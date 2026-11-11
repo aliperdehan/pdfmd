@@ -36,6 +36,13 @@ class Selection(unittest.TestCase):
     def collect(self, paths, recursive=False, include_never=False):
         return pdfmd_batch.collect_inputs(pdfmd, paths, recursive, include_never)
 
+    def test_source_likeness_covers_accepted_markdown_and_markup(self):
+        markdown, markup, html, office = pdfmd_batch.SOURCE_LIKENESS
+        self.assertTrue({".md", ".markdown", ".mdown", ".mkd"} <= markdown)
+        self.assertTrue({".txt", ".rst", ".org", ".adoc", ".textile", ".tex", ".typ", ".typst"} <= markup)
+        self.assertTrue({".html", ".htm"} <= html)
+        self.assertTrue({".docx", ".odt", ".rtf", ".epub", ".pptx"} <= office)
+
     def test_explicit_formats_use_existing_extension_tables(self):
         names = ("letter.markdown", "source.rst", "source.org", "source.tex", "source.typst", "source.html",
                  "source.txt", "source.docx", "source.odt", "source.epub", "source.ipynb", "source.wiki")
@@ -244,6 +251,38 @@ class Checkout(unittest.TestCase):
                     self.assertNotEqual(done.returncode, 0)
                     self.assertIn(message, done.stderr)
         self.assertEqual(list(self.work.glob("*.pdf")), [])
+
+    def test_same_pdf_destination_prefers_markdown(self):
+        for stem in ("a", "Документ с пробелом"):
+            with self.subTest(stem=stem):
+                md, html = stem + ".md", stem + ".html"
+                (self.work / md).write_text("# Source\n", encoding="utf-8")
+                (self.work / html).write_text("<p>Old output</p>", encoding="utf-8")
+                done = self.run_pdfmd(html, md, "-e", "inkmd")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertEqual(sum(line.startswith("OK    ") for line in done.stdout.splitlines()), 1)
+                self.assertIn(f"{html} (same output as {md})", done.stdout)
+                self.assertTrue((self.work / (stem + ".pdf")).is_file())
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_same_destination_prefers_html_to_docx(self):
+        (self.work / "a.html").write_text("<p>HTML source</p>", encoding="utf-8")
+        (self.work / "a.docx").write_bytes(b"not a docx")
+        done = self.run_pdfmd("a.docx", "a.html", "--to", "latex")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(sum(line.startswith("OK    ") for line in done.stdout.splitlines()), 1)
+        self.assertIn("a.docx (same output as a.html)", done.stdout)
+        self.assertIn("HTML source", (self.work / "a.tex").read_text(encoding="utf-8"))
+
+    def test_same_destination_in_output_folder_uses_name_tiebreak(self):
+        for folder in ("z", "a"):
+            (self.work / folder).mkdir()
+            (self.work / folder / "same.md").write_text("# Source\n", encoding="utf-8")
+        done = self.run_pdfmd("z/same.md", "a/same.md", "-e", "inkmd", "-o", "out")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(sum(line.startswith("OK    ") for line in done.stdout.splitlines()), 1)
+        self.assertIn("z/same.md (same output as a/same.md)", done.stdout)
+        self.assertTrue((self.work / "out/same.pdf").is_file())
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_rebuild_glob_skips_built_outputs_but_keeps_independent_html(self):

@@ -12,6 +12,17 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 
+# The author wants this source-likeness ranking revised later (master queue 3fi D33).
+SOURCE_LIKENESS = (
+    frozenset({".md", ".markdown", ".mdown", ".mkd"}),
+    frozenset({".txt", ".rst", ".org", ".adoc", ".asciidoc", ".textile", ".tex", ".latex",
+               ".typ", ".typst", ".wiki", ".man"}),
+    frozenset({".html", ".htm"}),
+    frozenset({".docx", ".doc", ".odt", ".ott", ".rtf", ".epub", ".pptx", ".ppt", ".odp",
+               ".xlsx", ".xls", ".ods"}),
+)
+
+
 def input_suffixes(core) -> set[str]:
     """The existing format tables, excluding output-only formats and non-Pandoc readers.
 
@@ -60,11 +71,15 @@ def collect_inputs(core, paths: list[Path], recursive: bool = False, include_nev
     return files
 
 
-def selection_note(core, paths, files, skipped, outputs):
-    if skipped or outputs:
+def selection_note(core, paths, files, skipped, outputs, collisions=()):
+    if skipped or outputs or collisions:
         note = "NOTE  skipped non-input paths: " + ", ".join(core.display_path(path) for path in skipped)
         if outputs:
             note += ("; " if skipped else "") + "built outputs: " + ", ".join(core.display_path(path) for path in outputs)
+        if collisions:
+            note += ("; " if skipped or outputs else "") + ", ".join(
+                f"{core.display_path(file)} (same output as {core.display_path(chosen)})"
+                for file, chosen in collisions)
         if len(paths) == 2 and any(path.suffix.lower() == ".pdf" and
                                   any(file.parent == path.resolve().parent for file in files) for path in skipped):
             note += "; to name the output, use -o NAME.pdf"
@@ -140,7 +155,23 @@ def run(core, *,
             built.add(planned)
     outputs = [file for file in files if file in built]
     files = [file for file in files if file not in built]
-    selection_note(core, args.batch_original_paths, files, args.batch_skipped, outputs)
+    destinations_by_output = {}
+    for file in files:
+        planned = core.load_package("pdfmd_routing.output").planned(file, output, file_target(file)).resolve()
+        destinations_by_output.setdefault(planned, []).append(file)
+    collisions = []
+    for group in destinations_by_output.values():
+        if len(group) < 2:
+            continue
+        def preference(file):
+            rank = next((i for i, suffixes in enumerate(SOURCE_LIKENESS) if file.suffix.lower() in suffixes),
+                        len(SOURCE_LIKENESS))
+            return rank, file.name, str(file)
+        chosen = min(group, key=preference)
+        collisions.extend((file, chosen) for file in group if file != chosen)
+    excluded = {file for file, _ in collisions}
+    files = [file for file in files if file not in excluded]
+    selection_note(core, args.batch_original_paths, files, args.batch_skipped, outputs, collisions)
     if not files:
         raise SystemExit("No buildable input files remain; the selected files are built outputs")
     if output:

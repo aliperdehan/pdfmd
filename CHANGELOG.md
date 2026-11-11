@@ -21,6 +21,12 @@ same commit as the change.
 
 ## v3.33.140 — 2026-11-11
 
+Pre-edit state: commit `81f311a`. Inputs such as `a.md` and an earlier `a.html` could both build to `a.pdf`, silently
+replacing the first result. Inputs with the same resolved planned destination now build once, preferring Markdown, other
+text markup, HTML, then office and e-book formats, with name order breaking ties; the NOTE names the skipped inputs and
+chosen source. Checkout regressions failed before the fix and pass afterwards for Markdown and HTML, HTML and DOCX,
+a Cyrillic spaced name, and a shared output folder.
+
 A repeated multi-path build could treat its earlier HTML or other readable output as a source, then fail on a
 self-overwrite. Selection now skips and names outputs belonging to another selected input, using the batch target and
 output-extension rules, while retaining unrelated inputs and the existing rewrite behaviour. Checkout-launcher
