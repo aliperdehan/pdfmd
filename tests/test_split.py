@@ -3,6 +3,7 @@ through a stand-in (`deferred`) or `DEFERRED_NAMES`; it loads on first use and g
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -60,6 +61,30 @@ class Deferred(unittest.TestCase):
 
 
 class Start(unittest.TestCase):
+    def test_chain_and_paragraph_load_only_on_first_use(self):
+        code = textwrap.dedent("""\
+            import sys
+            from pathlib import Path
+            import pdfmd
+            names = ('pdfmd_chain', 'pdfmd_paragraph')
+            assert not any(name in sys.modules for name in names), [name for name in names if name in sys.modules]
+            sys.argv = ['pdfmd', '--version']
+            try:
+                pdfmd.main()
+            except SystemExit as error:
+                assert error.code == 0
+            assert not any(name in sys.modules for name in names)
+            assert pdfmd.paragraph_spacing_typst_args(Path('unused.md'), [], 'html') == []
+            assert sys.modules['pdfmd_paragraph'].core is pdfmd
+            assert 'pdfmd_chain' not in sys.modules
+            assert pdfmd.chain_stopped() == ''
+            assert sys.modules['pdfmd_chain'].core is pdfmd
+        """)
+        done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True,
+                              stdin=subprocess.DEVNULL,
+                              env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
     def test_the_heavy_packages_do_not_load_at_start(self):
         code = ("import sys; sys.path.insert(0, sys.argv[1]); import pdfmd; "
                 "print(' '.join(name for name in ('pdfmd_serve', 'pdfmd_office', 'http.server', 'ssl') if name in sys.modules))")

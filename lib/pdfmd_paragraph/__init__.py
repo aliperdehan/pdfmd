@@ -12,7 +12,7 @@ own spacing, as before.
 - The HTML writers (WeasyPrint, Calibre, the browser, `--to html`) are not given it: pdfmd adds no style sheet of its own in
   one place there; a style sheet's `p { margin: ... }` does it.
 
-`core` is the `pdfmd` module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses
+`core` is the `pdfmd` module, bound by `pdfmd.py` on first use (the first binding wins); the pdfmd names the code uses
 (`cache_root`, `display_path` and `first_pdfmd_option`) are read as `core.X` when it runs.
 """
 
@@ -55,6 +55,11 @@ def command_line_value(value: str) -> str:
         return normalise(value) or "auto"
     except ValueError:
         raise SystemExit(f"--paragraph-spacing must be {ACCEPTED}, not {value!r}") from None
+
+
+def apply_cli(value: str) -> None:
+    """Pass a validated command-line value to this run and its batch workers."""
+    os.environ[ENV] = command_line_value(value)
 
 
 def paragraph_spacing(md_path: Path, metadata_files: list[Path]) -> str | None:

@@ -25,7 +25,7 @@ os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="pdfmd-test-config-")
 os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"]
 
 import pdfmd  # noqa: E402
-import pdfmd_paragraph  # noqa: E402
+pdfmd_paragraph = pdfmd.load_package("pdfmd_paragraph")
 
 PANDOC = shutil.which("pandoc")
 

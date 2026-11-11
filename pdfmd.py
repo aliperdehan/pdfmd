@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.163"
+PDFMD_VERSION = "3.33.164"
 import argparse
 import atexit
 import contextlib
@@ -1801,15 +1801,18 @@ from pdfmd_native import (CALIBRE_MARKDOWN_EXTENSIONS, CSV_DIV_LINE_RE, PAGE_BRE
                           native_paper, mapped_author, normalise_gfm, author_names_in_place)
 import pdfmd_args  # noqa: E402
 from pdfmd_args import build_parser  # noqa: E402
-import pdfmd_paragraph  # noqa: E402
-from pdfmd_paragraph import latex_args as paragraph_spacing_latex_args, typst_args as paragraph_spacing_typst_args  # noqa: E402
-import pdfmd_chain  # noqa: E402
 
 bind_core(pdfmd_comments, pdfmd_templates, pdfmd_watch, pdfmd_hybrid, pdfmd_polish, pdfmd_pdfimages, pdfmd_compat, pdfmd_view,
           pdfmd_lookup, pdfmd_routing, pdfmd_bridge, pdfmd_restore, pdfmd_parts, pdfmd_doctor, pdfmd_cache, pdfmd_install, pdfmd_tex,
-          pdfmd_attach, pdfmd_assemble, pdfmd_native, pdfmd_args, pdfmd_paragraph, pdfmd_chain)
+          pdfmd_attach, pdfmd_assemble, pdfmd_native, pdfmd_args)
 
 # Moves into packages that are not loaded at start (SPLIT.md, step 6): stand-ins that load the module on the first call.
+paragraph_spacing_latex_args = deferred("pdfmd_paragraph", "latex_args")
+paragraph_spacing_typst_args = deferred("pdfmd_paragraph", "typst_args")
+paragraph_spacing_command_line = deferred("pdfmd_paragraph", "apply_cli")
+chain_plan_build = deferred("pdfmd_chain", "plan_build")
+chain_stopped = deferred("pdfmd_chain", "stopped")
+chain_engine_failed = deferred("pdfmd_chain", "engine_failed")
 ansi_width_argument = deferred("pdfmd_ansi.cli", "ansi_width_argument")      # move 5 (v3.33.6)
 ansi_columns = deferred("pdfmd_ansi.cli", "ansi_columns")
 ansi_finish = deferred("pdfmd_ansi.cli", "ansi_finish")
@@ -14483,7 +14486,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
 
     if (target_format == "pdf" and engines and md_path.suffix.lower() not in OFFICE_INPUT_EXTENSIONS
             and not all(is_native_engine(engine) for engine in engines)):
-        engines = pdfmd_chain.plan_build(md_path, metadata_files, engines, output, verbose)     # engine-fallback (v3.33.71)
+        engines = chain_plan_build(md_path, metadata_files, engines, output, verbose)     # engine-fallback (v3.33.71)
     native_engines = [engine for engine in engines if is_native_engine(engine)]
     if target_format == "pdf" and native_engines:
         # The native tier (see the section after dependency_report()): no
@@ -14531,7 +14534,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         # opts back into the old Pandoc-mediated route for a document
         # that specifically needs pdfmd's own injection applied to it.
         ok, reason = compile_tex_direct(md_path, output, engines, keep_aux, verbose, debug)
-        if ok or not which("pandoc") or pdfmd_chain.stopped():
+        if ok or not which("pandoc") or chain_stopped():
             flush_summary()
             return md_path, ok, reason[-3000:]
         # No LaTeX engine got it through (or none is installed): Pandoc can still read the file and any engine can
@@ -15200,7 +15203,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             if pandoc_refused_command(result):      # an option Pandoc does not take: every engine would fail on it (v3.33.44)
                 break
             remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
-            if pdfmd_chain.engine_failed(str(md_path), engine, result, remaining, debug):     # engine-fallback stops here
+            if chain_engine_failed(str(md_path), engine, result, remaining, debug):     # engine-fallback stops here
                 break
         if result is None:
             # Every engine was skipped: each shares an engine with one that failed already.
@@ -15222,7 +15225,7 @@ def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Pa
     if result[1] and problems and resolve_strict(md_path, metadata_files):
         result = (result[0], False, strict_message(problems))
     built = Built(result, BUILD["engine"], BUILD["failed"], BUILD["output"])
-    built.stopped = pdfmd_chain.stopped()
+    built.stopped = chain_stopped()
     return attach_time(built, md_path, metadata_files)
 
 
@@ -16423,7 +16426,7 @@ def run_main() -> None:
     if args.calc_space is not None:
         os.environ[CALC_SPACE_ENV] = args.calc_space
     if args.paragraph_spacing is not None:
-        os.environ[pdfmd_paragraph.ENV] = pdfmd_paragraph.command_line_value(args.paragraph_spacing)
+        paragraph_spacing_command_line(args.paragraph_spacing)
     if args.calc_align is not None:
         os.environ[CALC_ALIGN_ENV] = args.calc_align
     if args.calc_constants is not None:

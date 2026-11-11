@@ -15,7 +15,7 @@ modes (`--engine-fallback MODE`, `pdfmd-options: {engine-fallback: MODE}`, a `--
   `pdf-engine:`, the config's default) is never reordered; with one, `auto` is `missing` when the output exists.
 
 A failed engine run leaves the output as it was (Pandoc writes the PDF only when the engine succeeded), so a stop keeps the
-previous file byte for byte. `core` is the `pdfmd` module, bound when `pdfmd.py` loads; the pdfmd names read here
+previous file byte for byte. `core` is the `pdfmd` module, bound on first use; the pdfmd names read here
 (`BUILD`, `ENGINE_CLI`, `ENGINE_FALLBACK_CLI`, `ENGINE_FAMILY`, `BROWSER_ENGINES`, `LATEX_ENGINES`, `config_options`,
 `display_path`, `first_pdfmd_option`, `frontmatter_engine`, `load_package`, `pypdf`, `report_engine_failure`, `vprint`) are
 read as `core.X` when it runs.

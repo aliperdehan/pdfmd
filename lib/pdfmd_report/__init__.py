@@ -370,7 +370,7 @@ def run(core, *,
             result = None
             failed_families: set[str] = set()
             failed_engines: list[str] = []
-            engines = core.pdfmd_chain.plan_build(files[0], metadata_files, engines, output, args.verbose)   # engine-fallback
+            engines = core.chain_plan_build(files[0], metadata_files, engines, output, args.verbose)   # engine-fallback
             for engine_index, engine in enumerate(engines):
                 family = ENGINE_FAMILY.get(engine, engine)
                 if family in failed_families:
@@ -491,7 +491,7 @@ def run(core, *,
                 failed_families.add(family)
                 failed_engines.append(engine)
                 remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
-                if core.pdfmd_chain.engine_failed("REPORT", engine, result, remaining, args.debug):   # engine-fallback stops here
+                if core.chain_engine_failed("REPORT", engine, result, remaining, args.debug):   # engine-fallback stops here
                     break
     assert result is not None
     if result.returncode == 0:
@@ -531,7 +531,7 @@ def run(core, *,
     if not args.verbose:
         AUTO_LOG.flush()
     report_built = attach_time(Built((output, result.returncode == 0), BUILD["engine"], BUILD["failed"]), files[0], metadata_files)
-    report_built.stopped = core.pdfmd_chain.stopped()
+    report_built.stopped = core.chain_stopped()
     print(f"{'OK  ' if result.returncode == 0 and not report_strict_failed else 'FAIL'}  REPORT  {display_path(output)}"
           + time_label(report_built) + engine_label(report_built))
     if args.verbose:

@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "lib"))
 
 import pdfmd  # noqa: E402
-import pdfmd_chain as chain  # noqa: E402
+chain = pdfmd.load_package("pdfmd_chain")
 
 PANDOC = shutil.which("pandoc")
 LUALATEX = shutil.which("lualatex")

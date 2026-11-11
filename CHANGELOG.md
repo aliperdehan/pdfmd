@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.164 — 2026-11-11
+
+Pre-edit state: commit `bc4086f`. Engine-chain and paragraph-spacing packages were imported at startup, including --version runs that need neither. Their entry points now use deferred stand-ins and bind core on first use; paragraph command-line environment handling lives in its own package. The fresh-process regression failed before the fix and passes afterwards, checking import, --version and both first-use bindings. The prescribed sys.modules check contains neither package afterwards (both were present before); five isolated checkout-launcher --version runs have median 0.115 s before and 0.092 s afterwards. Paragraph, engine-fallback, report, direct-TeX and repository guard tests run (138 tests, one skipped). Report and direct-TeX callers use the same deferred entry points. pdfmd.py grows from 17,204 to 17,207 lines because six deferred entry points replace three import lines; no implementation moves into the launchpad. No new setting or behavioural threshold.
+
 ## v3.33.163 — 2026-11-11
 
 Pre-edit state: commit `fa94231`. The Typst body rule overrode custom templates' leading, paragraph spacing and text edges. Fallback rules now precede the custom template, letting Typst's cascade honour each property independently while retaining defaults for properties it leaves unset; the redundant body override is omitted. Template selection covers explicit options and defaults files, and cached copies preserve relative partials and their contexts. Checkout-launcher measurements failed before the fix and pass afterwards for separate leading, spacing and edge overrides, a scoped rule, an unset-property control, equals-form templates and explicit or named defaults files with nested partials in a folder containing spaces. Default-template front-region and body measurements remain covered. Engine-filter, paragraph, author, chain, Office LaTeX and repository guard tests run (242 tests, six skipped; the same sandbox Calibre failure as v3.33.162). pdfmd.py remains 17,204 lines. No new setting or behavioural threshold; existing spacing and format constants are retained.
