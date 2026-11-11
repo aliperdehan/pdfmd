@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.151"
+PDFMD_VERSION = "3.33.152"
 import argparse
 import atexit
 import contextlib
@@ -14340,6 +14340,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             cmd += tblr_header_args(md_path, metadata_files)
             cmd += code_filter_args(no_auto, [md_path, title_source], metadata_files) + image_filter_args(no_auto, [md_path, title_source])
             hoist_code_header(cmd)
+            cmd += markup_header_args(md_path, metadata_files, cmd)
             keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]

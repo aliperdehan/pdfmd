@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.152 — 2026-11-11
+
+Pre-edit state: commit `c26fc88`. Uncached natbib and biblatex builds ran the markup filter without its LaTeX header, leaving callouts and highlighted text undefined at compilation. The native bibliography command now adds the shared markup header before preserving document headers, as the ordinary LaTeX routes do. Checkout regressions failed before the fix for both bibliography engines and pass afterwards, checking definitions, rendered markup and resolved bibliography text; callout, highlight, comment, Biber and repository guard tests run. pdfmd.py grows from 17,204 to 17,205 lines for the missing header call. No new setting or behavioural threshold.
+
 ## v3.33.151 — 2026-11-11
 
 Pre-edit state: commit `1c1b737`. A margin-only Office override made has_page true and replaced a reference document’s dimensions and orientation with the Letter defaults. DOCX and ODT patching now replace page size and orientation only when the specification requests paper or landscape, preserving a template’s page for margin-only changes. Package and checkout regressions failed before the fix in both formats and orientations and pass afterwards; explicit paper overrides still apply. Office, Word-markup and repository guard tests run. pdfmd.py remains 17,204 lines. No new setting or behavioural threshold.
