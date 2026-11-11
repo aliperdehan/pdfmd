@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.185j — 2026-11-12
+
+Pre-edit state: commit `82f49f1`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.18: restore the login-item default.** Restoring Popup defaults removed the preference before the app could unregister its own login item, leaving automatic login enabled. Restore now switches off an app-managed item before clearing the key, while leaving a login item managed only in System Settings alone.
+
+Regression: `tests/test_colophon_login_restore.py` simulates both app-managed and user-managed registrations without changing the real login items; it fails before the fix and passes afterwards. Swift build checks the application compiles.
+
 ## v3.33.185i — 2026-11-12
 
 Pre-edit state: commit `38aae0c`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump. **Colophon 0.3.17: bind pending copies to their render.** Editing a snippet during the live-render pause could let the preceding render copy and hide the popup for text no longer shown. A pending copy now records its request key and is copied only if the completed render and current input still match it; an older completion cannot consume a newer request.

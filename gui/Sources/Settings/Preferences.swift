@@ -306,6 +306,10 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
 
     /// Back to the defaults for everything on one tab.
     private func restore(_ tab: String) {
+        // Let the running app unregister its own login item before the key disappears. An absent key means the user manages it.
+        if tab == "Popup", Settings.store.object(forKey: "popLaunchAtLogin") != nil, Settings.flag("popLaunchAtLogin") {
+            Settings.set("popLaunchAtLogin", 0)
+        }
         var keys = Settings.items.filter { $0.tab == tab }.map(\.key) + Settings.texts.filter { $0.tab == tab }.map(\.key)
         if tab == "Colours" { keys += Palette.roles.flatMap { ["color." + $0.key, "category." + $0.key] } }
         Settings.remove(keys)
