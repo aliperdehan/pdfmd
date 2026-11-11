@@ -64,6 +64,9 @@ class Parse(unittest.TestCase):
             "https://github.com/owner/repo.git@v2": ("github", "owner/repo", "v2", ""),
             "https://github.com/owner/repo/tree/dev": ("github", "owner/repo", "dev", ""),
             "https://gitlab.com/g/r.git": ("git", "https://gitlab.com/g/r.git", "", ""),
+            "file:///C:/Users/x/kits repo@v1": ("git", "file:///C:/Users/x/kits repo", "v1", ""),
+            "file:///C:/Users/RUNNER~1/kits@v1#apa7": ("git", "file:///C:/Users/RUNNER~1/kits", "v1", "apa7"),
+            "file:///srv/kits": ("git", "file:///srv/kits", "", ""),
             "https://gitlab.com/g/r.git@v3#x": ("git", "https://gitlab.com/g/r.git", "v3", "x"),
             "git@github.com:owner/repo.git": ("git", "git@github.com:owner/repo.git", "", ""),
             "git@github.com:owner/repo.git@v1": ("git", "git@github.com:owner/repo.git", "v1", ""),
@@ -350,7 +353,8 @@ class Git(Base):
 
     def test_a_git_url_and_a_ref(self):
         repo = self.make()
-        url = f"file://{repo}"
+        # file:///C:/Users/x/repo on Windows (`file://C:\\...` is no URL: git fetch took it, git clone did not)
+        url = "file:///" + repo.as_posix().lstrip("/")
         done = self.run_install(f"{url}@v1")
         self.assertEqual(done[0].version, "1.0.0")
         self.assertEqual(len(done[0].commit), 40)
