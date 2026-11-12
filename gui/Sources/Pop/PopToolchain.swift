@@ -39,8 +39,16 @@ enum PopToolchain {
         return env
     }
 
-    /// Runs a helper to its end and returns its exit status (nil if it could not start).
-    static func run(_ exe: String, _ args: [String]) -> Int32? {
+    /// Runs a helper on the caller's worker queue, bounded by the popup's existing TeX/toolchain limit.
+    struct Timeout: LocalizedError {
+        let converter: String
+        let seconds: Double
+        var errorDescription: String? {
+            "\(converter) stopped after \(Settings.formatNumber(seconds)) s (Settings > Popup > TeX time limit)."
+        }
+    }
+
+    static func run(_ exe: String, _ args: [String]) throws -> Int32? {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: exe)
         p.arguments = args
@@ -48,8 +56,15 @@ enum PopToolchain {
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
+        let ended = DispatchSemaphore(value: 0)
+        p.terminationHandler = { _ in ended.signal() }
         guard (try? p.run()) != nil else { return nil }
-        p.waitUntilExit()
+        let limit = Settings.number("popTimeoutS")
+        if ended.wait(timeout: .now() + limit) == .timedOut {
+            if p.isRunning { PdfmdBuild.killTree(p.processIdentifier, grace: Settings.number("buildStopGrace")) }
+            ended.wait() // the tree is sent SIGKILL after the existing build-stop grace if SIGTERM was ignored
+            throw Timeout(converter: URL(fileURLWithPath: exe).lastPathComponent, seconds: limit)
+        }
         return p.terminationStatus
     }
 }

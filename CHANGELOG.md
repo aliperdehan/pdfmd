@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.33.187h — 2026-11-12
+
+Pre-edit state: commit `1f75e4a`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump.
+**Colophon 0.3.21: keep SVG export responsive and stop stalled converters (G3.4).** Saving a popup as SVG ran
+`pdftocairo` or `mutool` synchronously on the main thread with no deadline, so a stalled converter froze every window.
+Window exports now convert on a worker queue and deliver their result on the main queue. Helpers use the existing
+`popTimeoutS` TeX/toolchain limit, terminating their process tree with SIGTERM and escalating to SIGKILL after the existing
+`buildStopGrace`. A timeout reaches the popup's error alert with the converter's name and the limit; the command-line
+export reports the same error. Temporary conversion files are removed on success and failure. No new setting or cap.
+Four headless regressions fail before the fix and pass afterwards: both converters ignoring SIGTERM, successful export
+and cleanup, and the save panel's asynchronous call. The tests check main-queue responsiveness and delivery, process
+termination and the timeout message. The affected Colophon tests, required split/packaging/docs/setup/isolation checks
+and sandbox Swift build pass; no app window was opened. `pdfmd.py` is unchanged.
+
 ## v3.33.187g — 2026-11-12
 
 Pre-edit state: commit `fec8269`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump.

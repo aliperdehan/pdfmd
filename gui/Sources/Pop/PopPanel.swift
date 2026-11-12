@@ -605,11 +605,24 @@ final class PopController: NSObject, NSTextViewDelegate {
         switch url.pathExtension.lowercased() {
         case "png": data = PopPDFTools.png(from: pdf)
         case "svg":
-            data = PopPDFTools.svg(from: pdf)
-            if data == nil { warn("SVG needs pdftocairo (brew install poppler) or mutool (brew install mupdf-tools).") }
+            PopPDFTools.svg(from: pdf) { [weak self] result in
+                guard let self else { return }
+                switch result {
+                case .success(let data):
+                    if let data { self.writeExport(data, to: url) }
+                    else { self.warn("SVG needs pdftocairo (brew install poppler) or mutool (brew install mupdf-tools).") }
+                case .failure(let error): self.warn(error.localizedDescription)
+                }
+            }
+            return
         default: data = pdf
         }
-        if let d = data { do { try d.write(to: url); setStatus("saved \(url.lastPathComponent)", error: false) } catch { warn(error.localizedDescription) } }
+        if let data { writeExport(data, to: url) }
+    }
+
+    private func writeExport(_ data: Data, to url: URL) {
+        do { try data.write(to: url); setStatus("saved \(url.lastPathComponent)", error: false) }
+        catch { warn(error.localizedDescription) }
     }
 
     func warn(_ text: String) {

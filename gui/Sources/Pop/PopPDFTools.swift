@@ -72,7 +72,7 @@ enum PopPDFTools {
 
     /// The page as SVG, through poppler's `pdftocairo` or else MuPDF's `mutool` (Homebrew: poppler, mupdf-tools).
     /// nil when neither is installed.
-    static func svg(from pdf: Data) -> Data? {
+    static func svg(from pdf: Data) throws -> Data? {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("pop-svg-" + UUID().uuidString, isDirectory: true)
         guard (try? fm.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
@@ -80,11 +80,19 @@ enum PopPDFTools {
         let src = dir.appendingPathComponent("in.pdf"), out = dir.appendingPathComponent("out.svg")
         guard (try? pdf.write(to: src)) != nil else { return nil }
         if let t = PopToolchain.find("pdftocairo") {
-            _ = PopToolchain.run(t, ["-svg", src.path, out.path])
+            _ = try PopToolchain.run(t, ["-svg", src.path, out.path])
         } else if let m = PopToolchain.find("mutool") {
-            _ = PopToolchain.run(m, ["convert", "-o", out.path, src.path])
+            _ = try PopToolchain.run(m, ["convert", "-o", out.path, src.path])
         }
         return try? Data(contentsOf: out)
+    }
+
+    /// Window exports do not wait on the main thread; only delivery of the result returns there.
+    static func svg(from pdf: Data, completion: @escaping (Result<Data?, Error>) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result { try svg(from: pdf) }
+            DispatchQueue.main.async { completion(result) }
+        }
     }
 
     /// PDF for apps that take vector, PNG for those that do not; the receiving app picks the better one.

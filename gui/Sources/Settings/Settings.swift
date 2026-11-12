@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.3.20"
+let appVersion = "0.3.21"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -75,7 +75,7 @@ enum Settings {
         Item(key: "reloadOnDiskChange", value: 1, label: "Follow a file that another program changes", help: "1 = an editor window shows a file again when another program rewrites it (at once when you have not edited it; when you have, it asks which version to keep); 0 = the window keeps what it has until you revert", tab: "Editor", kind: .flag),
         Item(key: "diskChangeDelayMs", value: 150, label: "Pause before a changed file is read again (ms)", help: "a program that writes a file in several steps is waited for this long, so that it is read once", tab: "Editor"),
         Item(key: "buildTimeout", value: 600, label: "Stop a build after (s)", help: "a build (command R in an editor window) that has not ended after this many seconds is stopped, with everything it started; 0 = never", tab: "Build"),
-        Item(key: "buildStopGrace", value: 3, label: "Build stop grace (s)", help: "positive seconds to wait before forcing a stopped build to end, and to drain its output after it ends; also used for tool discovery; invalid values use the default", tab: "Build"),
+        Item(key: "buildStopGrace", value: 3, label: "Build stop grace (s)", help: "positive seconds to wait before forcing a stopped build to end, and to drain its output after it ends; also used for tool discovery and SVG export; invalid values use the default", tab: "Build"),
         Item(key: "buildOpensPDF", value: 1, label: "Open the PDF after a build", help: "1 = a build whose PDF is not open yet opens it in a window (the editor keeps the keyboard); a PDF that is open is always shown again", tab: "Build", kind: .flag),
         Item(key: "buildWhenWatched", value: 0, label: "Build although pdfmd is watching", help: "0 = when a pdfmd --watch (pdfmd -w, or the one that pdfmd --edit --editor starts) is already rebuilding this file on every save, command R only saves; 1 = build as well", tab: "Build", kind: .flag),
         Item(key: "exportReveal", value: 0, label: "Show the exported file in Finder", help: "1 = File > Export As shows the new file in Finder when it is done (Finder then takes the keyboard); 0 = only the window's subtitle says it", tab: "Build", kind: .flag),
@@ -106,7 +106,7 @@ enum Settings {
         Item(key: "popPreambleShown", value: 0, label: "Show the preamble pane", help: "1 = the popup shows its preamble (and, for pdfmd, its metadata) above the editor", tab: "Popup", kind: .flag),
         Item(key: "popRenderDelayMs", value: 400, label: "Pause before rendering (ms)", help: "the popup renders after the typing has paused this long", tab: "Popup"),
         Item(key: "popPreambleDelayMs", value: 600, label: "Pause after a preamble edit (ms)", help: "the popup renders after an edit of the preamble or the metadata has paused this long", tab: "Popup"),
-        Item(key: "popTimeoutS", value: 30, label: "TeX time limit (s)", help: "a TeX run that takes longer is stopped", tab: "Popup"),
+        Item(key: "popTimeoutS", value: 30, label: "TeX time limit (s)", help: "a TeX run or SVG converter that takes longer is stopped", tab: "Popup"),
         Item(key: "popPdfmdTimeoutS", value: 120, label: "pdfmd time limit (s)", help: "a pdfmd run of the popup that takes longer is stopped", tab: "Popup"),
         Item(key: "popFormatTimeoutS", value: 60, label: "Preamble cache time limit (s)", help: "compiling the preamble into a cached TeX format (pdflatex) is stopped after this long", tab: "Popup"),
         Item(key: "popFormatKeep", value: 6, label: "Cached preambles kept", help: "how many compiled preambles (about 9 MB each) are kept; the oldest go first", tab: "Popup"),

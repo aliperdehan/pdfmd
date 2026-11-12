@@ -67,7 +67,7 @@ enum PopCLI {
                     try png.write(to: URL(fileURLWithPath: p))
                 }
                 if let p = svgPath {
-                    guard let svg = PopPDFTools.svg(from: pdf) else { CLI.fail("eq: SVG needs pdftocairo (brew install poppler) or mutool (brew install mupdf-tools)", code: 1) }
+                    guard let svg = try PopPDFTools.svg(from: pdf) else { CLI.fail("eq: SVG needs pdftocairo (brew install poppler) or mutool (brew install mupdf-tools)", code: 1) }
                     try svg.write(to: URL(fileURLWithPath: p))
                 }
             } catch { CLI.fail("eq: \(error.localizedDescription)", code: 1) }
