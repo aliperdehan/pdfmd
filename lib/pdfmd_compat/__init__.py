@@ -19,7 +19,7 @@ from glob import glob as expand_glob
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-core = None
+from pdfmd_base import core
 
 
 MDPDF_KEYS = {"-o": "--out", "--output": "--out", "-h": "--header", "--header": "--header",

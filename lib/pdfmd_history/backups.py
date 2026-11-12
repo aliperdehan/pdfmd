@@ -37,7 +37,7 @@ try:
 except ImportError:                                # pragma: no cover -- incomplete installation
     yaml = None
 
-core = None
+from pdfmd_base import core
 
 
 def _timed(name):

@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 _PANDOC_EXTENSIONS: dict[str, frozenset[str]] = {}
 

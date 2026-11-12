@@ -1,6 +1,6 @@
 """Typed PDF document information shared by the finishing passes."""
 
-core = None
+from pdfmd_base import core
 
 
 def add_metadata(writer, values, *, replace=False):

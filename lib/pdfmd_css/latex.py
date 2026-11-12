@@ -14,7 +14,7 @@ import re
 import sys
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 def css_scope(md_path: Path, metadata_files: list[Path]) -> str:
     """``html`` (a style sheet is for the writers that read CSS: the default) or ``all``: the command line, else

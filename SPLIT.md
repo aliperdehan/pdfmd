@@ -35,10 +35,11 @@ The rule behind it is CLAUDE.md's "pdfmd.py holds only the core".
    a commit of its own (the author's leave, 2026-11-09).
 2. **Where the code goes.** A new package: `lib/pdfmd_x/__init__.py`. An existing package: a module of its own beside
    what is there (`lib/pdfmd_x/<role>.py`), unless the moved code is small. The text is moved as it is; only names change.
-3. **How it reaches pdfmd.** The package has a module global `core = None`; `pdfmd.py` sets it right after the import,
-   and the first binding wins, so a second copy of pdfmd (a script run imports nothing as `pdfmd`, but a stray
-   `import pdfmd` would make one) never re-points it. The binding is one line in the block after
-   `pypdf = lazy_import("pypdf")`: `import pdfmd_x`, the re-exports, `bind_core(pdfmd_x)`. `pdfmd.py` needs its packages
+3. **How it reaches pdfmd.** The package reads `core` from lib/pdfmd_base (`from pdfmd_base import core`, since 3.33.188;
+   phase 1 gave each module a `core = None` that `pdfmd.py`'s `bind_core()` set): one object for every package, bound to
+   pdfmd when `pdfmd.py` loads, and the first binding wins, so a second copy of pdfmd (a script run imports nothing as
+   `pdfmd`, but a stray `import pdfmd` would make one) never re-points it. The re-exports are in the block after
+   `pypdf = lazy_import("pypdf")`. `pdfmd.py` needs its packages
    (the author, 2026-11-09): the block starts with a check that stops a copy without `lib/` with one line, so a new package
    needs no fallback for a missing import. The new `__init__.py` starts
    with `from __future__ import annotations` (Python 3.9 reads the moved signatures' `str | None` only with it). Every pdfmd name the moved code uses (a helper, a constant, state)
@@ -60,7 +61,7 @@ The rule behind it is CLAUDE.md's "pdfmd.py holds only the core".
      `ssl`; `pdfmd_office` 21 ms; the other fourteen 0.2 to 3.5 ms each, about 25 ms together). In the binding
      block, each moved function that `pdfmd.py` calls or a test reads gets a stand-in,
      `serve_command = deferred("pdfmd_serve.commands", "serve_command")`, which loads the module on its first call,
-     hands it `core` (`bind_core`) and calls the real function; `pdfmd.py`'s own calls keep their bare names. A moved
+     and calls the real function (the module's `core` is pdfmd_base's); `pdfmd.py`'s own calls keep their bare names. A moved
      constant or class that a test or `lib/` reads as `pdfmd.X` goes into `DEFERRED_NAMES` instead
      (`DEFERRED_NAMES.update(_PANDOC_EXTENSIONS="pdfmd_flat.probe")`): the module's `__getattr__` (PEP 562) loads the
      module on the first read and returns the package's own object, so `mock.patch.dict(pdfmd.X)` still reaches it.

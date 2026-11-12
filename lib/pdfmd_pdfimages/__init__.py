@@ -19,7 +19,7 @@ import urllib.parse
 import zlib
 from pathlib import Path, PurePosixPath
 
-core = None
+from pdfmd_base import core
 
 
 SVG_UNITS = {"": 0.75, "px": 0.75, "pt": 1.0, "pc": 12.0, "mm": 72 / 25.4, "cm": 72 / 2.54, "in": 72.0}

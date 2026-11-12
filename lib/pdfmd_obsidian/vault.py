@@ -16,7 +16,7 @@ import os
 import sys
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 _VAULT_ROOTS: dict[Path, Path | None] = {}
 NEWLINE_WORDS = ("hard", "soft")

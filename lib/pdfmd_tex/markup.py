@@ -18,7 +18,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 # The classes that define no `landscape` and no highlighting of their own (Pandoc's template is written for them). Any other
 # `documentclass` may, so it gets the guarded header (a file-format fact, not a setting: what a class defines).

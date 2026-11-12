@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.187"
+PDFMD_VERSION = "3.33.188"
 import argparse
 import atexit
 import contextlib
@@ -1678,20 +1678,12 @@ pypdf = lazy_import("pypdf")
 
 # -- The packages split out of this file (SPLIT.md, entry 3fi) --------------------
 # Each one reads pdfmd's own helpers and state as `core.X` when it runs and never imports pdfmd: run as a script this file
-# is `__main__`, and a second import would be a second copy with its own state. The names below are re-exported, so
-# `pdfmd.x` keeps working for the code that stays here, the tests and lib/.
-def bind_core(*packages) -> None:
-    """Hand each package this module as its `core`; the first binding wins, so a second copy never re-points it."""
-    for package in packages:
-        if package.core is None:
-            package.core = sys.modules[__name__]
-
-
+# is `__main__`, and a second import would be a second copy with its own state. `core` is lib/pdfmd_base's one object for
+# every package, bound to this module below. The names below are re-exported, so `pdfmd.x` keeps working for the code that
+# stays here, the tests and lib/.
 def load_package(name: str):
-    """The module `name` (a package or one module of it), imported now and bound to this module as its `core`."""
-    module = importlib.import_module(name)
-    bind_core(module)
-    return module
+    """The module `name` (a package or one module of it), imported now; its `core` is this module (lib/pdfmd_base)."""
+    return importlib.import_module(name)
 
 
 def deferred(module: str, name: str):
@@ -1720,31 +1712,25 @@ if importlib.util.find_spec("pdfmd_comments") is None:
     raise SystemExit("pdfmd: this pdfmd.py has no lib/ folder beside it, and the pdfmd_* packages it needs are not "
                      "installed; keep pdfmd.py together with its lib/ folder, or install pdfmd: pipx install pdfmd-cli")
 
-import pdfmd_comments  # noqa: E402
+import pdfmd_base  # noqa: E402
+pdfmd_base.bind(sys.modules[__name__])      # every package's `core`, before any of them is imported; the first binding wins
 from pdfmd_comments import (CommentPolicy, comment_kind_set, parse_comment_policy,  # noqa: E402, F401 -- the strip_*_comments are read by lib/ and tests
                             strip_markdown_comments, strip_tex_comments, strip_xml_comments)
-import pdfmd_templates  # noqa: E402
 from pdfmd_templates import init_command  # noqa: E402
-import pdfmd_watch  # noqa: E402
 from pdfmd_watch import pinned_watch_argv, run_watch  # noqa: E402
 
-import pdfmd_hybrid  # noqa: E402
 from pdfmd_hybrid import attach_hybrid, hybrid_after_success, resolve_hybrid  # noqa: E402, F401 -- attach_hybrid is read by tests/test_embedding.py
 
-import pdfmd_polish  # noqa: E402
 from pdfmd_polish import (HF_FIELDS, fill_hf_field, hf_text, locate_headings, markdown_headings,  # noqa: E402, F401 -- read by tests
                           parse_hf_template, polish_pdf)
-import pdfmd_pdfimages  # noqa: E402
 from pdfmd_pdfimages import (encode_png, extract_pdf_images, file_picture_size, match_images_to_pdf,  # noqa: E402, F401 -- encode_png, file_picture_size and samples_to_png are read by tests
                              rewrite_image_paths, rewrite_tex_image_paths, samples_to_png)
-import pdfmd_compat  # noqa: E402
 from pdfmd_compat import (batchmd_main, batchmd_translate, inkmd_main, inkmd_translate,  # noqa: E402, F401 -- the *_main are console entry points (pyproject.toml), the *_translate are read by tests
                           md2pdf_main, md2pdf_translate, mdpdf_main, mdpdf_translate, pan_tec_main, pan_tec_translate)
 import pdfmd_view  # noqa: E402
 from pdfmd_view import (pager_command, run_pager, stdin_build, terminal_view,  # noqa: E402, F401 -- run_pager, view_pager_setting and view_sources are read by tests
                         view_pager_setting, view_sources)
 
-import pdfmd_lookup  # noqa: E402
 from pdfmd_lookup import (LOOKUP_FIELD_WORDS, LOOKUP_TIERS, LookupAmbiguous, cyrillic_candidates,  # noqa: E402, F401 -- lookup_fields, lookup_key, rank_lookup, document_priority, priority_enabled and source_markdown are read by tests or lib/
                           document_priority, find_wildcard_markdown, latin_candidates, lookup_fields, lookup_key,
                           priority_enabled, rank_lookup, source_markdown, strip_lookup_suffix)
@@ -1753,20 +1739,17 @@ import pdfmd_routing  # noqa: E402
 from pdfmd_routing import (BATCHOCR_TAG, EBOOK_INPUT_EXTENSIONS, batchocr_spec, find_batchocr,  # noqa: E402, F401 -- BATCHOCR_TAG, EBOOK_INPUT_EXTENSIONS, batchocr_spec, install_ocr_tools and tessdata_environment are read by tests
                            install_ocr_tools, route_ebook_input, route_pdf_input, route_text_input, tessdata_environment)
 
-import pdfmd_bridge  # noqa: E402
+import pdfmd_bridge  # noqa: E402, F401 -- tests read pdfmd.pdfmd_bridge
 from pdfmd_bridge import (CALIBRE_TABLE_CSS, PANDOC_TABLE_STYLE_RE, browser_page_css, calibre_html_command,  # noqa: E402, F401 -- CALIBRE_TABLE_CSS and PANDOC_TABLE_STYLE_RE are read by tests, run_calibre_convert and run_soffice_convert are patched or read by tests and lib/
                           calibre_page_options, convert_office_direct, convert_via_soffice_bridge, prince_author_options,
                           run_browser_print, run_calibre, run_calibre_convert, run_soffice_convert, start_soffice_job)
-import pdfmd_restore  # noqa: E402
 from pdfmd_restore import (RESTORE_CHAIN, check_source_command, layout_from_source, restore_attachments,  # noqa: E402, F401 -- RESTORE_CHAIN, layout_from_source, restore_attachments, restore_attachments_in_place and restore_chain are read by tests
                            restore_attachments_in_place, restore_chain, restore_from_markdown, restore_from_pdf,
                            restore_target_name)
-import pdfmd_parts  # noqa: E402
 from pdfmd_parts import (ATX_HEADING_RE, Heading, NoPartMatches, ScaffoldPlan, SectionPlan, chapter_order,  # noqa: E402, F401 -- ATX_HEADING_RE, Heading, NoPartMatches, collect_parts, find_heading, heading_parts, outermost_headings, parts_directory, scan_headings, scan_items, select_parts, split_top_level_sections and wrap_runs are read by tests or lib/
                          collect_parts, find_heading, heading_parts, outermost_headings, parts_directory, plan_scaffold,
                          plan_sections, scaffold_inputs, scan_headings, scan_items, section_source, select_parts,
                          split_into_parts, split_top_level_sections, wrap_part, wrap_runs)
-import pdfmd_doctor  # noqa: E402
 from pdfmd_doctor import (DEEP_SAMPLE, PANDOC_FEATURES, completion_options, completion_script, deep_checks,  # noqa: E402, F401 -- DEEP_SAMPLE, PANDOC_FEATURES, completion_options, deep_checks, foreign_commands, pandoc_limits and tool_note are read by tests
                           doctor_report, foreign_commands, pandoc_limits, tool_note)
 import pdfmd_cache  # noqa: E402
@@ -1779,18 +1762,15 @@ from pdfmd_install import (GRAPHVIZ_COMMANDS, GRAPHVIZ_SHA256, GRAPHVIZ_VERSION,
                            github_latest_release, github_release_asset, install_calibre, install_d2, install_extra, install_kind,
                            install_mathjax_files, install_tectonic, install_typst, node_asset_name, release_asset_matching,
                            safe_unpack_tar, tectonic_asset_pattern, typst_asset_name, uninstall_kind, unpack_graphviz, unpack_katex)
-import pdfmd_tex  # noqa: E402
 from pdfmd_tex import (MAX_TEX_DIRECT_PASSES, PLOT_CTX_PLAIN, PLOT_CTX_TWICE, compile_tex_direct,  # noqa: E402, F401 -- MAX_TEX_DIRECT_PASSES is named in the docstring only; PLOT_CTX_PLAIN, PLOT_CTX_TWICE, latex_engine_command, plot_recorded_inputs and run_tex_engine are read by tests or lib/
                        document_latex_definitions, engine_failure_reason, is_latex_preamble, latex_engine_command,
                        package_latex_keys, pandoc_refused_command, plot_preamble, plot_recorded_inputs, render_plot_requests,
                        run_tex_engine, tex_failure_cause, tex_tree_stamp, wrap_latex_header_includes)
-import pdfmd_attach  # noqa: E402
 from pdfmd_attach import (ATTACH_FORMAT_PLAIN, add_deflated_attachment, attach_source_after_success,  # noqa: E402, F401 -- all but attach_source_after_success, bundle_files, keep_source_after_success, read_pdf_attachments and referenced_images are read by tests or lib/
                           attached_bundle_mode, block_places, bundle_files, drop_blocks, drop_duplicate_blocks, find_in_tex_tree,
                           graphic_names_in, held_comments_note, inline_blocks, inline_candidates, keep_source_after_success,
                           layout_path, read_pdf_attachments, referenced_images, source_attachments, tex_distribution_roots,
                           write_pdf_attachments)
-import pdfmd_assemble  # noqa: E402
 from pdfmd_assemble import (EmbedPlan, assemble_markdown_text, embedded_resources, filter_bibliography,  # noqa: E402, F401 -- filter_bibliography, remember_trusted, render_embedded_block, render_embedded_file, trust_store_path and used_citation_keys are read by tests or lib/
                             parse_embedded_blocks, remember_trusted, render_embedded_block, render_embedded_file,
                             trust_store_path, trusted_hashes, unpack_assembled, used_citation_keys, write_assembled_markdown)
@@ -1799,12 +1779,7 @@ from pdfmd_native import (CALIBRE_MARKDOWN_EXTENSIONS, CSV_DIV_LINE_RE, PAGE_BRE
                           MathText, author_names, convert_native, csv_div_table, csv_guess_delimiter, csv_keep,
                           ignored_front_matter_keys, inline_math, native_font_size, native_landscape, native_order, native_page,
                           native_paper, mapped_author, normalise_gfm, author_names_in_place)
-import pdfmd_args  # noqa: E402
 from pdfmd_args import build_parser  # noqa: E402
-
-bind_core(pdfmd_comments, pdfmd_templates, pdfmd_watch, pdfmd_hybrid, pdfmd_polish, pdfmd_pdfimages, pdfmd_compat, pdfmd_view,
-          pdfmd_lookup, pdfmd_routing, pdfmd_bridge, pdfmd_restore, pdfmd_parts, pdfmd_doctor, pdfmd_cache, pdfmd_install, pdfmd_tex,
-          pdfmd_attach, pdfmd_assemble, pdfmd_native, pdfmd_args)
 
 # Moves into packages that are not loaded at start (SPLIT.md, step 6): stand-ins that load the module on the first call.
 paragraph_spacing_latex_args = deferred("pdfmd_paragraph", "latex_args")

@@ -48,7 +48,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from tempfile import mkdtemp
 
-core = None
+from pdfmd_base import core
 
 
 def csv_cut_advice(rows_cut: bool, cols_cut: bool) -> str:

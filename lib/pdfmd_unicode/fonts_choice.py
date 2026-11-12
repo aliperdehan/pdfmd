@@ -31,7 +31,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Iterator
 
-core = None
+from pdfmd_base import core
 
 
 DEFAULT_FONT = "DejaVu Serif"

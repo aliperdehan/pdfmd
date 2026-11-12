@@ -19,6 +19,9 @@ import isolation_support  # noqa: E402,F401  (the run's own cache, config and da
 ROOT = Path(__file__).resolve().parent.parent
 PDFMD = ROOT / "pdfmd.py"
 
+sys.path.insert(0, str(ROOT))
+import pdfmd as _first  # noqa: E402,F401  (v3.33.188: binds every package's `core` first, as in a whole run; first binding wins)
+
 spec = importlib.util.spec_from_file_location("pdfmd_under_test", PDFMD)
 pdfmd = importlib.util.module_from_spec(spec)
 sys.modules["pdfmd_under_test"] = pdfmd

@@ -12,7 +12,7 @@ import re
 import subprocess
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def option_values(command: list[str], long: str, short: str = "") -> list[str]:

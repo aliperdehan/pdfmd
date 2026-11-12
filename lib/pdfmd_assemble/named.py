@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys
 
-core = None
+from pdfmd_base import core
 
 
 def sources(document, metadata_files):

@@ -13,7 +13,7 @@ import sys
 import time
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def watch_signature(source: Path, outputs: set[Path] | None = None) -> tuple:

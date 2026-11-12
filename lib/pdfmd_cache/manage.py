@@ -27,7 +27,7 @@ import stat
 import sys
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 CLEAR_WORDS = ("builds", "documents", "stale", "all")
 BUILDS = "builds"

@@ -17,7 +17,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 _TOLD: set[tuple[str, str]] = set()          # (what, where) already said: the list is worked out more than once a build
 

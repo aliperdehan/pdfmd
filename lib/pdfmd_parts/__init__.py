@@ -30,7 +30,7 @@ from tempfile import NamedTemporaryFile
 
 from pdfmd_lookup import LOOKUP_TIERS, LookupAmbiguous, rank_lookup
 
-core = None
+from pdfmd_base import core
 
 
 HEADING_FIELD_WORDS = {"alias": "{#id}", "stem": "heading text"}

@@ -11,7 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def engine(md_path: Path, metadata_files: list[Path]) -> str:

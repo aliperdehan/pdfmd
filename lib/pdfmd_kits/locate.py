@@ -18,7 +18,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def package_places(folder: Path) -> list[Path]:

@@ -41,7 +41,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from tempfile import NamedTemporaryFile, mkdtemp
 
-core = None
+from pdfmd_base import core
 
 
 # `pdfmd --install KIND` / `pdfmd-cli[KIND]`; the version ranges match the

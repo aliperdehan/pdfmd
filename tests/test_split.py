@@ -1,6 +1,8 @@
 """v3.33.5: the split's deferred re-exports (SPLIT.md, step 6). A package that pdfmd.py does not load at start is reached
 through a stand-in (`deferred`) or `DEFERRED_NAMES`; it loads on first use and gets pdfmd as its `core`.
 
+v3.33.188: one `core` for every package (lib/pdfmd_base): `SharedCore`.
+
 v3.33.187i: the safety net for phase 2's moves (`SafetyNet`): every `core.NAME` in lib/ names something pdfmd has, every
 table entry and stand-in names something its module has, no name is both a pdfmd global and a table entry, and no code in
 lib/ binds a bare name that is one of pdfmd's state names (a `global X` lost in a move makes `X = ...` a silent local)."""
@@ -16,6 +18,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
 import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
@@ -24,6 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import pdfmd  # noqa: E402
+import pdfmd_base  # noqa: E402
 
 PACKAGE = "pdfmd_split_probe"
 
@@ -36,7 +40,7 @@ class Deferred(unittest.TestCase):
         package.mkdir()
         (package / "__init__.py").write_text("LOADED_INIT = True\n", encoding="utf-8")
         (package / "role.py").write_text(textwrap.dedent("""\
-            core = None
+            from pdfmd_base import core
             TABLE = {"a": 1}
 
             def where(value):
@@ -55,8 +59,8 @@ class Deferred(unittest.TestCase):
         stand_in = pdfmd.deferred(f"{PACKAGE}.role", "where")
         self.assertNotIn(f"{PACKAGE}.role", sys.modules)
         self.assertEqual(stand_in.__name__, "where")
-        self.assertEqual(stand_in(7), (pdfmd, 7))
-        self.assertIs(sys.modules[f"{PACKAGE}.role"].core, pdfmd)
+        self.assertEqual(stand_in(7), (pdfmd_base.core, 7))
+        self.assertEqual(Path(pdfmd_base.bound().__file__).resolve(), ROOT / "pdfmd.py")   # the copy loaded first
 
     def test_a_deferred_name_is_the_package_s_own_object(self):
         pdfmd.DEFERRED_NAMES["TABLE"] = f"{PACKAGE}.role"
@@ -72,6 +76,7 @@ class Start(unittest.TestCase):
             import sys
             from pathlib import Path
             import pdfmd
+            import pdfmd_base
             names = ('pdfmd_chain', 'pdfmd_paragraph')
             assert not any(name in sys.modules for name in names), [name for name in names if name in sys.modules]
             sys.argv = ['pdfmd', '--version']
@@ -81,10 +86,10 @@ class Start(unittest.TestCase):
                 assert error.code == 0
             assert not any(name in sys.modules for name in names)
             assert pdfmd.paragraph_spacing_typst_args(Path('unused.md'), [], 'html') == []
-            assert sys.modules['pdfmd_paragraph'].core is pdfmd
+            assert sys.modules['pdfmd_paragraph'].core is pdfmd_base.core and pdfmd_base.bound() is pdfmd
             assert 'pdfmd_chain' not in sys.modules
             assert pdfmd.chain_stopped() == ''
-            assert sys.modules['pdfmd_chain'].core is pdfmd
+            assert sys.modules['pdfmd_chain'].core is pdfmd_base.core
         """)
         done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True,
                               stdin=subprocess.DEVNULL,
@@ -97,6 +102,68 @@ class Start(unittest.TestCase):
         done = subprocess.run([sys.executable, "-c", code, str(ROOT)], capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.strip(), "")
+
+
+class SharedCore(unittest.TestCase):
+    """v3.33.188: `core` is lib/pdfmd_base's one object, bound to pdfmd when pdfmd.py loads; it was a `core = None` per
+    module, set only when pdfmd.py imported that module, so a module imported any other way had none."""
+
+    def test_every_module_takes_core_from_pdfmd_base(self):
+        own = []
+        for path in lib_sources():
+            if path.parent.name == "pdfmd_base":
+                continue
+            for node in ast.parse(path.read_text(encoding="utf-8")).body:
+                if "core" in top_level_bindings([node]) and not (
+                        isinstance(node, ast.ImportFrom) and node.module == "pdfmd_base"
+                        and [(alias.name, alias.asname) for alias in node.names] == [("core", None)]):
+                    own.append(f"{path.relative_to(ROOT).as_posix()}:{node.lineno}")
+        self.assertEqual(own, [], "a `core` of its own: `from pdfmd_base import core` instead")
+
+    def test_reads_writes_and_patches_go_to_pdfmd(self):
+        core = pdfmd_base.core
+        pdfmd = pdfmd_base.bound()               # the copy of pdfmd.py loaded first in this process (a test may load two)
+        self.assertIs(core.display_path, pdfmd.display_path)
+        self.assertEqual(core.__file__, pdfmd.__file__)
+        with mock.patch.object(pdfmd, "display_path", lambda path: "patched"):
+            self.assertEqual(core.display_path("x"), "patched")
+        self.assertIs(core.display_path, pdfmd.display_path)
+        before = pdfmd.VERBOSE_OUTPUT
+        with mock.patch.object(core, "VERBOSE_OUTPUT", "patched through core"):
+            self.assertEqual(pdfmd.VERBOSE_OUTPUT, "patched through core")
+        self.assertEqual(pdfmd.VERBOSE_OUTPUT, before)
+        core.split_probe_value = 1
+        self.assertEqual(pdfmd.split_probe_value, 1)
+        del core.split_probe_value
+        self.assertFalse(hasattr(pdfmd, "split_probe_value"))
+        self.assertFalse(hasattr(core, "split_probe_value"))
+
+    def test_the_first_binding_wins(self):
+        first = pdfmd_base.bound()
+        self.assertIsNotNone(first)
+        pdfmd_base.bind(object())
+        self.assertIs(pdfmd_base.bound(), first)
+
+    def test_a_package_imported_on_its_own_has_its_core(self):
+        code = textwrap.dedent("""\
+            import os, sys
+            sys.path[:0] = [sys.argv[1], os.path.join(sys.argv[1], "lib")]
+            import pdfmd_base
+            try:
+                pdfmd_base.core.display_path
+            except AttributeError as error:
+                assert "not bound yet" in str(error), error
+            else:
+                raise AssertionError("an unbound core answered")
+            assert not hasattr(pdfmd_base.core, "display_path")
+            import pdfmd
+            import pdfmd_chain                    # not through pdfmd: as a worker or another package imports it
+            assert pdfmd_chain.core.display_path is pdfmd.display_path
+            assert pdfmd_chain.stopped() == ""
+        """)
+        done = subprocess.run([sys.executable, "-c", code, str(ROOT)], cwd=ROOT, capture_output=True, text=True,
+                              stdin=subprocess.DEVNULL, env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
 
 # ---- the safety net (v3.33.187i) -------------------------------------------------------------------------------------

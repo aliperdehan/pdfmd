@@ -25,7 +25,7 @@ import re
 import sys
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 CSV_CUTS = ("ends", "head")

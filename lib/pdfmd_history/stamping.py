@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-core = None
+from pdfmd_base import core
 
 
 def demote(body: str, current, indent: str, new_line: str) -> str:

@@ -16,7 +16,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 # --- pdfmd --check: a linter (v3.26.15) ---------------------------------------------------------------------

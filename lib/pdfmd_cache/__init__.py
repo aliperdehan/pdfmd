@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from tempfile import mkdtemp
 
-core = None
+from pdfmd_base import core
 
 
 # Two builds that fill the same cache entry at once (v3.33.x): each writes the whole file to its own `.part` beside the

@@ -48,7 +48,7 @@ from tempfile import mkdtemp
 
 from .paths import confined_destination
 
-core = None
+from pdfmd_base import core
 
 
 def _timed(name):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def planned(source: Path, directory: Path | None, target: str) -> Path:

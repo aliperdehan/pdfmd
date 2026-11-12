@@ -22,7 +22,7 @@ from fnmatch import fnmatchcase
 from functools import lru_cache
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def latin_candidates(value: str) -> list[str]:

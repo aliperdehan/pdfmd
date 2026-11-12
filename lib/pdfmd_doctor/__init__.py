@@ -24,7 +24,7 @@ import tempfile
 import time
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def tool_note(name: str) -> str:

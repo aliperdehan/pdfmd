@@ -19,6 +19,34 @@ same commit as the change.
 
 ---
 
+## v3.33.188 — 2026-11-12
+
+Pre-edit state: commit `1f6c79f`. Phase 2 of the split, wave 0, step 0d: **one shared `core` for every package** (plan
+decision D2). The new package `lib/pdfmd_base` holds only that: `core`, one object that passes every read, write and
+deletion of an attribute on to pdfmd, bound by `pdfmd.py` to itself right after its "no lib/" check and before it imports any
+other package. The first binding wins, as before, so a second copy of `pdfmd.py` in one process never re-points it. The 49
+modules that had a `core = None` of their own (the plan counted 42 at 3.33.74) now say `from pdfmd_base import core`, and
+nothing else in them changes. A package imported any other way than through `pdfmd.py` (a `-j` worker that unpickles a
+function by its module, one package importing another, a test) therefore has its `core` whenever pdfmd is loaded; until
+now it had `None` unless `pdfmd.py` had imported it or `load_package` had bound it, which is what kept phase 2 from loading
+packages lazily. In `pdfmd.py`, `bind_core()` and its call naming 21 packages go, `load_package()` is a plain import, and the
+15 `import pdfmd_x` lines that only that call used go too: their `from pdfmd_x import ...` lines still load the same packages
+at start, and `import pdfmd_bridge` stays, as tests read `pdfmd.pdfmd_bridge`. Unbound, `core.X` raises an AttributeError
+that says so. `core.__dict__` is pdfmd's, so `mock.patch.object(core, ...)` saves and restores what pdfmd had. A read through
+`core` costs about 95 ns more than a module attribute (132 against 38 ns, measured), about 1 ms per 10,000 reads.
+`pdfmd_base` is in `pyproject.toml` twice and in `scripts/build_zipapp.py`. SPLIT.md's steps 3 and 6 now describe the shared
+`core`; CLAUDE.md still names `bind_core()` in "pdfmd.py holds only the core", whose rewrite for phase 2 the plan leaves to the
+author at its end (step 5f). `tests/test_split.py`: `SharedCore` checks that every module takes `core` from `pdfmd_base`,
+that reads, writes, deletions and patches through `core` reach pdfmd and are undone, that the first binding wins, that an
+unbound `core` says so, and that a deferred package imported directly has its `core`; the probe package and the start-up test
+compare through `pdfmd_base.bound()`, whichever copy of `pdfmd.py` a process loaded first. `tests/test_ranking_generated.py`
+imports `pdfmd` before it loads its second copy: the first copy now binds `core` for every package, where each module used to
+be bound by whichever copy imported it first, so with that test first in a process every package would read the second copy
+(a whole run imports `pdfmd` long before; found by running it first). Proof: `scripts/split_check.py` with `-b -j 2` as an extra build: SAME on 31 checks;
+`ruff --select F`; the always-run set, `test_split_tools`, `test_ranking_generated` (a second copy of `pdfmd.py`),
+`test_lua_missing` and the full suite (see the commit). Start-up: `scripts/pdfmd --version` interleaved with HEAD, median
+134.2 against 134.3 ms (best 120 against 118); one module more at start (205). `pdfmd.py`: 17,136 -> 17,111 lines.
+
 ## v3.33.187k — 2026-11-12
 
 Pre-edit state: commit `6eb9e82`. Scripts and their test only, no shipped code, so no `PDFMD_VERSION` bump. Phase 2 of the

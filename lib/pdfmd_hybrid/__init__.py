@@ -18,7 +18,7 @@ import warnings
 import zlib
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 # --- The hybrid PDF (v3.25.10) -----------------------------------------------------------------------------
 # LibreOffice's "hybrid PDF" (Export as PDF > Embed OpenDocument file): the PDF carries the document it was made from

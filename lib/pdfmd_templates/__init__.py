@@ -21,7 +21,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 DATA = Path(__file__).resolve().parent / "data"
 TEXT_SUFFIXES = {".md", ".markdown", ".txt", ".yaml", ".yml", ".bib", ".tex", ".csv", ".tsv", ".json", ".lua", ".css",

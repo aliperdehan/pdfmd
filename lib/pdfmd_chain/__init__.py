@@ -28,7 +28,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 MODES = ("auto", "on", "missing", "off")
 # YAML reads a bare on/off/yes/no as a boolean

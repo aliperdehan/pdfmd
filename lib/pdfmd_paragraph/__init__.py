@@ -23,7 +23,7 @@ import os
 import re
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 ENV = "PDFMD_PARAGRAPH_SPACING"            # --paragraph-spacing, set by main(), so -j workers read it too
 KEY = "paragraph-spacing"

@@ -1,7 +1,7 @@
 """Choose HTML maths explicitly, including fragments, while keeping Pandoc defaults choices."""
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def defaults_choose_math(options, cwd):

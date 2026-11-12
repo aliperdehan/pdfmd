@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-core = None
+from pdfmd_base import core
 
 def serve_main_document(folder: Path) -> tuple[Path | None, str]:
     """The document a bare `pdfmd` builds in ``folder`` and why, for the web UI's project view (the data of `which_command`, not its text)."""

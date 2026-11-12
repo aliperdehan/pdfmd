@@ -18,7 +18,7 @@ import re
 import sys
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def user_path_command(args) -> int:

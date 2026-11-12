@@ -32,7 +32,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from tempfile import mkdtemp
 
-core = None
+from pdfmd_base import core
 
 
 def _timed(name):

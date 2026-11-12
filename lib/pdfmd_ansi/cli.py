@@ -16,7 +16,7 @@ import shutil
 import sys
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 def ansi_width_argument(value: str) -> int:
     if not value.isdigit() or int(value) < 20:

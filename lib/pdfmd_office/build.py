@@ -33,7 +33,7 @@ try:
 except ImportError:                                # pragma: no cover -- incomplete installation
     yaml = None
 
-core = None
+from pdfmd_base import core
 
 
 def office_package_folders(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None

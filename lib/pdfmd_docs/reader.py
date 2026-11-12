@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 DOCUMENTS = {
     "readme": ("README.md", "README.md", "the manual: every feature, with examples"),

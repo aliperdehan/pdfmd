@@ -27,7 +27,7 @@ except ImportError:
 
 from pdfmd_pdfimages import extract_pdf_images, rewrite_image_paths, rewrite_tex_image_paths
 
-core = None
+from pdfmd_base import core
 
 
 def folder_counts(names: list[str]) -> str:

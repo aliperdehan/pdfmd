@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def csv_note_argument(value: str) -> str:

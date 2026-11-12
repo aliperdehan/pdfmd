@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:     # only the annotations name it; the code reads core.pypdf
     import pypdf
 
-core = None
+from pdfmd_base import core
 
 
 def _timed(name):

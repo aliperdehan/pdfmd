@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-core = None
+from pdfmd_base import core
 
 
 # -- Stripping HTML comments (v3.22.0) -----------------------------------------

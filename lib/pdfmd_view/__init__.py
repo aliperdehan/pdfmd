@@ -22,7 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 ANSI_LINK_TERMINALS = frozenset({"iTerm.app", "WezTerm", "ghostty", "vscode", "Hyper"})     # TERM_PROGRAM: they draw OSC 8 links

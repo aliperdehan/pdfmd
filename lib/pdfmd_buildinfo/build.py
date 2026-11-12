@@ -24,7 +24,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 
 def begin_timer() -> None:

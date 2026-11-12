@@ -16,7 +16,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-core = None
+from pdfmd_base import core
 
 def picture_target(args) -> str | None:
     """`--to`, else the format `-o` names by its suffix: png and svg are the ones that choose the picture command."""
