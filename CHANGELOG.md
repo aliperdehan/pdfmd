@@ -19,6 +19,29 @@ same commit as the change.
 
 ---
 
+## v3.33.191a — 2026-11-12
+
+Pre-edit state: commit `b2bea00`. Scripts and tests only, so no `PDFMD_VERSION` bump. **`scripts/test_parallel.py`, a parallel test runner**: the
+suite's ~3,160 tests run serially in one hour or more (LaTeX, Typst, LibreOffice and Pandoc builds), and unittest has no parallel
+mode. The runner starts each `tests/test_*.py` module (or the modules and shell patterns named on the command line) as
+`python3 -m unittest discover -s tests -p test_x.py` from the repository root, in `-j N` worker processes (default: the number of
+CPUs), slowest module first. Each worker has its own XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_DATA_HOME and TMPDIR under one temporary
+folder that is removed at the end (`--keep` keeps it), PDFMD_CONFIG empty, PDFMD_NO_PROMPT=1, stdin from /dev/null, and a session of
+its own; SIGTERM, SIGHUP (where the system has it) and Ctrl-C end every worker's whole process group (checked with a real SIGTERM: no worker, lualatex or
+pandoc is left) and start no queued module. The durations are kept in a timings file under the system temporary folder (not in the
+repository and not in pdfmd's cache), file size is the fallback; a line per module (status, tests, skipped, seconds), the totals
+and the full output of the failed modules follow, and the exit status is 1 when a module failed. The runner compares pdfmd's real
+cache, config and data folders before and after and says whether they changed. `--failed-only` runs the modules that failed last time.
+Two rules, each with its reason in the script: `SERIAL` modules run one at a time after the parallel phase, when nothing else runs
+(the `test_colophon_*` group: each compiles Swift under a 120 s limit inside the test, which expired beside the workers' LaTeX builds
+even with two at a time); `OWN_ENVIRONMENT` modules get the runner's own environment (`test_isolation` asserts that the run watches
+the real folders, which a worker's variables hide). The real folders are asked of a child process, because importing
+`tests/isolation_support` redirects the importer's own variables. A helper module with no tests (`test_00_environment`, exit status 5)
+counts as ok. `tests/test_parallel_runner.py`: scheduling, serial group, pattern selection, count parsing and the worker
+environment, without running a module. Measured on a quiet machine at d6f0435, `-j 8`: 3162 tests in 216 modules in 1880 s (the serial
+run: 3164 tests; the difference is the two Colophon modules that timed out in `setUpClass`, 9 tests, plus the runner's own 7). CLAUDE.md
+names the runner next to the serial command.
+
 ## v3.33.191 — 2026-11-12
 
 Pre-edit state: commit `4dc7f26`. **A font download from `mirrors.ctan.org` is asked again when the mirror that answered was

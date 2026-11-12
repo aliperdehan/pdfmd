@@ -97,6 +97,8 @@ lost-features prompt (`NATIVE_LOST`) and `math_lines()`, which `lib/pdfmd_ansi`
 reads too, stay in `pdfmd.py`. md2pdf (`pymd2pdf`) is an optional dependency, not vendored.
 `python3 -m unittest discover -s tests` runs everything; the end-to-end tests run
 `pdfmd` with an empty PATH, which is how to test "no Pandoc" without removing it.
+The serial run takes an hour or more: `python3 scripts/test_parallel.py [-j N] [--failed-only] [PATTERN ...]` runs the test modules
+in parallel worker processes, each with its own scratch config, cache, data and temporary folders (`--help` says more).
 
 `lib/pdfmd_yaml/` is a generated pure-Python copy of PyYAML, with its MIT
 licence. Never edit it by hand: change `scripts/vendor_pyyaml.py` and re-run
