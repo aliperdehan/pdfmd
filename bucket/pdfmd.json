@@ -1,10 +1,10 @@
 {
-    "version": "3.32.12",
+    "version": "3.33.191",
     "description": "Markdown to a good-looking PDF: a Pandoc wrapper with smart defaults",
     "homepage": "https://github.com/aliperdehan/pdfmd",
     "license": "MIT",
-    "url": "https://files.pythonhosted.org/packages/cf/56/03259c0932f538a86136b78c12aab7b6c21df52009df7b83f7260643a6c0/pdfmd_cli-3.32.12-py3-none-any.whl",
-    "hash": "3aa21ca3c219d524b17404c557e05e07a6faa86424cbf15388e5caa307e6f063",
+    "url": "https://files.pythonhosted.org/packages/82/c7/b648681a4f2e68d71626079ecc851898e675d9242c4a8a6ea05aeb42f338/pdfmd_cli-3.33.191-py3-none-any.whl",
+    "hash": "2841559373176eed2ddfc3ac99e46aa6e65dbb1220c4fe9a6afad78a6de4fb0e",
     "depends": [
         "python",
         "pandoc",
