@@ -8,6 +8,17 @@ The number in brackets, `[3dc]`, is the entry in the maintainer's working notes 
 holds the agreed details (design, decisions, measured facts). Items marked **decide**
 wait for an answer before any code.
 
+## The queue, paused after the 3.33.191 release (2026-11-12): resume in this order
+
+- [ ] No release until this queue is done, the GUI decided and built; CI runs on the branch `fixes-3.33.168` [D60]
+- [ ] 1. Split phase 2, wave 1 (base helpers, the `_timed` copies, edit, run, direct, build), then the full suite [3fi D29]
+- [ ] 2. After wave 1: lossless PDF shrinking, project metadata (`metadata-parents`, default 1 from the scaffold's folder), built-in fullcite and `bibliography-indent` [D42 D43 D51 D52 D53 D59]
+- [ ] 3. Bibliography: every layer's sources add up and a clashing key warns; a `bib` auto kind, also for keys the named files lack [D60 D61]
+- [ ] 4. Wave 2, then the biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
+- [ ] 5. Waves 3 to 5 (the docstring becomes `docs/reference.md`, `--doc reference`), then the full suite [3fi D29]
+- [ ] 6. Colophon by hand (`--smoke-web`, Cmd-Q with an unsaved tab, `gui.yml` on main), then the GUI decisions and build [D59 D60]
+- [ ] 7. nulabreport last: the full smoke test; a biochem report as `.docx` beside its PDF [D59]
+
 ## Decide first
 
 - [ ] **decide** Multi-path builds (`pdfmd *`, `-b a.md dir/`, 3.33.140): revise the guesses that skip non-inputs, earlier outputs and same-output clashes (e.g. a record of what pdfmd wrote, instead of guessing) [3fi D33]
@@ -87,7 +98,7 @@ wait for an answer before any code.
 
 ## Making the main `pdfmd.py` main code more manageable [3fi]
 
-- [ ] The split of `pdfmd.py`: phase 1 (37 packages, 3.33.x; pattern and order in `SPLIT.md`), then phase 2 [3fi]
+- [ ] The split of `pdfmd.py`, phase 2 (`SPLIT.md`, 47 moves): wave 0 done (3.33.187i to 3.33.191b); waves 1 to 5 open; a local full suite (`scripts/test_parallel.py`) after waves 1 and 5 only [3fi D28 D29]
 - [ ] After phase 1: the gathered oddities and bugs (split_check's weaknesses, Typst `indent: true`, cache-location words, a real `--install` check), then the full suite [3fi]
 - [ ] Runtime: lazy heavy imports (pypdf alone is about half of every start), a probe cache, fewer engine re-runs; no Rust/Go rewrite [3fj]
 - [ ] After the whole queue: pytest + pytest-xdist as an optional development extra (CI stays on unittest); `scripts/test_parallel.py` stays the runner unless it keeps failing in the waves [3fi D62]
