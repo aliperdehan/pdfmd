@@ -232,6 +232,8 @@ jobs:
           # packages pdfmd's own LaTeX asks for beyond MiKTeX's basic set are installed up front
           "$miktex/mpm" --admin --update-db || echo "WARN mpm --update-db failed"
           "$miktex/mpm" --admin --install=booktabs || echo "WARN mpm could not install booktabs"
+          # and beamer (the slide-notes tests): on-demand install fetched it in the third run of 3.33.17x, not in the eighth
+          "$miktex/mpm" --admin --install=beamer || echo "WARN mpm could not install beamer"
           "$miktex/lualatex" --version | head -1
       - name: poppler (the tests read PDFs with pdftotext and pdftoppm)
         run: |

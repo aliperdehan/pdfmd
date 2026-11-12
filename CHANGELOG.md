@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.187f — 2026-11-12
+
+Pre-edit state: commit `866917d`. The workflow only. The eighth CI run was green on every gating job; `windows-latex` (not
+gating) had two failures, both `test_slide_notes` builds ending in ``LaTeX Error: File `beamer.cls' not found``: MiKTeX's
+on-demand install fetched beamer in the third run and not in this one, as it once failed to fetch booktabs (v3.33.175d).
+The job now installs beamer up front beside booktabs, with a WARN if mpm cannot.
+
 ## v3.33.187e — 2026-11-12
 
 Pre-edit state: commit `e9f0f61`. Tests only, from a full local run on a Mac with LibreOffice (CI's runners have none, so
