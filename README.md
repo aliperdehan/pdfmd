@@ -1764,7 +1764,8 @@ The server is meant to be safe on a shared machine: it listens on 127.0.0.1 only
 printed URL trades it for a cookie once, a script sends `Authorization: Bearer TOKEN`); a request is refused when its `Host` is not
 `127.0.0.1` or `localhost` (DNS rebinding) or, for a write, when its `Origin` is another site; files are reached only below the project folder
 (`..`, absolute paths and links out of the folder are refused) and the page is sent with a policy that stops a script in a document's raw
-HTML from running. No CORS header is sent, so no other site can read an answer. A request body over `serve-max-request-mb` (in the setup's options, 100 MB by default; 0 = no limit) is refused (413)
+HTML from running. No CORS header is sent, so no other site can read an answer. A request body over `serve-max-request-mb` (in the setup's options, 100 MB by default; 0 = request bodies switched off, so the studio is read-only and every save, new file or render is refused (403);
+a negative number = no limit) is refused (413)
 before it is read. On macOS and Linux a server that is told which process to watch, by the environment variable `PDFMD_SERVE_PARENT` (the Mac
 app sets it to its own process id), stops by itself when that process is gone (the app crashed), instead of idling on its port. A server
 started from a terminal, under `nohup` or by a script is not watched.

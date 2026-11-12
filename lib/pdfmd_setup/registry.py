@@ -750,7 +750,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "`diagram-timeout` in `pdfmd-options`.", "Checks and limits", "config", "number"),
         text("options.serve-max-request-mb", "Largest request `pdfmd --serve` takes (MB)",
              "The body of one request to the local server of the web UI (a save sends the whole file): a larger one is refused (413) "
-             "before it is read. Default 100. 0 or a negative number: no limit. Read from this setup only, when the server starts.",
+             "before it is read. Default 100. 0: request bodies are switched off, so every save, new file and render is refused "
+             "and the studio is read-only (reading still works). A negative number (-1): no limit. Read from this setup only, when the server starts.",
              "Checks and limits", "config", "number"),
         text("options.check-ignore", "Codes `pdfmd --check` leaves out", "Comma-separated, e.g. heading-skip, link-anchor.",
              "Checks and limits", "config", "list"),

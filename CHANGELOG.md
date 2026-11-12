@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.190 — 2026-11-12
+
+Pre-edit state: commit `f7e369f`. **`serve-max-request-mb` follows the numeric convention of the other settings** (the author:
+"0 should be disabled, in accordance with pdfmd-wide logic, and negative means unbound"). A positive number is the cap in MB
+(default 100, refused with 413 as before); **0 switches request bodies off**: every request that carries a body (a save, a new
+file, a render) is refused with 403 and a JSON error (`code: bodies_off`) that names the setting, so the studio is read-only
+while GET requests still work; **a negative number (-1) is no limit**. Before, 0 and a negative number both meant no limit. A positive value under one
+byte is a cap of one byte, never 0 (which would switch bodies off).
+The `--setup` row, the README and the module docstring say so. Tests: `tests/test_serve.py` (zero, negative, positive, over raw
+sockets and through `pdfmd --serve` with a config file). `pdfmd.py` only gets the version line.
+
 ## v3.33.189a — 2026-11-12
 
 Pre-edit state: commit `c675b1b`. SPLIT.md only, no shipped code, so no `PDFMD_VERSION` bump. Phase 2 of the split, wave 0,

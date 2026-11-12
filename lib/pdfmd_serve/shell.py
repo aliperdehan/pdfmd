@@ -3,7 +3,8 @@
 The token travels once, in the URL that pdfmd prints (`?t=...`); the server answers it with an HttpOnly, SameSite=Strict cookie and a
 redirect, so the page never handles it. A script may send `Authorization: Bearer TOKEN` instead. Every request is checked for the Host
 (DNS rebinding), a write for the Origin; no CORS header is ever sent, so no other site can read an answer. A body larger than the
-setting `serve-max-request-mb` is refused before it is read (it is read before the token is checked). On a POSIX system the server
+setting `serve-max-request-mb` is refused before it is read (it is read before the token is checked); with 0 every request that
+carries a body is refused (403, a read-only studio, GET still works), a negative number is no limit. On a POSIX system the server
 stops when the process named by the environment variable PDFMD_SERVE_PARENT is gone (the Mac app that crashed: Colophon sets it to its
 own process id), instead of idling on its port. Without the variable (a terminal, `nohup`, a script) nothing is watched.
 """
@@ -38,7 +39,8 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
 
 
 # The default of the setting `serve-max-request-mb`: the largest request body, in MB (a whole file's text in a save, the text of a
-# render). 0 or a negative number: no limit.
+# render). 0: request bodies are switched off (every request that carries one is refused; the studio is read-only). A negative
+# number: no limit.
 MAX_REQUEST_MB = 100
 
 
@@ -81,7 +83,7 @@ class Server(ThreadingHTTPServer):
     def __init__(self, core: Core, web_root: Path, token: str, max_body: int | None = None):
         super().__init__(("127.0.0.1", 0), Handler)
         self.core, self.web_root, self.token = core, Path(web_root).resolve(), token
-        self.max_body = max_body if max_body is not None and max_body > 0 else None
+        self.max_body = max_body if max_body is None or max_body >= 0 else None      # None: no limit; 0: no body at all
         # the process whose end ends the server: only the one PDFMD_SERVE_PARENT names (the app that started it), never the shell's
         self.parent = watched_parent()
 
@@ -162,6 +164,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.close_connection = True
                 return self.refuse(400, "length", "a bad Content-Length")
             limit = self.server.max_body
+            if limit == 0 and size > 0:                      # bodies switched off: refused unread, whatever the method
+                self.close_connection = True
+                return self.refuse(403, "bodies_off", "this server takes no request body: the setting serve-max-request-mb is 0, "
+                                                      "which switches bodies off (the studio is read-only)")
             if limit is not None and size > limit:           # refused unread: the connection cannot carry another request
                 self.close_connection = True
                 return self.refuse(413, "too_large", f"the request body is {size} bytes, over the limit of {limit} "
@@ -221,7 +227,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def run(core: Core, web_root: Path, announce=None, max_body: int | None = None) -> int:
     """Serve until interrupted, or until the process named by PDFMD_SERVE_PARENT is gone (POSIX). `announce(info)` is called once with
-    `{api, url, port, token, root}` (default: one JSON line on stdout); `max_body` is the largest request body in bytes (None: no limit)."""
+    `{api, url, port, token, root}` (default: one JSON line on stdout); `max_body` is the largest request body in bytes (None: no limit; 0: no body is taken)."""
     token = secrets.token_urlsafe(24)
     server = Server(core, web_root, token, max_body)
     port = server.server_address[1]

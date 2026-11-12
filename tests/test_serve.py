@@ -507,6 +507,57 @@ class Http(Folder):
         self.assertEqual(connection.getresponse().status, 201)
         connection.close()
 
+    def _serve_with(self, max_body):
+        server = Server(self.core, WEB, "tok-123", max_body=max_body)
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+        thread.start()
+        self.addCleanup(lambda: (server.shutdown(), server.server_close(), thread.join(5)))
+        return server.server_address[1]
+
+    def _post_file(self, port, text="x"):
+        body = json.dumps({"path": "new.md", "text": text})
+        return self.raw_request(port, f"POST /api/file HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer tok-123\r\n"
+                                      f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n{body}")
+
+    def test_a_request_limit_of_zero_switches_bodies_off_and_reading_still_works(self):
+        port = self._serve_with(0)
+        answer = self._post_file(port)
+        self.assertIn(b" 403 ", answer.split(b"\r\n")[0])
+        self.assertIn(b"serve-max-request-mb", answer)
+        self.assertIn(b"switches bodies off", answer)
+        self.assertIn(b"bodies_off", answer)
+        self.assertFalse((self.root / "new.md").exists(), "nothing was written")
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        connection.request("GET", "/api/project", headers={"Authorization": "Bearer tok-123"})
+        self.assertEqual(connection.getresponse().status, 200)
+        connection.close()
+
+    def test_a_negative_request_limit_is_no_limit_and_a_positive_one_is_the_cap(self):
+        unbound = self._serve_with(None)        # what a negative number becomes
+        self.assertIn(b" 201 ", self._post_file(unbound, "x" * 100000).split(b"\r\n")[0])
+        capped = self._serve_with(64)
+        self.assertIn(b" 413 ", self._post_file(capped, "x" * 100000).split(b"\r\n")[0])
+
+    def test_the_setup_value_of_the_request_limit_zero_negative_positive(self):
+        # 0.000000001 MB is under one byte: a cap of one byte (413), never 0, which would switch bodies off (403)
+        for value, small, big in ((0, 403, 403), (-1, 201, 201), (0.001, 201, 413), ("0.000000001", 413, 413)):
+            config = self.root / f"config{value}.yaml"
+            config.write_text(f"options:\n  serve-max-request-mb: {value}\n", encoding="utf-8")
+            process = subprocess.Popen([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--serve"], cwd=self.root, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                       env={**os.environ, "PDFMD_CONFIG": str(config)})
+            try:
+                info = json.loads(process.stdout.readline())
+                for text, status in (("x", small), ("x" * 4000, big)):
+                    connection = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=30)
+                    connection.request("POST", "/api/file", body=json.dumps({"path": f"n{value}-{len(text)}.md", "text": text}),
+                                       headers={"Authorization": "Bearer " + info["token"], "Content-Type": "application/json"})
+                    self.assertEqual(connection.getresponse().status, status, f"limit {value}, {len(text)} characters")
+                    connection.close()
+            finally:
+                process.terminate()
+                process.communicate(timeout=30)
+
     @unittest.skipUnless(os.name == "posix", "a watched process is seen on POSIX only")
     def test_the_server_watches_only_the_process_it_is_told_about(self):
         import io
