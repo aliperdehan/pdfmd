@@ -19,6 +19,36 @@ same commit as the change.
 
 ---
 
+## v3.33.189 — 2026-11-12
+
+Pre-edit state: commit `d6f0435`. Phase 2 of the split, wave 0, step 0e: **the names table** (plan section 2.1). A name that
+phase 2 moves out of `pdfmd.py` and that something still reads as `pdfmd.X` (a test, or `lib/` as `core.X`) gets no stand-in:
+it is one word of a table line, `names("pdfmd_x.role", "a b c")`, the line `scripts/split_move.py` (3.33.187k) already writes.
+`names` is `pdfmd_base.names_into(DEFERRED_NAMES)`: it fills the same `DEFERRED_NAMES` that phase 1's
+`DEFERRED_NAMES.update(...)` lines fill (their six entries stay as they are until wave 5), and it refuses, when `pdfmd.py`
+loads, a word that is not a name or a name the table already serves from another module (a refused line adds nothing). The
+table is handed in, never reached through `pdfmd_base.bound()`, so a second copy of `pdfmd.py` fills its own. The module
+`__getattr__` now keeps what it loaded in pdfmd's globals: the first read of `pdfmd.X` imports the module and binds `X`, and
+every later read, `core.X` included, is a plain lookup that never comes back to `__getattr__`; an unknown name is still an
+AttributeError and binds nothing. For the six entries the table has today (`_PANDOC_EXTENSIONS`, `DOCUMENTS`, `_VAULT_ROOTS`,
+`_EMBED_INDEX`, `FOLDER_SETTINGS`, `installed_font_families`) nothing changes: no module rebinds them, and the tests change
+them in place (`.clear()`, `mock.patch.dict`, `.cache_clear()`). A `mock.patch.object(pdfmd, "X", ...)` is undone whether or
+not `X` had been read (before the first read, unittest.mock deletes the binding it made and the next read takes the module's
+object again). `pdfmd.py` grows by 4 lines, 17,111 -> 17,115 (the plan allowed about 8): the binding `names = ...`, one more
+comment line above `DEFERRED_NAMES`, and in `__getattr__` the kept value and one docstring line; the helper itself is in
+`lib/pdfmd_base`. SPLIT.md describes the table in step 0f. `tests/test_split.py`: `names()` fills the table and refuses what
+it cannot serve; a table entry read once is kept in pdfmd's globals, never loaded again and still there when its module is
+gone; a patch is undone before and after the first read; `.cache_clear()` reaches the real function. `SafetyNet` reads the
+table from the source as the mover does (every `names(...)` line in the shape the mover sees, each name once) and compares it
+with the table pdfmd has, also through `split_move.table_entries` on Python 3.12 and later; no module rebinds with `global` a
+name it serves to the table (pdfmd would keep the old object), and no table entry is pdfmd's state (a `-j` worker copies the
+`*_CLI` globals). Proof: `ruff --select F`; `test_split` (with the caching line removed, the caching test fails),
+`test_split_tools`, `test_packaging`, `test_docs_consistency`, `test_setup`, `test_isolation`, `test_launcher`, and the tests
+that read the six entries (`test_probes`, `test_doc`, `test_embeds`, `test_obsidian`, `test_newline`). `split_check` was not
+run: none of the six is read as `core.X` in `lib/` or bare in `pdfmd.py`, so no build of it reaches the change. Start-up:
+`scripts/pdfmd --version` interleaved with HEAD on a loaded machine, median 272.9 against 281.7 ms (best 249.7 against
+247.7); the same 205 modules at start.
+
 ## v3.33.188 — 2026-11-12
 
 Pre-edit state: commit `1f6c79f`. Phase 2 of the split, wave 0, step 0d: **one shared `core` for every package** (plan

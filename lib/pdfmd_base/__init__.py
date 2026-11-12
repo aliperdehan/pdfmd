@@ -8,9 +8,14 @@ reaches every package. The first binding wins: a second copy of pdfmd.py in one 
 it. A package imported on its own (a `-j` worker unpickling a function by its module, one package importing another, a
 test) therefore has its `core` whenever pdfmd is loaded; until 3.33.188 each package had a `core = None` of its own, set only
 when pdfmd.py imported it.
+
+`names_into()` (3.33.189) gives pdfmd.py its `names("pdfmd_x.role", "a b c")`, the lines of its names table: each name is
+served as `pdfmd.a` from that module, loaded on the first read (pdfmd.py's module `__getattr__`).
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 
 _bound = None                                   # the pdfmd module, once pdfmd.py has bound it
 
@@ -25,6 +30,22 @@ def bind(module) -> None:
 def bound():
     """The module `core` stands for, or None while nothing has bound it."""
     return _bound
+
+
+def names_into(table: dict[str, str]) -> Callable[[str, str], None]:
+    """`names(module, listed)` for the names table ``table`` (pdfmd.py's `DEFERRED_NAMES`: name -> module): each name in
+    ``listed``, separated by spaces or line breaks, is served from ``module`` (`pdfmd_x`, or `pdfmd_x.role` for one module
+    of it). The table is handed in, not reached through `bound()`: a second copy of pdfmd.py fills its own. A word that is
+    not a name, or a name the table already serves from another module, is a ValueError, raised when pdfmd.py loads."""
+    def names(module: str, listed: str) -> None:
+        words = listed.split()
+        for name in words:
+            if not name.isidentifier():
+                raise ValueError(f"names({module!r}, ...): {name!r} is not a name")
+            if table.get(name, module) != module:
+                raise ValueError(f"names({module!r}, ...): {name} is already served from {table[name]}")
+        table.update(dict.fromkeys(words, module))
+    return names
 
 
 def _unbound(name: str) -> AttributeError:

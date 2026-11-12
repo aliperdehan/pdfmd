@@ -1517,7 +1517,7 @@ def write_text_lf(path: Path, text: str) -> None:
     atomic_write_text(path, text, newline="\n")
 
 
-PDFMD_VERSION = "3.33.188"
+PDFMD_VERSION = "3.33.189"
 import argparse
 import atexit
 import contextlib
@@ -1696,14 +1696,17 @@ def deferred(module: str, name: str):
     return stand_in
 
 
-# The names other than functions that a test or lib/ reads as `pdfmd.X` from a deferred package: name -> its module.
+# The names table: name -> the module that serves `pdfmd.NAME` (a name that code here calls bare has a stand-in instead).
+# Filled below by `names("pdfmd_x.role", "a b c")` lines (pdfmd_base.names_into, 3.33.189) and `DEFERRED_NAMES.update(...)`.
 DEFERRED_NAMES: dict[str, str] = {}
 
 
 def __getattr__(name: str):
-    """`pdfmd.X` for a name in DEFERRED_NAMES (PEP 562): the package's own object, its module loaded on the first read."""
+    """`pdfmd.X` for a name in DEFERRED_NAMES (PEP 562): the package's own object, its module loaded on the first read.
+    It is kept in this module's globals, so a later read is a plain lookup and never comes here again."""
     if name in DEFERRED_NAMES:
-        return getattr(load_package(DEFERRED_NAMES[name]), name)
+        value = globals()[name] = getattr(load_package(DEFERRED_NAMES[name]), name)
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -1714,6 +1717,7 @@ if importlib.util.find_spec("pdfmd_comments") is None:
 
 import pdfmd_base  # noqa: E402
 pdfmd_base.bind(sys.modules[__name__])      # every package's `core`, before any of them is imported; the first binding wins
+names = pdfmd_base.names_into(DEFERRED_NAMES)   # the names table's lines: names("pdfmd_x.role", "a b c")
 from pdfmd_comments import (CommentPolicy, comment_kind_set, parse_comment_policy,  # noqa: E402, F401 -- the strip_*_comments are read by lib/ and tests
                             strip_markdown_comments, strip_tex_comments, strip_xml_comments)
 from pdfmd_templates import init_command  # noqa: E402

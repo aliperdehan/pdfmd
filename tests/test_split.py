@@ -5,7 +5,13 @@ v3.33.188: one `core` for every package (lib/pdfmd_base): `SharedCore`.
 
 v3.33.187i: the safety net for phase 2's moves (`SafetyNet`): every `core.NAME` in lib/ names something pdfmd has, every
 table entry and stand-in names something its module has, no name is both a pdfmd global and a table entry, and no code in
-lib/ binds a bare name that is one of pdfmd's state names (a `global X` lost in a move makes `X = ...` a silent local)."""
+lib/ binds a bare name that is one of pdfmd's state names (a `global X` lost in a move makes `X = ...` a silent local).
+
+v3.33.189: the names table (phase 2's `names("pdfmd_x.role", "a b c")` lines, pdfmd_base.names_into): `names()` fills
+`DEFERRED_NAMES` and refuses what it cannot serve, a table entry read once is kept in pdfmd's globals (later reads never
+load anything), a patch of one is undone whether or not it had been read, `.cache_clear()` still reaches the real function;
+the table read from the source (as `scripts/split_move.py` reads it) is the table pdfmd has, each name in it once, and no
+module rebinds a name it serves (pdfmd would keep the first object)."""
 
 from __future__ import annotations
 
@@ -17,6 +23,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from collections import Counter
 from pathlib import Path
 from unittest import mock
 
@@ -40,16 +47,23 @@ class Deferred(unittest.TestCase):
         package.mkdir()
         (package / "__init__.py").write_text("LOADED_INIT = True\n", encoding="utf-8")
         (package / "role.py").write_text(textwrap.dedent("""\
+            import functools
             from pdfmd_base import core
             TABLE = {"a": 1}
 
             def where(value):
                 return core, value
+
+            @functools.lru_cache(maxsize=None)
+            def cached():
+                return object()
         """), encoding="utf-8")
         sys.path.insert(0, folder.name)
         self.addCleanup(sys.path.remove, folder.name)
         self.addCleanup(self.forget)
-        self.addCleanup(pdfmd.DEFERRED_NAMES.pop, "TABLE", None)
+        for name in ("TABLE", "cached"):
+            self.addCleanup(pdfmd.DEFERRED_NAMES.pop, name, None)
+            self.addCleanup(vars(pdfmd).pop, name, None)     # a table entry once read is kept in pdfmd's globals (3.33.189)
 
     def forget(self):
         for name in (f"{PACKAGE}.role", PACKAGE):
@@ -68,6 +82,60 @@ class Deferred(unittest.TestCase):
 
     def test_an_unknown_name_is_still_an_attribute_error(self):
         self.assertFalse(hasattr(pdfmd, "no_such_name_anywhere"))
+        self.assertNotIn("no_such_name_anywhere", vars(pdfmd))
+
+    # ---- the names table (3.33.189) ----
+    def test_names_fills_the_table_and_refuses_what_it_cannot_serve(self):
+        table: dict[str, str] = {}
+        names = pdfmd_base.names_into(table)
+        names("pdfmd_x.role", "a b "
+                              "c\n    d")                   # implicitly joined pieces, as scripts/split_move.py wraps them
+        names("pdfmd_x.role", "a")                          # the same entry again changes nothing
+        names("pdfmd_y", "")
+        self.assertEqual(table, dict.fromkeys("abcd", "pdfmd_x.role"))
+        with self.assertRaisesRegex(ValueError, "already served from pdfmd_x.role"):
+            names("pdfmd_y", "e a")
+        with self.assertRaisesRegex(ValueError, "'f,' is not a name"):
+            names("pdfmd_y", "f, g")
+        self.assertEqual(table, dict.fromkeys("abcd", "pdfmd_x.role"))      # a refused line adds nothing
+
+    def test_pdfmd_names_fills_pdfmd_s_own_table(self):
+        pdfmd.names(f"{PACKAGE}.role", "TABLE cached")
+        self.assertEqual(pdfmd.DEFERRED_NAMES["TABLE"], f"{PACKAGE}.role")
+        self.assertEqual(pdfmd.DEFERRED_NAMES["cached"], f"{PACKAGE}.role")
+
+    def test_a_table_entry_read_once_is_kept_and_never_loaded_again(self):
+        pdfmd.names(f"{PACKAGE}.role", "TABLE")
+        self.assertNotIn("TABLE", vars(pdfmd))
+        with mock.patch.object(pdfmd, "load_package", wraps=pdfmd.load_package) as load:
+            first = pdfmd.TABLE
+            self.assertIs(pdfmd.TABLE, first)
+            self.assertIs(getattr(pdfmd, "TABLE"), first)
+        self.assertEqual(load.call_count, 1)
+        self.assertIs(vars(pdfmd)["TABLE"], sys.modules[f"{PACKAGE}.role"].TABLE)
+        self.forget()                                       # the module gone: the kept object still answers
+        self.assertIs(pdfmd.TABLE, first)
+
+    def test_a_patch_of_a_table_entry_is_undone_before_and_after_its_first_read(self):
+        pdfmd.names(f"{PACKAGE}.role", "TABLE")
+        with mock.patch.object(pdfmd, "TABLE", "patched"):  # not read yet: the patch reads it first
+            self.assertEqual(pdfmd.TABLE, "patched")
+        real = sys.modules[f"{PACKAGE}.role"].TABLE
+        self.assertIs(pdfmd.TABLE, real)
+        with mock.patch.object(pdfmd, "TABLE", "again"):    # kept in pdfmd's globals now
+            self.assertEqual(pdfmd.TABLE, "again")
+        self.assertIs(pdfmd.TABLE, real)
+        with mock.patch.dict(pdfmd.TABLE, {"b": 2}):        # in place: the module's own dict
+            self.assertEqual(sys.modules[f"{PACKAGE}.role"].TABLE, {"a": 1, "b": 2})
+        self.assertEqual(real, {"a": 1})
+
+    def test_a_cached_function_in_the_table_keeps_cache_clear(self):
+        pdfmd.names(f"{PACKAGE}.role", "cached")
+        self.assertIs(pdfmd.cached, sys.modules[f"{PACKAGE}.role"].cached)
+        first = pdfmd.cached()
+        self.assertIs(pdfmd.cached(), first)
+        pdfmd.cached.cache_clear()
+        self.assertIsNot(pdfmd.cached(), first)
 
 
 class Start(unittest.TestCase):
@@ -241,6 +309,31 @@ def top_level_bindings(body: list[ast.stmt]) -> set[str]:
     return names
 
 
+def table_lines(tree: ast.Module) -> list[tuple[str, str]]:
+    """(name, module) for each word of pdfmd.py's top-level `names("module", "a b c")` and `DEFERRED_NAMES.update(a=...)`
+    lines, in order; a `names(...)` line in any other shape (which `scripts/split_move.py` would not see) is an error."""
+    found: list[tuple[str, str]] = []
+    for node in tree.body:
+        call = node.value if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call) else None
+        if call is None:
+            continue
+        if isinstance(call.func, ast.Name) and call.func.id == "names":
+            if call.keywords or len(call.args) != 2 or not all(
+                    isinstance(argument, ast.Constant) and isinstance(argument.value, str) for argument in call.args):
+                raise AssertionError(f"pdfmd.py:{node.lineno}: names(...) takes two strings, the module and the names")
+            found += [(name, call.args[0].value) for name in call.args[1].value.split()]
+        elif (isinstance(call.func, ast.Attribute) and call.func.attr == "update"
+              and isinstance(call.func.value, ast.Name) and call.func.value.id == "DEFERRED_NAMES"):
+            found += [(keyword.arg, keyword.value.value) for keyword in call.keywords]
+    return found
+
+
+def module_source(module: str) -> Path:
+    """lib/'s file for a module: `pdfmd_x` is lib/pdfmd_x/__init__.py, `pdfmd_x.role` lib/pdfmd_x/role.py."""
+    path = ROOT / "lib" / Path(*module.split("."))
+    return path / "__init__.py" if path.is_dir() else path.with_suffix(".py")
+
+
 def stand_ins(tree: ast.Module) -> list[tuple[str, str, str]]:
     """(name, module, attribute) of every `name = deferred("module", "attribute")` at pdfmd.py's top level."""
     return [(node.targets[0].id, node.value.args[0].value, node.value.args[1].value) for node in tree.body
@@ -306,6 +399,37 @@ class SafetyNet(unittest.TestCase):
     def test_every_table_entry_and_stand_in_names_something_its_module_has(self):
         self.assertEqual(self.probe["table_missing"], [])
         self.assertEqual(self.probe["stand_ins_missing"], [])
+
+    def test_the_table_read_from_the_source_is_the_table_pdfmd_has(self):
+        lines = table_lines(self.tree)
+        self.assertGreater(len(lines), 5)
+        twice = sorted(name for name, count in Counter(name for name, _ in lines).items() if count > 1)
+        self.assertEqual(twice, [], "a name in two table lines: the later one wins, the earlier one is dead")
+        self.assertEqual(dict(lines), self.probe["table"])
+
+    @unittest.skipUnless(sys.version_info >= (3, 12), "scripts/split_move.py needs Python 3.12 (names inside f-strings)")
+    def test_the_mover_reads_the_same_table(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        self.addCleanup(sys.path.remove, str(ROOT / "scripts"))
+        import split_move
+        self.assertEqual(split_move.table_entries(self.tree), set(self.probe["table"]))
+
+    def test_no_module_rebinds_a_name_it_serves_to_the_table(self):
+        # pdfmd keeps the object it read first (3.33.189): a module that rebinds the name later would leave pdfmd.X stale
+        state = {name for node in ast.walk(self.tree) if isinstance(node, ast.Global) for name in node.names}
+        rebound, missing = [], []
+        for name, module in self.probe["table"].items():
+            if name in state or name.endswith("_CLI"):
+                rebound.append(f"{name}: pdfmd's state, never a table entry (a -j worker gets a copy of it)")
+            path = module_source(module)
+            if not path.is_file():
+                missing.append(f"{name}: {module}")
+                continue
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Global) and name in node.names:
+                    rebound.append(f"{path.relative_to(ROOT).as_posix()}:{node.lineno}: global {name}")
+        self.assertEqual(missing, [], "a table module with no file under lib/")
+        self.assertEqual(rebound, [], "a table entry has to stay the same object: mutate it in place, or serve a function")
 
     def test_no_name_is_both_a_pdfmd_global_and_a_table_entry(self):
         # read from the source, not from the module: a table entry that has been read is kept in pdfmd's globals
