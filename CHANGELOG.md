@@ -19,6 +19,26 @@ same commit as the change.
 
 ---
 
+## v3.33.189a — 2026-11-12
+
+Pre-edit state: commit `c675b1b`. SPLIT.md only, no shipped code, so no `PDFMD_VERSION` bump. Phase 2 of the split, wave 0,
+step 0f: **SPLIT.md is rewritten for phase 2.** It opens with the numbers (phase 1's, the phase 2 baseline measured at
+3.33.189, the plan's), then `## Phase 2: the moves, in order`: what phase 2 does differently (the shared `core`, the names
+table, callers first, the tools, the safety net), the author's decisions D1 to D7, the pattern for every move of phase 2,
+the wave 0 table, the 47 move sections in waves 1 to 4, wave 5's launchpad steps and what stays in `pdfmd.py`. The move
+sections are generated from the audit's move list (by name, regenerated at 3.33.187) with the plan's note per move added,
+and wave 0's changes to the binding block applied: `pdfmd_base` is an existing package since 3.33.188, `bind_core` is gone,
+`names` stays. A note that pointed at a direct import already removed in 3.33.49 (`pdfmd_doctor` and `find_batchocr`) was
+left out. Phase 1 follows as the record, its sections unchanged, with its "How the table was made" and its pattern moved
+under it; "Phase 2 clusters" goes. Code comments and CLAUDE.md that say "SPLIT.md, step N" mean phase 1's pattern, as the
+file now says. Baseline at 3.33.189: `pdfmd.py` 17,115 lines; `scripts/pdfmd --version` best 103.1 ms, median 128.3 ms of 10
+runs (106.3 and 128.2 ms for 3.33.188, interleaved, at a load average of about 4); 205 modules at start, 24 of them pdfmd's
+packages. Proof: `scripts/split_spec.py`'s reader finds, for each of the 47 phase 2 keys, the same definitions, constants
+and tests in the new file as in the generated list, and for each of phase 1's 37 keys (`--phase 1`) the same as in the old
+file; `scripts/split_move.py pdfmd_edit.command --dry-run` reads its section and passes its self-check; the always-run set
+(`test_split`, `test_split_tools`, `test_packaging`, `test_docs_consistency`, `test_setup`, `test_isolation`,
+`test_launcher`) and `test_doc` pass.
+
 ## v3.33.189 — 2026-11-12
 
 Pre-edit state: commit `d6f0435`. Phase 2 of the split, wave 0, step 0e: **the names table** (plan section 2.1). A name that
