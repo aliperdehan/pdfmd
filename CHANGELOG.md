@@ -19,6 +19,37 @@ same commit as the change.
 
 ---
 
+## v3.33.187k — 2026-11-12
+
+Pre-edit state: commit `6eb9e82`. Scripts and their test only, no shipped code, so no `PDFMD_VERSION` bump. Phase 2 of the
+split, wave 0, step 0c: **`scripts/split_move.py` moves a section of SPLIT.md by itself** (plan decision D5). It cuts each
+moved statement with the comment block right above it, writes them in `pdfmd.py`'s order to the package's module (a new
+`lib/pdfmd_x/__init__.py` or `role.py`, or appended to one, with the imports they need and `from pdfmd_base import core` when
+something reads it), and rewrites by Python's scoping rules: a read of a pdfmd name that stays (a definition, a constant, state,
+an import from a `pdfmd_*` package, a table entry) becomes `core.NAME`, while a parameter, a local, a closure variable, a
+comprehension's own variable or a class attribute of that name is left alone; `global X` with `X = ...`, `X += ...`, `del X`
+or a `for`/`with` target becomes `core.X ...`; a moved name that tests rebind on pdfmd is read as `core.NAME` inside the move
+too; `__file__` becomes `core.__file__` and `sys.modules[__name__]` `core`. In `pdfmd.py` it adds the table line
+(`names("pdfmd_x.role", "a b c")`, which step 0e defines) for the moved names read from outside, and a stand-in for a moved
+function that staying code calls bare; `--import-at-start` binds what staying code needs when `pdfmd.py` loads with a plain
+import above the first statement that needs it (move 1, `pdfmd_base`). Columns are UTF-8 bytes, as `ast` gives them, so a
+line with Cyrillic or typographic text before a rewritten name comes out right. It checks itself: each moved statement,
+parsed back from the text it wrote, has the AST of the original with exactly those substitutions. It refuses, writing
+nothing, what needs a decision (a pdfmd name read while the module loads, a local named `core`, a name bound in a top-level
+`if`/`try` or twice, `globals()`, `vars()`, `__name__` alone, a state write `core.X` cannot spell, a moved constant that staying
+code reads bare, state that staying code rebinds), and lists every comment block it carries, as the rule cannot tell a
+definition's comment from a banner above it (it carries `pdfmd.py`'s "BEFORE EDITING" header with `write_text_lf`).
+`--dry-run` and `--out DIR` write nothing in place. Unlike the plan, scoping comes from the AST rather than `symtable`: from
+Python 3.12 `symtable` reports an inlined comprehension's variable as a local of the enclosing function (PEP 709), and 3.14 adds
+annotation scopes, so its answer depends on the Python version; the tool needs 3.12 or later (names inside f-strings have
+positions only from there) and its tests skip on older ones. A dry run of all 47 planned moves at this commit raises nothing;
+13 go through as they are, the others are refused for the reasons the plan lists for doing them later (their callers have
+not moved). Written to a scratch folder, the `pdfmd_edit.command`, `pdfmd_direct.route`, `pdfmd_run` and `pdfmd_base` moves
+pass `ruff --select F` but for `names` itself. `scripts/split_spec.py`: a test's `pdfmd.X[...] = ...` changes `X` in place and
+is reported as "item set", no longer as a rebinding of `X`. `tests/test_split_tools.py` gains the tool's tests on synthetic
+sources (a move with every rewrite, an append, `--import-at-start`, a dry run, nine refusals, and a self-check that catches a
+wrong text). `pdfmd.py` is unchanged (17,136 lines).
+
 ## v3.33.187j — 2026-11-12
 
 Pre-edit state: commit `8a3ca9e`. A script and its test only, no shipped code, so no `PDFMD_VERSION` bump. Phase 2 of the

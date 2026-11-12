@@ -199,7 +199,8 @@ def test_patches(tests: list[Path], moving: set[str]) -> dict[str, list[str]]:
         ("patch", re.compile(r"patch\(\s*[\"']pdfmd\.(\w+)[\"']")),
         ("patch.dict", re.compile(r"patch\.dict\(\s*(?:pdfmd\.|[\"']pdfmd\.)(\w+)(?![\w.])")),  # not pdfmd.os.environ
         ("setattr", re.compile(r"setattr\(\s*pdfmd\s*,\s*[\"'](\w+)[\"']")),
-        ("assigned", re.compile(r"(?<![\w.])pdfmd\.(\w+)\s*(?:\[[^\]]*\]\s*)?=(?!=)")),
+        ("assigned", re.compile(r"(?<![\w.])pdfmd\.(\w+)\s*=(?!=)")),
+        ("item set", re.compile(r"(?<![\w.])pdfmd\.(\w+)\s*\[[^\]]*\]\s*=(?!=)")),          # in place, like patch.dict
         ("patch.object on ", re.compile(r"patch\.object\(\s*(?!pdfmd\s*,)([\w.]+)\s*,\s*[\"'](\w+)[\"']")),
     ]
     found: dict[str, list[str]] = {}
