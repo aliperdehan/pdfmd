@@ -303,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
         users = [f"pdfmd.py:{number}" for number, line in enumerate(lines, 1)
                  if number not in moved_lines and word.search(line.split("#")[0])]
         for path, body in (*test_texts.items(), *lib_texts.items()):
-            users += [f"{path.relative_to(root)}:{number}" for number, line in enumerate(body.splitlines(), 1)
+            users += [f"{path.relative_to(root).as_posix()}:{number}" for number, line in enumerate(body.splitlines(), 1)
                       if attribute.search(line)]
         print(f"- {name}: " + (f"TABLE ({listing(users)})" if users else "only the package"))
 
@@ -353,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         pattern = re.compile(r"\b(?:(?:pdfmd|core)\.)?%s\.(cache_clear|cache_info)\(" % re.escape(name))
         callers += [f"pdfmd.py:{number}" for number, line in enumerate(lines, 1) if number not in moved_lines and pattern.search(line)]
         for path, body in (*test_texts.items(), *lib_texts.items()):
-            callers += [f"{path.relative_to(root)}:{number}" for number, line in enumerate(body.splitlines(), 1)
+            callers += [f"{path.relative_to(root).as_posix()}:{number}" for number, line in enumerate(body.splitlines(), 1)
                         if pattern.search(line)]
         if decorated or callers:
             cached.append(f"- {name}" + (" (cached)" if decorated else "") + (f": {listing(callers, 5)}" if callers else ""))

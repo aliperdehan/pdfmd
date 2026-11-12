@@ -602,7 +602,7 @@ def apply(plan: Plan, source: str, tree: ast.Module, out: Path, root: Path) -> l
                 for alias in node.names} | {name for node in present.body for name in split_spec.bound_names(node)}
         clash = sorted(plan.moving & have)
         if clash:
-            plan.refused.append(f"{plan.target.relative_to(root)} already binds {', '.join(clash)}")
+            plan.refused.append(f"{plan.target.relative_to(root).as_posix()} already binds {', '.join(clash)}")
             return []
         missing = [line for name, line in sorted(plan.imports.items()) if name not in have]
         if "core" not in have and any(replacement.startswith("core") for replacement in plan.edits.values()):

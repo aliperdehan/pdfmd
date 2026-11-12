@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.191b — 2026-11-12
+
+Pre-edit state: commit `21f3edf`. Scripts only. `scripts/split_spec.py` listed the files that use a name with the system's
+path separator, so on Windows its report read `tests\test_probe.py:6` and `tests/test_split_tools.py` (`Report.
+test_what_the_move_needs`) failed in all four Windows jobs of the tenth CI run of 3.33.18x. The two listings and
+`scripts/split_move.py`'s "already binds" refusal now print forward slashes on every system (`as_posix()`), so the
+tools' output is the same everywhere. No change to pdfmd itself.
+
 ## v3.33.191a — 2026-11-12
 
 Pre-edit state: commit `b2bea00`. Scripts and tests only, so no `PDFMD_VERSION` bump. **`scripts/test_parallel.py`, a parallel test runner**: the
