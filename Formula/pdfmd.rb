@@ -3,8 +3,8 @@ class Pdfmd < Formula
 
   desc "Markdown to a good-looking PDF: a Pandoc wrapper with smart defaults"
   homepage "https://github.com/aliperdehan/pdfmd"
-  url "https://files.pythonhosted.org/packages/af/ed/db0fcea11d000dff9e0e3b0217bd848d9e2e710a903b833bbb31cdfa784d/pdfmd_cli-3.32.12.tar.gz"
-  sha256 "25aa17e8036f572c939071ff169e297cd8eb1f39f6cef3ba5c940177bf29182e"
+  url "https://files.pythonhosted.org/packages/c0/b2/f9287ace631d869c4e23258f43ea78743fd9f942ee16e97d58518ec40dc9/pdfmd_cli-3.33.191.tar.gz"
+  sha256 "31c412373340d023b263693834b2769ddecca9b5b4feba59f3c031cd84ab043b"
   license "MIT"
 
   depends_on "libyaml"
