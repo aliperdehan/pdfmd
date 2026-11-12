@@ -19,6 +19,22 @@ same commit as the change.
 
 ---
 
+## v3.33.187i — 2026-11-12
+
+Pre-edit state: commit `aeae2bc`. Tests only, no shipped code, so no `PDFMD_VERSION` bump. Phase 2 of the split, wave 0,
+step 0a: **`tests/test_split.py` grows the safety net for the moves (`SafetyNet`).** Phase 2 moves about 560 definitions out
+of `pdfmd.py` by name, and a slip in a move would otherwise show only as a wrong build later. Five checks: every `core.NAME`
+in `lib/` (read, written or deleted) names something pdfmd has, found with the AST and its scopes, so a local or a closure
+named `core` (`pdfmd_chem`) is left alone, a parameter `core` counts (`pdfmd_batch`, `pdfmd_report` and `pdfmd_args` are
+handed pdfmd), and `lib/pdfmd_serve/shell.py`, whose `core` is the JSON core of `--serve`, is skipped by name; 513 distinct
+names today, all present. Every `DEFERRED_NAMES` entry and every `deferred(...)` stand-in (110) names something its module
+has. No name is both bound in `pdfmd.py` and a table entry (read from the source, as a read table entry will be kept in
+pdfmd's globals). No code in `lib/` binds a bare name that is one of pdfmd's state names (the names of its `global`
+statements, its `*_CLI` settings and `WORKER_GLOBALS`, 70 today): a `global X` lost in a move would make `X = ...` a silent
+local. The loading checks run in a child process, so they do not depend on what earlier tests loaded. Nothing fails today.
+`test_split` joins the always-run set of the moves (`scripts/split_spec.py` and SPLIT.md say so from wave 0's later steps).
+`pdfmd.py` is unchanged (17,136 lines).
+
 ## v3.33.187h — 2026-11-12
 
 Pre-edit state: commit `1f75e4a`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump.
