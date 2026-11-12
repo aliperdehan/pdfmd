@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.33.187g — 2026-11-12
+
+Pre-edit state: commit `fec8269`. `gui/` only, no shipped pdfmd code, so no `PDFMD_VERSION` bump.
+**Colophon 0.3.20: validate numeric settings before storing them (G2.5, G3.3).** The CLI accepted values such as
+`pdfReloadDebounceMs 1e100`, stored them, then trapped while printing them; the Settings window likewise stored
+`lineNumberMinDigits 1e20`, crashing editors on the settings notification. Both now use one validator based on the
+consumer's integer conversions, Dispatch's signed nanoseconds and positive counts, sizes and time limits. Refusals name
+the valid range and leave the stored value alone. Invalid legacy preferences use defaults; CLI inspection and reset can
+format oversized stored numbers without an unchecked integer conversion. Bitmap dimensions also check the PDF-dependent
+pixel and byte counts before conversion or allocation. These are type/API limits and RGBA's four bytes per pixel, not new
+configurable caps. Five headless Swift regressions fail against the pre-edit sources and pass with the fix: CLI ranges,
+Settings refusal without storing, legacy fallback, legacy inspection and bitmap overflow (including an ordinary PNG).
+The Colophon area tests, required split/packaging/docs/setup/isolation checks and sandbox Swift build pass; no app window
+was opened. `pdfmd.py` is unchanged.
+
 ## v3.33.187f — 2026-11-12
 
 Pre-edit state: commit `866917d`. The workflow only. The eighth CI run was green on every gating job; `windows-latex` (not

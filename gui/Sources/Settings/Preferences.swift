@@ -216,7 +216,7 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
             let v = Settings.number(item.key)
             switch item.kind {
             case .flag: (c as? NSButton)?.state = v != 0 ? .on : .off
-            case .number: (c as? NSTextField)?.stringValue = v == v.rounded() ? "\(Int(v))" : "\(v)"
+            case .number: (c as? NSTextField)?.stringValue = Settings.formatNumber(v)
             case .choice(let values): (c as? NSPopUpButton)?.selectItem(at: values.firstIndex(of: v) ?? 0)
             }
         }
@@ -280,7 +280,11 @@ final class PreferencesController: NSWindowController, NSTabViewDelegate {
             case .flag: Settings.set(id, (sender as? NSButton)?.state == .on ? 1 : 0)
             case .number:
                 let text = (sender as? NSTextField)?.stringValue ?? ""
-                if let v = Double(text.trimmingCharacters(in: .whitespaces)), v >= 0 { Settings.set(id, v) } else { refresh() }   // a wrong entry goes back to what is stored
+                let value = Double(text.trimmingCharacters(in: .whitespaces)) ?? .nan
+                if let error = Settings.numericError(id, value) {
+                    let alert = NSAlert(); alert.messageText = "Invalid setting"; alert.informativeText = error
+                    alert.runModal(); refresh()
+                } else { Settings.set(id, value) }
             case .choice(let values):
                 Settings.set(id, values[(sender as? NSPopUpButton)?.indexOfSelectedItem ?? 0])
             }

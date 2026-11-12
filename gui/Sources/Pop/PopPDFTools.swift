@@ -8,8 +8,13 @@ enum PopPDFTools {
     /// The page drawn on a transparent bitmap at `scale` pixels per point.
     private static func bitmap(_ rep: NSPDFImageRep, scale: CGFloat) -> NSBitmapImageRep? {
         let size = rep.bounds.size
-        let w = max(1, Int((size.width * scale).rounded(.up)))
-        let h = max(1, Int((size.height * scale).rounded(.up)))
+        guard let width = Int(exactly: (size.width * scale).rounded(.up)),
+              let height = Int(exactly: (size.height * scale).rounded(.up)) else { return nil }
+        let w = max(1, width), h = max(1, height)
+        // The dimensions depend on the PDF as well as the setting; the bitmap's RGBA byte count must fit too.
+        let (pixels, pixelOverflow) = w.multipliedReportingOverflow(by: h)
+        let (_, byteOverflow) = pixels.multipliedReportingOverflow(by: 4)
+        guard !pixelOverflow, !byteOverflow else { return nil }
         guard let bmp = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h, bitsPerSample: 8,
                                          samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
@@ -41,7 +46,7 @@ enum PopPDFTools {
               let doc = PDFDocument(data: pdf), let page = doc.page(at: 0) else { return (pdf: pdf, pages: 1) }
         let pages = doc.pageCount
         // a full page from pdfmd carries a page number in its bottom margin: that is not part of the snippet
-        let strip = bmp.pixelsHigh > Int(ignoreBottom * scale * 3) ? Int(ignoreBottom * scale) : 0
+        let strip = CGFloat(bmp.pixelsHigh) > ignoreBottom * scale * 3 ? (Int(exactly: (ignoreBottom * scale).rounded(.towardZero)) ?? 0) : 0
         var minX = bmp.pixelsWide, maxX = -1, minY = bmp.pixelsHigh, maxY = -1
         for y in 0..<(bmp.pixelsHigh - strip) {
             let row = px + y * bmp.bytesPerRow

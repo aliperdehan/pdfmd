@@ -174,7 +174,7 @@ enum SettingsCLI {
     }
 
     static func entries() -> [Entry] {
-        func show(_ v: Double) -> String { v == v.rounded() ? String(Int(v)) : String(v) }
+        func show(_ v: Double) -> String { Settings.formatNumber(v) }
         var list: [Entry] = []
         for i in Settings.items {
             switch i.kind {
@@ -197,7 +197,7 @@ enum SettingsCLI {
 
     static func current(_ key: String) -> String? {
         guard let v = CFPreferencesCopyAppValue(key as CFString, CLI.domain as CFString) else { return nil }
-        if let n = v as? NSNumber { let d = n.doubleValue; return d == d.rounded() ? String(Int(d)) : String(d) }
+        if let n = v as? NSNumber { return Settings.formatNumber(n.doubleValue) }
         return v as? String
     }
 
@@ -213,6 +213,7 @@ enum SettingsCLI {
             }
         case "number":
             guard let d = Double(text) else { return (nil, "\(e.key) is a number, not \"\(raw)\"") }
+            if let error = Settings.numericError(e.key, d) { return (nil, error) }
             return (NSNumber(value: d), nil)
         case "choice":
             if e.key.hasPrefix("category.") {

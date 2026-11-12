@@ -1,6 +1,6 @@
 import Foundation
 
-let appVersion = "0.3.19"
+let appVersion = "0.3.20"
 
 /// Every number that changes the editor's behaviour is a setting here, never a constant in the code
 /// (the repository's "no hardcoded thresholds" rule). They live in the app's UserDefaults, so there are two ways to change one:
@@ -164,7 +164,7 @@ enum Settings {
     ]
 
     static func number(_ key: String) -> Double {
-        if let n = store.object(forKey: key) as? NSNumber { return n.doubleValue }
+        if let n = store.object(forKey: key) as? NSNumber, numericError(key, n.doubleValue) == nil { return n.doubleValue }
         return items.first { $0.key == key }!.value
     }
 
