@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.187d — 2026-11-12
+
+Pre-edit state: commit `dd36254`. The workflow only. `linux-pandoc` and `windows-latex` install STIX Two with
+`pdfmd --install fonts:stix-two`, which downloads from https://mirrors.ctan.org, and that redirector sends each request to
+another CTAN mirror. In the fifth and sixth CI runs one mirror's certificate chain was incomplete
+(`CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate`) and another timed out, so both gating Linux jobs
+ended before their tests. The step now tries up to three times, 15 s apart; a third failure still fails the job. pdfmd's
+own download is unchanged (a retry there is a proposal in the maintainer's notes).
+
 ## v3.33.187c — 2026-11-12
 
 Pre-edit state: commit `28038db`. Tests only, from the sixth CI run. (1) The eleven `tests/test_colophon_*.py` modules of
