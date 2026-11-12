@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.187c — 2026-11-12
+
+Pre-edit state: commit `28038db`. Tests only, from the sixth CI run. (1) The eleven `tests/test_colophon_*.py` modules of
+v3.33.185a-187a compile small Swift programs against macOS frameworks and skipped only where there is no `swiftc`; the
+Linux runners have one, and ten of them errored there. They now run on macOS only (`sys.platform == 'darwin'`), where
+they pass. (2) `test_serve`'s test of a server started by hand (v3.33.185) waited 30 s for the server's first line and then
+read it unchecked; on a loaded macOS runner the line had not come yet (an `IndexError`). It now waits up to 120 s and fails
+with the server's output when the line never comes.
+
 ## v3.33.187b — 2026-11-12
 
 Pre-edit state: commit `ad03ad5`. A test only, from the fifth CI run of the 3.33.17x-18x fixes (every `native` job and

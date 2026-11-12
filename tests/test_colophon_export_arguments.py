@@ -12,7 +12,7 @@ import isolation_support  # noqa: E402,F401
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@unittest.skipUnless(shutil.which('swiftc'), 'Swift compiler required')
+@unittest.skipUnless(sys.platform == 'darwin' and shutil.which('swiftc'), 'Colophon is a Mac app: this check compiles Swift against macOS frameworks')
 class ExportArguments(unittest.TestCase):
     def test_escaped_spaces_and_quotes_stay_in_whole_words(self):
         source = (ROOT / 'gui/Sources/Editor/Export.swift').read_text()

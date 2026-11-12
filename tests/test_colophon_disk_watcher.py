@@ -13,7 +13,7 @@ import isolation_support  # noqa: E402,F401
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@unittest.skipUnless(shutil.which('swiftc'), 'Swift compiler required')
+@unittest.skipUnless(sys.platform == 'darwin' and shutil.which('swiftc'), 'Colophon is a Mac app: this check compiles Swift against macOS frameworks')
 class DiskWatcher(unittest.TestCase):
     def test_recreated_file_and_later_write_are_watched(self):
         source = (ROOT / 'gui/Sources/Editor/DiskWatcher.swift').read_text().replace('import Cocoa', 'import Foundation\nimport Darwin')

@@ -12,7 +12,7 @@ import isolation_support  # noqa: E402,F401
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@unittest.skipUnless(shutil.which('swiftc'), 'Swift compiler required')
+@unittest.skipUnless(sys.platform == 'darwin' and shutil.which('swiftc'), 'Colophon is a Mac app: this check compiles Swift against macOS frameworks')
 class PendingCopy(unittest.TestCase):
     def test_old_completion_does_not_copy_after_an_edit(self):
         source = (ROOT / 'gui/Sources/Pop/PopPanel.swift').read_text()

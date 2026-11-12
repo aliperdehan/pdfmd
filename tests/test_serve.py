@@ -677,10 +677,13 @@ class CommandLine(unittest.TestCase):
                                str(ROOT / "scripts" / "pdfmd"), str(out)], cwd=self.folder, capture_output=True, text=True, timeout=60, env=env)
         pid = int(done.stdout.strip())
         self.addCleanup(lambda: _kill(pid))
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + 120                              # a cold start on a loaded CI runner can take a while
         while time.monotonic() < deadline and '"url"' not in (out.read_text(encoding="utf-8") if out.exists() else ""):
             time.sleep(0.1)
-        info = json.loads(out.read_text(encoding="utf-8").splitlines()[0])
+        announced = out.read_text(encoding="utf-8") if out.exists() else ""
+        if '"url"' not in announced:
+            self.fail(f"the server never said where it listens; its output: {announced!r}")
+        info = json.loads(announced.splitlines()[0])
         time.sleep(1.5)                                                # several turns of the 0.2 s poll after the starter's end
         self.assertTrue(_alive(pid), "an unwatched server must outlive its starter")
         connection = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=30)

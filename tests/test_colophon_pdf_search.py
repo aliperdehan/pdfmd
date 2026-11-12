@@ -12,7 +12,7 @@ import isolation_support  # noqa: E402,F401
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@unittest.skipUnless(shutil.which('swiftc'), 'Swift compiler required')
+@unittest.skipUnless(sys.platform == 'darwin' and shutil.which('swiftc'), 'Colophon is a Mac app: this check compiles Swift against macOS frameworks')
 class PDFSearch(unittest.TestCase):
     def test_callbacks_from_old_document_are_ignored(self):
         source = (ROOT / 'gui/Sources/PDF/PDFViewer.swift').read_text()
