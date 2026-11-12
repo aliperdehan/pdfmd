@@ -19,6 +19,27 @@ same commit as the change.
 
 ---
 
+## v3.33.187j — 2026-11-12
+
+Pre-edit state: commit `8a3ca9e`. A script and its test only, no shipped code, so no `PDFMD_VERSION` bump. Phase 2 of the
+split, wave 0, step 0b: **`scripts/split_spec.py` reports what a phase 2 move needs.** It finds a section under SPLIT.md's
+`## Phase 2:` heading when there is one, as phase 1's sections share six keys with phase 2's (`pdfmd_parts`, `pdfmd_routing`,
+`pdfmd_native`, `pdfmd_comments`, `pdfmd_hybrid`, `pdfmd_watch`) and the first match used to win; `--phase 1` reads phase 1's,
+an explicit phase never falls back to the whole file, and two sections of one key in one phase are refused. A dotted key
+(`pdfmd_tex.inputs`) is its own section. `--sections FILE` reads sections from another file in SPLIT.md's format (the
+generated move list), `--root DIR` another checkout. New in the report: where the code goes (a new package, appended to one,
+or a module of its own); a name bound only inside a top-level `try`/`if` (moved by hand); the state the moved code writes with
+`global` (`core.X = ...`); every kind of test patch (`patch.dict(pdfmd.X)`, `setattr(pdfmd, "X", ...)`, `pdfmd.X = ...`, and
+`patch.object` of a moved name on a lib/ module, besides `patch.object(pdfmd, ...)` and `patch("pdfmd.x")`), with the names
+the moved code only writes; what is read when a module loads, both ways (decorators, default arguments, class bodies,
+constants built from constants: a pdfmd name the moved code needs then cannot be `core.X`, and a moved name that staying code
+needs then needs a binding in `pdfmd.py`); module-level statements that use a moved name; `lru_cache` functions and their
+`.cache_clear()` / `.cache_info()` callers; `__file__`, `__name__` and `globals()` in the moved code; moved names that staying
+code rebinds with `global`. `test_split` joins the always-run set it prints. A fix on the way: a name the moved code both reads
+and rebinds with `global` was left out of "read as `core.NAME`", as `ast.walk` meets `global X` before the `X = ...` below
+it (`run_main` has six such names). `tests/test_split_tools.py` (new) checks the lookup on a synthetic SPLIT.md and the report
+on a synthetic checkout, so neither depends on what `pdfmd.py` holds. `pdfmd.py` is unchanged (17,136 lines).
+
 ## v3.33.187i — 2026-11-12
 
 Pre-edit state: commit `aeae2bc`. Tests only, no shipped code, so no `PDFMD_VERSION` bump. Phase 2 of the split, wave 0,
