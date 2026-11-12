@@ -255,7 +255,13 @@ class Discovery(unittest.TestCase):
     def test_other_targets_are_untouched(self):
         self.assertEqual(self.build("-o", "doc.html").returncode, 0)
         self.assertEqual(self.build("-o", "doc.odt").returncode, 0)
-        self.assertIn(b"8.2681in", zipfile.ZipFile(self.root / "doc.odt").read("styles.xml"))
+        # the page stays A4, however the writer spells it: Pandoc's own `8.2681in`, LibreOffice's `21.001cm` (the default .odt
+        # route since v3.33.180 is Word -> LibreOffice where LibreOffice is installed)
+        styles = zipfile.ZipFile(self.root / "doc.odt").read("styles.xml").decode()
+        width = re.search(r'fo:page-width="([0-9.]+)(in|cm|mm|pt)"', styles)
+        self.assertIsNotNone(width, "a page width in styles.xml")
+        inches = float(width.group(1)) / {"in": 1, "cm": 2.54, "mm": 25.4, "pt": 72}[width.group(2)]
+        self.assertAlmostEqual(inches, 8.2681, delta=0.01)
 
     def test_init_reference_writes_and_never_overwrites(self):
         self.assertEqual(self.build("--init-reference", name="--version").returncode, 0) if False else None

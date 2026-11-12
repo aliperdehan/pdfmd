@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.187e — 2026-11-12
+
+Pre-edit state: commit `e9f0f61`. Tests only, from a full local run on a Mac with LibreOffice (CI's runners have none, so
+they take the Pandoc fallback and pass). Since v3.33.180 an .odt is the Word build converted by LibreOffice, which spells
+the same things differently: `test_office.Discovery.test_other_targets_are_untouched` looked for Pandoc's `8.2681in` and
+found `fo:page-width="21.001cm"` (the same A4 page), and `test_office_latex.Properties.test_word_and_opendocument` looked
+for the title with a literal `"` where LibreOffice writes `&quot;`. The first now converts the page width to inches (A4
+within 0.01 in), the second compares the parsed `dc:title` and `meta:initial-creator`; what they check is unchanged.
+
 ## v3.33.187d — 2026-11-12
 
 Pre-edit state: commit `dd36254`. The workflow only. `linux-pandoc` and `windows-latex` install STIX Two with

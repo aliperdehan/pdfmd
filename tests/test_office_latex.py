@@ -852,8 +852,12 @@ class Properties(unittest.TestCase):
         self.assertNotIn("title-meta", zipfile.ZipFile(self.root / "d.docx").read("docProps/custom.xml").decode())
         self.pdfmd("d.md", "-o", "d.odt")
         meta = zipfile.ZipFile(self.root / "d.odt").read("meta.xml").decode()
-        self.assertIn(f"<dc:title>{COVERED_TITLE}</dc:title>", meta)
-        self.assertIn("<meta:initial-creator>A. One; B. Two</meta:initial-creator>", meta)
+        # compared as XML values: LibreOffice (the default .odt route since v3.33.180) writes `"` as `&quot;`, Pandoc does not
+        import xml.etree.ElementTree as ET
+        ns = {"dc": "http://purl.org/dc/elements/1.1/", "meta": "urn:oasis:names:tc:opendocument:xmlns:meta:1.0"}
+        properties = ET.fromstring(meta)
+        self.assertEqual(properties.findtext(".//dc:title", namespaces=ns), COVERED_TITLE)
+        self.assertEqual(properties.findtext(".//meta:initial-creator", namespaces=ns), "A. One; B. Two")
         self.assert_private(self.root / "d.odt")
         self.assertEqual(zipfile.ZipFile(self.root / "d.odt").infolist()[0].filename, "mimetype")
 
