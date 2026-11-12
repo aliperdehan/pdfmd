@@ -192,6 +192,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "parts": Omitted("document", "a document in parts (the folder setup will hold it per project)"),
     "max-asset-mb": "options.max-asset-mb", "max-output-mb": "options.max-output-mb", "soffice-timeout": "options.soffice-timeout", "diagram-timeout": "options.diagram-timeout",
     "serve-max-request-mb": "options.serve-max-request-mb",
+    "download-retries": "options.download-retries",
     "no-auto": "options.no-auto",
     "auto": "options.auto.explicit-only", "auto.explicit-only": "options.auto.explicit-only", "auto.on": "options.auto.on",
     "office.latex": "options.office.latex", "office.labels": "options.office.labels",

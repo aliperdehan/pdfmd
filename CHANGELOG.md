@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.191 — 2026-11-12
+
+Pre-edit state: commit `4dc7f26`. **A font download from `mirrors.ctan.org` is asked again when the mirror that answered was
+bad.** The redirector sends every request to a different CTAN mirror, and one with an incomplete certificate chain
+(`SSL: CERTIFICATE_VERIFY_FAILED unable to get local issuer certificate`) or a time-out failed CI twice. For a URL on that host
+(only that host) a TLS/certificate, connection or time-out error, or a file that fails its checksum, now makes pdfmd ask again,
+up to the new setting `download-retries` (the setup's options): the number of extra tries after the first, default 2; 0: no retry;
+a negative number: no limit (Ctrl-C stops it; there is no pause between tries). Each failed try prints one WARN naming the
+mirror it reached and the error; the last failure is the error it was before. An HTTP status (404, 500) is not retried. The code
+is the new `lib/pdfmd_unicode/download.py`; `--setup` row and inventory entry added. Tests: `tests/test_download_retry.py`
+(stand-in openers, nothing is downloaded). `pdfmd.py` only gets the version line.
+
 ## v3.33.190 — 2026-11-12
 
 Pre-edit state: commit `f7e369f`. **`serve-max-request-mb` follows the numeric convention of the other settings** (the author:

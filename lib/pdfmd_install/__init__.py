@@ -1060,7 +1060,8 @@ def install_fonts(names: str) -> bool:
         print(f"No font package or group called {error.args[0]!r}. `pdfmd --install fonts` lists them.",
               file=sys.stderr)
         return False
-    failed = installer.install(keys, core.fonts_directory())
+    from pdfmd_unicode.download import retries_setting
+    failed = installer.install(keys, core.fonts_directory(), retries=retries_setting(core))
     core.reset_font_caches()
     done = [key for key in keys if key not in failed]
     if done:

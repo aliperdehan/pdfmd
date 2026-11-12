@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Callable
 
 from ._catalog import PACKAGES
+from .download import DEFAULT_RETRIES, ChecksumMismatch, fetch
 from .scripts import SCRIPT_NAMES
 
 MANIFEST = "manifest.json"
@@ -136,35 +137,37 @@ def packages_for(code_points, language: str | None = None) -> list[str]:
 
 # -- fetching ----------------------------------------------------------------------
 
-def _download(url: str, opener: Callable = urllib.request.urlopen) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "pdfmd-fonts"})
-    with opener(request, timeout=300) as response:
-        return response.read()
+def _download(url: str, opener: Callable = urllib.request.urlopen, log: Callable[[str], None] = print,
+              retries: int = DEFAULT_RETRIES, check: Callable[[bytes], None] | None = None) -> bytes:
+    return fetch(url, opener, log, retries, check=check)
 
 
 def _git_blob_sha1(data: bytes) -> str:
     return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
 
-def _file_bytes(item: dict, archives: dict[str, bytes], opener: Callable) -> bytes:
+def _file_bytes(item: dict, archives: dict[str, bytes], opener: Callable, log: Callable[[str], None] = print,
+                retries: int = DEFAULT_RETRIES) -> bytes:
     """One catalog file's content, checked against its pin."""
     if "zip" in item:
         url = item["zip"]
         if url not in archives:
-            archives[url] = _download(url, opener)
-            if hashlib.sha256(archives[url]).hexdigest() != item["zip_sha256"]:
-                raise OSError(f"SHA-256 mismatch for {url}")
+            def check_zip(data: bytes) -> None:
+                if hashlib.sha256(data).hexdigest() != item["zip_sha256"]:
+                    raise ChecksumMismatch(f"SHA-256 mismatch for {url}")
+            archives[url] = _download(url, opener, log, retries, check_zip)
         with zipfile.ZipFile(io.BytesIO(archives[url])) as bundle:
             return bundle.read(item["member"])
-    data = _download(item["url"], opener)
-    if _git_blob_sha1(data) != item["git_sha1"]:
-        raise OSError(f"checksum mismatch for {item['url']}")
-    return data
+    def check_blob(data: bytes) -> None:
+        if _git_blob_sha1(data) != item["git_sha1"]:
+            raise ChecksumMismatch(f"checksum mismatch for {item['url']}")
+    return _download(item["url"], opener, log, retries, check_blob)
 
 
 def install(keys: list[str], directory: Path, log: Callable[[str], None] = print,
-            opener: Callable = urllib.request.urlopen) -> list[str]:
-    """Install packages; returns the keys that failed. Re-installing replaces the folder."""
+            opener: Callable = urllib.request.urlopen, retries: int = DEFAULT_RETRIES) -> list[str]:
+    """Install packages; returns the keys that failed. Re-installing replaces the folder. `retries`: extra tries of a
+    mirrors.ctan.org download (download.py)."""
     failed: list[str] = []
     archives: dict[str, bytes] = {}
     manifest = read_manifest(directory)
@@ -178,7 +181,7 @@ def install(keys: list[str], directory: Path, log: Callable[[str], None] = print
         staging.mkdir(parents=True)
         try:
             for item in package["files"]:
-                (staging / item["name"]).write_bytes(_file_bytes(item, archives, opener))
+                (staging / item["name"]).write_bytes(_file_bytes(item, archives, opener, log, retries))
             licence = (f"{package['title']}\n\nLicence: {package['license']}\n"
                        f"{LICENCE_TEXT.get(package['license'], '')}\nUpstream: {package['homepage']}\n"
                        f"Installed by pdfmd on {date.today().isoformat()}; the files are exactly the upstream ones "
