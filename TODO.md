@@ -21,6 +21,7 @@ wait for an answer before any code.
 
 ## Decide first
 
+- [ ] **decide** Coloured links by default in LaTeX and Typst (the author prefers it; a default flip is a major change by the changelog's rule): at 4.0 with the other default flips, or a revised rule; the opt-in is the `colorlinks` setup row [3fl]
 - [ ] **decide** Multi-path builds (`pdfmd *`, `-b a.md dir/`, 3.33.140): revise the guesses that skip non-inputs, earlier outputs and same-output clashes (e.g. a record of what pdfmd wrote, instead of guessing) [3fi D33]
 - [ ] **decide** Parts-scaffold search above the document: keep probing every *.md (b, built 3.33.168) or only conventional/named parts folders (a) [3fi D39]
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
@@ -45,7 +46,7 @@ wait for an answer before any code.
 - [ ] `table-keep` limits: grid tables, height-based rule, the Pandoc floor for caption attributes [3cf]
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
 - [ ] Check that `lof` / `lot` (lists of figures and tables) work through pdfmd; then a recipe [3en, 3dg]
-- [ ] Agent-friendly pdfmd, low priority (when there is spare time): stale PDF after a failed build, `--explain CODE`, `--help agent`, a `--json` result shared with `--api` and `--doctor --json`, `--profile agent` (no guessing, no fallback, per-code `--strict`, tiny output), `--fix`, raw TeX and front matter under `--security`, a tool schema or MCP front-end last; exit code 3 for "degraded" is the author's call [3ff]
+- [ ] Agent-friendly pdfmd, low priority (when there is spare time): stale PDF after a failed build, `--explain CODE`, `--help agent`, a `--json` result shared with `--api` and `--doctor --json`, `--profile agent` (no guessing, no fallback, per-code `--strict`, tiny output), `--fix`, raw TeX and front matter under `--security`, a tool schema or MCP front-end last; exit code 3 for "degraded" is the author's call [3ff, 3fk]
 - [ ] Pandoc-gap audit: the user guide's "does not" sentences and closed won't-fix requests, each marked done / worth doing / refused; before the Eisvogel line [3dk]
 - [ ] Eisvogel LaTeX template: a bundled pinned copy with its licence, `--install eisvogel` for the latest, a `template` key; LaTeX only [3dk]
 - [ ] Discover more project files without a flag: `template.<ext>` or `<name>.<ext>` per output format, `templates/`, CSL, CSS; templates are an auto kind and an attach-source kind (off by default) [3dl]
@@ -150,6 +151,7 @@ is low priority. [3di]
 
 ## Investigate first, no commitment
 
+- [ ] Engine speed: XeLaTeX built a document ~4.7x faster than LuaLaTeX in an outside review; measure warm (font cache), then decide whether pdfmd prefers a faster engine that built a comparable document before [3fk]
 - [ ] pdfmd-gui: an Overleaf-like project view; one local web UI plus thin native wrappers, a client of the CLI, never obligatory; its foundation (emit, `--json`, the split, the generated reference) ships in 3.x before 4.0 [3do]
 - [ ] pdfmd-gui window shell, open: native wrapper vs an optional chromium window (`--install chromium`, a `--setup` row to toggle); no Node needed [3do]
 - [ ] Colophon web UI and JSON core, slice 1 built (3.32.36); left: builds with job events, checks and formats, settings schema and values, history, `/api/raw`, search; Tauri postponed [3do]
