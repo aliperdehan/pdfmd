@@ -410,6 +410,30 @@ end
                     self.assertNotIn("SECRET-OUTSIDE", answer["html"])
                     self.assertTrue(any("outside the project folder" in line for line in answer["warnings"]), answer)
 
+    @unittest.skipUnless(PANDOC and os.name != "nt", "needs Pandoc and symlinks")
+    def test_cli_trusted_cache_symlinks_are_checked_after_resolution(self):
+        cache = self.root.parent / "cache" / "pdfmd"
+        cache.mkdir(parents=True)
+        outside = self.root.parent / "secret.csv"
+        outside.write_text("k,v\nSECRET-OUTSIDE,1\n", encoding="utf-8")
+        (cache / "safe.csv").write_text("k,v\ncache-value,2\n", encoding="utf-8")
+        (cache / "escape.csv").symlink_to(outside)
+        (cache / "safe-link.csv").symlink_to(cache / "safe.csv")
+        env = {**os.environ, "XDG_CACHE_HOME": str(cache.parent)}
+        for name, allowed in (("escape.csv", False), ("safe.csv", True), ("safe-link.csv", True)):
+            with self.subTest(name=name):
+                text = f'::: {{.csv file="{cache / name}"}}\n:::\n'
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--api", "POST", "/api/render",
+                                       json.dumps({"path": "report.md", "text": text})], cwd=self.root, env=env,
+                                      stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                answer = json.loads(done.stdout)
+                if allowed:
+                    self.assertIn("cache-value", answer["html"])
+                else:
+                    self.assertNotIn("SECRET-OUTSIDE", answer["html"])
+                    self.assertTrue(any("outside the project folder" in line for line in answer["warnings"]), answer)
+
     @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_the_live_views_filters_open_nothing_outside_the_project(self):
         """Review finding G4.4: the text names the files a filter opens (`::: {.csv file=...}`). A name that leads out of the project, by

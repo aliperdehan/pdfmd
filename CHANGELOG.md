@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.197 — 2026-11-13
+
+Pre-edit state: commit `52404d4`. A lexical trusted-folder shortcut allowed a symlink beneath the cache or filter folder to read an unrelated outside file. Send every named path through the operating-system real-path check before accepting it against the project or caller-trusted roots. A scripts/pdfmd CSV regression checks an escaping cache symlink, an ordinary cache file and a symlink that stays in the cache, failing before and passing after. Serve, web, raw and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+
 ## v3.33.196 — 2026-11-13
 
 Pre-edit state: commit `bd7047e`. The fetch wrapper exempted every scheme:// source, allowing file URLs to read outside the project. Decode file URL paths and authorities, including localhost, percent escapes and Windows drive paths, and apply the ordinary local-path guard. Only HTTP(S) and FTP(S) URLs bypass that check. A live-core render regression checks an outside URL, encoded traversal, localhost and an allowed project URL, failing before and passing after; serve, web, raw and required checks run, including CLI render coverage. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.

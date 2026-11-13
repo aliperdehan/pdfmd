@@ -47,21 +47,12 @@ local function key(path)
   return fold and out:lower() or out
 end
 
-local TRUSTED = {}
-for line in (os.getenv("PDFMD_LIVE_TRUSTED") or ""):gmatch("[^\n]+") do TRUSTED[#TRUSTED + 1] = key(absolute(line)) end
-
-local function under(path, place) return path == place or path:sub(1, #place + 1) == place .. "/" end
-
 local verdicts = {}
 local function permitted(path)
   local full = absolute(path)
   if verdicts[full] ~= nil then return verdicts[full] end
   local ok = false
-  if not full:find("/%.%./") and not full:find("/%.%.$") then
-    local k = key(full)
-    for _, place in ipairs(TRUSTED) do if under(k, place) then ok = true break end end
-  end
-  if not ok and PYTHON and CHECK then        -- the project's own files: the operating system resolves the path (symlinks, `..`)
+  if PYTHON and CHECK then        -- resolve every path, including paths beneath caller-trusted folders
     local done, answer = pcall(pandoc.pipe, PYTHON, {"-I", "-S", CHECK}, full)
     ok = done and answer == "yes"
   end
@@ -191,7 +182,7 @@ if pandoc.mediabag and pandoc.mediabag.fetch then
 end
 """
 
-# Run by the guard for a path that is not in a place pdfmd named: "yes" when its real path is inside the project (outside `.git`) or in
+# Run by the guard for every named path: "yes" when its real path is inside the project (outside `.git`) or in
 # one of those places. `-I -S`: nothing of the user's site or environment is imported.
 CHECK = r"""import os, sys
 def under(path, place):
