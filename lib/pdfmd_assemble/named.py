@@ -8,11 +8,29 @@ from pdfmd_base import core
 def sources(document, metadata_files):
     """The ordinary option cascade, retaining file paths instead of display labels."""
     yield document, core.frontmatter_pdfmd_options(document)
-    for path in core.metadata_files_by_priority(metadata_files):
-        options = core.metadata_file_yaml(path).get('pdfmd-options')
-        yield path, options if isinstance(options, dict) else {}
-    for path, options in core.folder_layer_files(str(document.resolve().parent)):
-        yield Path(path), options
+    metadata = core.metadata_files_by_priority(metadata_files)
+
+    def options(path):
+        found = core.metadata_file_yaml(path).get('pdfmd-options')
+        return found if isinstance(found, dict) else {}
+
+    for path in metadata:
+        if not (core.is_global_metadata(path) or path in core.KIT_METADATA or core.is_folder_metadata(path)):
+            yield path, options(path)
+    # Include metadata-only folders too, but only metadata selected for this build.
+    for directory, data, _ in core.folder_walk(str(document.resolve().parent)):
+        for path in metadata:
+            if core.is_folder_metadata(path) and path.parent == directory:
+                yield path, options(path)
+        if data is not None:
+            found = data.get('options')
+            yield directory / 'config.yaml', found if isinstance(found, dict) else {}
+    for path in metadata:
+        if path in core.KIT_METADATA and not core.is_global_metadata(path):
+            yield path, options(path)
+    for path in metadata:
+        if core.is_global_metadata(path):
+            yield path, options(path)
     config = core.config_path()
     if config is not None:
         yield config, core.config_options()

@@ -21,7 +21,7 @@ class NamedFiles(unittest.TestCase):
     def setUp(self):
         self.scratch = tempfile.TemporaryDirectory()
         self.addCleanup(self.scratch.cleanup)
-        self.root = Path(self.scratch.name)
+        self.root = Path(self.scratch.name).resolve()
         self.doc = self.root / 'doc.md'
         self.doc.write_text('Original\n')
         self.env = {**os.environ, 'PDFMD_CONFIG': '', 'PDFMD_NO_PROMPT': '1',
@@ -52,6 +52,37 @@ class NamedFiles(unittest.TestCase):
 
     def text(self, target):
         return (self.root / ('doc.html' if target == 'html' else 'doc.tex')).read_text()
+
+    def test_metadata_keeps_its_real_layer_for_replacement_and_append(self):
+        from pdfmd_assemble.named import files
+        config = self.write('global/config.yaml', 'options: {}\n')
+        global_meta = self.write('global/metadata.yaml', 'pdfmd-options: {preamble: global.tex}\n')
+        kit = self.write('kit/defaults.yaml', 'pdfmd-options: {preamble+: kit.tex}\n')
+        parent = self.write('.pdfmd/metadata.yaml', 'pdfmd-options: {preamble+: parent.tex}\n')
+        local = self.write('local.yaml', 'pdfmd-options: {preamble+: local.tex}\n')
+        for owner, name in ((global_meta, 'global.tex'), (kit, 'kit.tex'), (parent, 'parent.tex'),
+                            (local, 'local.tex'), (parent, 'folder.tex')):
+            self.write(str((owner.parent / name).relative_to(self.root)), name)
+        with patch.object(pdfmd, 'config_path', return_value=config), \
+             patch.object(pdfmd, 'config_options', return_value={}), \
+             patch.object(pdfmd, 'folder_walk', return_value=((parent.parent, {'options': {'preamble': 'folder.tex'}}, parent),)), \
+             patch.dict(pdfmd.KIT_METADATA, {kit: 'test'}):
+            self.assertEqual(files(self.doc, [local, parent, kit, global_meta], 'preamble'),
+                             [parent.with_name('folder.tex'), parent.with_name('parent.tex'), local.with_name('local.tex')])
+
+    def test_folder_choices_replace_kit_names_through_the_cli(self):
+        self.assets('kits/lab', after='Kit')
+        self.write('kits/lab/.kit', 'kit-format: 1\nname: lab\ndefaults: defaults.yaml\n')
+        self.write('kits/lab/defaults.yaml', 'pdfmd-options: {lua-filter: change.lua, preamble: extra.tex}\n')
+        self.assets('.pdfmd/assets', after='Folder')
+        self.write('.pdfmd/config.yaml', 'inherit: false\noptions: {lua-filter: assets/change.lua, preamble: assets/extra.tex}\n')
+        self.doc.write_text('---\npdfmd-options: {kit: ' + str(self.root / 'kits/lab') + '}\n---\nOriginal\n')
+        self.build('html')
+        self.assertIn('Folder', self.text('html'))
+        self.assertNotIn('Kit', self.text('html'))
+        self.build('latex')
+        self.assertIn('\\NamedFolder', self.text('latex'))
+        self.assertNotIn('\\NamedKit', self.text('latex'))
 
     def test_metadata_paths_and_trust_note(self):
         self.assets('meta/assets')

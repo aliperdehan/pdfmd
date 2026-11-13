@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.199 — 2026-11-13
+
+Pre-edit state: commit `d72057a`. R4.1: global and kit metadata naming a preamble or Lua filter overrode nearer folder choices. Resolve named files in their actual layers: document metadata, each folder's metadata and configuration, kit defaults, global metadata and global configuration, with the document first. Nearest lists replace and append keys retain their owning paths. Layer and scripts/pdfmd HTML/LaTeX regressions fail before and pass after; named-file, assembly and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+
 ## v3.33.198 — 2026-11-13
 
 Pre-edit state: commit `2a8daa3`. Diagram metadata could make a live render create a cache folder outside the project through Pandoc make_directory. Check the resolved cache folder against the project boundary, excluding caller-trusted cache exceptions; redirect an outside folder to the per-render diagrams folder. Pass the existing verbose choice to the filter so only --verbose emits the explanatory note. Two regressions through the CLI and live core check redirection, actual temporary-folder creation, project-local caches and quiet/verbose notes, failing before and passing after. Serve, web, raw, diagram and required checks run; the existing hung-tool test recorded no invocation once and passed on an isolated rerun. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
