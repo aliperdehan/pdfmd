@@ -339,6 +339,15 @@ class Mover(unittest.TestCase):
                 self.assertEqual((self.root / "pdfmd.py").read_text(), code)
                 self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
 
+    def test_rebound_export_is_refused(self):
+        code = "def names(*args):\n    pass\nnames('other', 'x')\ndef f():\n    global f\n    f = lambda: 2\n    return 1\n"
+        mover_tree(self.root, code, "`f`", test="import pdfmd\nx = pdfmd.f\n")
+        done = self.move()
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("f: moved code rebinds", done.stdout)
+        self.assertEqual((self.root / "pdfmd.py").read_text(), code)
+        self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()

@@ -435,6 +435,12 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
             outside.add(name)
     plan.table = sorted(outside - set(plan.stand_ins) - set(plan.at_start),
                         key=lambda name: where[name][0].lineno if name in where else 0)
+    served = set(plan.table) | set(plan.stand_ins) | set(plan.at_start)
+    for statement in plan.statements:
+        for node in ast.walk(statement):
+            if isinstance(node, ast.Global):
+                for name in sorted(set(node.names) & moving & served):
+                    plan.refused.append(f"{name}: moved code rebinds an exported name at line {node.lineno}; it is state")
     plan.notes = list(dict.fromkeys(plan.notes))
     return plan, source, tree
 

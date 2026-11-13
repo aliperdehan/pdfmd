@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.191e — 2026-11-13
+
+Pre-edit state: commit `1c9540c`. Scripts and tests only; pdfmd itself is unchanged. A moved function could rebind its own global name while pdfmd kept its first object through the names table or a plain import. Refuse rebinding any moved export, including stand-ins. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
+
 ## v3.33.191d — 2026-11-13
 
 Pre-edit state: commit `d100856`. Scripts and tests only; pdfmd itself is unchanged. The mover checked only direct top-level definitions, allowing conditional replacements or deletions of a moved function to change behaviour. Scan module-scope bindings and deletions outside the move, stopping at nested scopes, and refuse conflicting statements. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
