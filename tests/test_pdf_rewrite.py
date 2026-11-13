@@ -25,7 +25,7 @@ except ImportError:
 
 @unittest.skipUnless(pypdf, 'needs pypdf')
 class InfoNames(unittest.TestCase):
-    def rewrite(self, route, header=None):
+    def rewrite(self, route, header=None, indirect=False):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'engine.pdf'
             writer = pypdf.PdfWriter()
@@ -33,7 +33,8 @@ class InfoNames(unittest.TestCase):
                 writer.pdf_header = header
             writer.add_blank_page(200, 200)
             writer.add_metadata({'/Author': 'Unknown', '/Title': 'Original', '/Subject': '/False'})
-            writer._info[NameObject('/Trapped')] = NameObject('/False')
+            value = NameObject('/False')
+            writer._info[NameObject('/Trapped')] = writer._add_object(value) if indirect else value
             writer.write(path)
             if route == 'stamp':
                 with patch.object(pdfmd, 'stamp_summary', return_value='test stamp'):
@@ -74,6 +75,9 @@ class InfoNames(unittest.TestCase):
 
     def test_hybrid(self):
         self.rewrite('hybrid')
+
+    def test_indirect_names(self):
+        self.rewrite('calibre', indirect=True)
 
     def test_header_versions(self):
         for route in ('stamp', 'polish', 'calibre', 'attachments', 'hybrid'):

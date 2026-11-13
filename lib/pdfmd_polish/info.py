@@ -12,6 +12,8 @@ def add_metadata(writer, values, *, replace=False):
     """
     from pypdf.generic import NameObject
 
+    values = {key: value.get_object() if hasattr(value, "get_object") else value
+              for key, value in values.items()}
     names = {NameObject(key): value for key, value in values.items() if isinstance(value, NameObject)}
     if replace:
         writer.metadata = None
