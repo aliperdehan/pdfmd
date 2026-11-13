@@ -13,6 +13,7 @@ wait for an answer before any code.
 - [ ] No release until this queue is done, the GUI decided and built; CI runs on the branch `fixes-3.33.168` [D60]
 - [ ] 1. Split phase 2, wave 1 (base helpers, the `_timed` copies, edit, run, direct, build), then the full suite [3fi D29]
 - [ ] 2. After wave 1: lossless PDF shrinking, project metadata (`metadata-parents`, default 1 from the scaffold's folder), built-in fullcite and `bibliography-indent` [D42 D43 D51 D52 D53 D59]
+- [ ] 2b. After wave 1: TeX self-repair for five broken-TeX cases (`tex-repair: auto|off`), tests from the TeX log corpus, then the corpus to the Trash [3fm D70]
 - [ ] 3. Bibliography: every layer's sources add up and a clashing key warns; a `bib` auto kind, also for keys the named files lack [D60 D61]
 - [ ] 4. Wave 2, then the biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
 - [ ] 5. Waves 3 to 5 (the docstring becomes `docs/reference.md`, `--doc reference`), then the full suite [3fi D29]
