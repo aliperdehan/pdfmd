@@ -423,6 +423,21 @@ class Mover(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn('names("pdfmd_probe", "f")', (self.root / "pdfmd.py").read_text())
 
+    def test_conditional_scope_locals_are_not_module_names(self):
+        code = ("if True:\n    def local():\n        list = 3\n    class C:\n        dict = 4\n"
+                "    value = lambda: (tuple := 1)\n    values = [set for set in []]\n"
+                "def f():\n    return list(), dict(), tuple(), set()\n")
+        bound = set(split_spec.nested_bindings(ast.parse(code).body[0]))
+        self.assertEqual(bound, {"local", "C", "value", "values"})
+        mover_tree(self.root, code, "`f`", test="")
+        done = self.move()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        module = (self.root / "lib" / "pdfmd_probe" / "__init__.py").read_text()
+        self.assertNotIn("from pdfmd_base import core", module)
+        namespace = {}
+        exec(module, namespace)
+        self.assertEqual(namespace["f"](), ([], {}, (), set()))
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()

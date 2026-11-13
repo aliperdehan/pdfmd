@@ -106,13 +106,19 @@ def nested_bindings(node: ast.stmt) -> list[str]:
     if not isinstance(node, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
         return []
     names: list[str] = []
-    for child in ast.walk(node):
+    pending = [node]
+    while pending:
+        child = pending.pop()
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.append(child.name)
+            continue
+        if isinstance(child, (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+            continue
         if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store):
             names.append(child.id)
         elif isinstance(child, (ast.Import, ast.ImportFrom)):
             names += [(alias.asname or alias.name.split(".")[0]) for alias in child.names]
-        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names.append(child.name)
+        pending.extend(ast.iter_child_nodes(child))
     return names
 
 
