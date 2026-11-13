@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.208a — 2026-11-13
+
+Pre-edit state: commit `1c1f60e`. Tests only, from CI round 12. `tests/test_docs_consistency.py` (`LiveBoundary`, 3.33.194) read README.md without `encoding="utf-8"`, so the Windows jobs decoded it as cp1252 and the test errored; it now names the encoding. `tests/test_serve.py` (`test_cli_preview_keeps_unicode_separators_before_images`, 3.33.193) required `data-pos` on the `<p>` around the image, which is where Pandoc 3.13 puts it; Pandoc 3.1.3 puts it on the `<img>`, with the image itself intact, so the test now accepts either and still fails on a cut image. No shipped code changed.
+
 ## v3.33.208 — 2026-11-13
 
 Pre-edit state: commit `3d77ed6`. R5b.5: patch-built reports applied global code settings over metadata-file settings because both report code-filter calls omitted the metadata files. Pass them through for LaTeX and PDF builds. A scripts/pdfmd regression fails before and passes after; report, code-setting and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.

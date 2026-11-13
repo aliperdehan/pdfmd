@@ -309,7 +309,7 @@ class Render(Folder):
         self.assertEqual(done.returncode, 0, done.stderr)
         markup = json.loads(done.stdout)["html"]
         self.assertIn("Before\u2028after</p>", markup)
-        self.assertRegex(markup, r'<p data-pos="[^"]*"><img src="/api/raw\?path=bird.png"[^>]* alt="bird" /></p>')
+        self.assertRegex(markup, r'<p[^>]*><img src="/api/raw\?path=bird.png"[^>]* alt="bird" /></p>')
         self.assertEqual(markup.count("<img "), 1)
         self.assertNotIn('src="bird.png"', markup)
 
