@@ -409,7 +409,16 @@ final class PopController: NSObject, NSTextViewDelegate {
     /// it), the author is asked first: keep the pane's text (the file on disk is replaced) or load the file (what was typed in the pane
     /// is dropped). A file that is gone is written again.
     func savePane(to file: URL) {
-        let disk = try? Data(contentsOf: file)
+        let disk: Data?
+        do { disk = try Data(contentsOf: file) }
+        catch {
+            let failure = error as NSError
+            guard failure.domain == NSCocoaErrorDomain, failure.code == NSFileReadNoSuchFileError else {
+                setStatus("\(file.lastPathComponent) was not saved: \(error.localizedDescription)", error: true)
+                return
+            }
+            disk = nil
+        }
         let mine = preambleView.string
         if let disk, disk != paneOnDisk, disk != mine.data(using: .utf8), !keepPaneOverDisk(file) {
             paneOnDisk = disk

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.192b — 2026-11-13
+
+Pre-edit state: commit `75568cf`. No shipped pdfmd code changed; PDFMD_VERSION is unchanged. **Colophon 0.3.23: preserve unreadable Pop pane files.** A failed disk read was treated as a missing file, allowing an atomic save to overwrite unreadable external changes without a conflict question. Only a missing-file error permits recreation; other read failures use the existing pane error display and leave the disk, pane text and saved snapshot intact. A headless Swift regression checks unreadable files, recreation and ordinary conflicts, failing before and passing after. Affected Colophon, web, serve and required checks and the sandbox Swift build run; no window was opened. Hand check: make an externally changed preamble unreadable, edit the pane and confirm its error and unchanged file.
+
 ## v3.33.192a — 2026-11-13
 
 Pre-edit state: commit `372a937`. No shipped pdfmd code changed; PDFMD_VERSION is unchanged. **Colophon 0.3.22: ask before reloading an edited Studio.** The same-document URL shortcut treated reloads and identical-URL navigation as anchor jumps and discarded unsaved tabs. Only a changed fragment on a GET link or script navigation bypasses the existing dirty check. A headless Swift navigation regression was checked failing before and passing after; affected Colophon, web, serve and required checks run, with socket checks blocked by the sandbox. The sandbox Swift build was run; no window was opened. Hand check: edit two tabs, reload or follow an empty link, cancel leaving, then follow an anchor.
