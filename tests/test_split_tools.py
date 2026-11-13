@@ -348,6 +348,19 @@ class Mover(unittest.TestCase):
         self.assertEqual((self.root / "pdfmd.py").read_text(), code)
         self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
 
+    def test_global_definition_and_mapping_bindings_are_refused(self):
+        for binding in ("    def STATE():\n        return 3\n", "    class STATE:\n        pass\n",
+                        "    match {}:\n        case {**STATE}:\n            pass\n"):
+            with self.subTest(binding=binding):
+                self.root = Path(tempfile.mkdtemp(dir=self.root))
+                code = "STATE = None\ndef f():\n    global STATE\n" + binding + "    return STATE()\n"
+                mover_tree(self.root, code, "`f`", test="")
+                done = self.move()
+                self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+                self.assertIn("binds the state STATE", done.stdout)
+                self.assertEqual((self.root / "pdfmd.py").read_text(), code)
+                self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()

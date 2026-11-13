@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.191f — 2026-11-13
+
+Pre-edit state: commit `a5c2c20`. Scripts and tests only; pdfmd itself is unchanged. Removing a global declaration could leave function or class definitions and mapping rest captures local while their reads became core attributes. Recognise these binding forms and refuse them before rewriting. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
+
 ## v3.33.191e — 2026-11-13
 
 Pre-edit state: commit `1c9540c`. Scripts and tests only; pdfmd itself is unchanged. A moved function could rebind its own global name while pdfmd kept its first object through the names table or a plain import. Refuse rebinding any moved export, including stand-ins. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.

@@ -363,6 +363,10 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
                 bound = node.name
             elif isinstance(node, ast.alias):
                 bound = node.asname or node.name.split(".")[0]
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bound = node.name
+            elif isinstance(node, ast.MatchMapping):
+                bound = node.rest
             if bound in state_written:
                 plan.refused.append(f"{label}: binds the state {bound} (line {node.lineno}) in a way `core.{bound}` cannot "
                                     "spell; rewrite it by hand")
