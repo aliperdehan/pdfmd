@@ -1380,19 +1380,14 @@ def calibre_resource_paths(text: str, base: Path, scratch: Path) -> str:
     from pdfmd_check.lint import mask_code
 
     visible, _ = mask_code(text)
-    # Reference-style images get their destination from a separate definition.
-    label = lambda value: " ".join(value.split()).casefold()
-    references = {label(match.group(2) or match.group(1)) for match in
-                  re.finditer(r"!\[([^]\n]*)\](?:\[([^]\n]*)\])?(?![\[(])", visible)}
-    destinations = [(match.start(1 if match.group(1) else 2), match.end(1 if match.group(1) else 2))
-                    for match in core.IMAGE_REF_RE.finditer(visible)]
-    for match in re.finditer(r"(?m)^[ \t]*\[([^]\n]+)\]:[ \t]*<?([^\s>]+)>?", visible):
-        if label(match.group(1)) in references:
-            destinations.append(match.span(2))
+    from html import unescape
+    from .resources import image_destinations
+
+    destinations = image_destinations(visible)
     pieces: list[str] = []
     position = 0
     for start, end in sorted(destinations):
-        target = text[start:end]
+        target = unescape(re.sub(r"\\([!\"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])", r"\1", text[start:end]))
         parts = urlsplit(target)
         if parts.scheme or parts.netloc or not parts.path or Path(unquote(parts.path)).is_absolute():
             continue

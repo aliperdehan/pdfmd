@@ -40,6 +40,26 @@ class ResourcePaths(unittest.TestCase):
             self.assertIn('[plot]: ../source/images/ref.png', result)
 
 
+    def test_balanced_angle_and_escaped_destinations(self):
+        from pdfmd_native import calibre_resource_paths
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            base, scratch = root / "source", root / "scratch"
+            base.mkdir()
+            scratch.mkdir()
+            text = ('![A](images/plot(1).png "title")\n'
+                    '![B](<images/with space.png>)\n'
+                    '![C](images/a&amp;b.png)\n'
+                    '![D](images/escaped\\(2\\).png)\n'
+                    '![E][ref]\n[ref]: <images/with space.png>\n')
+            result = calibre_resource_paths(text, base, scratch)
+            self.assertIn('![A](../source/images/plot%281%29.png "title")', result)
+            self.assertIn('![B](<../source/images/with%20space.png>)', result)
+            self.assertIn('![C](../source/images/a%26b.png)', result)
+            self.assertIn('![D](../source/images/escaped%282%29.png)', result)
+            self.assertIn('[ref]: <../source/images/with%20space.png>', result)
+
+
 class Selection(unittest.TestCase):
     def test_calibre_is_a_native_engine_only_without_pandoc(self):
         with mock.patch.object(pdfmd, "which", lambda name: None), mock.patch.object(pdfmd, "resolve_calibre", lambda: "/c"):
@@ -146,6 +166,17 @@ class Build(unittest.TestCase):
         call = json.loads(self.log.read_text(encoding="utf-8"))
         self.assertTrue(call["image_found"])
         self.assertIn("`![Code](images/example.png)`", call["text"])
+
+    def test_complex_image_destinations_reach_calibre(self):
+        (self.directory / "d.md").write_text(
+            '![Plot](images/plot(1).png)\n![Space](<images/a b.png>)\n![Amp](images/a&amp;b.png)\n',
+            encoding="utf-8")
+        done = self.run_pdfmd("-e", "calibre")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = json.loads(self.log.read_text(encoding="utf-8"))["text"]
+        self.assertIn("images/plot%281%29.png", text)
+        self.assertIn("images/a%20b.png", text)
+        self.assertIn("images/a%26b.png", text)
 
     def test_the_formulas_are_text_and_it_says_so(self):
         done = self.run_pdfmd()
