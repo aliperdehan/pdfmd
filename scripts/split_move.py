@@ -443,7 +443,7 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
         else:
             plan.refused.append(f"{name}: code that stays in pdfmd.py reads it bare (line {bare[name][0][0]}) and it is "
                                 "not a function, so a stand-in cannot serve it; decide by hand")
-    outside: set[str] = set(core_read)
+    outside: set[str] = set(core_read) | (set(patched) & moving)
     texts = [path.read_text(encoding="utf-8", errors="replace") for path in tests]
     texts += [path.read_text(encoding="utf-8", errors="replace") for path in sorted((root / "lib").rglob("*.py"))
               if not GENERATED & set(path.relative_to(root).parts)]

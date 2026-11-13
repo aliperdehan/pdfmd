@@ -416,6 +416,13 @@ class Mover(unittest.TestCase):
         self.assertEqual(namespace["f"].cache_info().currsize, 0)
         self.assertIn("from pdfmd_probe import f", (self.root / "pdfmd.py").read_text())
 
+    def test_patch_only_users_receive_exports(self):
+        code = "def names(*args):\n    pass\nnames('other', 'x')\ndef f():\n    return 1\n"
+        mover_tree(self.root, code, "`f`", test="from unittest.mock import patch\nimport pdfmd\nwith patch.object(pdfmd, 'f'):\n    pass\n")
+        done = self.move()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn('names("pdfmd_probe", "f")', (self.root / "pdfmd.py").read_text())
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()
