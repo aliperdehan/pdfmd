@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.194 — 2026-11-13
+
+Pre-edit state: commit `bc9911b`. The live-view documentation described a filter sandbox with only a subprocess exception, obscuring the trust boundary agreed in DECISION 66. The shipped contain.py docstring and README now distinguish document references, which stay inside the project, from trusted project filters and the Pandoc functions they call, which can reach any file. No further restriction of project code is required for R3b.3. A documentation-contract regression was checked failing before and passing after; web, serve and required checks run. This patch changes the shipped package docstring; pdfmd.py remains 17,115 lines (version only).
+
 ## v3.33.193 — 2026-11-13
 
 Pre-edit state: commit `d7b7e7b`. A Unicode line separator before an image made live-preview rewriting cut adjacent HTML: splitlines counted boundaries that HTMLParser does not. Build offsets from LF boundaries only, matching HTMLParser. A regression through scripts/pdfmd checks the complete paragraph and rewritten image, failing before and passing after. Web, serve, split, packaging, docs consistency, setup and isolation checks run; socket-dependent serve checks remain blocked by the sandbox. pdfmd.py remains 17,115 lines (version only).

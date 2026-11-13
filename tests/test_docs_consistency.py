@@ -119,3 +119,17 @@ class AgentGuide(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LiveBoundary(unittest.TestCase):
+    def test_live_view_documents_the_document_boundary_and_trusted_project_code(self):
+        from pdfmd_serve import contain
+        for name, text in (("README", (ROOT / "README.md").read_text().split("Every answer carries", 1)[1].split("### Other command names", 1)[0]), ("contain", contain.__doc__)):
+            with self.subTest(document=name):
+                text = " ".join(text.lower().split())
+                self.assertIn("project filters are trusted code", text)
+                self.assertIn("pandoc functions they call", text)
+                self.assertIn("a document's own references", text)
+                self.assertIn("stay inside the project", text)
+                for reference in ("images", "includes", "csv", "raw-latex inputs", "fetches", "cache folders"):
+                    self.assertIn(reference, text)

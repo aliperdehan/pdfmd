@@ -1,18 +1,16 @@
-"""The live view's filters stay inside the project folder (review finding G4.4 of entry 3do).
+"""The live view contains document-supplied references (DECISION 66).
 
-`/api/render` checks the path of the document, but the filters it runs read what the TEXT names: `::: {.csv file="../private.txt"}` had
-`csv_table.lua` open a file beside the project and put it into the page. Pandoc runs the file `init.lua` of its data folder before every
-Lua filter, each in a Lua state of its own, so the render is given a data folder of its own whose `init.lua` (GUARD) wraps the Lua
-functions that open a file by name (`io.open`, `io.lines`, `io.input`, `io.output`, `dofile`, `loadfile`, `os.remove`, `os.rename`,
-`pandoc.mediabag.fetch`): a path is let through when it is in the folder of one of the render's filters, in pdfmd's cache (the
-pictures it draws) or in the render's own temporary folder (TMPDIR), and otherwise only when its real path (symlinks and `..` resolved by
-the operating system, CHECK) is inside the project and not in its `.git`. A refused path fails as a missing file would, with one `WARN`
-line that the page shows.
+A document's own references (images, includes, CSV, raw-LaTeX inputs, fetches and cache folders) stay inside the project,
+excluding its private `.git` folder. Paths are checked after resolving symlinks and `..`. pdfmd's generated assets and filter
+helpers may also use the cache, filter and temporary folders named by the caller; a document cannot add trusted roots.
 
-What this does not cover: a program a filter starts reads what it is told (a LaTeX picture's `\\input`, a diagram tool's include). And
-what it costs: a file outside the project that a setting names (a LaTeX preamble shared by every document) is not read by the live view's
-filters either, and the live view no longer sees Pandoc's user data folder (its templates are not used there; an `init.lua` of the
-user's own is not run).
+Project filters are trusted code: they can run programs and reach any file, as can the Pandoc functions they call. The guard
+checks document-supplied references handled by the shipped filters; it does not sandbox arbitrary project code or its native
+filesystem and loader APIs.
+
+`/api/render` checks the document path. Each filter then starts in a Lua state of its own, with this render's data-folder
+`init.lua` (GUARD) wrapping file operations. CHECK resolves paths using the operating system. A refusal produces the existing
+missing-file-style error and a WARN line for the page. The live view does not load Pandoc's user data folder or its init.lua.
 """
 
 from __future__ import annotations
