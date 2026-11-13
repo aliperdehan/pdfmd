@@ -115,6 +115,54 @@ os.rename = function(from, to, ...)
   end
   return rename(from, to, ...)
 end
+-- Pandoc's LaTeX reader performs native includes, bypassing io.open. Inspect their files before handing it any text.
+local read = pandoc.read
+local function latex_inputs(text, seen, directory)
+  local i = 1
+  while i <= #text do
+    local char = text:sub(i, i)
+    if char == "%" then
+      i = text:find("\n", i, true) or (#text + 1)
+    elseif char == "\\" then
+      local command, after = text:match("^\\(%a+)()", i)
+      if command == "input" or command == "include" then
+        local argument = text:sub(after):match("^%s*(%b{})")
+        local name = argument and argument:sub(2, -2):match("^%s*(.-)%s*$") or text:sub(i, after - 1)
+        -- A macro-dependent name cannot be checked before the native reader expands it. Fail closed.
+        if not argument or name:find("[\\{}#%%\"]") then error(refused(name), 2) end
+        local folders = {directory or pandoc.system.get_working_directory()}
+        for _, folder in ipairs(PANDOC_STATE.resource_path or {}) do folders[#folders + 1] = folder end
+        for _, folder in ipairs(folders) do
+          local path = (name:match("^/") or name:match("^%a:[/\\]")) and name or (folder .. "/" .. name)
+          for _, candidate in ipairs({path, path .. ".tex"}) do
+            if not permitted(candidate) then error(refused(candidate), 2) end
+            local identity = key(absolute(candidate))
+            if not seen[identity] then
+              seen[identity] = true
+              local handle = open(candidate, "rb")
+              if handle then
+                local contents = handle:read("a"); handle:close()
+                latex_inputs(contents, seen, candidate:match("^(.*)[/\\]") or folder)
+              end
+            end
+          end
+        end
+        i = after
+      else
+        i = after or (i + 2)       -- also skip escaped percent signs and backslashes
+      end
+    else
+      i = i + 1
+    end
+  end
+end
+pandoc.read = function(text, format, ...)
+  if type(text) == "string" and type(format) == "string" and (format == "latex" or format:match("^latex[+-]")) then
+    latex_inputs(text, {})
+  end
+  return read(text, format, ...)
+end
+
 if pandoc.mediabag and pandoc.mediabag.fetch then
   local fetch = pandoc.mediabag.fetch
   pandoc.mediabag.fetch = function(source, ...)

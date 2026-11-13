@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.195 — 2026-11-13
+
+Pre-edit state: commit `314e343`. With raw: true, the native LaTeX reader behind pandoc.read could include outside files without using guarded io.open. Check literal input/include paths, extension candidates and nested include files against permitted() before the native read; names depending on macros or TeX syntax are refused with the existing guard message because their target cannot be established first. The CLI regression checks direct and nested escapes and an allowed project include, failing before and passing after. Serve, web, raw and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+
 ## v3.33.194 — 2026-11-13
 
 Pre-edit state: commit `bc9911b`. The live-view documentation described a filter sandbox with only a subprocess exception, obscuring the trust boundary agreed in DECISION 66. The shipped contain.py docstring and README now distinguish document references, which stay inside the project, from trusted project filters and the Pandoc functions they call, which can reach any file. No further restriction of project code is required for R3b.3. A documentation-contract regression was checked failing before and passing after; web, serve and required checks run. This patch changes the shipped package docstring; pdfmd.py remains 17,115 lines (version only).

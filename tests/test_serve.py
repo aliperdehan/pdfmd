@@ -359,6 +359,29 @@ class Render(Folder):
         self.assertIn(f"<caption>{caption}</caption>", with_filter["html"])
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_cli_raw_latex_includes_obey_the_live_boundary(self):
+        secret = self.root.parent / "outside.tex"
+        secret.write_text("SECRET-OUTSIDE", encoding="utf-8")
+        (self.root / "inside.tex").write_text("inside-value", encoding="utf-8")
+        (self.root / "nested.tex").write_text(r"\input{../outside.tex}", encoding="utf-8")
+        for command, name, expected in (("input", "../outside.tex", False), ("include", str(secret), False),
+                                        ("input", "nested", False), ("input", "inside", True),
+                                        ("input", r"\outside", False), ("input", " ../outside.tex ", False),
+                                        ("input", " inside.tex ", True)):
+            with self.subTest(command=command, name=name):
+                source = "---\npdfmd-options: {raw: true}\n---\n\n```{=latex}\n" + "\\" + command + "{" + name + "}\n```\n"
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--api", "POST", "/api/render",
+                                       json.dumps({"path": "report.md", "text": source})], cwd=self.root, env={**os.environ},
+                                      stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                answer = json.loads(done.stdout)
+                if expected:
+                    self.assertIn("inside-value", answer["html"])
+                else:
+                    self.assertNotIn("SECRET-OUTSIDE", answer["html"])
+                    self.assertTrue(any("outside the project folder" in line for line in answer["warnings"]), answer)
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_the_live_views_filters_open_nothing_outside_the_project(self):
         """Review finding G4.4: the text names the files a filter opens (`::: {.csv file=...}`). A name that leads out of the project, by
         `..`, by an absolute path or through a symlink, is refused with a warning; a file of the project is still a table."""
