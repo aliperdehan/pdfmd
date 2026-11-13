@@ -451,6 +451,18 @@ class Mover(unittest.TestCase):
         exec(module, namespace)
         self.assertIs(namespace["f"](SimpleNamespace(modules={"custom": value}), "custom"), value)
 
+    def test_comprehension_attribute_target_owner_stays_global(self):
+        code = "BOX = None\ndef f():\n    return [BOX.value for BOX.value in [1, 2]]\n"
+        mover_tree(self.root, code, "`f`", test="")
+        done = self.move()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        module = (self.root / "lib" / "pdfmd_probe" / "__init__.py").read_text()
+        self.assertIn("[core.BOX.value for core.BOX.value in [1, 2]]", module)
+        from types import SimpleNamespace
+        namespace = {"core": SimpleNamespace(BOX=SimpleNamespace())}
+        exec(module.replace("from pdfmd_base import core", ""), namespace)
+        self.assertEqual(namespace["f"](), [1, 2])
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()

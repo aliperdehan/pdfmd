@@ -69,7 +69,13 @@ class Scope:
 
 
 def target_names(node: ast.AST) -> set[str]:
-    return {child.id for child in ast.walk(node) if isinstance(child, ast.Name)}
+    if isinstance(node, ast.Name):
+        return {node.id}
+    if isinstance(node, ast.Starred):
+        return target_names(node.value)
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return set().union(*(target_names(element) for element in node.elts))
+    return set()
 
 
 def scope_of(node: ast.AST) -> Scope:

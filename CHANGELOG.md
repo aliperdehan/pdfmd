@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.191n — 2026-11-13
+
+Pre-edit state: commit `bd21c25`. Scripts and tests only; pdfmd itself is unchanged. An attribute owner in a comprehension target was treated as a local, leaving global BOX references bare after moving. Collect only actual Name targets, recursively through unpacking and starred targets; attribute and subscript owners remain reads. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
+
 ## v3.33.191m — 2026-11-13
 
 Pre-edit state: commit `5bbb0e4`. Scripts and tests only; pdfmd itself is unchanged. The module-self substitution replaced sys.modules[__name__] even when both names were parameters. Require both names to resolve to module globals before replacing the expression with core. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
