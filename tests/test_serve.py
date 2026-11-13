@@ -299,6 +299,20 @@ class Render(Folder):
         self.assertIn('src="../outside.png"', result)
         self.assertEqual(result.count('fake.png'), 2)
 
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_cli_preview_keeps_unicode_separators_before_images(self):
+        text = "Before\u2028after\n\n![bird](bird.png)\n"
+        (self.root / "bird.png").write_bytes(b"picture")
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--api", "POST", "/api/render",
+                               json.dumps({"path": "report.md", "text": text})], cwd=self.root, env={**os.environ},
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        markup = json.loads(done.stdout)["html"]
+        self.assertIn("Before\u2028after</p>", markup)
+        self.assertRegex(markup, r'<p data-pos="[^"]*"><img src="/api/raw\?path=bird.png"[^>]* alt="bird" /></p>')
+        self.assertEqual(markup.count("<img "), 1)
+        self.assertNotIn('src="bird.png"', markup)
+
     def test_without_pandoc_the_answer_says_so(self):
         core = Core(self.root, which=lambda name: None)
         status, answer = core.handle("POST", "/api/render", {"text": "# x"})

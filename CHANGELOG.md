@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.193 — 2026-11-13
+
+Pre-edit state: commit `d7b7e7b`. A Unicode line separator before an image made live-preview rewriting cut adjacent HTML: splitlines counted boundaries that HTMLParser does not. Build offsets from LF boundaries only, matching HTMLParser. A regression through scripts/pdfmd checks the complete paragraph and rewritten image, failing before and passing after. Web, serve, split, packaging, docs consistency, setup and isolation checks run; socket-dependent serve checks remain blocked by the sandbox. pdfmd.py remains 17,115 lines (version only).
+
 ## v3.33.192c — 2026-11-13
 
 Pre-edit state: commit `19b68a5`. No shipped pdfmd code changed; PDFMD_VERSION is unchanged. **Colophon 0.3.24: retain dirty state after a failed reload.** Choosing Load the File on Disk cleared the change count before attempting the read, so a file that disappeared during the question left retained edits marked clean. Clear the count only after a successful revert. A headless Swift regression exercises a deletion during the question and a subsequent successful reload, failing before and passing after. Affected Colophon, web, serve and required checks and the sandbox Swift build run; no window was opened. Hand check: delete an edited file while its external-change sheet is open, choose Load the File on Disk, then close and confirm the save question.

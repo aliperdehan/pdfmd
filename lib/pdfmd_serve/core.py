@@ -378,8 +378,8 @@ class Core:
             return attributes.sub(attribute, tag)
 
         offsets = [0]
-        for line in markup.splitlines(keepends=True):
-            offsets.append(offsets[-1] + len(line))
+        for line in markup.split("\n"):
+            offsets.append(offsets[-1] + len(line) + 1)
 
         class Images(HTMLParser):
             def __init__(self):
