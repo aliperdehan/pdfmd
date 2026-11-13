@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.191d — 2026-11-13
+
+Pre-edit state: commit `d100856`. Scripts and tests only; pdfmd itself is unchanged. The mover checked only direct top-level definitions, allowing conditional replacements or deletions of a moved function to change behaviour. Scan module-scope bindings and deletions outside the move, stopping at nested scopes, and refuse conflicting statements. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
+
 ## v3.33.191c — 2026-11-13
 
 Pre-edit state: commit `287d2af`. Scripts and tests only; pdfmd itself is unchanged. The state guard forgot a name when its last writer moved out of pdfmd.py. Include core attribute writes and deletions in its inventory, retaining the floor check; a synthetic moved LibreOffice timeout writer proves the bare assignment is caught. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.

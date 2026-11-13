@@ -327,6 +327,18 @@ class Mover(unittest.TestCase):
         return subprocess.run([sys.executable, str(ROOT / "scripts" / "split_move.py"), "pdfmd_probe", "--root", str(self.root),
                                *extra], capture_output=True, text=True, encoding="utf-8")
 
+    def test_conditional_redefinitions_and_deletions_are_refused(self):
+        for tail in ("if True:\n    def f():\n        return 2\n", "del f\n"):
+            with self.subTest(tail=tail):
+                self.root = Path(tempfile.mkdtemp(dir=self.root))
+                code = "def f():\n    return 1\n" + tail
+                mover_tree(self.root, code, "`f`", test="")
+                done = self.move()
+                self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+                self.assertIn("f:", done.stdout)
+                self.assertEqual((self.root / "pdfmd.py").read_text(), code)
+                self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()

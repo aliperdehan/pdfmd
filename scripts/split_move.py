@@ -220,6 +220,19 @@ class Plan:
     carried: list[str] = field(default_factory=list)                  # the comment blocks that move, to be read
 
 
+def module_changes(node: ast.AST) -> set[str]:
+    """Bindings and deletions executed in the module namespace, without entering nested scopes."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return {node.name}
+    if isinstance(node, (ast.Lambda, *COMPREHENSIONS)):
+        return set()
+    if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+        return {node.id}
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return {alias.asname or alias.name.split(".")[0] for alias in node.names}
+    return set().union(*(module_changes(child) for child in ast.iter_child_nodes(node)))
+
+
 def top_level_imports(tree: ast.Module) -> dict[str, ast.stmt]:
     """name -> the plain top-level import statement that binds it (not one inside an `if` or `try`)."""
     found: dict[str, ast.stmt] = {}
@@ -289,6 +302,10 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
             plan.refused.append(f"{name}: changed in place at the top level (line {nodes[0].lineno})")
         elif nodes[0] not in plan.statements:
             plan.statements.append(nodes[0])
+    for node in tree.body:
+        if node not in plan.statements:
+            for name in sorted(module_changes(node) & moving):
+                plan.refused.append(f"{name}: also bound or deleted by module-level statement at line {node.lineno}")
     plan.statements.sort(key=lambda node: node.lineno)
     inside = {id(child) for node in plan.statements for child in ast.walk(node)}
     for node in plan.statements:
