@@ -382,6 +382,35 @@ class Render(Folder):
                     self.assertTrue(any("outside the project folder" in line for line in answer["warnings"]), answer)
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_fetch_checks_decoded_file_urls(self):
+        outside = self.root.parent / "outside.txt"
+        outside.write_text("SECRET-OUTSIDE", encoding="utf-8")
+        inside = self.root / "inside.txt"
+        inside.write_text("inside-value", encoding="utf-8")
+        (self.root / "report.lua").write_text('''function Image(el)
+  local ok, mime, data = pcall(pandoc.mediabag.fetch, el.src)
+  return pandoc.Str(ok and data or "REFUSED")
+end
+''', encoding="utf-8")
+        @contextlib.contextmanager
+        def filters(document, metadata):
+            yield ["--lua-filter", str(self.root / "report.lua")]
+        core = Core(self.root, filters=filters)
+        for url, allowed in ((outside.as_uri(), False), (inside.as_uri(), True),
+                             (self.root.as_uri() + "/%2e%2e/outside.txt", False),
+                             (outside.as_uri().replace("file:///", "file://localhost/"), False)):
+            with self.subTest(url=url):
+                text = f"![resource]({url})\n"
+                (self.root / "report.md").write_text(text, encoding="utf-8")
+                status, answer = core.handle("POST", "/api/render", {"path": "report.md", "text": text})
+                self.assertEqual(status, 200, answer)
+                if allowed:
+                    self.assertIn("inside-value", answer["html"])
+                else:
+                    self.assertNotIn("SECRET-OUTSIDE", answer["html"])
+                    self.assertTrue(any("outside the project folder" in line for line in answer["warnings"]), answer)
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_the_live_views_filters_open_nothing_outside_the_project(self):
         """Review finding G4.4: the text names the files a filter opens (`::: {.csv file=...}`). A name that leads out of the project, by
         `..`, by an absolute path or through a symlink, is refused with a warning; a file of the project is still a table."""

@@ -166,7 +166,26 @@ end
 if pandoc.mediabag and pandoc.mediabag.fetch then
   local fetch = pandoc.mediabag.fetch
   pandoc.mediabag.fetch = function(source, ...)
-    if type(source) == "string" and not source:match("^%a[%w+.-]*://") and not permitted(source) then error(refused(source), 2) end
+    if type(source) == "string" then
+      local scheme = source:match("^(%a[%w+.-]*):")
+      scheme = scheme and scheme:lower()
+      local path = source
+      if scheme == "file" then
+        path = source:sub(#scheme + 2):match("^[^?#]*")
+        local host, rest = path:match("^//([^/]*)(.*)$")
+        local function decode(value)
+          return (value:gsub("%%(%x%x)", function(hex) return string.char(tonumber(hex, 16)) end))
+        end
+        if host then
+          host = decode(host)
+          path = (host == "" or host:lower() == "localhost") and rest or ("//" .. host .. rest)
+        end
+        path = decode(path)
+        if package.config:sub(1, 1) == "\\" and path:match("^/%a:/") then path = path:sub(2) end
+      end
+      local network = source:match("^%a[%w+.-]*://") and (scheme == "http" or scheme == "https" or scheme == "ftp" or scheme == "ftps")
+      if not network and not permitted(path) then error(refused(path), 2) end
+    end
     return fetch(source, ...)
   end
 end

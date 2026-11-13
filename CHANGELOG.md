@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.196 — 2026-11-13
+
+Pre-edit state: commit `bd7047e`. The fetch wrapper exempted every scheme:// source, allowing file URLs to read outside the project. Decode file URL paths and authorities, including localhost, percent escapes and Windows drive paths, and apply the ordinary local-path guard. Only HTTP(S) and FTP(S) URLs bypass that check. A live-core render regression checks an outside URL, encoded traversal, localhost and an allowed project URL, failing before and passing after; serve, web, raw and required checks run, including CLI render coverage. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+
 ## v3.33.195 — 2026-11-13
 
 Pre-edit state: commit `314e343`. With raw: true, the native LaTeX reader behind pandoc.read could include outside files without using guarded io.open. Check literal input/include paths, extension candidates and nested include files against permitted() before the native read; names depending on macros or TeX syntax are refused with the existing guard message because their target cannot be established first. The CLI regression checks direct and nested escapes and an allowed project include, failing before and passing after. Serve, web, raw and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
