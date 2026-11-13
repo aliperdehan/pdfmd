@@ -370,6 +370,19 @@ class Mover(unittest.TestCase):
         self.assertEqual((self.root / "pdfmd.py").read_text(), code)
         self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
 
+    def test_overwritten_import_is_read_through_core(self):
+        code = "from os import sep\nsep = 'custom'\ndef f():\n    return sep\n"
+        mover_tree(self.root, code, "`f`", test="")
+        done = self.move()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        module = (self.root / "lib" / "pdfmd_probe" / "__init__.py").read_text()
+        self.assertIn("return core.sep", module)
+        self.assertNotIn("from os import sep", module)
+        from types import SimpleNamespace
+        namespace = {}
+        exec(module.replace("from pdfmd_base import core", ""), {"core": SimpleNamespace(sep="custom")}, namespace)
+        self.assertEqual(namespace["f"](), "custom")
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()

@@ -328,7 +328,10 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
                    | {name for node in tree.body for name in split_spec.nested_bindings(node)})
     for_package = {name for name, node in imports.items()
                    if not (isinstance(node, ast.ImportFrom) and (node.module or "").startswith("pdfmd"))
-                   and name not in rebound_by_tests}
+                   and name not in rebound_by_tests
+                   and name not in declared_anywhere
+                   and not any(name in module_changes(other) for other in tree.body
+                               if not isinstance(other, (ast.Import, ast.ImportFrom)))}
     staying = (pdfmd_names | set(imports)) - moving - for_package
     core_read: set[str] = set()
 
