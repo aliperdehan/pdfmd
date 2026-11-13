@@ -463,6 +463,15 @@ class Mover(unittest.TestCase):
         exec(module.replace("from pdfmd_base import core", ""), namespace)
         self.assertEqual(namespace["f"](), [1, 2])
 
+    def test_quoted_annotations_are_refused(self):
+        code = 'from pathlib import Path\ndef f(x: "Path"):\n    return x\n'
+        mover_tree(self.root, code, "`f`", test="")
+        done = self.move()
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("f: quoted annotation 'Path'", done.stdout)
+        self.assertEqual((self.root / "pdfmd.py").read_text(), code)
+        self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()

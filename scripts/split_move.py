@@ -344,6 +344,19 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
     for statement in plan.statements:
         label = ", ".join(split_spec.bound_names(statement))
         uses, scopes = name_uses(statement)
+        for node in ast.walk(statement):
+            annotations = []
+            if isinstance(node, ast.arg) and node.annotation is not None:
+                annotations.append(node.annotation)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.returns is not None:
+                annotations.append(node.returns)
+            elif isinstance(node, ast.AnnAssign):
+                annotations.append(node.annotation)
+            for annotation in annotations:
+                for quoted in ast.walk(annotation):
+                    if isinstance(quoted, ast.Constant) and isinstance(quoted.value, str):
+                        plan.refused.append(f"{label}: quoted annotation {quoted.value!r} at line {quoted.lineno}; "
+                                            "resolve its dependencies by hand before moving")
         if any("core" in scope.bound for scope in scopes):
             plan.refused.append(f"{label}: has a local or a parameter named `core`")
         for cls in (node for node in ast.walk(statement) if isinstance(node, ast.ClassDef)):
