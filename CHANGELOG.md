@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.192c — 2026-11-13
+
+Pre-edit state: commit `19b68a5`. No shipped pdfmd code changed; PDFMD_VERSION is unchanged. **Colophon 0.3.24: retain dirty state after a failed reload.** Choosing Load the File on Disk cleared the change count before attempting the read, so a file that disappeared during the question left retained edits marked clean. Clear the count only after a successful revert. A headless Swift regression exercises a deletion during the question and a subsequent successful reload, failing before and passing after. Affected Colophon, web, serve and required checks and the sandbox Swift build run; no window was opened. Hand check: delete an edited file while its external-change sheet is open, choose Load the File on Disk, then close and confirm the save question.
+
 ## v3.33.192b — 2026-11-13
 
 Pre-edit state: commit `75568cf`. No shipped pdfmd code changed; PDFMD_VERSION is unchanged. **Colophon 0.3.23: preserve unreadable Pop pane files.** A failed disk read was treated as a missing file, allowing an atomic save to overwrite unreadable external changes without a conflict question. Only a missing-file error permits recreation; other read failures use the existing pane error display and leave the disk, pane text and saved snapshot intact. A headless Swift regression checks unreadable files, recreation and ordinary conflicts, failing before and passing after. Affected Colophon, web, serve and required checks and the sandbox Swift build run; no window was opened. Hand check: make an externally changed preamble unreadable, edit the pane and confirm its error and unchanged file.

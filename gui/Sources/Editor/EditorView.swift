@@ -156,7 +156,7 @@ final class EditorDocument: NSDocument {
         let choose = { [weak self] (loadIt: Bool) in
             guard let self else { return }
             self.asking = false
-            if loadIt { self.updateChangeCount(.changeCleared); self.loadFromDisk(url) }
+            if loadIt { self.loadFromDisk(url) }
             else { self.fileModificationDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? self.fileModificationDate }   // kept: no second question at the save
         }
         asking = true
@@ -174,6 +174,7 @@ final class EditorDocument: NSDocument {
         let caret = controller?.parts.textView.selectedRange().location ?? 0
         do {
             try revert(toContentsOf: url, ofType: fileType ?? "Markdown and text")
+            updateChangeCount(.changeCleared)
             lastReloadError = nil
         } catch {
             lastReloadError = error
