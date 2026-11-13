@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.208 — 2026-11-13
+
+Pre-edit state: commit `3d77ed6`. R5b.5: patch-built reports applied global code settings over metadata-file settings because both report code-filter calls omitted the metadata files. Pass them through for LaTeX and PDF builds. A scripts/pdfmd regression fails before and passes after; report, code-setting and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+
 ## v3.33.207 — 2026-11-13
 
 Pre-edit state: commit `0571ae5`. R5b.4: Calibre scratch Markdown corrupted balanced image paths, angle-delimited paths with spaces and escaped names. Parse complete destinations and decode Markdown and HTML escapes before rebasing. Regressions fail before and pass after, including a scripts/pdfmd build with a stand-in Calibre; Calibre and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.

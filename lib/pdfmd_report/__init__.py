@@ -307,7 +307,7 @@ def run(core, *,
                     cmd += width_filter_args(width_filter)
                 cmd += cellalign_args(files, metadata_files)
                 if is_tex_target:
-                    cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
+                    cmd += code_filter_args(report_no_auto, list(files), metadata_files) + image_filter_args(report_no_auto, list(files))
                     cmd += core.paragraph_spacing_latex_args(list(files), metadata_files)
                     hoist_code_header(cmd)
                     keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
@@ -449,7 +449,7 @@ def run(core, *,
                         cmd += width_filter_args(width_filter)
                     cmd += cellalign_args(files, metadata_files)
                     if engine in LATEX_ENGINES:
-                        cmd += code_filter_args(report_no_auto, list(files)) + image_filter_args(report_no_auto, list(files))
+                        cmd += code_filter_args(report_no_auto, list(files), metadata_files) + image_filter_args(report_no_auto, list(files))
                         hoist_code_header(cmd)
                         keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                     # as for one document (v3.28.2): last, after the LaTeX filter (v3.28.11)

@@ -105,6 +105,23 @@ class CommandMetadataPrecedence(RouteCase):
 
 class CodeMetadataPrecedence(RouteCase):
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_patch_report_metadata_code_settings_beat_global(self):
+        config = self.root / "config.yaml"
+        config.write_text('options: {line-numbers: true, report-build: patch}\n')
+        self.env["PDFMD_CONFIG"] = str(config)
+        metadata = self.root / "base.yaml"
+        metadata.write_text('pdfmd-options: {line-numbers: false}\n')
+        self.source.write_text('```python\na = 1\n```\n')
+        other = self.root / "other.md"
+        other.write_text('Text.\n')
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "-r", str(self.source), str(other),
+                               "--to", "latex", "-o", str(self.root / "report.tex"), "-y", str(metadata),
+                               "--no-stamp", "--no-backup"], cwd=self.root, env=self.env,
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=90)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("numbers=left", (self.root / "report.tex").read_text())
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_checkout_metadata_code_settings_beat_global_and_yield_to_cli_and_document(self):
         config = self.root / "config.yaml"
         config.write_text('options: {line-numbers: true, line-number-step: 5}\n')
