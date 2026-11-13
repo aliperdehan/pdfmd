@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import http.client
 import ssl
+import socket
 import urllib.error
 import urllib.request
 from typing import Callable
@@ -40,8 +41,9 @@ def _retryable(error: BaseException) -> bool:
     if isinstance(error, urllib.error.HTTPError):
         return False
     if isinstance(error, urllib.error.URLError):          # urlopen wraps the TLS, connection and time-out errors of the socket
-        return isinstance(error.reason, RETRYABLE)
-    return isinstance(error, RETRYABLE)
+        error = error.reason
+    return (isinstance(error, RETRYABLE)
+            or isinstance(error, socket.gaierror) and error.errno == socket.EAI_AGAIN)
 
 
 class _Recorder(urllib.request.HTTPRedirectHandler):

@@ -3,6 +3,7 @@
 import hashlib
 import io
 import ssl
+import socket
 import sys
 import unittest
 import urllib.error
@@ -94,6 +95,19 @@ class Fetch(unittest.TestCase):
         self.assertEqual(len(log), 1)
         self.assertIn("good.mirror.example", log[0])
         self.assertIn("SHA-256 mismatch", log[0])
+
+    def test_dns_retry_only_for_temporary_resolution_on_redirector(self):
+        temporary = urllib.error.URLError(socket.gaierror(socket.EAI_AGAIN, "temporary"))
+        permanent = urllib.error.URLError(socket.gaierror(socket.EAI_NONAME, "unknown"))
+        opener = opener_of(temporary, b"ok")
+        self.assertEqual(fetch(CTAN, opener, lambda line: None, retries=1), b"ok")
+        self.assertEqual(len(opener.calls), 2)
+        for url, error in ((CTAN, permanent), (OTHER, temporary)):
+            with self.subTest(url=url):
+                opener = opener_of(error, b"ok")
+                with self.assertRaises(urllib.error.URLError):
+                    fetch(url, opener, lambda line: None, retries=1)
+                self.assertEqual(len(opener.calls), 1)
 
     def test_another_host_is_never_retried(self):
         opener = opener_of(CERT)
