@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.191p — 2026-11-13
+
+Pre-edit state: commit `b12085a`. Scripts and tests only; pdfmd itself is unchanged. Ctrl-C during a blocked parallel worker waited for the executor before stopping it. Stop workers inside the executor scope and prevent a worker from starting after interruption. A blocked-worker regression was checked failing before and passing after; runner, split, packaging, docs consistency, setup and isolation tests run.
+
 ## v3.33.191o — 2026-11-13
 
 Pre-edit state: commit `b032805`. Scripts and tests only; pdfmd itself is unchanged. Quoted annotations contained no Name nodes, so moving a function annotated with a quoted Path dropped its import and broke get_type_hints. Refuse quoted annotations explicitly before writing, naming the statement and annotation whose dependencies need resolving. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.

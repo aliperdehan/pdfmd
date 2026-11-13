@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import signal
+import subprocess
 import sys
+import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -74,6 +79,46 @@ class Environment(unittest.TestCase):
                 self.assertNotEqual(one[key], two[key])
                 self.assertTrue(one[key].startswith(folder))
             self.assertEqual((one["PDFMD_CONFIG"], one["PDFMD_NO_PROMPT"]), ("", "1"))
+
+
+@unittest.skipIf(os.name == "nt", "SIGINT delivery differs on Windows")
+class Interrupt(unittest.TestCase):
+    def test_interrupt_stops_blocked_worker(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            (base / "tests").mkdir()
+            marker = base / "started"
+            (base / "tests" / "test_blocked.py").write_text(
+                "import os, time, unittest\nfrom pathlib import Path\n"
+                f"class Blocked(unittest.TestCase):\n def test_wait(self):\n  Path({str(marker)!r}).write_text(str(os.getpid()))\n  time.sleep(60)\n")
+            code = ("import sys; from pathlib import Path; "
+                    f"sys.path.insert(0, {str(ROOT / 'scripts')!r}); import test_parallel as r; "
+                    f"r.ROOT=Path({folder!r}); r.TESTS=r.ROOT/'tests'; r.STATE=r.ROOT/'state'; "
+                    "r.real_folders=lambda: []; sys.exit(r.main(['-j', '1']))")
+            env = {**os.environ, "TMPDIR": folder, "XDG_CONFIG_HOME": folder, "XDG_CACHE_HOME": folder,
+                   "XDG_DATA_HOME": folder, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+            proc = subprocess.Popen([sys.executable, "-c", code], env=env, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            try:
+                deadline = time.monotonic() + 10
+                while not marker.exists() and proc.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue(marker.exists(), "worker did not start")
+                proc.send_signal(signal.SIGINT)
+                try:
+                    _, stderr = proc.communicate(timeout=3)
+                except subprocess.TimeoutExpired:
+                    self.fail("runner did not stop the blocked worker promptly")
+                self.assertEqual(proc.returncode, 130, stderr.decode())
+            finally:
+                if proc.poll() is None:
+                    if marker.exists():
+                        try:
+                            os.kill(int(marker.read_text()), signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.communicate()
 
 
 if __name__ == "__main__":

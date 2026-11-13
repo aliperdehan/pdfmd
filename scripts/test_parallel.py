@@ -155,10 +155,13 @@ def run_module(name: str, env: dict[str, str]) -> dict:
                 "failures": 0, "errors": 0, "skipped": 0}
     try:
         # A session of its own: the whole process group (LaTeX, Pandoc, ...) can be ended when the runner is stopped.
-        child = subprocess.Popen([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", f"{name}.py"], cwd=ROOT, env=env,
-                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                 errors="replace", start_new_session=True)
         with CHILDREN_LOCK:
+            if STOPPED.is_set():
+                return {"name": name, "status": "FAIL", "seconds": 0.0, "output": "not run: interrupted", "code": 1, "tests": 0,
+                        "failures": 0, "errors": 0, "skipped": 0}
+            child = subprocess.Popen([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", f"{name}.py"], cwd=ROOT, env=env,
+                                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                     errors="replace", start_new_session=True)
             CHILDREN.add(child)
         try:
             output = child.communicate()[0]
@@ -272,7 +275,11 @@ def main(argv: list[str] | None = None) -> int:
             signal.signal(number, _terminate)
     try:
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-            list(pool.map(job, parallel))
+            try:
+                list(pool.map(job, parallel))
+            except KeyboardInterrupt:
+                stop_children()
+                raise
         for name in serial:
             report(run_module(name, worker_env(base, "serial", args.own_tex_cache, name)))
     except KeyboardInterrupt:
