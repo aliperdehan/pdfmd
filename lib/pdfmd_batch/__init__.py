@@ -178,6 +178,8 @@ def run(core, *,
     files = list(destinations)
 
     def preamble_for(file, metadata):
+        if file.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS:
+            return []
         if not (file_target(file) in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(file)):
             return []
         preambles = document_preambles(file, pandoc_options, effective_no_auto(file, args.no_auto),
@@ -188,6 +190,10 @@ def run(core, *,
         print("WARN  --open is ignored in batch mode (-b); it would open every converted file "
               "(--bopen SPEC opens the ones you say)", file=sys.stderr)
     def file_metadata_and_engines(file):
+        if file.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS:
+            if args.presentation:
+                raise SystemExit("-p/--presentation isn't supported for an office-document input")
+            return None, engines
         # metadata_for(file) is looked up once and reused for both the
         # engine restriction (which may now fall through to this same
         # metadata file's own pdf-engine setting -- see resolve_engines)

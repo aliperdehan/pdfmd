@@ -126,6 +126,14 @@ class Checkout(unittest.TestCase):
         self.assertEqual(sum(line.startswith("OK    ") for line in done.stdout.splitlines()), count, done.stdout)
         self.assertEqual(len(list((folder or self.work).glob("*" + suffix))), count, done.stdout)
 
+    def test_binary_office_input_without_engine_does_not_read_as_text(self):
+        (self.work / "letter.docx").write_bytes(b"PK\x03\x04\xff\xfe")
+        self.environment["PATH"] = str(self.folder / "empty-path")
+        done = self.run_pdfmd("-b", "letter.docx")
+        self.assertNotIn("UnicodeDecodeError", done.stdout + done.stderr)
+        self.assertNotIn("Traceback", done.stdout + done.stderr)
+        self.assertIn("soffice", (done.stdout + done.stderr).lower())
+
     def test_explicit_files_with_source_attachments(self):
         done = self.run_pdfmd("-b", *self.names, "-e", "inkmd", "--attach-source")
         self.assert_built(done, 2)

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.206 — 2026-11-13
+
+Pre-edit state: commit `efd3de4`. R5b.1: explicit binary Office inputs in batch mode were read as UTF-8 while resolving engines. Apply the single-file Office guard before metadata, engine and preamble discovery. A scripts/pdfmd regression fails before and passes after; batch and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+
 ## v3.33.205 — 2026-11-13
 
 Pre-edit state: commit `73c60c7`. R4.5: temporary DNS resolution failures wrapped by urllib bypassed CTAN mirror retries. Retry EAI_AGAIN, while permanent DNS errors and other hosts still fail immediately. The DNS regression fails before and passes after; download and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
