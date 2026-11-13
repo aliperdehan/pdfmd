@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.192a — 2026-11-13
+
+Pre-edit state: commit `372a937`. No shipped pdfmd code changed; PDFMD_VERSION is unchanged. **Colophon 0.3.22: ask before reloading an edited Studio.** The same-document URL shortcut treated reloads and identical-URL navigation as anchor jumps and discarded unsaved tabs. Only a changed fragment on a GET link or script navigation bypasses the existing dirty check. A headless Swift navigation regression was checked failing before and passing after; affected Colophon, web, serve and required checks run, with socket checks blocked by the sandbox. The sandbox Swift build was run; no window was opened. Hand check: edit two tabs, reload or follow an empty link, cancel leaving, then follow an anchor.
+
 ## v3.33.192 — 2026-11-13
 
 Pre-edit state: commit `aab8e13`. Switching back to an inactive Studio tab after a disk refresh restored stale CodeMirror text and could overwrite the newer file on Save. Reuse a cached state only when its text matches the refreshed tab; otherwise create a fresh state and history. Rebuilt the shipped bundle offline with the installed esbuild and locked dependencies. The real-CodeMirror regression was checked failing before and passing after; web, serve, split, packaging, docs consistency, setup and isolation tests run. pdfmd.py remains 17,115 lines (version only).

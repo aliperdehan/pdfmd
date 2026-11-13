@@ -279,7 +279,11 @@ final class WebStudioController: NSWindowController, WKScriptMessageHandler, WKN
             NSWorkspace.shared.open(url); decisionHandler(.cancel); return
         }
         guard action.targetFrame?.isMainFrame ?? true else { decisionHandler(.allow); return }
-        if let here = webView.url, Self.withoutFragment(url) == Self.withoutFragment(here) { decisionHandler(.allow); return }
+        if let here = webView.url, Self.withoutFragment(url) == Self.withoutFragment(here) {
+            let fragmentJump = url.fragment != nil && url.fragment != here.fragment && action.request.httpMethod == "GET"
+                && (action.navigationType == .linkActivated || action.navigationType == .other)
+            decisionHandler(fragmentJump || mayLeavePage() ? .allow : .cancel); return
+        }
         if action.navigationType == .linkActivated {
             if own, let folder, let file = Self.projectFile(for: url, folder: folder, current: state["cur"] as? String) { openInPage(file) } else { NSSound.beep() }
             decisionHandler(.cancel); return
