@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.200 — 2026-11-13
+
+Pre-edit state: commit `3fe5a70`. R4.2: an ODT build through LibreOffice stamped and recorded its disposable Word intermediate before conversion, including when forced conversion failed. Suppress intermediate stamping and stamp the final ODT through the existing partial/report-aware path only after successful conversion; Pandoc fallback still stamps its own successful output. Route and scripts/pdfmd regressions check the unstamped source/history at converter entry, final ODT names, failed forced conversion and fallback, failing before and passing after. ODT, Office, timeout, history and required checks run; real LibreOffice is skipped in the sandbox. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+
 ## v3.33.199 — 2026-11-13
 
 Pre-edit state: commit `d72057a`. R4.1: global and kit metadata naming a preamble or Lua filter overrode nearer folder choices. Resolve named files in their actual layers: document metadata, each folder's metadata and configuration, kit defaults, global metadata and global configuration, with the document first. Nearest lists replace and append keys retain their owning paths. Layer and scripts/pdfmd HTML/LaTeX regressions fail before and pass after; named-file, assembly and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.

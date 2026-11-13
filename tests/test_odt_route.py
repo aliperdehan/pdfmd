@@ -57,6 +57,7 @@ class Route(unittest.TestCase):
         result, writer, convert, said = self.build(engine="soffice")
         self.assertTrue(result[1])
         self.assertEqual(writer.call_args.kwargs["target_format"], "docx")
+        self.assertTrue(writer.call_args.kwargs["skip_stamp"])
         self.assertEqual(convert.call_args.args[1:], (self.output, False, "odt"))
         self.assertFalse(convert.call_args.args[0].exists())  # intermediate cleaned up
         self.assertEqual(pdfmd.BUILD["output"], self.output)
@@ -141,7 +142,8 @@ class Launcher(unittest.TestCase):
 
     def run_pdfmd(self, *args):
         return subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "doc.md", "-o", "doc.odt",
-                               "--no-stamp", "--no-backup", "--no-auto", "font", *args],
+                               *([] if "--stamp" in args else ["--no-stamp"]),
+                               "--no-backup", "--no-auto", "font", *args],
                               cwd=self.folder, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
 
     def check_odt(self, done):
@@ -233,6 +235,48 @@ class Launcher(unittest.TestCase):
         done = self.run_pdfmd()
         self.check_odt(done)
         self.assertEqual(done.stderr.count("WARN"), 1, done.stderr)
+
+    @unittest.skipIf(os.name == "nt", "POSIX stand-in for LibreOffice")
+    def test_stamp_and_history_wait_for_successful_odt_conversion(self):
+        binary = self.folder / "soffice"
+        observed = self.folder / "observed.json"
+        binary.write_text("#!" + sys.executable + "\n" +
+                          "import json, os, pathlib, sys\n"
+                          f"folder = pathlib.Path({str(self.folder)!r})\n"
+                          f"pathlib.Path({str(observed)!r}).write_text(json.dumps([\n"
+                          "    (folder / 'doc.md').read_text(),\n"
+                          "    (folder / '.backups' / 'doc.hst').exists()]))\n"
+                          "if os.environ.get('PDFMD_TEST_FAIL_ODT'): raise SystemExit(1)\n"
+                          "source = pathlib.Path(sys.argv[-1])\n"
+                          "out = pathlib.Path(sys.argv[sys.argv.index('--outdir') + 1])\n"
+                          "(out / (source.stem + '.odt')).write_bytes(source.read_bytes())\n",
+                          encoding="utf-8")
+        binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
+        self.env["PATH"] = str(self.folder) + os.pathsep + self.env.get("PATH", "")
+        for route, fail in (("soffice", False), ("soffice", True), ("auto", True)):
+            with self.subTest(route=route, fail=fail):
+                history = self.folder / ".backups" / "doc.hst"
+                history.unlink(missing_ok=True)
+                (self.folder / "doc.odt").unlink(missing_ok=True)
+                self.write(f"  odt: {{engine: {route}}}\n", timeout=-1)
+                before = (self.folder / "doc.md").read_text()
+                self.env["PDFMD_TEST_FAIL_ODT"] = "1" if fail else ""
+                done = self.run_pdfmd("--stamp", "--stamp-store", "both", "--stamp-output")
+                self.assertEqual(json.loads(observed.read_text()), [before, False])
+                if route == "soffice" and fail:
+                    self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
+                    self.assertEqual((self.folder / "doc.md").read_text(), before)
+                    self.assertFalse(history.exists())
+                    self.assertFalse((self.folder / "doc.odt").exists())
+                else:
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    for path in (self.folder / "doc.md", history):
+                        stamp = path.read_text()
+                        self.assertIn("doc.odt", stamp)
+                        self.assertNotIn("document.docx", stamp)
+                    self.assertEqual((self.folder / "doc.md").read_text().count("Compiled to"), 1)
+                    entries, _ = pdfmd.history_module().read_file(history)
+                    self.assertEqual(len(entries), 1)
 
     def test_real_libreoffice_preserves_raw_word_blocks(self):
         if os.environ.get("CODEX_SANDBOX"):

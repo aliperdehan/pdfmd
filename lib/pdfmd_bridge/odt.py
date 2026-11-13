@@ -67,13 +67,16 @@ def convert(build, md_path: Path, *args, **kwargs):
     if core.resolve_soffice() is not None:
         with tempfile.TemporaryDirectory(prefix="pdfmd-odt-word-") as scratch:
             word = Path(scratch) / "document.docx"
-            word_values = {**given, "output_file": word, "target_format": "docx"}
+            word_values = {**given, "output_file": word, "target_format": "docx", "skip_stamp": True}
             result = build(**word_values)
             if result[1]:
                 ok, reason = core.run_soffice_convert(word, output, given["verbose"], "odt")
                 core.BUILD["output"] = output
                 if ok:
                     core.record_engine("soffice")
+                    core.stamp_build(given["partial"], given["skip_stamp"], md_path, metadata,
+                                     given["preamble_files"] or [], given["stamp_overrides"] or {},
+                                     output, given["verbose"])
                     return result
             else:
                 reason = result[2]
