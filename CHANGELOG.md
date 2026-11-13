@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.202 — 2026-11-13
+
+Pre-edit state: commit `fef0fef`. R5b.2: early single-file output protection discovered metadata without the document class, so article.yaml beside book.yaml caused an uncaught ambiguity even for an article document. Resolve documentclass (or class) before that lookup and retain the existing FileNotFoundError/ValueError-to-SystemExit handling; binary Office inputs still skip the text class read and Quarto keeps its own metadata path. scripts/pdfmd regressions check both class keys and a clear ambiguity error, failing before and passing after, plus the Office input diagnostic. Rewrite, folder-setup, Office and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+
 ## v3.33.201 — 2026-11-13
 
 Pre-edit state: commit `0535507`. R4.3: flat exports inserted their generated title and abstract after normalisation, leaving original anchor links, unflattened blocks and scripts outside the selected mode. Insert the generated head before the existing inline and block walks, after collecting heading slugs. Filter regressions cover Unicode, ASCII and dropped scripts, rewritten links and definition lists; scripts/pdfmd checks both GFM and text exports. Regressions fail before and pass after; flat, ASCII, source-retention and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.

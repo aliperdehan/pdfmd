@@ -143,5 +143,52 @@ class OtherRoutes(unittest.TestCase):
                 self.assertTrue((folder / ("out (2)." + ext)).is_file())
 
 
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class ClassMetadata(unittest.TestCase):
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory(prefix="pdfmd-output-metadata-")
+        self.addCleanup(scratch.cleanup)
+        self.folder = Path(scratch.name)
+        (self.folder / "article.yaml").write_text("title: Article settings\n")
+        (self.folder / "book.yaml").write_text("title: Book settings\n")
+        self.env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                    **{"XDG_" + key + "_HOME": str(self.folder / key.lower())
+                       for key in ("CONFIG", "CACHE", "DATA")}}
+
+    def build(self, front):
+        (self.folder / "paper.md").write_text("---\n" + front + "---\n\nBody.\n")
+        return subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "paper.md", "--to", "latex",
+                               "--no-stamp", "--no-backup", "--no-auto", "font"], cwd=self.folder,
+                              env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+
+    def test_single_resolves_class_before_discovering_metadata(self):
+        for key in ("documentclass", "class"):
+            with self.subTest(key=key):
+                done = self.build(key + ": article\n")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                text = (self.folder / "paper.tex").read_text()
+                self.assertIn("Article settings", text)
+                self.assertNotIn("Book settings", text)
+
+    def test_ambiguous_metadata_keeps_the_existing_error_handling(self):
+        done = self.build("title: Ambiguous\n")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("Multiple YAML files", done.stderr)
+        self.assertIn("use -y FILE or bare -y", done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+
+    def test_binary_office_input_still_skips_the_frontmatter_class_read(self):
+        source = self.folder / "input.docx"
+        made = subprocess.run([shutil.which("pandoc"), "-f", "markdown", "-o", str(source)],
+                              input="Office body.\n", cwd=self.folder, env=self.env, capture_output=True, text=True)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), str(source), "--to", "gfm",
+                               "-y", "article.yaml", "--no-stamp", "--no-backup"], cwd=self.folder,
+                              env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("only direct PDF conversion", done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

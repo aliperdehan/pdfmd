@@ -30,7 +30,14 @@ def job_target(final: Path | None, source: Path, goal: str) -> Path:
 
 
 def single(source: Path, output: Path, job: dict | None, target: str, metadata_for) -> Path:
-    metadata = [] if source.suffix.lower() == ".qmd" else metadata_for(source)
+    metadata = []
+    if source.suffix.lower() != ".qmd":
+        try:
+            document_class = (None if source.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS else
+                              core.frontmatter_value(source, "documentclass") or core.frontmatter_value(source, "class"))
+            metadata = metadata_for(source, document_class=document_class)
+        except (FileNotFoundError, ValueError) as error:
+            raise SystemExit(str(error))
     if job is not None:
         final = job_target(job["final"], source, job["goal"])
         job["final"] = protected(source, final, job["goal"], metadata)
