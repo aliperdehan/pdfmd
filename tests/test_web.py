@@ -64,6 +64,11 @@ ed.forgetDocument("b.md");
 ed.setText("A edit", "a.md");
 ed.setText("disk B", "b.md");
 ed.undo(); assert.equal(ed.getText(), "disk B", "closed documents discard their history");
+ed.setText("A edit", "a.md");
+ed.setText("new disk B", "b.md");
+assert.equal(ed.getText(), "new disk B", "a refreshed inactive document replaces its cached text");
+ed.undo(); assert.equal(ed.getText(), "new disk B", "refresh discards stale history too");
+
 '''
         done = subprocess.run([NODE, "-e", script, str(WEB)], env={**os.environ},
                               stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)

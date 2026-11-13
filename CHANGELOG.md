@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.192 — 2026-11-13
+
+Pre-edit state: commit `aab8e13`. Switching back to an inactive Studio tab after a disk refresh restored stale CodeMirror text and could overwrite the newer file on Save. Reuse a cached state only when its text matches the refreshed tab; otherwise create a fresh state and history. Rebuilt the shipped bundle offline with the installed esbuild and locked dependencies. The real-CodeMirror regression was checked failing before and passing after; web, serve, split, packaging, docs consistency, setup and isolation tests run. pdfmd.py remains 17,115 lines (version only).
+
 ## v3.33.191q — 2026-11-13
 
 Pre-edit state: commit `97165ab`. Scripts and tests only; pdfmd itself is unchanged. Interrupting a worker left tools in separate sessions running. Walk its descendant tree using ps on POSIX, or taskkill /T /F on Windows, before stopping the worker. A detached-child regression, using a simulated process listing because the sandbox denies ps, was checked failing before and passing after; runner, split, packaging, docs consistency, setup and isolation tests run.
