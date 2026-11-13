@@ -60,6 +60,13 @@ local function permitted(path)
   return ok
 end
 
+-- Document-named cache folders use the project boundary, without the caller's generated-asset exceptions.
+function pdfmd_live_project_path(path)
+  if not PYTHON or not CHECK then return false end
+  local done, answer = pcall(pandoc.pipe, PYTHON, {"-I", "-S", CHECK, "--project"}, absolute(path))
+  return done and answer == "yes"
+end
+
 local told = {}
 local function refused(path)
   local k = key(absolute(path))      -- one warning for a file, however the filter spells the places it tries
@@ -192,7 +199,8 @@ real = os.path.realpath(sys.stdin.read())
 root = os.path.realpath(os.environ["PDFMD_LIVE_ROOT"])
 places = [os.path.realpath(p) for p in os.environ.get("PDFMD_LIVE_TRUSTED", "").split("\n") if p]
 inside = under(real, root) and not under(real, os.path.join(root, ".git"))
-sys.stdout.write("yes" if inside or any(under(real, p) for p in places) else "no")
+allowed = inside if "--project" in sys.argv[1:] else inside or any(under(real, p) for p in places)
+sys.stdout.write("yes" if allowed else "no")
 """
 
 

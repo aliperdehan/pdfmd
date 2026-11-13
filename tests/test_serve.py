@@ -435,6 +435,44 @@ end
                     self.assertTrue(any("outside the project folder" in line for line in answer["warnings"]), answer)
 
     @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_cli_live_diagram_cache_uses_render_folder_outside_project(self):
+        text = "---\npdfmd-options: {diagram-timeout: 0}\n---\n\n```dot\ndigraph { a -> b }\n```\n"
+        for verbose in (False, True):
+            with self.subTest(verbose=verbose):
+                cache = self.root.parent / ("verbose-cache" if verbose else "quiet-cache")
+                env = {**os.environ, "XDG_CACHE_HOME": str(cache), "LOCALAPPDATA": str(cache)}
+                args = ["--verbose"] if verbose else []
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *args, "--api", "POST", "/api/render",
+                                       json.dumps({"path": "report.md", "text": text})], cwd=self.root, env=env,
+                                      stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                answer = json.loads(done.stdout)
+                self.assertIn("digraph", answer["html"])
+                self.assertFalse((cache / "pdfmd" / "raw" / "pictures").exists(), "a live render must not create the outside cache folder")
+                notes = [line for line in answer["warnings"] if "diagram cache" in line and "per-render" in line]
+                self.assertEqual(bool(notes), verbose, answer)
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_document_diagram_cache_is_project_local_or_temporary(self):
+        probe = self.root / "probe.lua"
+        probe.write_text('''function Pandoc(doc)
+  local ok = pcall(pandoc.system.list_directory, os.getenv("TMPDIR") .. "/diagrams")
+  return pandoc.Pandoc({pandoc.Para({pandoc.Str(ok and "temporary-cache" or "project-cache")})})
+end
+''', encoding="utf-8")
+        @contextlib.contextmanager
+        def filters(document, metadata):
+            yield ["--lua-filter", str(ROOT / "lib/pdfmd_lua/diagram.lua"), "--lua-filter", str(probe)]
+        core = Core(self.root, filters=filters)
+        for folder, temporary in ((self.root.parent / "outside-cache", True), (self.root / "local-cache", False)):
+            with self.subTest(folder=folder.name):
+                text = "---\npdfmd-raw-cache: " + json.dumps(str(folder)) + "\npdfmd-diagram-off: true\n---\n\n```dot\nx\n```\n"
+                status, answer = core.handle("POST", "/api/render", {"path": "report.md", "text": text})
+                self.assertEqual(status, 200, answer)
+                self.assertIn("temporary-cache" if temporary else "project-cache", answer["html"])
+                self.assertEqual(folder.exists(), not temporary)
+
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_the_live_views_filters_open_nothing_outside_the_project(self):
         """Review finding G4.4: the text names the files a filter opens (`::: {.csv file=...}`). A name that leads out of the project, by
         `..`, by an absolute path or through a symlink, is refused with a warning; a file of the project is still a table."""

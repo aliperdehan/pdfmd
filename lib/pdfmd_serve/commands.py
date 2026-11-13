@@ -69,7 +69,8 @@ def serve_live_filters(source: Path, metadata_files: list[Path]) -> Iterator[lis
     first = pdfmd_lua.path("sourcepos")
     with core.csv_table_filter() as csv_filter:
         yield (["--lua-filter", str(first)] if first is not None else []) + core.document_filter_args(
-            source, source, metadata_files, core.effective_no_auto(source, None), csv_filter, [])
+            source, source, metadata_files, core.effective_no_auto(source, None), csv_filter, []) + (
+                ["-M", "pdfmd-live-verbose=true"] if core.VERBOSE_OUTPUT else [])
 
 
 def serve_core(folder: Path):

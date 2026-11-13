@@ -293,6 +293,12 @@ function Pandoc(doc)
   local given = doc.meta["pdfmd-raw-cache"]
   if given then cache_dir = pandoc.utils.stringify(given) end
   if not cache_dir then return nil end
+  if os.getenv("PDFMD_LIVE_ROOT") and (not pdfmd_live_project_path or not pdfmd_live_project_path(cache_dir)) then
+    if doc.meta["pdfmd-live-verbose"] then
+      io.stderr:write("NOTE  live view: diagram cache " .. cache_dir .. " is outside the project folder; using the per-render folder\n")
+    end
+    cache_dir = os.getenv("TMPDIR") .. "/diagrams"
+  end
   if doc.meta["pdfmd-raw-rel"] then cache_rel = pandoc.utils.stringify(doc.meta["pdfmd-raw-rel"]) end
   flat = doc.meta["pdfmd-flat"] ~= nil
   local seconds = doc.meta["pdfmd-diagram-timeout"]
