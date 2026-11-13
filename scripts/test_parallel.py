@@ -62,10 +62,42 @@ STOPPED = threading.Event()            # set when the run is interrupted: queued
 
 
 def stop_children() -> None:
-    """End every worker's process group (the worker and the tools it started) and start no other."""
+    """End workers and their descendants, including tools in separate sessions."""
     STOPPED.set()
     with CHILDREN_LOCK:
-        running = list(CHILDREN)
+        running = [child for child in CHILDREN if child.poll() is None]
+    if os.name == "nt":
+        for child in running:
+            try:
+                subprocess.run(["taskkill", "/PID", str(child.pid), "/T", "/F"], stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            except OSError:
+                pass
+    else:
+        try:
+            listing = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=True).stdout
+            descendants: dict[int, list[int]] = {}
+            for line in listing.splitlines():
+                try:
+                    pid, parent = map(int, line.split())
+                except ValueError:
+                    continue
+                descendants.setdefault(parent, []).append(pid)
+            pending = [child.pid for child in running]
+            found = []
+            while pending:
+                pid = pending.pop()
+                for descendant in descendants.get(pid, []):
+                    found.append(descendant)
+                    pending.append(descendant)
+            for pid in reversed(found):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+        except (OSError, subprocess.CalledProcessError):
+            pass
     for child in running:
         try:
             os.killpg(child.pid, signal.SIGKILL)

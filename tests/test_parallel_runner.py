@@ -121,5 +121,53 @@ class Interrupt(unittest.TestCase):
                     proc.communicate()
 
 
+    def test_interrupt_stops_detached_descendant(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            (base / "tests").mkdir()
+            marker, survived = base / "pids", base / "survived"
+            (base / "tests" / "test_detached.py").write_text(
+                "import os, subprocess, sys, time, unittest\nfrom pathlib import Path\n"
+                f"class Detached(unittest.TestCase):\n def test_wait(self):\n"
+                f"  child = subprocess.Popen([sys.executable, '-c', {('import time; from pathlib import Path; time.sleep(2); Path(' + repr(str(survived)) + ').touch(); time.sleep(60)')!r}], start_new_session=True)\n"
+                f"  Path({str(marker)!r}).write_text(str(os.getpid()) + ' ' + str(child.pid))\n"
+                "  time.sleep(60)\n")
+            # This sandbox may deny ps; supply its process snapshot while using real processes and signals.
+            code = ("import sys, subprocess; from pathlib import Path; "
+                    f"sys.path.insert(0, {str(ROOT / 'scripts')!r}); import test_parallel as r; "
+                    f"r.ROOT=Path({folder!r}); r.TESTS=r.ROOT/'tests'; r.STATE=r.ROOT/'state'; "
+                    "r.real_folders=lambda: []; "
+                    f"p=Path({str(marker)!r}); "
+                    "r.subprocess.run=lambda *a, **k: subprocess.CompletedProcess(a[0], 0, "
+                    "'{} {}\\n'.format(p.read_text().split()[1], p.read_text().split()[0])); "
+                    "sys.exit(r.main(['-j', '1']))")
+            env = {**os.environ, "TMPDIR": folder, "XDG_CONFIG_HOME": folder, "XDG_CACHE_HOME": folder,
+                   "XDG_DATA_HOME": folder, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+            proc = subprocess.Popen([sys.executable, "-c", code], env=env, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            pids = []
+            try:
+                deadline = time.monotonic() + 10
+                while not marker.exists() and proc.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue(marker.exists(), "worker did not start")
+                pids = [int(pid) for pid in marker.read_text().split()]
+                proc.send_signal(signal.SIGINT)
+                _, stderr = proc.communicate(timeout=3)
+                self.assertEqual(proc.returncode, 130, stderr.decode())
+                time.sleep(2.2)
+                self.assertFalse(survived.exists(), "detached child survived interruption")
+            finally:
+                if proc.poll() is None:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.communicate()
+                if survived.exists() or proc.returncode != 130:
+                    for pid in reversed(pids):
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+
+
 if __name__ == "__main__":
     unittest.main()
