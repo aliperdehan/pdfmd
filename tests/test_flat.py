@@ -163,6 +163,20 @@ class Filter(unittest.TestCase):
         self.assertTrue(out.startswith("# The Title\n\n*A One, B Two — 2026-10-09*\n\n**Abstract.** Short.\n\nBody."), out)
         self.assertNotIn("Title", self.flatten("---\ntitle: The Title\n---\n\nBody.\n", title=False)[0])
 
+    def test_generated_head_uses_the_body_normalisation_passes(self):
+        source = ("---\ntitle: H~2~O\nsubtitle: x^2^\nabstract: |\n"
+                  "  H~2~O and [jump](#sec:target).\n\n"
+                  "  Term\n  : A definition.\n---\n\n# Target {#sec:target}\n")
+        for mode, title, subtitle in (("unicode", "H₂O", "x²"), ("ascii", "H_2O", "x^2"),
+                                      ("drop", "H2O", "x2")):
+            with self.subTest(mode=mode):
+                out, _ = self.flatten(source, mode)
+                self.assertTrue(out.startswith("# " + title + "\n"), out)
+                self.assertIn("**" + subtitle + "**", out)
+                self.assertIn("[jump](#target)", out)
+                self.assertIn("**Term**\n\nA definition.", out)
+                self.assertNotIn("<sub>", out)
+
     def test_abstract_keeps_all_paragraphs_and_blocks(self):
         out, _ = self.flatten("---\nabstract: |\n  First *paragraph*.\n\n  Second paragraph.\n\n  - An item\n  - Another item\n---\n\nBody.\n")
         self.assertIn("**Abstract.** First *paragraph*.\n\nSecond paragraph.", out)
@@ -312,6 +326,35 @@ class CommandLine(unittest.TestCase):
         self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-flat-cli-"))
         self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
         self.env = {**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"]}
+
+    def test_generated_title_and_abstract_receive_inline_and_block_passes(self):
+        source = self.write("head.md", "---\ntitle: H~2~O\nsubtitle: x^2^\nabstract: |\n"
+                            "  H~2~O and [jump](#sec:target).\n\n"
+                            "  Term\n  : A definition.\n---\n\n"
+                            "# Target {#sec:target}\n\nH~2~O and [jump](#sec:target).\n")
+        for target in ("gfm", "txt"):
+            with self.subTest(target=target):
+                env = {**self.env, "PDFMD_NO_PROMPT": "1",
+                       "XDG_CONFIG_HOME": str(self.directory / "config"),
+                       "XDG_CACHE_HOME": str(self.directory / "cache"),
+                       "XDG_DATA_HOME": str(self.directory / "data")}
+                done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), str(source),
+                                       "--to", target, "-o", "head.out", "--no-stamp", "--no-backup"],
+                                      cwd=self.directory, env=env, stdin=subprocess.DEVNULL,
+                                      capture_output=True, text=True)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                out = (self.directory / "head.out").read_text()
+                self.assertEqual(out.count("H₂O"), 3, out)
+                self.assertIn("x²", out)
+                self.assertNotIn("<sub>", out)
+                self.assertNotIn("#sec:target", out)
+                if target == "gfm":
+                    self.assertEqual(out.count("[jump](#target)"), 2, out)
+                    self.assertIn("**Term**\n\nA definition.", out)
+                else:
+                    self.assertEqual(out.count("jump."), 2, out)
+                    self.assertIn("Term", out)
+                    self.assertIn("A definition.", out)
 
     def test_multiblock_abstract_survives_gfm_and_text_builds(self):
         for target in ("gfm", "txt"):

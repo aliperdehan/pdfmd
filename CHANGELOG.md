@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.201 — 2026-11-13
+
+Pre-edit state: commit `0535507`. R4.3: flat exports inserted their generated title and abstract after normalisation, leaving original anchor links, unflattened blocks and scripts outside the selected mode. Insert the generated head before the existing inline and block walks, after collecting heading slugs. Filter regressions cover Unicode, ASCII and dropped scripts, rewritten links and definition lists; scripts/pdfmd checks both GFM and text exports. Regressions fail before and pass after; flat, ASCII, source-retention and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+
 ## v3.33.200 — 2026-11-13
 
 Pre-edit state: commit `3fe5a70`. R4.2: an ODT build through LibreOffice stamped and recorded its disposable Word intermediate before conversion, including when forced conversion failed. Suppress intermediate stamping and stamp the final ODT through the existing partial/report-aware path only after successful conversion; Pandoc fallback still stamps its own successful output. Route and scripts/pdfmd regressions check the unstamped source/history at converter entry, final ODT names, failed forced conversion and fallback, failing before and passing after. ODT, Office, timeout, history and required checks run; real LibreOffice is skipped in the sandbox. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.

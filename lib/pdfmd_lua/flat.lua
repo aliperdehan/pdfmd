@@ -548,12 +548,12 @@ local function flatten(doc)
   doc = number_headings(doc)
   local head = config.title and title_block(doc.meta) or pandoc.Blocks{}
   collect_slugs(doc, head)
-  doc = doc:walk(inline_pass)
-  doc = doc:walk(block_pass)
   if config.title then
     head:extend(doc.blocks)
     doc.blocks = head
   end
+  doc = doc:walk(inline_pass)
+  doc = doc:walk(block_pass)
   if not text_format and old_style_breaks() then
     doc = doc:walk({LineBreak = function() return pandoc.RawInline("markdown", "\\\n") end})
   end
