@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.191g — 2026-11-13
+
+Pre-edit state: commit `69f5be3`. Scripts and tests only; pdfmd itself is unchanged. A class assigning LIMIT = LIMIT inside a moved function lost the global fallback because all class bindings were treated as already present. Refuse class-body reads of names also bound by that class rather than guessing their execution order. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
+
 ## v3.33.191f — 2026-11-13
 
 Pre-edit state: commit `a5c2c20`. Scripts and tests only; pdfmd itself is unchanged. Removing a global declaration could leave function or class definitions and mapping rest captures local while their reads became core attributes. Recognise these binding forms and refuse them before rewriting. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.

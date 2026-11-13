@@ -337,6 +337,15 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
         uses, scopes = name_uses(statement)
         if any("core" in scope.bound for scope in scopes):
             plan.refused.append(f"{label}: has a local or a parameter named `core`")
+        for cls in (node for node in ast.walk(statement) if isinstance(node, ast.ClassDef)):
+            bound = scope_of(cls).bound
+            for part in cls.body:
+                class_uses, _ = name_uses(part)
+                for use in class_uses:
+                    if use.eager and use.resolved == "global" and isinstance(use.node.ctx, ast.Load) \
+                            and use.node.id in bound:
+                        plan.refused.append(f"{label}: ambiguous class-body read of {use.node.id} at line "
+                                            f"{use.node.lineno}; rewrite it by hand")
         replaced: set[int] = set()
         state_written: set[str] = set()
         for node in ast.walk(statement):

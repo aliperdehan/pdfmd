@@ -361,6 +361,15 @@ class Mover(unittest.TestCase):
                 self.assertEqual((self.root / "pdfmd.py").read_text(), code)
                 self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
 
+    def test_class_read_before_assignment_is_refused(self):
+        code = "LIMIT = 5\ndef f():\n    class C:\n        LIMIT = LIMIT\n    return C.LIMIT\n"
+        mover_tree(self.root, code, "`f`", test="")
+        done = self.move()
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("f: ambiguous class-body read of LIMIT", done.stdout)
+        self.assertEqual((self.root / "pdfmd.py").read_text(), code)
+        self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()
