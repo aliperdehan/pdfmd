@@ -57,7 +57,7 @@ Pre-edit state: commit `3fe5a70`. R4.2: an ODT build through LibreOffice stamped
 
 ## v3.33.199 — 2026-11-13
 
-Pre-edit state: commit `d72057a`. R4.1: global and kit metadata naming a preamble or Lua filter overrode nearer folder choices. Resolve named files in their actual layers: document metadata, each folder's metadata and configuration, kit defaults, global metadata and global configuration, with the document first. Nearest lists replace and append keys retain their owning paths. Layer and scripts/pdfmd HTML/LaTeX regressions fail before and pass after; named-file, assembly and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+Pre-edit state: commit `d72057a`. R4.1: global and kit metadata naming a preamble or Lua filter overrode nearer folder choices. Resolve named files in their actual layers: document metadata, each folder's metadata and configuration, kit defaults, global metadata and global configuration, with the document first. Nearest lists replace and append keys retain their owning paths. Layer and scripts/pdfmd HTML/LaTeX regressions fail before and pass after; named-file, assembly and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting. The fix left an unused `Path` import in `lib/pdfmd_assemble/named.py` (ruff F401, failed the `lint` job of CI round 12); removed afterwards (pre-edit state: commit `101bb92`).
 
 ## v3.33.198 — 2026-11-13
 

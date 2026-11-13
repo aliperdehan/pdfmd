@@ -1,5 +1,4 @@
 """Named preambles and Lua filters, with the file that owns each relative path."""
-from pathlib import Path
 import sys
 
 from pdfmd_base import core
