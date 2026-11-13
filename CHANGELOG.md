@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.191c — 2026-11-13
+
+Pre-edit state: commit `287d2af`. Scripts and tests only; pdfmd itself is unchanged. The state guard forgot a name when its last writer moved out of pdfmd.py. Include core attribute writes and deletions in its inventory, retaining the floor check; a synthetic moved LibreOffice timeout writer proves the bare assignment is caught. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
+
 ## v3.33.191b — 2026-11-12
 
 Pre-edit state: commit `21f3edf`. Scripts only. `scripts/split_spec.py` listed the files that use a name with the system's

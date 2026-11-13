@@ -145,6 +145,25 @@ PROBE_TEST = textwrap.dedent("""\
 """)
 
 
+class StateGuard(unittest.TestCase):
+    def test_moved_last_writer_still_protects_state(self):
+        from tests import test_split
+        tree = ast.parse((ROOT / "pdfmd.py").read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Global):
+                node.names = [name for name in node.names if name != "SOFFICE_TIMEOUT_NOW"]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "writer.py"
+            path.write_text("def correct():\n    core.SOFFICE_TIMEOUT_NOW = 0\n"
+                            "def moved():\n    global SOFFICE_TIMEOUT_NOW\n    SOFFICE_TIMEOUT_NOW = 0\n")
+            guard = test_split.SafetyNet("test_no_code_in_lib_binds_a_bare_state_name")
+            guard.tree = tree
+            with unittest.mock.patch.object(test_split, "lib_sources", return_value=[path]), \
+                 unittest.mock.patch.object(test_split, "ROOT", Path(folder)):
+                with self.assertRaisesRegex(AssertionError, "SOFFICE_TIMEOUT_NOW"):
+                    guard.test_no_code_in_lib_binds_a_bare_state_name()
+
+
 class Report(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()

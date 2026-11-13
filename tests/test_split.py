@@ -439,6 +439,12 @@ class SafetyNet(unittest.TestCase):
     def test_no_code_in_lib_binds_a_bare_state_name(self):
         tree = self.tree
         state = {name for node in ast.walk(tree) if isinstance(node, ast.Global) for name in node.names}
+        # A correct moved writer no longer declares `global` in pdfmd.py. Its core.X write keeps X protected.
+        for path in lib_sources():
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "core" \
+                        and not isinstance(node.ctx, ast.Load):
+                    state.add(node.attr)
         state |= {name for name in top_level_bindings(tree.body) if name.endswith("_CLI")}
         workers = next(node.value for node in tree.body if isinstance(node, ast.Assign)
                        and getattr(node.targets[0], "id", None) == "WORKER_GLOBALS")
