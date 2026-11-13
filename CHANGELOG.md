@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.191j — 2026-11-13
+
+Pre-edit state: commit `6152389`. Scripts and tests only; pdfmd itself is unchanged. A deferred stand-in lost cache_info and cache_clear on moved cached functions. Distinguish direct calls from object uses; require a real binding for attributes or identity, supplied by the existing --import-at-start option, or refuse clearly. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
+
 ## v3.33.191i — 2026-11-13
 
 Pre-edit state: commit `08a1757`. Scripts and tests only; pdfmd itself is unchanged. Appending a move silently reused an unrelated destination Path instead of pathlib.Path. Check every existing binding of each required dependency, including core, and refuse incompatible definitions before writing either file. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.

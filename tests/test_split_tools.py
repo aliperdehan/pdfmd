@@ -397,6 +397,25 @@ class Mover(unittest.TestCase):
         self.assertEqual(target.read_text(), original)
         self.assertEqual((self.root / "pdfmd.py").read_text(), code)
 
+    def test_cached_function_attributes_require_real_binding(self):
+        code = ("def names(*args):\n    pass\nnames('other', 'x')\n"
+                "from functools import lru_cache\n@lru_cache(maxsize=None)\ndef f():\n    return 3\n"
+                "def stays():\n    f.cache_clear()\n    return f.cache_info()\n")
+        mover_tree(self.root, code, "`f`", test="")
+        done = self.move()
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("f: staying code needs the real object", done.stdout)
+        self.assertEqual((self.root / "pdfmd.py").read_text(), code)
+        self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
+        done = self.move("--import-at-start")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        namespace = {}
+        exec((self.root / "lib" / "pdfmd_probe" / "__init__.py").read_text(), namespace)
+        self.assertEqual(namespace["f"](), 3)
+        namespace["f"].cache_clear()
+        self.assertEqual(namespace["f"].cache_info().currsize, 0)
+        self.assertIn("from pdfmd_probe import f", (self.root / "pdfmd.py").read_text())
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()

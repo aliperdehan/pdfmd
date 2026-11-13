@@ -415,21 +415,29 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
 
     # who reads the moved names from outside the move
     bare: dict[str, list[tuple[int, bool]]] = {}
+    real_binding: set[str] = set()
     for node in tree.body:
         if id(node) in inside:
             continue
         uses, _ = name_uses(node)
+        direct_calls = {id(child.func) for child in ast.walk(node) if isinstance(child, ast.Call)}
         for use in uses:
+            if use.resolved == "global" and use.node.id in moving and isinstance(use.node.ctx, ast.Load) \
+                    and id(use.node) not in direct_calls:
+                real_binding.add(use.node.id)
             if use.resolved == "global" and use.node.id in moving and isinstance(use.node.ctx, ast.Load):
                 bare.setdefault(use.node.id, []).append((use.node.lineno, use.eager))
     for name in sorted(bare):
         eager_lines = [line for line, eager in bare[name] if eager]
         function = isinstance(where[name][0], (ast.FunctionDef, ast.AsyncFunctionDef))
-        if at_start and (eager_lines or not function):
+        if at_start and (eager_lines or not function or name in real_binding):
             plan.at_start[name] = min(line for line, _ in bare[name])
         elif eager_lines:
             plan.refused.append(f"{name}: code that stays in pdfmd.py reads it when pdfmd.py loads (line {eager_lines[0]}): "
                                 f"bind it with a plain `from {key} import {name}` by hand (the package then loads at start)")
+        elif function and name in real_binding:
+            plan.refused.append(f"{name}: staying code needs the real object (attributes or identity); "
+                                "use --import-at-start or bind it by hand")
         elif function:
             plan.stand_ins.append(name)
         else:
