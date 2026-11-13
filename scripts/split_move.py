@@ -354,7 +354,9 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
         for node in ast.walk(statement):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "vars" and not node.args:
                 plan.refused.append(f"{label}: calls vars() at line {node.lineno} (pdfmd.py's own namespace; decide by hand)")
-            elif is_sys_modules_name(node):
+            elif is_sys_modules_name(node) and all(
+                    any(use.node is part and use.resolved == "global" for use in uses)
+                    for part in (node.value.value, node.slice)):
                 if node.lineno != node.end_lineno:
                     plan.refused.append(f"{label}: sys.modules[__name__] over several lines at line {node.lineno}")
                 plan.edits[id(node)] = "core"

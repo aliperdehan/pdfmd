@@ -438,6 +438,19 @@ class Mover(unittest.TestCase):
         exec(module, namespace)
         self.assertEqual(namespace["f"](), ([], {}, (), set()))
 
+    def test_module_self_expression_respects_parameters(self):
+        code = "def f(sys, __name__):\n    return sys.modules[__name__]\n"
+        mover_tree(self.root, code, "`f`", test="")
+        done = self.move()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        module = (self.root / "lib" / "pdfmd_probe" / "__init__.py").read_text()
+        self.assertIn("return sys.modules[__name__]", module)
+        from types import SimpleNamespace
+        value = object()
+        namespace = {}
+        exec(module, namespace)
+        self.assertIs(namespace["f"](SimpleNamespace(modules={"custom": value}), "custom"), value)
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.191m — 2026-11-13
+
+Pre-edit state: commit `5bbb0e4`. Scripts and tests only; pdfmd itself is unchanged. The module-self substitution replaced sys.modules[__name__] even when both names were parameters. Require both names to resolve to module globals before replacing the expression with core. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
+
 ## v3.33.191l — 2026-11-13
 
 Pre-edit state: commit `1b5c604`. Scripts and tests only; pdfmd itself is unchanged. The spec descended into nested scopes under conditional statements, mistaking local list bindings for pdfmd globals and rewriting builtin reads to core.list. Stop at function, lambda, class and comprehension scopes whilst retaining the enclosing definitions. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
