@@ -101,7 +101,7 @@ class Arguments(unittest.TestCase):
 class ThroughPdfmd(unittest.TestCase):
     def run_pdfmd(self, root: Path, *args: str) -> subprocess.CompletedProcess:
         environment = {**os.environ, "PDFMD_CONFIG": "", **cache_env(root / "cache"), "XDG_CONFIG_HOME": str(root / "config"),
-                       "APPDATA": str(root / "config"), "PDFMD_NO_PROMPT": "1"}
+                       "XDG_DATA_HOME": str(root / "data"), "APPDATA": str(root / "config"), "PDFMD_NO_PROMPT": "1"}
         environment.pop(pdfmd_paragraph.ENV, None)
         return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *args], cwd=root, capture_output=True, text=True,
                               stdin=subprocess.DEVNULL, env=environment)
@@ -117,6 +117,31 @@ class ThroughPdfmd(unittest.TestCase):
                     done = self.run_pdfmd(root, "-r", "a.md", "b.md", "--to", target, "-s", "-o", "out." + suffix)
                     self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                     self.assertIn(expected, (root / ("out." + suffix)).read_text(encoding="utf-8"))
+
+    def test_report_patch_spacing_preserves_custom_header_includes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            header = "header-includes: |\n  \\newcommand{\\ReportGreeting}{Preserved}\n"
+            for owner in ("document", "metadata"):
+                for spacing in ("auto", "6pt"):
+                    with self.subTest(owner=owner, spacing=spacing):
+                        (root / "a.md").write_text("---\npdfmd-options:\n  report-build: patch\n"
+                                                  f"  paragraph-spacing: {spacing}\n---\n\nOne.\n")
+                        (root / "b.md").write_text(("---\n" + header + "---\n\n" if owner == "document" else "")
+                                                  + "Two. \\ReportGreeting{}\n")
+                        metadata = root / "metadata.yaml"
+                        metadata.write_text(header if owner == "metadata" else "{}\n")
+                        done = self.run_pdfmd(root, "-r", "a.md", "b.md", "--to", "latex", "-o", "out.tex",
+                                              "--no-stamp", "--no-backup", "--no-stamp-pdf-metadata",
+                                              "--no-auto", "font")
+                        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                        tex = (root / "out.tex").read_text()
+                        self.assertEqual(tex.count("\\newcommand{\\ReportGreeting}{Preserved}"), 1, tex)
+                        self.assertIn("\\ReportGreeting{}", tex)
+                        if spacing == "6pt":
+                            self.assertIn("\\setlength{\\parskip}{6pt}", tex)
+                        else:
+                            self.assertNotIn("\\setlength{\\parskip}{6pt}", tex)
 
     def test_latex_and_typst_sources(self):
         with tempfile.TemporaryDirectory() as folder:

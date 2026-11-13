@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.203 — 2026-11-13
+
+Pre-edit state: commit `b694796`. R5b.3: a patch-built LaTeX report with paragraph spacing as its only generated header lost custom header-includes, because preservation ran before the spacing header was added. Add spacing arguments before hoisting and preserving the completed header list. A scripts/pdfmd regression checks document and metadata headers with explicit spacing and the unchanged auto control, failing before and passing after. Paragraph-spacing, report-build, header-includes, shared-filter and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
+
 ## v3.33.202 — 2026-11-13
 
 Pre-edit state: commit `fef0fef`. R5b.2: early single-file output protection discovered metadata without the document class, so article.yaml beside book.yaml caused an uncaught ambiguity even for an article document. Resolve documentclass (or class) before that lookup and retain the existing FileNotFoundError/ValueError-to-SystemExit handling; binary Office inputs still skip the text class read and Quarto keeps its own metadata path. scripts/pdfmd regressions check both class keys and a clear ambiguity error, failing before and passing after, plus the Office input diagnostic. Rewrite, folder-setup, Office and required checks run. pdfmd.py remains 17,115 lines (version only); no new threshold or setting.
