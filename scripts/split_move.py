@@ -643,6 +643,17 @@ def apply(plan: Plan, source: str, tree: ast.Module, out: Path, root: Path) -> l
         if clash:
             plan.refused.append(f"{plan.target.relative_to(root).as_posix()} already binds {', '.join(clash)}")
             return []
+        required = dict(plan.imports)
+        if any(replacement.startswith("core") for replacement in plan.edits.values()):
+            required["core"] = "from pdfmd_base import core"
+        for name, line in sorted(required.items()):
+            bindings = [node for node in present.body if name in module_changes(node)]
+            if bindings and any(not isinstance(node, (ast.Import, ast.ImportFrom))
+                                or import_line(node, name) != line for node in bindings):
+                plan.refused.append(f"{plan.target.relative_to(root).as_posix()}: incompatible dependency binding "
+                                    f"{name}; requires {line}")
+        if plan.refused:
+            return []
         missing = [line for name, line in sorted(plan.imports.items()) if name not in have]
         if "core" not in have and any(replacement.startswith("core") for replacement in plan.edits.values()):
             missing.append("from pdfmd_base import core")

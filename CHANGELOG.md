@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.191i — 2026-11-13
+
+Pre-edit state: commit `08a1757`. Scripts and tests only; pdfmd itself is unchanged. Appending a move silently reused an unrelated destination Path instead of pathlib.Path. Check every existing binding of each required dependency, including core, and refuse incompatible definitions before writing either file. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.
+
 ## v3.33.191h — 2026-11-13
 
 Pre-edit state: commit `c7fc859`. Scripts and tests only; pdfmd itself is unchanged. Moving a function reading an overwritten import copied its original import and restored the wrong value. Only copy unchanged imports; names reassigned at module scope or declared global remain core reads. Regression checked failing before and passing after; split tools, split, packaging, docs consistency, setup and isolation tests run.

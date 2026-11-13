@@ -383,6 +383,20 @@ class Mover(unittest.TestCase):
         exec(module.replace("from pdfmd_base import core", ""), {"core": SimpleNamespace(sep="custom")}, namespace)
         self.assertEqual(namespace["f"](), "custom")
 
+    def test_incompatible_destination_dependency_is_refused(self):
+        code = "from pathlib import Path\ndef f():\n    return Path('x')\n"
+        mover_tree(self.root, code, "`f`", test="")
+        package = self.root / "lib" / "pdfmd_probe"
+        package.mkdir()
+        target = package / "__init__.py"
+        original = "Path = lambda value: 'wrong'\n"
+        target.write_text(original)
+        done = self.move()
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("incompatible dependency binding Path", done.stdout)
+        self.assertEqual(target.read_text(), original)
+        self.assertEqual((self.root / "pdfmd.py").read_text(), code)
+
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
         done = self.move()
