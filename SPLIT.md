@@ -148,7 +148,7 @@ Note: Warm-up for the tool on an existing, deferred package. `__file__` becomes 
 
 Tests: `test_edit_pdf`, `test_standalone_source`.
 
-#### 3. `pdfmd_run` (new package): 4 definitions, 2 constants, ~912 lines
+#### 3. `pdfmd_run` (new package): 4 definitions, 2 constants, ~912 lines; done in 3.33.212 (as the tool wrote it: two names in the table, the stand-in `run_main`, 290 `core.` rewrites, the 37 state writes as `core.X = ...`; `pdfmd.py` keeps the 22 imports it no longer reads itself, for lib/ and the tests; `tests/test_jobs.py` reads `run_main`'s `core.X` writes with `ast`)
 
 Goes to `lib/pdfmd_run/__init__.py`.
 

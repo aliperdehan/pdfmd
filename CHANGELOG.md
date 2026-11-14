@@ -19,6 +19,89 @@ same commit as the change.
 
 ---
 
+## v3.33.212 — 2026-11-15
+
+Pre-edit state: commit `5150157`. Phase 2 of the split, wave 1, move 3: **the command line moves whole to the new package
+`lib/pdfmd_run`** (plan decision D1), which `pdfmd.py` does not load at start: `run_main` and what only it used,
+`disabled_topics`, `command_line_parser`, `refuse_disabled`, `POLISH_INFO_KEYS` and `DISABLED_OK_ENV`, text and docstrings
+unchanged. `scripts/split_move.py pdfmd_run` moved the six statements (`POLISH_INFO_KEYS` from beside the PDF finishing
+settings, the rest from around `main`, which stays); no comment block sits on any of them, so none was carried, and the
+"Whole features switched off" block stays above `DISABLED_WARNED`, which is state. It made 290 rewrites: 287 reads and
+writes of pdfmd names as `core.NAME`, and the three `sys.modules[__name__]` that hand pdfmd to lib/pdfmd_batch
+(`prepare_inputs`, `run`) and lib/pdfmd_report (`run`) as `core`. The 12 `global` lines went, and the 37 names they declared
+(36 in `run_main`, `DISABLED_WARNED` in `disabled_topics`) are written as `core.X = ...`; all 37 are in SPLIT.md's list of the
+state that stays, and each is still bound in `pdfmd.py`. Its self-check passed. A resolver of Python's scoping written apart
+from the tool, run over the original six statements, agrees at every one of the 290 places and at every name it left bare:
+each name the original read or wrote as a pdfmd global is `core.X` (pdfmd binds no built-in's name), and each local, parameter,
+closure and comprehension variable is bare, among them `disabled_topics`'s local `names`, which is also the name of pdfmd's
+`names()`. It wrote the module with `argparse`, `os`, `pdfmd_routing`, `re`, `shlex`, `sys`, `Path` and
+`from pdfmd_base import core`; in `pdfmd.py`, after the table's first line, `names("pdfmd_run", "DISABLED_OK_ENV
+command_line_parser")` (lib/pdfmd_doctor's completion reads the parser as `core.command_line_parser`, tests/test_setup the
+variable's name as `pdfmd.DISABLED_OK_ENV`) and the stand-in `run_main = deferred("pdfmd_run", "run_main")`: `main` calls it
+bare, so tests/test_interrupt's `mock.patch.object(pdfmd, "run_main", ...)` still reaches `main`'s call. By hand:
+-  Packaging: `pdfmd_run` in `pyproject.toml` (`packages`, `[tool.setuptools.package-dir]`) and in `PACKAGES` of
+  `scripts/build_zipapp.py`.
+-  22 names that `pdfmd.py` imports from its packages are no longer read in `pdfmd.py`: the moved code reads them as `core.X`
+  (some tests and other packages too). They all stay. `ruff --select F` named five, on four lines that had no `F401`:
+  `init_command` (pdfmd_templates), `pinned_watch_argv` and `run_watch` (pdfmd_watch), `build_parser` (pdfmd_args) and the
+  module `pdfmd_routing`, whose `# noqa: E402` gained `F401` with the reason. `import pdfmd_routing` has no reader left
+  (lib/pdfmd_run imports the package itself; the `from pdfmd_routing import (...)` below it loads the package at start
+  anyway): kept, as a move removes no import. The other 17 sit in statements that carry `F401` already, and the comments of
+  those statements now name them: `comment_kind_set` (pdfmd_comments), `stdin_build` and `terminal_view` (pdfmd_view),
+  `LookupAmbiguous` (pdfmd_lookup; `source_markdown` was named already), `route_ebook_input`, `route_pdf_input` and
+  `route_text_input` (pdfmd_routing), `start_soffice_job` (pdfmd_bridge), `check_source_command`, `restore_from_markdown` and
+  `restore_from_pdf` (pdfmd_restore), `plan_sections` and `split_into_parts` (pdfmd_parts), `completion_script` and
+  `doctor_report` (pdfmd_doctor), `unpack_assembled` (pdfmd_assemble).
+-  `tests/test_jobs.py`, `WorkerState`: the test that every setting `run_main` keeps reaches a `-j` worker read the `global`
+  lines of `inspect.getsource(pdfmd.run_main)`, which is the stand-in now. It parses lib/pdfmd_run with `ast` and collects
+  every `core.NAME` that `run_main` stores or deletes, tuple targets included (`core.PATH_STYLE, core.PATH_UP = ...`: a
+  regular expression on `core.X = ` would miss 7 of the names); `disabled_topics`'s `DISABLED_WARNED` is not a worker
+  setting and was never scanned. The same 36 names as the `global` lines at `5150157`; with `PATH_STYLE` or `VERBOSE_OUTPUT`
+  taken out of `WORKER_GLOBALS` it fails. `import inspect` and `import re` went, `import ast` came.
+-  The comment above `WORKER_GLOBALS` says the test reads `run_main`'s `core.NAME = ...` (it said "every `global` main()
+  sets"); same number of lines.
+-  The module docstring is the tool's two lines and a paragraph on what the module holds.
+-  SPLIT.md marks the move done.
+
+What is different: `pdfmd.run_main` is a stand-in (`__name__` kept, `__doc__` names the module), and every command loads
+`pdfmd_run`, as every command runs `run_main`; `import pdfmd` alone does not. lib/pdfmd_batch and lib/pdfmd_report get
+`pdfmd_base.core` where they got the module itself: they read attributes of it, `core.__file__` included, and hand it on, and
+`core` passes every read and write to pdfmd, so they do the same; their docstrings, which call it "the `pdfmd` module
+itself", are left as they are. `DISABLED_WARNED` is now read and written only by lib/pdfmd_run (through `core`); it stays
+state, as SPLIT.md lists it. Where `core.` came in front of a call, the call's continuation lines kept their indentation, a few columns short of its parenthesis now (`core.POLISH_CLI.update(...)`, `core.resolve_embed(...)` and others): the text is the tool's.
+
+`pdfmd.py`: 16,562 -> 15,652 lines. Start-up: the same 205 modules after `import pdfmd` with `--version`; a real run, seen
+by an at-exit listing of `sys.modules` (`scripts/pdfmd` run with `runpy`, fresh cache, config and data folders, twice per tree
+and the same both times), has `pdfmd_run` and nothing else new: `--version` 211 -> 212 modules, a PDF build 475 -> 476 (its
+standard modules are loaded already; importing it takes about 0.3 ms). `scripts/pdfmd --version` interleaved with a copy of
+`5150157`, 22 runs each, best / median 91.1 / 92.8 against 90.9 / 93.1 ms, and with the order swapped 90.3 / 104.3 against
+90.4 / 104.0 (`split_check`'s own: 90 / 91 against 107 / 112 ms). Proof: `ruff --select F`; 1,478 tests of 72 modules (`scripts/test_parallel.py -j 4`), 7 skipped (prompt_toolkit is installed, twice; a library here spells Chinese, four times; no Windows registry, once): the move's list (`test_setup`, `test_jobs`), `test_interrupt`, the always-run set and `test_split_tools`, the modules of the completion and the doctor (`test_completion`, `test_doctor`, `test_help`), and the modules of the settings `run_main` writes and of the commands it dispatches (`test_attach`, `test_cache_location`, `test_css_v2`, `test_engine_fallback`, `test_lookup`, `test_hybrid_folder`, `test_settings_routes`, `test_display_path`, `test_path_display`, `test_labels`, `test_build_record`, `test_build_log`, `test_build_time`, `test_pagebreak`, `test_show_comments`, `test_obsidian`, `test_pdf_rewrite`, `test_standalone_source`, `test_odt_route`, `test_sections`, `test_calibre_targets`, `test_ranking_generated`, `test_embedding`, `test_tables`, `test_install_python`, `test_doc`, `test_stdin`, `test_watch`, `test_translit`, `test_paper`, `test_bopen`, `test_pdf_input`, `test_text_input`, `test_ebook_input`, `test_user_path`, `test_cache_manage`, `test_check`, `test_check_source`, `test_history`, `test_crop`, `test_edit`, `test_ranking_which`, `test_presets`, `test_kits`, `test_unicode`, `test_calc`, `test_raw`, `test_linebreak`, `test_polish`, `test_ascii`, `test_api`, `test_isolation`, `test_lua_missing`, `test_batch_paths`, `test_batch_cache`, `test_paragraph_spacing`, `test_code_blocks`, `test_csv_switch`). In that run the three tests that read the changelog's first heading failed (`test_doc`, `test_docs_consistency`, `test_packaging`: the version was 3.33.212 before this entry was written); a second run of 217 tests in 11 modules with `unittest` (those three, `test_jobs`, `test_split`, `test_split_tools`, `test_interrupt` and the four with skips) passes. The real cache gained
+build records only of documents that builds outside the tests made during the run (version 3.33.211, the main checkout's;
+the run's isolation check named them, and the real config's `known-lua.txt`, whose new line names another document's
+filter). The switched-off features, which `split_check`'s empty config never reaches, compared by hand between a copy of
+`5150157` and the move with a config of `disabled: [cache, history, bogus]`: `--help` and `--help cache` (the hidden options,
+the WARN about `bogus` once), `--cache-info` and `--no-stamp` refused, both with `--disabled` (and `DISABLED_OK_ENV` set for
+the build's own children), `--cache-info` with `PDFMD_ALLOW_DISABLED=1`, and `--completion bash` and `zsh` without the hidden
+options: the same output and exit status, but for the time stamp in the name of one build record. `scripts/split_check.py`
+SAME on 49 checks, no BOTH FAILED, with 19 extra builds in the scratch copy of examples/, each through `run_main`'s own
+dispatch: `--completion bash` and `zsh` (lib/pdfmd_doctor's `core.command_line_parser([])`, the table entry, and
+`core.completion_script`); `-b ../batch -j 2 --to latex` with `--line-numbers 2 --no-code-wrap --no-citeproc --strip-comments
+--paper a4 --raw --metadata-precedence first --seed-labels off --seed-calc off --build-time --time-format words
+--engine-fallback off --css-scope all --unclosed-comment keep --gfm-math fenced` (settings that `run_main` rebinds as
+`core.X` or fills in pdfmd's dictionaries, and the workers get with `worker_state()`; the workers' `.tex` files are the
+same in both trees, with the line numbers); a PDF of `results.md` with `--paper a4 --no-citeproc --build-time --time-format clock --build-log on --seed-labels
+scan --seed-calc scan --cache-location document --metadata-precedence first --no-global-metadata --engine-fallback off
+--bookmarks --header --pdf-title --pdf-author --family times --keep-comments-in md --disabled --cache-plots --rewrite`
+(`POLISH_INFO_KEYS`, and `--disabled` setting `DISABLED_OK_ENV`); `--to ansi -o -` (`terminal_view`); `--check`;
+`--show-config`; `--translit list`; `--which`; `--check-dependencies`; `--doctor`; `--list-parts`; `--split` of
+`slides.md`; `--unpack` of the merged fixture; `--stop-at tex`; and as declared failures `--presets` (no config),
+`--image-dpi` without a picture target, `--deep` without `--doctor` and `--no-auto bogus`. A first run with `--cache-info`
+among the extras differed only in the cache's sizes: the build records hold each tree's own path, and the two trees' paths
+differ in length (a pair of them compared: they differ in the version, the times and the paths only). What a `-j` worker
+receives, checked directly: `pdfmd.main()` in one process with 36 options and `--completion bash` (which ends the run
+after every state write), then `worker_state()`: the same 52 names and values in a copy of `5150157` and in the move, 38
+of them changed by the command line, 33 of those rebound by `run_main` as `core.X = ...`.
+
 ## v3.33.211 — 2026-11-15
 
 Pre-edit state: commit `6fa3a2e`. Phase 2 of the split, wave 1, move 2: **`pdfmd --edit` and `pdfmd --init-vscode` move to

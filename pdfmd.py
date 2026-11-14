@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.211"
+PDFMD_VERSION = "3.33.212"
 import argparse
 import atexit
 import contextlib
@@ -1652,10 +1652,10 @@ def __getattr__(name: str):
 import pdfmd_base  # noqa: E402
 pdfmd_base.bind(sys.modules[__name__])      # every package's `core`, before any of them is imported; the first binding wins
 names = pdfmd_base.names_into(DEFERRED_NAMES)   # the names table's lines: names("pdfmd_x.role", "a b c")
-from pdfmd_comments import (CommentPolicy, comment_kind_set, parse_comment_policy,  # noqa: E402, F401 -- the strip_*_comments are read by lib/ and tests
+from pdfmd_comments import (CommentPolicy, comment_kind_set, parse_comment_policy,  # noqa: E402, F401 -- the strip_*_comments are read by lib/ and tests, comment_kind_set by lib/pdfmd_run
                             strip_markdown_comments, strip_tex_comments, strip_xml_comments)
-from pdfmd_templates import init_command  # noqa: E402
-from pdfmd_watch import pinned_watch_argv, run_watch  # noqa: E402
+from pdfmd_templates import init_command  # noqa: E402, F401 -- read by lib/pdfmd_run
+from pdfmd_watch import pinned_watch_argv, run_watch  # noqa: E402, F401 -- read by lib/pdfmd_run, pinned_watch_argv by tests too
 
 from pdfmd_hybrid import attach_hybrid, hybrid_after_success, resolve_hybrid  # noqa: E402, F401 -- attach_hybrid is read by tests/test_embedding.py
 
@@ -1666,29 +1666,29 @@ from pdfmd_pdfimages import (encode_png, extract_pdf_images, file_picture_size, 
 from pdfmd_compat import (batchmd_main, batchmd_translate, inkmd_main, inkmd_translate,  # noqa: E402, F401 -- the *_main are console entry points (pyproject.toml), the *_translate are read by tests
                           md2pdf_main, md2pdf_translate, mdpdf_main, mdpdf_translate, pan_tec_main, pan_tec_translate)
 import pdfmd_view  # noqa: E402
-from pdfmd_view import (pager_command, run_pager, stdin_build, terminal_view,  # noqa: E402, F401 -- run_pager, view_pager_setting and view_sources are read by tests
+from pdfmd_view import (pager_command, run_pager, stdin_build, terminal_view,  # noqa: E402, F401 -- run_pager, view_pager_setting and view_sources are read by tests, stdin_build and terminal_view by lib/pdfmd_run
                         view_pager_setting, view_sources)
 
-from pdfmd_lookup import (LOOKUP_FIELD_WORDS, LOOKUP_TIERS, LookupAmbiguous, cyrillic_candidates,  # noqa: E402, F401 -- lookup_fields, lookup_key, rank_lookup, document_priority, priority_enabled and source_markdown are read by tests or lib/
+from pdfmd_lookup import (LOOKUP_FIELD_WORDS, LOOKUP_TIERS, LookupAmbiguous, cyrillic_candidates,  # noqa: E402, F401 -- LookupAmbiguous, lookup_fields, lookup_key, rank_lookup, document_priority, priority_enabled and source_markdown are read by tests or lib/
                           document_priority, find_wildcard_markdown, latin_candidates, lookup_fields, lookup_key,
                           priority_enabled, rank_lookup, source_markdown, strip_lookup_suffix)
 
-import pdfmd_routing  # noqa: E402
-from pdfmd_routing import (BATCHOCR_TAG, EBOOK_INPUT_EXTENSIONS, batchocr_spec, find_batchocr,  # noqa: E402, F401 -- BATCHOCR_TAG, EBOOK_INPUT_EXTENSIONS, batchocr_spec, install_ocr_tools and tessdata_environment are read by tests
+import pdfmd_routing  # noqa: E402, F401 -- no longer read here: lib/pdfmd_run, its one reader, imports it itself
+from pdfmd_routing import (BATCHOCR_TAG, EBOOK_INPUT_EXTENSIONS, batchocr_spec, find_batchocr,  # noqa: E402, F401 -- BATCHOCR_TAG, EBOOK_INPUT_EXTENSIONS, batchocr_spec, install_ocr_tools and tessdata_environment are read by tests, the route_*_input by lib/
                            install_ocr_tools, route_ebook_input, route_pdf_input, route_text_input, tessdata_environment)
 
 import pdfmd_bridge  # noqa: E402, F401 -- tests read pdfmd.pdfmd_bridge
-from pdfmd_bridge import (CALIBRE_TABLE_CSS, PANDOC_TABLE_STYLE_RE, browser_page_css, calibre_html_command,  # noqa: E402, F401 -- CALIBRE_TABLE_CSS and PANDOC_TABLE_STYLE_RE are read by tests, run_calibre_convert and run_soffice_convert are patched or read by tests and lib/
+from pdfmd_bridge import (CALIBRE_TABLE_CSS, PANDOC_TABLE_STYLE_RE, browser_page_css, calibre_html_command,  # noqa: E402, F401 -- CALIBRE_TABLE_CSS and PANDOC_TABLE_STYLE_RE are read by tests, run_calibre_convert and run_soffice_convert are patched or read by tests and lib/, start_soffice_job by lib/pdfmd_run and tests
                           calibre_page_options, convert_office_direct, convert_via_soffice_bridge, prince_author_options,
                           run_browser_print, run_calibre, run_calibre_convert, run_soffice_convert, start_soffice_job)
-from pdfmd_restore import (RESTORE_CHAIN, check_source_command, layout_from_source, restore_attachments,  # noqa: E402, F401 -- RESTORE_CHAIN, layout_from_source, restore_attachments, restore_attachments_in_place and restore_chain are read by tests, restore_target_name by tests and lib/
+from pdfmd_restore import (RESTORE_CHAIN, check_source_command, layout_from_source, restore_attachments,  # noqa: E402, F401 -- RESTORE_CHAIN, layout_from_source, restore_attachments, restore_attachments_in_place and restore_chain are read by tests, restore_target_name by tests and lib/, check_source_command, restore_from_markdown and restore_from_pdf by lib/ (the last by tests too)
                            restore_attachments_in_place, restore_chain, restore_from_markdown, restore_from_pdf,
                            restore_target_name)
-from pdfmd_parts import (ATX_HEADING_RE, Heading, NoPartMatches, ScaffoldPlan, SectionPlan, chapter_order,  # noqa: E402, F401 -- ATX_HEADING_RE, Heading, NoPartMatches, collect_parts, find_heading, heading_parts, outermost_headings, parts_directory, scan_headings, scan_items, select_parts, split_top_level_sections and wrap_runs are read by tests or lib/
+from pdfmd_parts import (ATX_HEADING_RE, Heading, NoPartMatches, ScaffoldPlan, SectionPlan, chapter_order,  # noqa: E402, F401 -- ATX_HEADING_RE, Heading, NoPartMatches, collect_parts, find_heading, heading_parts, outermost_headings, parts_directory, plan_sections, scan_headings, scan_items, select_parts, split_into_parts, split_top_level_sections and wrap_runs are read by tests or lib/
                          collect_parts, find_heading, heading_parts, outermost_headings, parts_directory, plan_scaffold,
                          plan_sections, scaffold_inputs, scan_headings, scan_items, section_source, select_parts,
                          split_into_parts, split_top_level_sections, wrap_part, wrap_runs)
-from pdfmd_doctor import (DEEP_SAMPLE, PANDOC_FEATURES, completion_options, completion_script, deep_checks,  # noqa: E402, F401 -- DEEP_SAMPLE, PANDOC_FEATURES, completion_options, deep_checks, foreign_commands, pandoc_limits and tool_note are read by tests
+from pdfmd_doctor import (DEEP_SAMPLE, PANDOC_FEATURES, completion_options, completion_script, deep_checks,  # noqa: E402, F401 -- DEEP_SAMPLE, PANDOC_FEATURES, completion_options, deep_checks, foreign_commands, pandoc_limits and tool_note are read by tests, completion_script and doctor_report by lib/pdfmd_run and tests
                           doctor_report, foreign_commands, pandoc_limits, tool_note)
 import pdfmd_cache  # noqa: E402
 from pdfmd_cache import (TEMPORARY_PLACES, adopt_moved_cache, cache_directory, cache_location, cache_root,  # noqa: E402, F401 -- TEMPORARY_PLACES and cache_location are read by tests or lib/; adopt_moved_cache is named in a docstring only
@@ -1709,7 +1709,7 @@ from pdfmd_attach import (ATTACH_FORMAT_PLAIN, add_deflated_attachment, attach_s
                           graphic_names_in, held_comments_note, inline_blocks, inline_candidates, keep_source_after_success,
                           layout_path, read_pdf_attachments, referenced_images, source_attachments, tex_distribution_roots,
                           write_pdf_attachments)
-from pdfmd_assemble import (EmbedPlan, assemble_markdown_text, embedded_resources, filter_bibliography,  # noqa: E402, F401 -- filter_bibliography, remember_trusted, render_embedded_block, render_embedded_file, trust_store_path and used_citation_keys are read by tests or lib/
+from pdfmd_assemble import (EmbedPlan, assemble_markdown_text, embedded_resources, filter_bibliography,  # noqa: E402, F401 -- filter_bibliography, remember_trusted, render_embedded_block, render_embedded_file, trust_store_path, unpack_assembled and used_citation_keys are read by tests or lib/
                             parse_embedded_blocks, remember_trusted, render_embedded_block, render_embedded_file,
                             trust_store_path, trusted_hashes, unpack_assembled, used_citation_keys, write_assembled_markdown)
 import pdfmd_native  # noqa: E402
@@ -1717,7 +1717,7 @@ from pdfmd_native import (CALIBRE_MARKDOWN_EXTENSIONS, CSV_DIV_LINE_RE, PAGE_BRE
                           MathText, author_names, convert_native, csv_div_table, csv_guess_delimiter, csv_keep,
                           ignored_front_matter_keys, inline_math, native_font_size, native_landscape, native_order, native_page,
                           native_paper, mapped_author, normalise_gfm, author_names_in_place)
-from pdfmd_args import build_parser  # noqa: E402
+from pdfmd_args import build_parser  # noqa: E402, F401 -- read by tests and lib/
 
 # Moves into packages that are not loaded at start (SPLIT.md, step 6): stand-ins that load the module on the first call.
 paragraph_spacing_latex_args = deferred("pdfmd_paragraph", "latex_args")
@@ -1837,6 +1837,8 @@ script_fallback = deferred("pdfmd_unicode.fonts_choice", "script_fallback")     
 # a function, but pdfmd.py never calls it and tests call its .cache_clear(), which a stand-in does not have
 DEFERRED_NAMES.update(installed_font_families="pdfmd_unicode.fonts_choice")
 names("pdfmd_edit.command", "put_outside_blocks source_carried source_lost")
+names("pdfmd_run", "DISABLED_OK_ENV command_line_parser")
+run_main = deferred("pdfmd_run", "run_main")
 edit_command = deferred("pdfmd_edit.command", "edit_command")
 gather_stamp_texts = deferred("pdfmd_edit.command", "gather_stamp_texts")
 init_vscode_command = deferred("pdfmd_edit.command", "init_vscode_command")
@@ -15006,7 +15008,6 @@ PDF_TO_STDOUT_CLI = False        # set by `-o -` on PDF inputs (v3.30.39)
 POLISH_CLI: dict = {}                       # filled in by main() from the command line
 PAPER_CLI: str | None = None                # --paper, also used by the native renderers
 INKMD_CLI: dict = {}                        # inkmd's own compile options, from the command line
-POLISH_INFO_KEYS = {"title": "/Title", "subject": "/Subject", "author": "/Author", "keywords": "/Keywords"}
 
 
 # `parse_hf_template`, `fill_hf_field`, `markdown_headings`, `search_form`, `locate_headings`, `outline_entries`, `hf_text`,
@@ -15512,7 +15513,7 @@ WATCH_INTERVAL = 1.0
 # What main() keeps in module globals from the command line: every *_CLI name, and these. -j workers are fresh processes
 # (macOS and Windows spawn them, they do not fork), so they get a copy of it (v3.27.3); before that, --line-numbers,
 # --fallback, --raw, --keep-source ... did not reach a document built by a worker. tests/test_jobs.py checks that every
-# `global` main() sets is covered.
+# `core.NAME = ...` of run_main (lib/pdfmd_run) is covered.
 WORKER_GLOBALS = ("SHOW_FULL_PATHS", "PATH_STYLE", "PATH_UP", "CITEPROC_DISABLED", "FUZZY_LOOKUP", "PART_CUTS", "VERBOSE_OUTPUT")
 
 
@@ -15534,59 +15535,6 @@ def restore_worker_state(state: dict) -> None:
 DISABLED_WARNED = False
 
 
-def disabled_topics() -> list[str]:
-    global DISABLED_WARNED
-    value = load_config().get("disabled")
-    names = [value] if isinstance(value, str) else value if isinstance(value, list) else []
-    names = [str(name).strip().casefold() for name in names]
-    try:
-        from pdfmd_help import CORE, DISABLEABLE
-    except ImportError:
-        return []
-    wrong = [name for name in names if name not in DISABLEABLE]
-    if wrong and not DISABLED_WARNED:
-        DISABLED_WARNED = True
-        print(f"WARN  config {config_path()}: disabled: {', '.join(wrong)} "
-              f"{'is not a feature that can be switched off' if len(wrong) == 1 else 'are not features that can be switched off'}"
-              f" (can: {', '.join(DISABLEABLE)}; {', '.join(CORE)} stay on)", file=sys.stderr)
-    return [name for name in names if name in DISABLEABLE]
-
-
-DISABLED_OK_ENV = "PDFMD_ALLOW_DISABLED"     # set by a run that passed the check, for pdfmd's own child processes
-
-
-def command_line_parser(argv: list[str] | None = None) -> tuple[argparse.ArgumentParser, list[argparse.Action]]:
-    """The parser for this run, with the options of switched-off features hidden unless --disabled is on it (or this
-    is pdfmd's own child process: the Word route, --doctor --deep, --watch ... pass --no-stamp and the like)."""
-    parser = build_parser()
-    argv = sys.argv[1:] if argv is None else argv
-    if "--disabled" in argv or os.environ.get(DISABLED_OK_ENV):
-        return parser, []
-    try:
-        from pdfmd_help import hide
-    except ImportError:
-        return parser, []
-    return parser, hide(parser, disabled_topics())
-
-
-def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action],
-                    parser: argparse.ArgumentParser | None = None) -> None:
-    """Stop when the command line used an option of a switched-off feature without --disabled. "Used" is a value that
-    differs from what the parser gives with no options at all (two flags sharing a dest, --strip-comments and
-    --keep-comments, have different defaults of their own); a dest a visible option shares is never refused."""
-    if not hidden:
-        return
-    from_help = __import__("pdfmd_help")
-    baseline = vars((parser or build_parser()).parse_known_args([])[0])
-    visible = {action.dest for action in (parser or build_parser())._actions if action not in hidden}
-    for action in hidden:
-        if action.dest not in visible and getattr(args, action.dest, None) != baseline.get(action.dest):
-            name = next((item for item in action.option_strings if item.startswith("--")), action.option_strings[0])
-            topics = " and ".join(sorted(from_help.topics_of(action)))
-            raise SystemExit(f"{name}: the {topics} features are switched off (`pdfmd --setup`, d). Run it once with "
-                             f"`pdfmd --disabled {name} ...`, or switch them back on.")
-
-
 def main() -> None:
     """The command: Ctrl-C ends it with one line and the usual exit status 130, not a traceback (v3.30.14). Pandoc and the
     engines are in the same terminal group and get the signal too; the temporary folders are removed on the way out."""
@@ -15600,864 +15548,6 @@ def main() -> None:
         except OSError:
             pass
         raise SystemExit(130) from None
-
-
-def run_main() -> None:
-    parser, hidden = command_line_parser()
-    args, pandoc_options = parser.parse_known_args(load_package("pdfmd_args").normalise_metadata_options(sys.argv[1:]))
-    refuse_disabled(args, hidden, parser)
-    if args.bopen is not None:
-        try:
-            parse_bopen(args.bopen)
-        except SystemExit:
-            if not Path(args.bopen).exists():
-                raise
-            args.path = [Path(args.bopen), *(args.path or [])]       # `--bopen notes`: the folder, not a spec
-            args.bopen = "all"
-        if not args.batch:
-            args.open = True
-    if hidden or args.disabled:
-        os.environ[DISABLED_OK_ENV] = "1"          # pdfmd's own child processes are not refused again
-    if args.ascii_stdio:       # pdfmd_lua/ascii.lua's helper: text in, ASCII text out (see pdfmd_flat/asciify.py)
-        from pdfmd_flat import asciify
-        raise SystemExit(asciify.serve(*args.ascii_stdio))
-    if args.trust_lua:
-        raise SystemExit(0 if trust_lua(args.trust_lua) else 1)
-    if args.path and all(path.suffix.lower() == ".pdf" for path in args.path):
-        # Reading a PDF: the unknown flags are batchocr's, and an abbreviation must not
-        # swallow one (`-c` is batchocr's --concat and an abbreviation of pdfmd's -cwd).
-        reader_parser = build_parser()
-        reader_parser.allow_abbrev = False
-        for flag in [flag for flag in reader_parser._option_string_actions if len(flag) > 2 and flag[1] != "-"]:
-            del reader_parser._option_string_actions[flag]     # `-cwd`: older argparse still abbreviates it
-        args, pandoc_options = reader_parser.parse_known_args()
-    use_managed_tools()
-    provide_writable_places()
-    if args.merge:
-        # --merge (v3.27.6): one Markdown file that builds alone, = --assemble-only --embed-metadata all
-        if args.no_embed_metadata:
-            raise SystemExit("--merge embeds everything; it contradicts --no-embed-metadata")
-        args.assemble_only = True
-        if args.embed_metadata is None:
-            args.embed_metadata = ["all"]
-    if args.debug:
-        args.verbose = True
-    args.to_many = None
-    if args.to and "," in args.to:
-        # `--to png,pdf`: several picture formats from one build (see picture_command)
-        wanted = []
-        for name in args.to.split(","):
-            name = name.strip().casefold().lstrip(".")
-            name = DEFAULT_OUTPUT_ALIASES.get(name, name)
-            if name and name not in wanted:
-                wanted.append(name)
-        args.to_many, args.to = wanted, wanted[0]
-    if args.to:
-        # `--to md`, `--to tex`, `--to typ`: the names of the files, as `default-output:` takes them
-        args.to = args.to.strip().casefold().lstrip(".")
-        args.to, ascii_asked = split_ascii_target(args.to)
-        ASCII_CLI["on"] = ascii_asked
-        args.to = DEFAULT_OUTPUT_ALIASES.get(args.to, args.to)
-    if args.view:
-        if args.to and args.to != "ansi":
-            raise SystemExit(f"--view shows the styled terminal text (--to ansi); it cannot be combined with --to {args.to}")
-        args.to = "ansi"
-        if args.out is not None and str(args.out) != "-":
-            args.view = False                         # -o FILE saves it: no pager, nothing shown (one meaning per flag)
-    if args.color:
-        os.environ[ANSI_COLOR_ENV] = args.color
-    if args.width:
-        os.environ[ANSI_WIDTH_ENV] = str(args.width)
-    if (args.out is not None and str(args.out) == "-" and not args.view and args.path
-            and all(path.suffix.lower() == ".pdf" for path in args.path)):
-        global PDF_TO_STDOUT_CLI
-        args.out, PDF_TO_STDOUT_CLI = None, True     # `pdfmd x.pdf -o -`: the Markdown on standard output (M1ck4's pdfmd pipes so)
-    if args.view or (args.out is not None and str(args.out) == "-"):
-        raise SystemExit(terminal_view(args))
-    if args.path and [str(path) for path in args.path] == ["-"]:
-        stdin_build(args)
-    global SHOW_FULL_PATHS, STRIP_COMMENTS_CLI, ATTACH_CLI, BUNDLE_CLI, STRIP_KINDS_CLI, KEEP_KINDS_CLI, KEEP_SOURCE_CLI
-    global BIB_ATTACH_CLI, CSL_ATTACH_CLI, BUNDLE_PACKAGES_CLI, HYBRID_CLI, CSS_SCOPE_CLI, REWRITE_CLI
-    set_kit_cli(args.kit, args.kit_stack)
-    REWRITE_CLI = True if args.watch else args.rewrite       # a watch rebuilds the same file on every save
-    BUNDLE_PACKAGES_CLI = args.bundle_packages
-    STRIP_COMMENTS_CLI = args.strip_comments
-    STRIP_KINDS_CLI = comment_kind_set(args.strip_comments_in)
-    KEEP_KINDS_CLI = comment_kind_set(args.keep_comments_in)
-    BIB_ATTACH_CLI = args.attach_bibliography
-    CSL_ATTACH_CLI = args.attach_csl
-    CSS_CLI[:] = args.css
-    CSS_SCOPE_CLI = args.css_scope
-    ATTACH_CLI = args.attach_source
-    KEEP_SOURCE_CLI = args.keep_source
-    HYBRID_CLI = args.hybrid
-    BUNDLE_CLI = args.bundle
-    global VERBOSE_OUTPUT
-    VERBOSE_OUTPUT = bool(args.verbose)
-    AUTO_LOG.reset(dedupe=bool(args.batch) or len(args.path or []) > 1)
-    global PAPER_CLI
-    PAPER_CLI = args.paper
-    INKMD_CLI.clear()
-    for flag, key, value in (("family", "family", args.family), ("no_autolinks", "autolinks", False),
-                             ("no_html", "html", False), ("allow_unsafe_urls", "safe", False),
-                             ("allow_remote_images", "allow_remote_images", True),
-                             ("emoji_fallback", "emoji_fallback", args.emoji_fallback)):
-        if getattr(args, flag) not in (None, False):
-            INKMD_CLI[key] = value
-    CODE_CLI.clear()
-    if args.line_numbers:
-        CODE_CLI["line-numbers"] = True
-        if args.line_numbers.isdigit() and int(args.line_numbers) > 1:
-            CODE_CLI["line-number-step"] = int(args.line_numbers)
-    if args.no_code_wrap:
-        CODE_CLI["code-wrap"] = False
-    POLISH_CLI.clear()
-    configured = config_options()          # the config file's defaults (pdfmd --setup); the command line wins
-    POLISH_CLI.update(header=args.header or configured.get("header") or None,
-                      footer=args.footer or configured.get("footer") or None,
-                      bookmarks=args.bookmarks or bool(configured.get("bookmarks")),
-                      attach_links=args.attach_links or bool(configured.get("attach-links")),
-                      info={POLISH_INFO_KEYS[name]: getattr(args, f"pdf_{name}")
-                            for name in POLISH_INFO_KEYS if getattr(args, f"pdf_{name}")})
-    if args.restore is not None:
-        restorer = (restore_from_markdown if args.restore.suffix.lower() in (".md", ".markdown")
-                    else restore_from_pdf)
-        raise SystemExit(restorer(args.restore, args.out.resolve() if args.out else None, args.list_only))
-    # -v/--verbose (or --debug) writes full paths, as it always did; otherwise the style is a setting (entry 3ea): --path-style,
-    # then the folder settings above the first document, then the config (the folder settings are read at the first input only:
-    # the style is one for the whole run).
-    global PATH_STYLE, PATH_UP
-    SHOW_FULL_PATHS = args.full_paths
-    first_input = next(iter(args.path or []), None)
-    if first_input is not None and Path(first_input).is_dir():
-        first_input = Path(first_input) / "x.md"
-    PATH_STYLE, PATH_UP = path_style_settings(args.path_style, args.path_up, first_input, args.verbose)
-    global CITEPROC_DISABLED, CACHE_PLOTS_CLI, FUZZY_LOOKUP, SEED_LABELS_CLI, SEED_CALC_CLI, METADATA_PRECEDENCE_CLI, NO_AUTO_CLI
-    global PRESET_CLI, GLOBAL_METADATA_CLI
-    CITEPROC_DISABLED = args.no_citeproc
-    # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
-    # turn off the lookup that is still busy finding that document.
-    FUZZY_LOOKUP = not auto_disabled(args.no_auto, "lookup")
-    NO_AUTO_CLI = args.no_auto
-    global FALLBACK_CLI, MISSING_CLI, STRICT_CLI, ENGINE_CLI, ENGINE_FALLBACK_CLI
-    FALLBACK_CLI, MISSING_CLI, STRICT_CLI = args.fallback, args.missing, args.strict
-    ENGINE_CLI, ENGINE_FALLBACK_CLI = args.engine, args.engine_fallback
-    if args.strict is not None:
-        os.environ["PDFMD_STRICT"] = "1" if args.strict else "0"
-    global BUILD_TIME_CLI, TIME_FORMAT_CLI, BUILD_LOG_CLI
-    BUILD_TIME_CLI, TIME_FORMAT_CLI, BUILD_LOG_CLI = args.build_time, args.time_format, args.build_log
-    if args.build_log:
-        os.environ["PDFMD_BUILD_LOG"] = args.build_log
-    os.environ.setdefault("PDFMD_COMMAND_LINE", shlex.join(sys.argv[1:]))
-    if args.build_time is not None:
-        os.environ["PDFMD_BUILD_TIME"] = "1" if args.build_time else "0"
-    if args.time_format:
-        timing = timing_module()
-        problem = timing.check_style(args.time_format) if timing else None
-        if problem:
-            raise SystemExit(f"--time-format: {problem}")
-        os.environ["PDFMD_TIME_FORMAT"] = args.time_format
-    for value, variable in ((args.csv_rows, CSV_ENV["rows"]), (args.csv_cols, CSV_ENV["cols"]), (args.csv_note, CSV_NOTE_ENV)):
-        if value is not None:
-            os.environ[variable] = str(value)
-    if args.csv is not None:
-        os.environ[CSV_ENABLED_ENV] = "on" if args.csv else "off"
-    if args.calc is not None:
-        os.environ[CALC_ENV] = "on" if args.calc else "off"
-    if args.calc_digits is not None:
-        os.environ[CALC_DIGITS_ENV] = args.calc_digits
-    if args.calc_round is not None:
-        os.environ[CALC_ROUND_ENV] = args.calc_round
-    if args.calc_subs is not None:
-        os.environ[CALC_SUBS_ENV] = "true" if args.calc_subs else "false"
-    if args.calc_typeset is not None:
-        os.environ[CALC_TYPESET_ENV] = args.calc_typeset
-    for style, env in CALC_TYPESET_STYLE_ENVS.items():
-        if getattr(args, "calc_typeset_" + style) is not None:
-            os.environ[env] = getattr(args, "calc_typeset_" + style)
-    if args.calc_noindent is not None:
-        os.environ[CALC_NOINDENT_ENV] = args.calc_noindent
-    if args.calc_space is not None:
-        os.environ[CALC_SPACE_ENV] = args.calc_space
-    if args.paragraph_spacing is not None:
-        paragraph_spacing_command_line(args.paragraph_spacing)
-    if args.calc_align is not None:
-        os.environ[CALC_ALIGN_ENV] = args.calc_align
-    if args.calc_constants is not None:
-        os.environ[CALC_CONSTANTS_ENV] = args.calc_constants
-    if args.calc_export is not None:
-        os.environ[CALC_EXPORT_ENV] = args.calc_export
-    if args.table_keep is not None:
-        os.environ[TABLE_KEEP_ENV] = str(args.table_keep)
-    for value, variable in ((args.max_asset_mb, "PDFMD_MAX_ASSET_MB"), (args.max_output_mb, "PDFMD_MAX_OUTPUT_MB")):
-        if value is not None:
-            os.environ[variable] = str(value)
-    configured = load_config().get("translit")
-    if isinstance(configured, list):
-        configured = ",".join(str(item) for item in configured)
-    if args.translit is not None:
-        translit = args.translit
-    elif os.environ.get("PDFMD_TRANSLIT") is not None:
-        translit = os.environ["PDFMD_TRANSLIT"]
-    else:
-        translit = configured
-    if translit and translit.strip().casefold() == "list":
-        raise SystemExit(0 if translit_report() else 1)
-    for problem in set_translit(translit):
-        print(f"WARN  --translit: {problem}", file=sys.stderr)
-    CACHE_PLOTS_CLI = args.cache_plots or None
-    SEED_LABELS_CLI = args.seed_labels
-    SEED_CALC_CLI = args.seed_calc
-    METADATA_PRECEDENCE_CLI = args.metadata_precedence
-    PRESET_CLI, GLOBAL_METADATA_CLI = args.preset, args.global_metadata
-    global CACHE_LOCATION_CLI
-    CACHE_LOCATION_CLI = args.cache_location
-    RAW_CLI.update({"all": args.raw, "off": args.no_raw, "for": list(args.raw_for or [])})
-    PAGEBREAK_CLI.update({"kinds": args.pagebreak, "off": args.no_pagebreak})
-    LINEBREAK_CLI.update({"kinds": args.linebreak, "off": args.no_linebreak})
-    MARKUP_CLI.update({"kinds": args.markup, "off": args.no_markup})
-    SHOW_COMMENTS_CLI["on"] = args.show_comments
-    FLAVOUR_CLI["name"] = args.flavour
-    UNCLOSED_CLI["mode"] = args.unclosed_comment
-    GFM_CLI.update({"scripts": args.gfm_scripts, "math": args.gfm_math})
-    ASCII_CLI["missing"] = args.ascii_missing
-    if args.serve is not None:
-        raise SystemExit(serve_command(args))
-    if args.api is not None:
-        raise SystemExit(api_command(list(args.api)))
-    if args.init_reference:
-        raise SystemExit(0 if init_reference(args.init_reference) else 1)
-    if args.completion:
-        if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(newline="\n")          # CRLF in a shell script breaks it in Git Bash and WSL
-        sys.stdout.write(completion_script(args.completion))
-        raise SystemExit(0)
-    if args.user_path or args.add_to_path is not None or args.remove_from_path or args.show_user_path:
-        raise SystemExit(user_path_command(args))
-    if args.deep and not args.doctor:
-        raise SystemExit("--deep goes with --doctor: pdfmd --doctor --deep")
-    if args.doctor:
-        raise SystemExit(0 if doctor_report(deep=args.deep) else 1)
-    if args.cache_info or isinstance(args.clear_cache, str):
-        status = cache_command(args)                        # --cache-info, --clear-cache WHAT (pdfmd_cache.manage)
-        if status is not None:
-            raise SystemExit(status)
-    if (args.crop_pad is not None or args.crop_ignore_bottom is not None or args.crop_page is not None) and not args.crop:
-        raise SystemExit("--crop-pad, --crop-ignore-bottom and --crop-page go with --crop: pdfmd --crop formula.pdf --crop-pad 1")
-    if (args.image_dpi is not None or args.image_quality is not None) and not (args.crop or args.to_many or picture_target(args) in PICTURE_ONLY):
-        raise SystemExit("--image-dpi and --image-quality go with --to png, jpg, tiff, eps, ps or svg")
-    if args.to_many:
-        raise SystemExit(multi_target_command(args))
-    if args.crop or picture_target(args) in PICTURE_ONLY:
-        raise SystemExit(picture_command(args))
-    if args.check_docx:
-        raise SystemExit(check_docx_command(args, pandoc_options))
-    if args.init is not None:
-        raise SystemExit(init_command(args))
-    if args.check_ignore and not args.check:
-        raise SystemExit("--check-ignore goes with --check: pdfmd --check --check-ignore heading-jump")
-    if args.check:
-        raise SystemExit(check_command(args))
-    if args.check_dependencies:
-        raise SystemExit(0 if dependency_report() else 1)
-    if args.extract_tables or args.expand_tables or args.extract_inline_csv:
-        raise SystemExit(tables_command(args))
-    if args.failed and not args.last_build:
-        raise SystemExit("--failed goes with --last-build: pdfmd --last-build --failed FILE")
-    if args.last_build:
-        raise SystemExit(last_build_command(args))
-    if args.history or args.history_diff or args.history_restore:
-        if args.history_diff and args.history_restore:
-            raise SystemExit("--history-diff and --history-restore are different things; pick one.")
-        raise SystemExit(history_view_command(args))
-    if args.init_backups:
-        raise SystemExit(init_backups_command(args))
-    if args.history_to_file or args.history_to_notes or args.merge_history:
-        if args.history_to_file and args.history_to_notes:
-            raise SystemExit("--history-to-file and --history-to-notes are opposites; pick one.")
-        raise SystemExit(history_command(args))
-    if args.check_fonts:
-        ok = True
-        for target in (args.path or [Path.cwd()]):
-            try:
-                document = find_markdown(target)
-            except FileNotFoundError as error:
-                raise SystemExit(str(error))
-            ok = check_fonts(document, args.no_auto, list(args.variable or [])) and ok
-        raise SystemExit(0 if ok else 1)
-    if args.edit:
-        raise SystemExit(edit_command(args))
-    if args.init_vscode:
-        raise SystemExit(init_vscode_command(args))
-    if args.show_config or args.init_config:
-        raise SystemExit(0 if config_report(init=args.init_config) else 1)
-    if args.presets:
-        raise SystemExit(0 if presets_report(args.path[0] if args.path else None) else 1)
-    if args.kits is not None:
-        raise SystemExit(0 if kits_report(list(args.kits), args.no_auto) else 1)
-    if args.which is not None:
-        raise SystemExit(0 if which_command(list(args.which), args) else 1)
-    if args.check_source:
-        raise SystemExit(0 if check_source_command(list(args.path or []), args.recursive) else 1)
-    if args.doc is not None:
-        raise SystemExit(doc_command(args.doc, args.doc_print, args.doc_path))
-    if args.doc_print or args.doc_path:
-        raise SystemExit("--print and --path go with --doc: pdfmd --doc readme --print")
-    if args.setup is not None:
-        raise SystemExit(0 if setup_command(args.setup) else 1)
-    if args.install:
-        raise SystemExit(0 if install_extra(args.install, bool(getattr(args, "yes", False))) else 1)
-    if args.uninstall:
-        if args.uninstall.startswith("kit"):
-            raise SystemExit(0 if uninstall_kit(args.uninstall.partition(":")[2]) else 1)
-        if args.uninstall.startswith("ocr"):
-            raise SystemExit(0 if install_ocr_languages(args.uninstall.partition(":")[2], remove=True) else 1)
-        raise SystemExit(0 if uninstall_fonts(args.uninstall.partition(":")[2]) else 1)
-    if args.batch or (not args.report and len(args.path or []) > 1):
-        from pdfmd_batch import prepare_inputs
-        prepare_inputs(sys.modules[__name__], args)
-    else:
-        routed = route_pdf_input(args, pandoc_options)
-        if routed is not None:
-            raise SystemExit(routed)
-        routed = route_text_input(args, pandoc_options)
-        if routed is not None:
-            raise SystemExit(routed)
-        route_ebook_input(args)
-    if not pdfmd_routing.quarto_input(args) and not which("pandoc") and not native_possible(args):
-        raise SystemExit(PANDOC_MISSING)
-    paths = args.path or [Path.cwd()]
-    if args.clear_cache:
-        if args.path:
-            try:
-                document = find_markdown(paths[0])
-            except FileNotFoundError as error:
-                raise SystemExit(str(error))
-            plan = plan_scaffold(document, [], args.no_auto, args.metadata_file)
-            source = plan.scaffold if plan else document
-            local = source.resolve().parent / LOCAL_CACHE_DIRNAME
-            status = remove_cache_paths([cache_directory(source), cache_directory(source, local)], [cache_root(), local])
-        else:
-            status = clear_cache("all")                     # the cache folder and ./.cache/pdfmd (v3.33.74: with sizes)
-        if status:
-            raise SystemExit(status)
-        return
-    if args.slim and not args.unpack:
-        raise SystemExit("--slim goes with --unpack")
-    if args.unpack:
-        if len(paths) != 1 or not args.path:
-            raise SystemExit("--unpack takes one assembled Markdown file")
-        try:
-            raise SystemExit(unpack_assembled(find_markdown(paths[0]), args.out.resolve() if args.out else None,
-                                              slim=args.slim))
-        except FileNotFoundError as error:
-            raise SystemExit(str(error))
-    if args.split:
-        if len(paths) != 1:
-            raise SystemExit("--split takes one Markdown file")
-        try:
-            raise SystemExit(split_into_parts(find_markdown(paths[0]), args.split.resolve(), max(1, args.split_depth)))
-        except FileNotFoundError as error:
-            raise SystemExit(str(error))
-    variables = DEFAULT_VARS + args.variable
-    if args.paper and not any(variable.startswith("papersize") for variable in args.variable):
-        variables = variables + [f"papersize={args.paper}"]
-    stamp_overrides: dict = {}
-    if args.stamp:
-        stamp_overrides["enabled"] = True
-    if args.no_stamp:
-        stamp_overrides["enabled"] = False
-    if args.stamp_mode:
-        stamp_overrides["mode"] = args.stamp_mode
-    if args.stamp_packages:
-        stamp_overrides["packages"] = args.stamp_packages
-    if args.stamp_scope:
-        stamp_overrides["scope"] = args.stamp_scope
-    if args.stamp_store:
-        stamp_overrides["store"] = args.stamp_store
-    if args.stamp_output:
-        stamp_overrides["include_output"] = True
-    if args.no_stamp_output:
-        stamp_overrides["include_output"] = False
-    if args.stamp_partial:
-        stamp_overrides["partial"] = True
-    if args.no_stamp_partial:
-        stamp_overrides["partial"] = False
-    if args.stamp_pdf_metadata:
-        stamp_overrides["pdf_metadata"] = True
-    if args.no_stamp_pdf_metadata:
-        stamp_overrides["pdf_metadata"] = False
-    if args.no_auto:
-        unknown = sorted(set(args.no_auto) - NO_AUTO_KINDS)
-        if unknown:
-            raise SystemExit(f"Unknown --no-auto kind(s): {', '.join(unknown)}. "
-                             f"Valid: {', '.join(sorted(NO_AUTO_KINDS))}")
-    if args.batch and args.report:
-        raise SystemExit("Choose either --batch or --report/--book, not both")
-    if args.presentation and args.report:
-        raise SystemExit("--presentation cannot be combined with --report/--book")
-
-    # Stop-at stage (see STOP_STAGES). --assemble-only is --stop-at markdown;
-    # so is an -o ending .assembled.md (single-file/report only, like every
-    # -o extension below). The stage then fixes the target format: `tex` is
-    # --to latex (beamer with -p), `markdown` is the internal assembled one.
-    stop_at = args.stop_at
-    if args.assemble_only:
-        if stop_at not in (None, "markdown"):
-            raise SystemExit(f"--assemble-only means --stop-at markdown; it conflicts with --stop-at {stop_at}")
-        stop_at = "markdown"
-    if (stop_at is None and args.out and not args.batch
-            and args.out.name.casefold().endswith(ASSEMBLED_SUFFIX)):
-        stop_at = "markdown"
-    embed_request = None
-    if args.no_embed_metadata and args.embed_metadata is not None:
-        raise SystemExit("--embed-metadata and --no-embed-metadata contradict each other")
-    if args.lua_mode is not None and args.embed_metadata is None and stop_at != "markdown":
-        raise SystemExit("--lua-mode applies to --stop-at markdown (--assemble-only) only")
-    if args.embed_metadata is not None:
-        unknown_kinds = sorted(set(args.embed_metadata) - {*EMBED_ALL, "all"})
-        if unknown_kinds:
-            raise SystemExit(f"Unknown --embed-metadata kind(s): {', '.join(unknown_kinds)}. "
-                             f"Valid: {', '.join(EMBED_ALL)}, all")
-        if stop_at != "markdown":
-            raise SystemExit("--embed-metadata applies to --stop-at markdown (--assemble-only) only")
-        wanted = (set(EMBED_KINDS) if not args.embed_metadata
-                  else set(EMBED_ALL) if "all" in args.embed_metadata else set(args.embed_metadata))
-        embed_request = EmbedRequest(frozenset(wanted), args.lua_mode, False)
-    elif stop_at == "markdown":
-        # No kinds named: each document's own pdfmd-options.embed decides.
-        embed_request = EmbedRequest(None, args.lua_mode, args.no_embed_metadata)
-    if stop_at in ("markdown", "tex"):
-        if args.to:
-            raise SystemExit(f"--stop-at {stop_at} fixes the output format; drop --to {args.to}")
-        out_format = format_from_output(args.out) if args.out and not args.batch else None
-        if stop_at == "tex" and out_format not in (None, "latex"):
-            raise SystemExit(f"--stop-at tex writes a .tex file; -o {args.out} names another format")
-        if stop_at == "markdown" and out_format not in (None, "markdown"):
-            raise SystemExit(f"--stop-at markdown writes Markdown; -o {args.out} names another format")
-        if stop_at == "markdown" and (args.presentation or args.watch):
-            raise SystemExit("--stop-at markdown can't be combined with -p/--presentation or -w/--watch")
-        if stop_at == "markdown" and args.engine is not None:
-            print("WARN  --engine is ignored for --stop-at markdown: no engine is involved",
-                  file=sys.stderr)
-
-    # Target format: explicit --to wins; otherwise a recognized -o/--out
-    # extension implies it (single-file/report only -- batch's -o is a
-    # directory, so it only responds to --to); default is pdf.
-    target_format = (
-        (args.to.casefold() if args.to else None)
-        or (format_from_output(args.out) if args.out and not args.batch else None)
-        or "pdf"
-    )
-    target_format, ascii_named = split_ascii_target(target_format)      # `-o notes.ascii.txt`
-    ASCII_CLI["on"] = ASCII_CLI["on"] or ascii_named
-    if stop_at == "markdown":
-        target_format = ASSEMBLED_FORMAT
-    elif stop_at == "tex":
-        target_format = "beamer" if args.presentation else "latex"
-    if args.presentation and target_format != "pdf" and stop_at != "tex":
-        raise SystemExit("-p/--presentation always produces a PDF (via Beamer); "
-                         "it can't be combined with --to/-o for another format")
-    convert_job = None
-    if stop_at is None:
-        goal = calibre_goal(args.engine, target_format)
-        if goal:
-            if args.engine is not None and not calibre_asked_first(args.engine):
-                print(f"WARN  --engine is ignored for --to {target_format}: Calibre writes it", file=sys.stderr)
-            convert_job = start_calibre_job(args, goal, target_format, pandoc_options)
-            target_format = "epub"
-        else:
-            goal = soffice_goal(args.engine, target_format)
-            if goal:
-                if args.engine is not None and not soffice_asked_first(args.engine):
-                    print(f"WARN  --engine is ignored for --to {target_format}: LibreOffice writes it", file=sys.stderr)
-                convert_job = start_soffice_job(args, goal, target_format)
-                target_format = "docx"
-    if (args.engine is not None and target_format != "pdf" and stop_at != "markdown"
-            and not (target_format == "odt" and args.engine.strip().casefold() == "pandoc")):
-        print(f"WARN  --engine is ignored for "
-              f"{'--stop-at tex' if stop_at == 'tex' else f'--to {target_format}'}: "
-              "no PDF engine is involved", file=sys.stderr)
-    # Explicit: the command line named a format (or a stage), so a document's
-    # pdfmd-options.default-output does not apply.
-    target_explicit = (stop_at is not None or bool(args.to) or args.presentation
-                       or bool(format_from_output(args.out) if args.out and not args.batch else None))
-    engines: list[str] = []
-    engines_error: SystemExit | None = None
-    if target_format == "pdf":
-        try:
-            engines = select_engines(args.engine, args.presentation)
-        except SystemExit as error:
-            if target_explicit:
-                raise
-            # A document's default-output may not be PDF: only fail if one is.
-            engines_error = error
-    native_auto = (bool(engines) and not args.engine
-                   and all(is_native_engine(engine) for engine in engines))
-    if native_auto:
-        native_run_note(engines)
-
-    def need_engines(format_name: str) -> None:
-        if format_name == "pdf" and engines_error is not None:
-            raise engines_error
-
-    def default_target(document: Path, metadata_files: list[Path]) -> str:
-        """target_format, or the document's own default-output (never over an explicit one)."""
-        if target_explicit:
-            return target_format
-        chosen = default_output_format(document, metadata_files)
-        if chosen and chosen != target_format:
-            print(f"AUTO OUTPUT  {display_path(document)}: default-output {chosen} (pdfmd-options)")
-        return chosen or target_format
-
-    newest_used: list[bool] = []
-
-    def only_markdown_in(directory: Path) -> Path:
-        """The one Markdown file of a folder (what `pdfmd` and `pdfmd '#section'` mean)."""
-        markdown_files = sorted(directory.glob("*.md"), key=lambda path: path.name.casefold())
-        if not markdown_files:
-            hint = ""
-            try:
-                if not sys.stdin.isatty():
-                    hint = " To build Markdown piped in, name it: `pdfmd -` reads standard input."
-            except (AttributeError, ValueError, OSError):
-                pass
-            raise SystemExit("No Markdown files found in the current directory." + hint)
-        picking = len(markdown_files) > 1 and (args.newest or priority_enabled(directory))
-        if picking:
-            markdown_files = source_markdown(markdown_files)
-        if len(markdown_files) > 1:
-            if picking:
-                newest_used.append(True)
-                return choose_markdown(markdown_files, args.newest, args.include_never)
-            names = ", ".join(path.name for path in markdown_files)
-            raise SystemExit(
-                f"Multiple Markdown files found: {names}\n"
-                "Specify one file, use -b to convert all separately, or use -r to combine them."
-            )
-        print(f"AUTO MD    {display_path(markdown_files[0])}")
-        return markdown_files[0]
-
-    if not args.path and not args.batch and not args.report:
-        paths = [only_markdown_in(Path.cwd())]
-    # `pdfmd report#intro` is shorthand for --section: a part in parts mode,
-    # any heading (or {#id}) otherwise. A literal path with a '#' in its name
-    # wins, so nothing that already worked changes meaning. `doc##name` asks
-    # for a level-2 heading (see find_heading); `#name` alone, with no
-    # document, means the folder's only Markdown file.
-    section_requests = split_section_requests(args.section)
-    # `@` says the same as `#` (`pdfmd report@intro`, `doc@@yield`): an interactive bash and some other shells take a `#`
-    # for the start of a comment and never pass it on.
-    if len(paths) == 1 and re.search(r"[#@]", str(paths[0])) and not paths[0].exists():
-        # The whole string, not .name: a section path (`doc#results/yield`) has a slash.
-        base, separator, suffix = re.split(r"([#@])", str(paths[0]), maxsplit=1)
-        if os.sep != "/":
-            suffix = suffix.replace(os.sep, "/")        # Path turned `doc#results/yield` into `doc#results\\yield` on Windows
-        if base and not base.endswith(("/", os.sep)):
-            paths = [Path(base)]
-        else:
-            paths = [only_markdown_in(Path(base) if base else Path.cwd())]
-        # `doc#name` asks for `name`; `doc##name` for `##name`, a level-2 heading.
-        section_requests += split_section_requests(["#" + suffix.replace("@", "#", 1) if suffix.startswith(("#", "@")) else suffix])
-    if args.newest and not newest_used:
-        print("WARN  --newest picks among the Markdown files of a folder for a bare `pdfmd` (or `pdfmd '#section'`); "
-              "it does nothing with a named file, -b or -r", file=sys.stderr)
-    scaffold_plan = None
-    section_plan = None
-    plan_source = None
-    single_document = not args.batch and not args.report and not args.presentation and len(paths) == 1
-    if single_document:
-        try:
-            plan_source = find_markdown(paths[0])
-        except LookupAmbiguous as error:
-            raise SystemExit(str(error))
-        except FileNotFoundError as error:
-            if section_requests or args.list_parts:
-                raise SystemExit(str(error))
-            plan_source = None
-        if plan_source is not None:
-            scaffold_plan = plan_scaffold(plan_source, section_requests, args.no_auto, args.metadata_file)
-    if scaffold_plan is None and (section_requests or args.list_parts):
-        if not single_document:
-            raise SystemExit("--section, --list-parts and 'name#section' take one document, "
-                             "not -b/--batch, -r/--report or -p/--presentation")
-        if plan_source.suffix.lower() != ".md":
-            raise SystemExit(f"{plan_source}: sections can only be taken from a Markdown (.md) document")
-        if args.list_parts:
-            print_headings(plan_source, args.no_auto, args.metadata_file)
-            return
-        section_plan = plan_sections(plan_source, section_requests, args.no_auto, args.metadata_file)
-    if scaffold_plan is not None and args.list_parts:
-        print_parts(scaffold_plan)
-        return
-    if scaffold_plan is not None:
-        PART_CUTS.update(scaffold_plan.cuts)
-    if args.watch:
-        if args.batch or args.report:
-            raise SystemExit("-w/--watch only supports single-file mode, not -b/--batch or -r/--report")
-        if len(paths) != 1:
-            raise SystemExit("-w/--watch accepts one Markdown name or path")
-        if scaffold_plan is not None:
-            watch_source = scaffold_plan.scaffold
-        else:
-            try:
-                watch_source = find_markdown(paths[0])
-            except FileNotFoundError as error:
-                raise SystemExit(str(error))
-        run_watch(watch_source, pinned_watch_argv(sys.argv[1:], args.path, paths[0]), args, default_target, scaffold_plan, section_plan)
-        return
-    if args.report:
-        from pdfmd_report import run as run_report
-        return run_report(sys.modules[__name__], args=args, default_target=default_target, embed_request=embed_request,
-                          engines=engines, need_engines=need_engines, pandoc_options=pandoc_options, paths=paths,
-                          stamp_overrides=stamp_overrides, target_format=target_format, variables=variables)
-    metadata_by_dir = {}
-    def embeds_preamble(file) -> bool:
-        """Whether the assembled stage folds `file`'s preamble in (so it has to be found)."""
-        if target_format != ASSEMBLED_FORMAT or embed_request is None:
-            return False
-        try:
-            found = metadata_for(file)
-        except (FileNotFoundError, ValueError):
-            return False
-        chosen = resolve_embed(file, found if isinstance(found, list) else ([found] if found else []),
-                               embed_request)
-        return chosen is not None and "preamble" in chosen[0]
-
-    def metadata_for(file, document_class=None):
-        directory = file.parent.resolve()
-        cache_key = (directory, file.stem.casefold())
-        if cache_key not in metadata_by_dir:
-            # An explicit -y/--metadata-file always wins over --no-auto
-            # metadata; only auto-discovery (args.metadata_file is None) is
-            # what --no-auto metadata/yaml suppresses -- per file, since
-            # each file's own pdfmd-options can differ even in one batch.
-            file_no_auto = effective_no_auto(file, args.no_auto)
-            requested = ([] if args.metadata_file is None
-                        and auto_disabled(file_no_auto, "metadata")
-                        else args.metadata_file)
-            if requested is None:
-                # pdfmd-options.yaml / .metadata: the document names its own
-                # metadata files (like -y, but written in the document).
-                requested = option_names(frontmatter_pdfmd_options(file), "yaml") or None
-            metadata_by_dir[cache_key] = find_metadata(directory, requested,
-                                                        document_class=document_class,
-                                                        document_stem=file.stem, document=file,
-                                                        discover=not (requested is None and discovery_disabled(file_no_auto, "metadata")))
-            discovered = metadata_by_dir[cache_key]
-            if args.metadata_file is None and discovered is not None and discovered is not AUTO_METADATA_DISABLED:
-                paths = discovered if isinstance(discovered, list) else [discovered]
-                for path in paths:
-                    AUTO_LOG.record_file("YAML", path, args.verbose)
-        value = metadata_by_dir[cache_key]
-        return None if value is AUTO_METADATA_DISABLED else value
-    if args.batch:
-        from pdfmd_batch import run as run_batch
-        results = run_batch(sys.modules[__name__], args=args, embed_request=embed_request, embeds_preamble=embeds_preamble,
-                            engines=engines, metadata_for=metadata_for, need_engines=need_engines,
-                            pandoc_options=pandoc_options, paths=paths, stamp_overrides=stamp_overrides,
-                            target_explicit=target_explicit, target_format=target_format, variables=variables)
-    else:
-        try:
-            if len(paths) != 1:
-                raise FileNotFoundError("Single-file mode accepts one Markdown name or path")
-            source = find_markdown(paths[0])
-        except FileNotFoundError as error:
-            raise SystemExit(str(error))
-        if target_format == ASSEMBLED_FORMAT:
-            if source.suffix.lower() not in (".md", ".markdown"):
-                raise SystemExit(f"{source}: --stop-at markdown assembles Markdown files only")
-            if is_assembled_document(source):
-                raise SystemExit(f"{display_path(source)} is already an assembled file "
-                                 f"({ASSEMBLED_KEY}: true); there is nothing left to assemble")
-        # A parts-mode build is the scaffold plus its parts: it takes the
-        # scaffold's own name and folder, and a partial build carries the
-        # section names in its file name so it never replaces the full report.
-        output_stem = source.stem
-        if scaffold_plan is not None:
-            source = scaffold_plan.scaffold
-            output_stem = scaffold_plan.output_stem
-        elif section_plan is not None:
-            output_stem = section_plan.output_stem
-        target_format = default_target(source, scaffold_metadata_files(source, args.metadata_file))
-        direct_kind = (direct_route(source, target_format, args.from_format, args.no_auto, args.engine)
-                       if scaffold_plan is None and section_plan is None and not args.presentation else None)
-        if direct_kind is None:
-            need_engines(target_format)
-        output_extension = output_extension_for(target_format, source)
-        out_dir = None
-        output_file = None
-        if args.out and not args.destination_cwd and args.out.is_dir():
-            # Check is-a-directory BEFORE adding a default suffix -- a dot-less
-            # directory name would otherwise get an extension appended to the
-            # directory's own name instead of being used as a directory.
-            out_dir = args.out.resolve()
-        elif args.out:
-            requested_output = Path.cwd() / args.out.name if args.destination_cwd else args.out.resolve()
-            output_file = default_output_path(requested_output, target_format)
-        elif args.destination_cwd:
-            output_file = Path.cwd() / f"{output_stem}{output_extension}"
-        output = output_file or ((out_dir / f"{output_stem}{output_extension}") if out_dir
-                                 else source.with_name(f"{output_stem}{output_extension}"))
-        output = output_file = load_package("pdfmd_routing.output").single(source, output, convert_job, target_format, metadata_for)
-        if source.suffix.lower() == ".qmd":
-            if args.presentation:
-                raise SystemExit("-p/--presentation isn't supported for .qmd -- set the "
-                                 "format in the document's own Quarto front matter instead")
-            BUILD["engine"], BUILD["failed"] = None, []
-            begin_timer()
-            with warning_capture() as seen:
-                built = convert_qmd(source, output, target_format, variables, pandoc_options)
-            results = [finish_build(built, seen, source, [])]
-            if results[0][1]:
-                # Front matter only: Quarto has its own metadata system, so no
-                # metadata.yaml is looked up for a .qmd (see convert_qmd).
-                backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
-        elif direct_kind is not None:
-            BUILD["engine"], BUILD["failed"] = None, []
-            begin_timer()
-            with warning_capture() as seen:
-                built = convert_direct(direct_kind, source, output, args.engine, args.verbose, args.debug,
-                                       apply_defaults=(config_options().get("apply-defaults", False) if args.apply_defaults is None
-                                                       else args.apply_defaults) not in (False, "false", "False", 0, ""),
-                                       metadata_request=args.metadata_file)
-            results = [finish_build(built, seen, source, [])]
-            if results[0][1]:
-                backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
-        elif source.suffix.lower() in OFFICE_INPUT_EXTENSIONS:
-            # A binary office document (.docx/.pptx/.xlsx/.odt/etc.) has no
-            # YAML front matter, documentclass, or LaTeX preamble to go
-            # looking for -- frontmatter_value()/metadata_for() below both
-            # read the file as text, which crashes outright on a zip-based
-            # binary format (caught testing this Phase's own new feature: a
-            # real .docx/.pptx crashed here immediately, unrelated to
-            # convert_one, before this branch existed). convert_one's own
-            # OFFICE_INPUT_EXTENSIONS branch handles the actual conversion
-            # -- including raising a clear error for --to/--from/--no-auto
-            # officedirect combinations that have no working route, rather
-            # than reaching this branch's own only-slightly-later crash.
-            if args.presentation:
-                raise SystemExit("-p/--presentation isn't supported for an office-document input")
-            # No resolve_engines() call: it would read the file as text
-            # looking for a pdf-engine front-matter key, which an office
-            # document never has and can't be read as (same crash as
-            # above) -- engines (from select_engines(args.engine, ...) at
-            # the top of main()) is used as-is.
-            results = [convert_one(source, out_dir, args.presentation, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, output_resolved=True)]
-        else:
-            if scaffold_plan is not None or section_plan is not None:
-                # _convert_one derives the output name from the document's own
-                # stem; a partial build's differs, so hand over the final path.
-                output_file = output
-            document_class = (frontmatter_value(source, "documentclass")
-                              or frontmatter_value(source, "class"))
-            try:
-                metadata = metadata_for(source, document_class=document_class)
-            except (FileNotFoundError, ValueError) as error:
-                raise SystemExit(str(error))
-            engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
-            preambles = []
-            if target_format in {"pdf", *TEX_STANDALONE_FORMATS} or embeds_preamble(source):
-                preambles = document_preambles(source, pandoc_options, effective_no_auto(source, args.no_auto), engine_metadata_files)
-                announce_preambles(preambles)
-            file_engines = resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
-            results = [convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
-                                   extra_inputs=(scaffold_plan.files[1:] if scaffold_plan is not None else None),
-                                   all_parts=(scaffold_plan.parts if scaffold_plan is not None else None),
-                                   cache_cli=args.cache, embed=embed_request, trust_embedded=args.trust_embedded,
-                                   self_contained=args.self_contained,
-                                   parts_root=(scaffold_plan.directory if scaffold_plan is not None else None),
-                                   partial=((scaffold_plan is not None and scaffold_plan.selected is not None)
-                                            or section_plan is not None),
-                                   source_override=((section_plan.text, section_plan.shifted)
-                                                    if section_plan is not None else None),
-                                   full_override=(section_plan.full_text if section_plan is not None else None),
-                                   calc_text_override=(section_plan.calc_text if section_plan is not None else None), output_resolved=True)]
-            if section_plan is not None and results[0][1] and target_format != ASSEMBLED_FORMAT:
-                if LAST_WHOLE:
-                    print("NOTE  section build: the whole document was numbered and this section kept, so its "
-                          "numbers and the references to the rest are the full document's (a reference written "
-                          "as raw LaTeX \\ref is not resolved outside LaTeX; use @sec:/@fig: with pandoc-crossref)")
-                elif LAST_SEEDED:
-                    print("NOTE  section build: references to other sections come from the last full build "
-                          "(cache); they are stale if you have since changed the document. This section's "
-                          "own heading, figure, table and equation numbers restart at its first one")
-                elif LAST_SCANNED and LAST_EXACT:
-                    print(f"NOTE  section build: references to other sections ({LAST_SCANNED} labels) come from a draft "
-                          "pass over the whole document, so they are exact. This section's own heading, figure, "
-                          "table and equation numbers restart at its first one")
-                elif LAST_SCANNED:
-                    print(f"NOTE  section build: references to other sections ({LAST_SCANNED} labels) are counted "
-                          "from the document's sources: approximate where it defines its own macros; a full build "
-                          "with the cache on (--cache) first makes them exact. This section's own heading, "
-                          "figure, table and equation numbers restart at its first one")
-                else:
-                    print("NOTE  section build: references to other sections print as ??, and heading, "
-                          "figure and table numbers restart from this section's own first one (with the "
-                          "cache on -- pdfmd-options: {cache: {aux: true}}, or --cache -- a full build "
-                          "first lets later section builds fill the references in)")
-            if (scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]
-                    and target_format != ASSEMBLED_FORMAT):
-                if LAST_WHOLE:
-                    print("NOTE  partial build: the whole document was numbered and these parts kept, so their "
-                          "numbers and the references to the rest are the full document's (a reference written "
-                          "as raw LaTeX \\ref is not resolved outside LaTeX; use @sec:/@fig: with pandoc-crossref)")
-                elif LAST_SEEDED:
-                    print("NOTE  partial build: numbers of parts left out come from the last full build "
-                          "(--cache); they are stale if you have since added or moved a figure or table there"
-                          + (f" (and {LAST_SCANNED} labels counted from the sources fill in what it lacks)"
-                             if LAST_SCANNED else ""))
-                elif LAST_SCANNED and LAST_EXACT:
-                    print(f"NOTE  partial build: numbers of parts left out ({LAST_SCANNED} labels) come from a draft "
-                          "pass over the whole document, so they are exact")
-                elif LAST_SCANNED:
-                    print(f"NOTE  partial build: numbers of parts left out are counted from the sources "
-                          f"({LAST_SCANNED} labels); approximate where the document defines its own macros -- "
-                          "a full build with the cache on (--cache) makes them exact")
-                else:
-                    print("NOTE  partial build: references to parts left out print as ??, and figure/"
-                          "table numbers restart from this build's own first one (pdfmd-options: "
-                          "{cache: {aux: true}} carries them over from the last full build)")
-                if scaffold_plan.cuts:
-                    print("NOTE  a section or element cut out of a part is numbered from its own start, "
-                          "cache or not: its heading, figure, table and equation numbers restart there "
-                          "(only whole parts get their numbers from the last full build)")
-            if (LAST_SKIPPED and not (LAST_EXACT or LAST_SEEDED or LAST_WHOLE) and results[0][1]
-                    and target_format != ASSEMBLED_FORMAT
-                    and (section_plan is not None or (scaffold_plan is not None and scaffold_plan.selected is not None))):
-                print(f"NOTE  {LAST_SKIPPED} label{'' if LAST_SKIPPED == 1 else 's'} came after a caption in an "
-                      "environment pdfmd does not know, so a reference to one outside this build prints ?? rather "
-                      "than the number of the heading before it (--seed-labels draft counts them exactly)")
-        if args.open and results[0][1]:
-            open_file(output)
-    if convert_job is not None:
-        results = finish_convert_job(convert_job, results, args.verbose)
-    failures = [result for result in results if not result[1]]
-    for result in results:
-        source, ok, error = result
-        print(f"{'OK  ' if ok else 'FAIL'}  {display_path(source)}{built_name(result)}{time_label(result)}{engine_label(result)}")
-        if args.verbose:
-            for line in time_breakdown(result):
-                print(line)
-        if error:
-            print(error)
-        if getattr(result, "record_path", None) and (args.verbose or not ok):
-            print(f"{'      full record: ' if not ok else 'RECORD  '}{under_home(result.record_path)}")
-    if args.batch and args.bopen is not None:
-        built = [Path(result.output) for result in results
-                 if result[1] and getattr(result, "output", None) is not None and Path(result.output).is_file()]
-        picked = [built[index] for index in bopen_indices(args.bopen, len(built))]
-        for path in picked:
-            open_file(path)
-        if picked:
-            print(f"OPENED  {len(picked)} of {len(built)} ({args.bopen}): " + ", ".join(path.name for path in picked[:6])
-                  + (f", +{len(picked) - 6} more" if len(picked) > 6 else ""))
-    if native_auto and not failures:
-        offer_native_upgrade()
-    if not failures:
-        maybe_hint_setup()
-    if failures:
-        raise SystemExit(1)
 
 
 # ---------------------------------------------------------------------------

@@ -3,9 +3,8 @@
 
 from __future__ import annotations
 
-import inspect
+import ast
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -24,9 +23,13 @@ import pdfmd  # noqa: E402
 
 class WorkerState(unittest.TestCase):
     def test_every_global_main_sets_reaches_a_worker(self):
-        names = set()
-        for line in re.findall(r"^\s+global (.+)$", inspect.getsource(pdfmd.run_main), re.MULTILINE):
-            names.update(name.strip() for name in line.split(","))
+        # run_main is lib/pdfmd_run's (3.33.212): it sets pdfmd's state as `core.NAME = ...`, where it said `global NAME`
+        source = (ROOT / "lib" / "pdfmd_run" / "__init__.py").read_text(encoding="utf-8")
+        run_main = next(node for node in ast.parse(source).body
+                        if isinstance(node, ast.FunctionDef) and node.name == "run_main")
+        names = {node.attr for node in ast.walk(run_main)
+                 if isinstance(node, ast.Attribute) and isinstance(node.ctx, (ast.Store, ast.Del))
+                 and isinstance(node.value, ast.Name) and node.value.id == "core"}
         self.assertTrue(names)
         for name in names:
             self.assertTrue(name.endswith("_CLI") or name in pdfmd.WORKER_GLOBALS,
