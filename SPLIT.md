@@ -164,7 +164,7 @@ Note: D1: `run_main` moves whole. Its 37 state writes lose their `global` lines 
 
 Tests: `test_setup`, `test_jobs`.
 
-#### 4. `pdfmd_direct.route` (existing package): 5 definitions, 2 constants, ~154 lines
+#### 4. `pdfmd_direct.route` (existing package): 5 definitions, 2 constants, ~154 lines; done in 3.33.213 (as the tool wrote it: three names in the table, no stand-ins, 35 `core.` rewrites; every single-file build loads `pdfmd_direct.route`, a build to a target other than PDF and a `.qmd` the whole package)
 
 Goes to `lib/pdfmd_direct/route.py`.
 

@@ -19,6 +19,66 @@ same commit as the change.
 
 ---
 
+## v3.33.213 — 2026-11-15
+
+Pre-edit state: commit `282e31c`. Phase 2 of the split, wave 1, move 4: **the direct routes move to
+`lib/pdfmd_direct/route.py`**, a new module of the existing package `pdfmd_direct` (the Typst and HTML engines of the
+direct routes), which `pdfmd.py` does not load at start: `DIRECT_SUFFIXES`, `DIRECT_READERS`, `direct_route`,
+`direct_defaults`, `convert_direct`, `_convert_direct` and `convert_qmd` (a `.qmd` handed to the Quarto CLI), text and
+docstrings unchanged. `scripts/split_move.py pdfmd_direct.route` moved the seven statements, one stretch of `pdfmd.py`
+between `convert_via_cache` and the `build_parser` pointer comment; no comment block sits on any of them, so none was
+carried. It made 35 `core.NAME` rewrites of 16 names (`auto_disabled`, `engine_executable`, `display_path`,
+`read_text_best_effort`, `which`, `resolve_soffice`, `find_metadata`, `AUTO_METADATA_DISABLED`, `metadata_file_yaml`,
+`vprint`, `fonts_directory`, `managed_index`, `log_cmd`, `record_engine`, `report_engine_failure`, `run_soffice_convert`;
+tests patch `which`, `engine_executable`, `display_path`, `record_engine`, `resolve_soffice` and `run_soffice_convert` on
+pdfmd, and the patches still reach the moved calls) and changed no `global` line; `direct_defaults` and `_convert_direct`,
+read only inside the move, stay bare, and so do the in-function `import pdfmd_direct as direct` and
+`import pdfmd_direct.defaults as defaults`, now imports of the module's own package. Its self-check passed, and with the
+`core.` prefixes taken out the module's code is the old text line for line. It wrote the module with `re`, `subprocess`,
+`sys`, `Path` and `from pdfmd_base import core`, and in `pdfmd.py`, after the table's `pdfmd_run` line,
+`names("pdfmd_direct.route", "direct_route convert_direct convert_qmd")` (lib/pdfmd_run reads the three as `core.X`,
+tests/test_direct `pdfmd.direct_route`); no stand-ins, as code staying in `pdfmd.py` calls none of them. The package's other
+modules (`__init__`, `defaults`, `html`, `typst`) read no moved name and no `core`. By hand:
+-  The module docstring is the tool's two lines and a paragraph on what the module holds.
+-  SPLIT.md marks the move done.
+
+What is different: every single-file build (a scaffold, a section build and `-p` excepted) now loads `pdfmd_direct.route`,
+since `run_main` asks `core.direct_route` about each, and a build to a target other than PDF or of a `.qmd`, which loaded
+no part of `pdfmd_direct` before, also loads the package's `defaults`, `html` and `typst` and the standard `html` and
+`html.entities` (the package's `__init__` imports its modules; a PDF build loads them already, through
+`engine_executable`), about 1.6 to 2.9 ms; nothing new loads at start. At exit, a real run holds as many modules as before
+for `--version` (207), one more for a PDF, a `.tex`, a `.typ` or an `.html` build, and seven more for `--to html`,
+`--to docx` and a `.qmd` (323 -> 330, 322 -> 329, 239 -> 246); making the package's imports lazy is a fix of its own, after
+the wave. A lib/ without `pdfmd_direct`, where `direct_route` caught the `ImportError` and took the Pandoc route, now ends
+every single-file build in a `ModuleNotFoundError` (seen in copies of `282e31c` and of the move without that folder), and
+the package's docstring that says `pdfmd.py` works without it is left as it is.
+
+`pdfmd.py`: 15,652 -> 15,499 lines. Start-up: the same 205 modules after `import pdfmd` with `--version` (the at-exit
+listings above: `scripts/pdfmd` run with `runpy`, fresh cache, config and data folders, twice per tree and the same both
+times). `scripts/pdfmd --version` interleaved with a copy of `282e31c`, 22 runs each, best / median 96.1 / 128.8 against
+95.6 / 127.9 ms, and with the order swapped 121.7 / 131.1 against 119.7 / 133.2 (load average about 5; `split_check`'s own:
+134 / 148 against 245 / 276 ms). Proof: `ruff --select F`; 603 tests of 29 modules pass (two runs, 456 and 147), 7 skipped
+(pymd2pdf is not installed; `PDFMD_GOLDEN` unset; prompt_toolkit is installed; four that need KaTeX installed): the move's
+list (`test_direct`), the modules that build a direct suffix or a `.qmd` or name a moved name (`test_rewrite`,
+`test_quarto_without_pandoc`, `test_typst_input`, `test_batch_paths`, `test_engine_fallback`, `test_kit_texinputs`,
+`test_settings_routes`; `test_paragraph_spacing`, `test_diagrams`, `test_raw`, `test_labels`, `test_engine_filters` and
+`test_chem` write a `.typ`, which `direct_route` leaves to Pandoc), those that patch on pdfmd a name the moved code reads as
+`core.X` (`test_native`, `test_browser_engine`, `test_engine_chain`, `test_odt_route`; `test_calibre` and
+`test_calibre_targets` not run, as they run a real Calibre here), `test_lua_missing`, the always-run set and
+`test_split_tools`; after the entry was written, 85 tests of the five modules that read the changelog or the split (`test_doc`, `test_docs_consistency`, `test_packaging`, `test_split`, `test_split_tools`) again. The real cache's build records unchanged but for a new record of a document that a build outside
+the tests made during the run (version 3.33.212, the main checkout's; the run's isolation check named it). `scripts/split_check.py`
+SAME on 45 checks, no BOTH FAILED, with 15 extra builds, in this order in the scratch copy of examples/, each through
+`run_main`'s own dispatch: a Typst file made from `results.md` (`-t typst -s`), then built (`direct_route`'s `typst`,
+`convert_direct`, `_convert_direct`), with `--from typst` (`DIRECT_READERS`), with `--no-auto typstdirect`, with
+`-e lualatex` and `--to md` (the Pandoc route, three ways); a Typst file and an HTML page from a folder outside the copy
+whose `metadata.yaml` gives the six settings, with `--apply-defaults` (`direct_defaults`, the copy beside the original,
+removed afterwards), and a Typst file with an error there (a declared failure: the message names the original file and its
+own line, the copy's added lines taken off); an HTML page made from `results.md` (`--to html -s`), then built (WeasyPrint)
+and with `--no-auto htmldirect`; and a `.qmd` made from `results.md` (`--to markdown`), rendered by Quarto 1.10.18 to HTML
+(`convert_qmd`), and again with `-V foo=bar` (its WARN). Every output exists in both trees with the same size; the same
+chain run by hand with `--verbose` in a copy of `282e31c` and in the move logs the same `AUTO TYPSTDIRECT`,
+`AUTO HTMLDIRECT`, `AUTO APPLYDEFAULTS` and `WARN` lines, but for the trees' own paths and the build records' folder names.
+
 ## v3.33.212 — 2026-11-15
 
 Pre-edit state: commit `5150157`. Phase 2 of the split, wave 1, move 3: **the command line moves whole to the new package

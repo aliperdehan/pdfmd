@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.212"
+PDFMD_VERSION = "3.33.213"
 import argparse
 import atexit
 import contextlib
@@ -1838,6 +1838,7 @@ script_fallback = deferred("pdfmd_unicode.fonts_choice", "script_fallback")     
 DEFERRED_NAMES.update(installed_font_families="pdfmd_unicode.fonts_choice")
 names("pdfmd_edit.command", "put_outside_blocks source_carried source_lost")
 names("pdfmd_run", "DISABLED_OK_ENV command_line_parser")
+names("pdfmd_direct.route", "direct_route convert_direct convert_qmd")
 run_main = deferred("pdfmd_run", "run_main")
 edit_command = deferred("pdfmd_edit.command", "edit_command")
 gather_stamp_texts = deferred("pdfmd_edit.command", "gather_stamp_texts")
@@ -15348,160 +15349,6 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
     finally:
         if not persistent:
             shutil.rmtree(base, ignore_errors=True)
-
-
-DIRECT_SUFFIXES = {".typ": "typst", ".typst": "typst", ".html": "html", ".htm": "html", ".xhtml": "html"}
-DIRECT_READERS = {"typst": ("typst",), "html": ("html", "html5")}
-
-
-def direct_route(path: Path, target_format: str, from_format: str | None, no_auto: list[str] | None,
-                 engine_request: str | None, announce: bool = True) -> str | None:
-    """`typst` or `html` when this input is finished enough to go straight to its engine (a `.typ` to Typst, an
-    `.html` to WeasyPrint or a browser), else None: the Pandoc route, which is also what is left when the tool for
-    the direct one is not installed. `--no-auto typstdirect|htmldirect`, an explicit `--from`, a target other than
-    PDF, or an `-e` naming an engine of another kind all keep the Pandoc route."""
-    kind = DIRECT_SUFFIXES.get(path.suffix.lower())
-    if kind is None or target_format != "pdf" or auto_disabled(no_auto, kind + "direct"):
-        return None
-    if from_format is not None and from_format.casefold().split("+")[0] not in DIRECT_READERS[kind]:
-        return None
-    try:
-        import pdfmd_direct as direct
-    except ImportError:
-        return None
-    if kind == "typst":
-        if not direct.typst_accepts_request(engine_request):
-            return None
-        if not engine_executable("typst"):
-            if announce:
-                print(f"WARN  {display_path(path)}: Typst is not installed, so this goes through Pandoc's Typst "
-                      "reader, which loses what Pandoc's model cannot hold (`pdfmd --install typst`)", file=sys.stderr)
-            return None
-        return kind
-    if not direct.html_accepts_request(engine_request):
-        return None
-    text = read_text_best_effort(path)
-    if not direct.html_attempts(text, engine_request, which, resolve_soffice):
-        if announce:
-            print(f"WARN  {display_path(path)}: no HTML engine or browser found for a direct build "
-                  "(WeasyPrint, Chrome, Edge...); going through Pandoc", file=sys.stderr)
-        return None
-    return kind
-
-
-def direct_defaults(source: Path, metadata_request: list[str] | None) -> dict:
-    """The settings `--apply-defaults` gives a direct document: those of the metadata files found for it."""
-    import pdfmd_direct.defaults as defaults
-    found = find_metadata(source.parent.resolve(), metadata_request, document_stem=source.stem, document=source)
-    files = [] if found is AUTO_METADATA_DISABLED or found is None else (found if isinstance(found, list) else [found])
-    return defaults.collect([metadata_file_yaml(item) for item in files])
-
-
-def convert_direct(kind: str, source: Path, output: Path, engine_request: str | None,
-                   verbose: bool, debug: bool, apply_defaults: bool = False,
-                   metadata_request: list[str] | None = None) -> tuple[Path, bool, str]:
-    """Build a `.typ` or `.html` file with its own engine; none of Pandoc's discovery (metadata, preambles, filters,
-    fonts, margins, the stamp) applies, since none of it goes through Pandoc."""
-    import pdfmd_direct as direct
-    import pdfmd_direct.defaults as defaults
-    given = direct_defaults(source, metadata_request) if apply_defaults else {}
-    text = read_text_best_effort(source)
-    prelude = defaults.typst_prelude(given, text) if kind == "typst" and given else ""
-    changed = defaults.apply_to_html(given, text) if kind == "html" and given else text
-    copy: Path | None = None
-    if (prelude or changed != text) and given:
-        # beside the original, so what it refers to by a relative path is found; removed afterwards
-        copy = source.with_name(f".{source.stem}.pdfmd-defaults{source.suffix}")
-        copy.write_text(prelude + text if kind == "typst" else changed, encoding="utf-8")
-        vprint(verbose, f"AUTO APPLYDEFAULTS  {display_path(source)}: " + ", ".join(sorted(given)))
-    try:
-        return _convert_direct(kind, source, copy or source, output, engine_request, verbose, debug, direct,
-                               prelude.count("\n"), text)
-    finally:
-        if copy is not None:
-            copy.unlink(missing_ok=True)
-
-
-def _convert_direct(kind: str, source: Path, built: Path, output: Path, engine_request: str | None,
-                    verbose: bool, debug: bool, direct, offset: int, text: str) -> tuple[Path, bool, str]:
-    if kind == "typst":
-        fonts = fonts_directory() if managed_index() is not None and managed_index().faces else None
-        ok, reason = direct.compile_typst(engine_executable("typst"), built, output,
-                                          str(fonts) if fonts else None, lambda command, cwd: log_cmd(command, cwd, verbose))
-        if built != source:             # the message names the copy and counts the added lines: say it as the file is
-            reason = re.sub(re.escape(built.name) + r":(\d+)", lambda found: f"{source.name}:{max(1, int(found.group(1)) - offset)}", reason)
-            reason = reason.replace(built.name, source.name)
-            reason = re.sub(r"(?m)^(\s*)(\d+)( │)", lambda found: f"{found.group(1)}{max(1, int(found.group(2)) - offset)}{found.group(3)}", reason)
-        if ok:
-            record_engine("typst")
-        if ok:
-            vprint(verbose, f"AUTO TYPSTDIRECT  {display_path(source)}: compiled with Typst directly (no Pandoc)")
-        else:
-            print(f"WARN  {display_path(source)}: typst failed", file=sys.stderr)
-        return source, ok, reason
-    order = direct.html_attempts(text, engine_request, which, resolve_soffice)
-    browser = any(name in dict(order) for name in direct.BROWSER_NAMES)
-    advice = (" (a browser would: -e chrome, edge or chromium)" if browser
-              else "; no browser was found (Chrome, Chromium, Edge, Brave)")
-    if order and order[0][0] == "weasyprint" and direct.has_scripts(text):
-        print(f"WARN  {display_path(source)}: the page has scripts and WeasyPrint does not run them, so what they draw "
-              "is missing" + advice, file=sys.stderr)
-    if order and order[0][0] == "weasyprint" and direct.has_mathml(text):
-        print(f"WARN  {display_path(source)}: the page has MathML and WeasyPrint does not draw it, so its formulas "
-              "print as flat text" + advice, file=sys.stderr)
-
-    def failed(name: str, reason: str, remaining: list[str]) -> None:
-        fake = subprocess.CompletedProcess(args=[name], returncode=1, stdout="", stderr=reason)
-        report_engine_failure(display_path(source), name, fake, remaining, debug)
-
-    ok, reason, used = direct.render_html(built, output, order, soffice_convert=lambda src, out: run_soffice_convert(src, out, verbose),
-                                          on_failure=failed, log=lambda command, cwd: log_cmd(command, cwd, verbose))
-    if ok and used:
-        record_engine(str(used))
-    if ok:
-        vprint(verbose, f"AUTO HTMLDIRECT  {display_path(source)}: {used} (no Pandoc)")
-    return source, ok, reason
-
-
-def convert_qmd(source: Path, output: Path, target_format: str,
-                variables: list[str], pandoc_options: list[str]) -> tuple[Path, bool, str]:
-    """Render a Quarto document (.qmd) via the Quarto CLI, not Pandoc directly.
-
-    Pandoc has no idea what a .qmd file is -- it silently falls back to
-    treating it as plain Markdown, so executable code chunks (R/Python/Julia,
-    run through knitr or Jupyter) never get executed: figures don't render
-    and the chunk syntax leaks into the output as literal text. Quarto's own
-    CLI is what actually knows how to run those chunks, so .qmd is handed off
-    to it entirely; none of Pandoc's metadata-file/preamble/Lua-filter
-    machinery in this script applies here -- Quarto has its own, separate
-    project and metadata system.
-
-    NOTE: this path could not be exercised where this script was written (no
-    Quarto install available there) -- it follows Quarto's documented CLI,
-    but please flag anything that doesn't match your installed version.
-    """
-    quarto = which("quarto")
-    if not quarto:
-        return source, False, (
-            "Quarto was not found on PATH. Install it from https://quarto.org to render "
-            ".qmd files -- Pandoc alone cannot execute their R/Python/Julia code chunks, "
-            "which is why a plain Pandoc conversion silently drops figures and computed output."
-        )
-    if variables or pandoc_options:
-        print(f"WARN  {source}: -V and passthrough Pandoc options don't apply to Quarto "
-              "rendering and were ignored; use Quarto's own -P/-M flags instead", file=sys.stderr)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    # Quarto's own -o has historically wanted a bare filename in the source's
-    # directory, so render there and move the result to the real destination
-    # afterward (covers -o/--out pointing elsewhere, or --destination-cwd).
-    cmd = [quarto, "render", source.name, "--to", target_format, "-o", output.name]
-    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=source.parent)
-    rendered = source.parent / output.name
-    if result.returncode == 0 and rendered.exists() and rendered.resolve() != output.resolve():
-        rendered.replace(output)
-    if result.returncode == 0:
-        record_engine("quarto")
-    return source, result.returncode == 0, (result.stdout + result.stderr)[-3000:]
 
 
 # build_parser: lib/pdfmd_args (v3.33.40)
