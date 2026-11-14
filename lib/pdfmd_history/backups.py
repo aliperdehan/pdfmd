@@ -12,17 +12,16 @@ stand-in in `pdfmd.py` loads it on the first call; the first binding wins); the 
 `backup_sort_key`, `backup_target`, `build_notes_blocks`, `config_path`, `display_path`, `find_markdown`, `find_metadata`,
 `history_file`, `history_heading_pattern`, `history_module`, `is_pdfmd_notes`, `load_config`, `normalized_source`, `note_entry`,
 `pdfmd_build_notes`, `plan_scaffold`, `resolve_backup_options`, `resolve_stamp_options`, `sha256_text`, `stamp_line_pattern`,
-`update_build_notes` and `vprint`) are read as `core.X` when it runs. `backup_after_success` and `backup_pdf_after_success` were
-decorated with `pdfmd`'s `@timed`, which is defined far below the place where `pdfmd.py` can load this module: `_timed` is the same
-decorator looked up when the function is called. `history_module()` stays in `pdfmd.py` (other code calls it); the functions that
-`pdfmd.py`, `lib/pdfmd_report` or the tests call are reached through the stand-ins there.
+`update_build_notes` and `vprint`) are read as `core.X` when it runs. `backup_after_success` and `backup_pdf_after_success` are
+decorated with `@timed` from `pdfmd_base` (since v3.33.210; while `timed` was defined in `pdfmd.py`, below the place where
+`pdfmd.py` can load this module, a copy here, `_timed`, looked `core.timed` up at each call). `history_module()` stays in `pdfmd.py`
+(other code calls it); the functions that `pdfmd.py`, `lib/pdfmd_report` or the tests call are reached through the stand-ins there.
 """
 
 from __future__ import annotations
 
 import contextlib
 import filecmp
-import functools
 import io
 import json
 import os
@@ -38,16 +37,7 @@ except ImportError:                                # pragma: no cover -- incompl
     yaml = None
 
 from pdfmd_base import core
-
-
-def _timed(name):
-    """`core.timed(name)` for a function defined before `core.timed` exists: each call is wrapped when it is made."""
-    def decorate(function):
-        @functools.wraps(function)
-        def wrapper(*args, **kwargs):
-            return core.timed(name)(function)(*args, **kwargs)
-        return wrapper
-    return decorate
+from pdfmd_base import timed
 
 
 def entry_line(entry) -> str:
@@ -731,7 +721,7 @@ def backup_unchanged(previous: Path, current: Path) -> bool:
     return BACKUP_IGNORED_LINE_RE.sub("", old_text) == BACKUP_IGNORED_LINE_RE.sub("", new_text)
 
 
-@_timed("backup (source)")
+@timed("backup (source)")
 def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled: bool | None,
                          verbose: bool, cli_format: str | None = None, collect: "list[Path] | None" = None) -> None:
     """Snapshot md_path into its backup directory if --backup/
@@ -779,7 +769,7 @@ def backup_pdf_pattern(pdf: Path) -> re.Pattern:
     return re.compile(rf"^{re.escape(pdf.stem)}_\d{{8}}-\d{{6}}{_COUNTER}\.pdf$")
 
 
-@_timed("backup (PDF)")
+@timed("backup (PDF)")
 def backup_pdf_after_success(md_path: Path, pdf: Path, metadata_files: list[Path], cli_enabled: bool | None,
                              verbose: bool, when: datetime | None = None) -> Path | None:
     """Copy the PDF a build made into the backup folder of ``md_path`` (v3.32.42), when `backup` is on and `backup: {pdfs: N}` is not 0:

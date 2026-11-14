@@ -6,13 +6,13 @@ Moved out of `pdfmd.py` unchanged (v3.33.13, SPLIT.md), with `HF_FIELDS`, `HF_FO
 `LINKED_FILE_LIMIT`. `core` is the `pdfmd` module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the
 code uses (`POLISH_CLI`, `add_deflated_attachment`, `atomic_write_pdf`, `display_path`, `fence_after`) are read as `core.X` when it
 runs, and so is `core.pypdf`, a lazy loader there, so pypdf is never imported at the top here (the `from pypdf.generic import ...`
-lines stay inside the functions, as they were). `polish_pdf` was decorated with `pdfmd`'s `@timed`, which is defined far below the
-place where the package loads: `_timed` is the same decorator looked up at call time (`core.timed(name)(function)`).
+lines stay inside the functions, as they were). `polish_pdf` is decorated with `@timed` from `pdfmd_base` (since v3.33.210; while
+`timed` was defined in `pdfmd.py`, below the place where the package loads, a copy here, `_timed`, looked `core.timed` up at each
+call).
 """
 
 from __future__ import annotations
 
-import functools
 import logging
 import re
 import sys
@@ -27,16 +27,7 @@ if TYPE_CHECKING:     # only the annotations name it; the code reads core.pypdf
     import pypdf
 
 from pdfmd_base import core
-
-
-def _timed(name):
-    """`core.timed(name)` for a function defined before `core.timed` exists: each call is wrapped when it is made."""
-    def decorate(function):
-        @functools.wraps(function)
-        def wrapper(*args, **kwargs):
-            return core.timed(name)(function)(*args, **kwargs)
-        return wrapper
-    return decorate
+from pdfmd_base import timed
 
 
 HF_FIELDS = ("page", "pages", "header", "heading", "date", "title")
@@ -215,7 +206,7 @@ def polish_wanted() -> bool:
                 or options.get("attach_links") or options.get("info"))
 
 
-@_timed("polish PDF")
+@timed("polish PDF")
 def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> None:
     """Apply the requested finishing touches to the built ``pdf_path``; a failure leaves the PDF as it was."""
     options = core.POLISH_CLI

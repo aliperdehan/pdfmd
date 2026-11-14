@@ -13,14 +13,14 @@ protocol they belong to is described in `pdfmd.py`, above `CACHE_HANDSHAKE`, whi
 `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses (`ENGINE_FAMILY`, `LATEX_ENGINES`,
 `TECTONIC_SEARCH_ENV`, `frontmatter_value`, `log_cmd`, `office_packages`, `package_helper`, `chain_engine_failed` (since v3.33.71), `record_engine`,
 `report_engine_failure`, `run_probe`, `sha1_file`, `tex_argument`, `vprint` and `which`) are read as `core.X` when it runs;
-`run_probe` and `which` are patched by tests as `pdfmd.X`. `render_plot_requests` and `compile_tex_direct` were decorated with
-`pdfmd`'s `@timed`, which is defined far below the place where the package loads: `_timed` is the same decorator looked up at
-call time (`core.timed(name)(function)`). `json` and `concurrent.futures` stay imported inside `render_plot_requests`.
+`run_probe` and `which` are patched by tests as `pdfmd.X`. `render_plot_requests` and `compile_tex_direct` are decorated with
+`@timed` from `pdfmd_base` (since v3.33.210; while `timed` was defined in `pdfmd.py`, below the place where the package loads, a
+copy here, `_timed`, looked `core.timed` up at each call). `json` and `concurrent.futures` stay imported inside
+`render_plot_requests`.
 """
 
 from __future__ import annotations
 
-import functools
 import os
 import re
 import shutil
@@ -32,16 +32,7 @@ from tempfile import mkdtemp, mkstemp
 from textwrap import dedent
 
 from pdfmd_base import core
-
-
-def _timed(name):
-    """`core.timed(name)` for a function defined before `core.timed` exists: each call is wrapped when it is made."""
-    def decorate(function):
-        @functools.wraps(function)
-        def wrapper(*args, **kwargs):
-            return core.timed(name)(function)(*args, **kwargs)
-        return wrapper
-    return decorate
+from pdfmd_base import timed
 
 
 def is_latex_preamble(path: Path) -> bool:
@@ -491,7 +482,7 @@ def plot_recorded_inputs(fls: Path, roots: list[Path]) -> dict[str, str]:
     return found
 
 
-@_timed("plots")
+@timed("plots")
 def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Path, preamble: str,
                          engine: str, cwd: Path, env: dict | None, roots: list[Path],
                          verbose: bool, aliases: dict[str, list[str]] | None = None) -> tuple[int, int]:
@@ -569,7 +560,7 @@ AUX_CLEAN_SUFFIXES = (".aux", ".toc", ".out", ".lof", ".lot", ".bbl", ".blg", ".
                       ".fls", ".fdb_latexmk", ".log", ".pdf")
 
 
-@_timed("LaTeX (direct)")
+@timed("LaTeX (direct)")
 def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                        keep_aux: bool, verbose: bool, debug: bool,
                        aux_dir: Path | None = None, cwd: Path | None = None,

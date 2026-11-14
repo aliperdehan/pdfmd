@@ -15,13 +15,13 @@ module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd na
 `core.resolve_calibre`, `core.resolve_soffice` and `core.which` are patched by tests as `pdfmd.X`, and `pdfmd.run_calibre_convert`
 (re-exported here) is patched too, through `finish_convert_job`, which stays. `pdfmd_direct` is imported inside `run_browser_print`,
 so neither it nor `pdfmd_office` loads at start. The three functions that `pdfmd.py` decorated with `@timed` are decorated with
-`_timed`, which looks `core.timed` up when the function is called (`timed` is defined far below the place where the package loads).
+`@timed` from `pdfmd_base` (since v3.33.210; while `timed` was defined in `pdfmd.py`, below the place where the package loads, a
+copy here, `_timed`, looked `core.timed` up at each call).
 """
 
 from __future__ import annotations
 
 import atexit
-import functools
 import os
 import re
 import shutil
@@ -33,19 +33,10 @@ from pathlib import Path
 from tempfile import mkdtemp
 
 from pdfmd_base import core
+from pdfmd_base import timed
 
 
-def _timed(name):
-    """`core.timed(name)` for a function defined before `core.timed` exists: each call is wrapped when it is made."""
-    def decorate(function):
-        @functools.wraps(function)
-        def wrapper(*args, **kwargs):
-            return core.timed(name)(function)(*args, **kwargs)
-        return wrapper
-    return decorate
-
-
-@_timed("soffice")
+@timed("soffice")
 def run_soffice_convert(input_path: Path, output: Path, verbose: bool, target: str = "pdf") -> tuple[bool, str]:
     """Convert one file to PDF (or ``target``: doc, rtf, odt, txt, epub: v3.29.1) via headless LibreOffice, into ``output``.
 
@@ -270,7 +261,7 @@ def calibre_page_options(md_path: Path, metadata_files: list[Path], variables: l
     return options + authors
 
 
-@_timed("calibre")
+@timed("calibre")
 def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool) -> subprocess.CompletedProcess:
     """`ebook-convert` the HTML page into `output` (written beside the page first, so a failed run leaves no
     half-written PDF). Qt runs offscreen on macOS and Linux: no window, and no display needed on a server."""
@@ -406,7 +397,7 @@ def browser_page_css(md_path: Path, metadata_files: list[Path], variables: list[
             f"@page landscape {{ size: {points(height)} {points(width)} !important; }}\n")        # for markup: landscape, the same paper turned
 
 
-@_timed("browser print")
+@timed("browser print")
 def run_browser_print(html: Path, output: Path, engine: str, page_css: str, verbose: bool) -> subprocess.CompletedProcess:
     """Print the page with headless `engine` (chrome, chromium, edge, brave) into `output`: the page gets the paper and
     margins as `@page` and the print style of CALIBRE_CSS (Pandoc's own is for a screen). The browser writes into a scratch

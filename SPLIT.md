@@ -114,7 +114,7 @@ that code still in `pdfmd.py` reads bare when the move is made, in this order) w
 
 ### Wave 1: the pattern (one move per agent run; the strongest model)
 
-Between moves 1 and 2, not a move: the six `_timed` copies (lib/pdfmd_tex, pdfmd_bridge, pdfmd_attach, pdfmd_polish, pdfmd_assemble, pdfmd_history/backups.py) become `from pdfmd_base import timed`, a patch of its own; proof: the `--verbose` TIME lines are identical.
+Between moves 1 and 2, not a move: the six `_timed` copies (lib/pdfmd_tex, pdfmd_bridge, pdfmd_attach, pdfmd_polish, pdfmd_assemble, pdfmd_history/backups.py) become `from pdfmd_base import timed`, a patch of its own; proof: the `--verbose` TIME lines are identical; done in 3.33.210 (the ten functions are decorated with `pdfmd_base`'s `timed` directly, `import functools`, which only the copies used, left the six modules, and their docstrings no longer explain a copy; the notes of moves 12, 21, 24, 26, 33, 34 and 35 below still say what those versions did).
 
 #### 1. `pdfmd_base` (existing package, since 3.33.188): 16 definitions, 1 constants, ~198 lines; done in 3.33.209 (one plain import binds the 15 names `pdfmd.py` reads and `BUILD`, no stand-ins; the file header and the "no lib/" check stayed, the check now above that import)
 

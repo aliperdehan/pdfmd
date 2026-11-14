@@ -23,17 +23,16 @@ code uses are read as `core.X` when it runs: `ACCESSORY_DIRNAME`, `ASSEMBLED_COM
 patched by tests as `pdfmd.X`; `bundle_files`, `cache_root` and the three `strip_*_comments` are `pdfmd_attach`'s, `pdfmd_cache`'s
 and `pdfmd_comments`'s, read through pdfmd as before, and `yaml` is pdfmd's own optional import. `_RESOURCE_OWNER` (the document
 whose build holds the resources, so a nested call for it is a no-op) stays in `pdfmd.py` as state: `embedded_resources` reads and
-writes it as `core._RESOURCE_OWNER` where it had `global _RESOURCE_OWNER`. `write_assembled_markdown` was decorated with `pdfmd`'s
-`@timed`, which is defined far below the place where the package loads: `_timed` is the same decorator looked up at call time
-(`core.timed(name)(function)`). The comment above `EMBED_KINDS` that `embed_into_text`'s docstring points at stays in `pdfmd.py`
-with `EMBED_KINDS`.
+writes it as `core._RESOURCE_OWNER` where it had `global _RESOURCE_OWNER`. `write_assembled_markdown` is decorated with `@timed`
+from `pdfmd_base` (since v3.33.210; while `timed` was defined in `pdfmd.py`, below the place where the package loads, a copy here,
+`_timed`, looked `core.timed` up at each call). The comment above `EMBED_KINDS` that `embed_into_text`'s docstring points at stays
+in `pdfmd.py` with `EMBED_KINDS`.
 """
 
 from __future__ import annotations
 
 import base64
 import binascii
-import functools
 import hashlib
 import json
 import os
@@ -49,16 +48,7 @@ from tempfile import mkdtemp
 from .paths import confined_destination
 
 from pdfmd_base import core
-
-
-def _timed(name):
-    """`core.timed(name)` for a function defined before `core.timed` exists: each call is wrapped when it is made."""
-    def decorate(function):
-        @functools.wraps(function)
-        def wrapper(*args, **kwargs):
-            return core.timed(name)(function)(*args, **kwargs)
-        return wrapper
-    return decorate
+from pdfmd_base import timed
 
 
 PARTIAL_KEY = "pdfmd-partial"
@@ -174,7 +164,7 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
     return mark_assembled(joined, partial=partial)
 
 
-@_timed("assemble text")
+@timed("assemble text")
 def write_assembled_markdown(sources: list[Path], output: Path,
                              drop_later_front_matter: bool,
                              plan: "EmbedPlan | None" = None,

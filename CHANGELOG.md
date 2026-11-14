@@ -19,6 +19,61 @@ same commit as the change.
 
 ---
 
+## v3.33.210 — 2026-11-15
+
+Pre-edit state: commit `11b4f43`. Phase 2 of the split, wave 1, the step between moves 1 and 2 (not a move): **the six
+`_timed` copies give way to `pdfmd_base`'s `timed`**. `lib/pdfmd_tex`, `lib/pdfmd_bridge`, `lib/pdfmd_attach`,
+`lib/pdfmd_polish`, `lib/pdfmd_assemble` and `lib/pdfmd_history/backups.py` each had a `_timed(name)` of their own, written
+when their functions left `pdfmd.py` (3.33.13 to 3.33.38): `timed` was then defined in `pdfmd.py`, below the place where these
+packages load, so the copy wrapped each call in `core.timed(name)(function)` when it was made. Since 3.33.209 `timed` is
+`pdfmd_base`'s, there before any package loads and reading nothing when it decorates, so the ten functions take it directly:
+`from pdfmd_base import timed` below each module's `from pdfmd_base import core`, then `@timed(...)` with the step names unchanged
+(`plots`, `LaTeX (direct)`, `soffice`, `calibre`, `browser print`, `attach source`, `polish PDF`, `assemble text`,
+`backup (source)`, `backup (PDF)`). A line of its own, not `from pdfmd_base import core, timed`: `tests/test_split.py`
+(`SharedCore`) wants the statement that binds `core` to import it alone, and `scripts/split_move.py` writes that line on its own
+too. All by hand: the step is not a section move, so `split_spec` and `split_move` have nothing to do. Besides the six
+definitions:
+- each module's `import functools` went, which only the copy used (`pdfmd_tex` and `pdfmd_attach` keep their
+  `from functools import lru_cache`; `functools` loads at start all the same);
+- each module docstring explained the copy with "`timed` is defined far below the place where the package loads", which is
+  not so since 3.33.209: it now says the function is decorated with `pdfmd_base`'s `timed` and what the copy did until this
+  version;
+- SPLIT.md marks the step done. The phase 1 notes of moves 12, 21, 24, 26, 33, 34 and 35 there, which say the functions use
+  `_timed` (or that `timed` stayed in `pdfmd.py`), are left as they are: they record what those versions did, as 3.33.209 left
+  move 21's;
+- `pdfmd.py` changes only in `PDFMD_VERSION`.
+
+What is different: the wrapper is `pdfmd_base.timed`'s, made once when the module loads, where the copy made one at every call.
+Both wrap with `functools.wraps`, so each function's `__name__`, `__qualname__`, `__module__`, `__doc__` and `__wrapped__` are
+what they were (and `pdfmd.X` is what it was: the package's object, or for the two backups the stand-in); both read `BUILD["timer"]` when the function is called, and
+`pdfmd.BUILD` is `pdfmd_base.BUILD`, so `mock.patch.dict(pdfmd.BUILD, ...)`, the tests' way to the timer, reaches both. The copy
+looked `core.timed` up at each call, so a patched `pdfmd.timed` would have reached it: nothing patches `timed` (tests/, lib/,
+scripts/). And a call made with nothing bound (the module imported without pdfmd) now reaches the function itself, untimed,
+where the copy stopped at `core.timed` (`polish_pdf` then stops at `core.POLISH_CLI`). `lib/pdfmd_office/build.py` times
+`subprocess.run` with `core.timed(...)` inside a function, at call time: not a copy, unchanged.
+
+`pdfmd.py`: 16,955 lines before and after. Start-up: the same 205 modules after `import pdfmd` with `--version` (five of the
+six modules load at start, as before; `pdfmd_history.backups` does not); `scripts/pdfmd --version` interleaved with HEAD, 22 runs
+each, best / median 95.6 / 103.2 against 94.7 / 103.5 ms, and with the order swapped 95.2 / 103.5 against 97.0 / 103.2. Proof:
+`ruff --select F`; the ten functions called through their real wrappers, before and after, with the inner function swapped for
+a stand-in under a build timer: the same step each and the same metadata (the wrapper's own file is the one
+difference); the six modules import without pdfmd. 725 tests of 42 modules (the six packages' own and the features they
+serve, `test_build_time`, `test_build_log`, the always-run set and `test_split_tools`; `test_calibre` and
+`test_calibre_targets` without the two classes that run the real Calibre): one failure, `test_biber_direct`, which fails at HEAD
+too (Biber exits 25 on this machine after reading the `.bib`, so the citation stays `[fresh]`), 2 skipped. The real cache's build
+records unchanged but for one folder that a build of another project's document made during the run (its record names that
+document; the run's isolation check named it as outside the tests). `scripts/split_check.py` SAME on 36 checks, no BOTH FAILED,
+with six extra builds through the real call sites: `-e soffice` (`TIME soffice`), `--to doc` (`run_soffice_convert` from
+`finish_convert_job`; a non-PDF target prints no TIME lines), `-e calibre` and `-e chrome` with stand-ins named by
+`PDFMD_CALIBRE` and `PDFMD_BROWSER` that copy a ready PDF (no Calibre or browser runs), `--cache` (`TIME LaTeX (direct)`) and
+`--bookmarks` (`polish_pdf` at work); and SAME on 31 checks with a `--cache --cache-plots` build of a document that loads a
+scratch package on `TEXINPUTS` taking part in the picture cache (`PLOTS  stored 1 plot`, `TIME plots`; one earlier run differed
+only in that line's whole seconds, `(9 s)` against `(10 s)`, which `split_check`'s mask does not cover). The default builds give
+`backup (source)`, `backup (PDF)` and `polish PDF` (every PDF build), `assemble text` (`--assemble-only`, `--merge`) and
+`attach source` (`--attach-source`); the kept build records hold the same TIME steps in both trees. `--backup` itself cannot
+be an extra (`split_check` passes `--no-backup`): by hand through both trees, `--backup --bookmarks` gives the same TIME lines
+and a `BACKUP` line each.
+
 ## v3.33.209 — 2026-11-14
 
 Pre-edit state: commit `c6368f7`. Phase 2 of the split, wave 1, move 1: **the helpers every package uses move to

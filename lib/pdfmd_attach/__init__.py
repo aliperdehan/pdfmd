@@ -27,14 +27,13 @@ runs: `ACCESSORY_DIRNAME`, `ATTACH_FORMAT`, `ATTACH_MANIFEST`, `ATTACH_SOURCE`, 
 `pandoc_version` and `which` are patched by tests as `pdfmd.X`. pypdf is `core.pypdf`, a lazy loader there, so it is never
 imported at the top here (only the annotations name it); the `from pypdf.generic import ...` line and the imports of
 `pdfmd_tables`, `pdfmd_flat.keep` and `pdfmd_flat.asciify` stay inside the functions, as they were. `attach_source_after_success`
-was decorated with `pdfmd`'s `@timed`, which is defined far below the place where the package loads: `_timed` is the same
-decorator looked up at call time (`core.timed(name)(function)`).
+is decorated with `@timed` from `pdfmd_base` (since v3.33.210; while `timed` was defined in `pdfmd.py`, below the place where the
+package loads, a copy here, `_timed`, looked `core.timed` up at each call).
 """
 
 from __future__ import annotations
 
 import contextlib
-import functools
 import hashlib
 import io
 import json
@@ -57,16 +56,7 @@ if TYPE_CHECKING:     # only the annotations name it; the code reads core.pypdf
     import pypdf
 
 from pdfmd_base import core
-
-
-def _timed(name):
-    """`core.timed(name)` for a function defined before `core.timed` exists: each call is wrapped when it is made."""
-    def decorate(function):
-        @functools.wraps(function)
-        def wrapper(*args, **kwargs):
-            return core.timed(name)(function)(*args, **kwargs)
-        return wrapper
-    return decorate
+from pdfmd_base import timed
 
 
 def folder_options_in_force(md_path: Path) -> dict:
@@ -888,7 +878,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     return attachments, merged, manifest
 
 
-@_timed("attach source")
+@timed("attach source")
 def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path],
                                 metadata_files: list[Path], preamble_files: list[Path] | None,
                                 no_auto: list[str] | None, verbose: bool,
