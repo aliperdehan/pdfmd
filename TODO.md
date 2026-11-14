@@ -28,6 +28,7 @@ wait for an answer before any code.
 - [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
 - [ ] **decide** images in `--view` through the kitty graphics protocol (Ghostty, kitty, WezTerm), also display math; the pager conflict is open [3dm]
 - [ ] **decide** a Pandoc memory cap: a `pdfmd-options` key and `--setup` row passing `+RTS -M<n> -RTS`; default off or on, and the value [3en]
+- [ ] **decide** Text shorthands such as `+/-` -> ±, beside the `--`/`---` dashes: which set, the default, never inside code; postponed while the author weighs the list [D44]
 - [ ] **later** PlantUML as a diagram language next to mermaid, d2 and dot: not now (author, 2026-11-02: no second Java for it); pick up if asked [3en]
 - [ ] Build record: LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
 
@@ -136,6 +137,7 @@ is low priority. [3di]
 
 ## Before 4.0
 
+- [ ] **decide** `pdfmd.py`'s name once it is under 1,000 lines: a `pdfmd_cli` package (`core.py`, `__main__.py`) with `pdfmd.py` kept as a shim, or `__init__.py` [Q67]
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]
 - [ ] Windows test session on a second machine: fork + pull requests, the Mac session merges and bumps the version [3dp]
 - [ ] Tool paths per document and on the command line: the `tesseract-path`, `soffice-path` ... keys also as `pdfmd-options` and flags, so one document can pin another version of a tool [3dt]
@@ -182,6 +184,7 @@ is low priority. [3di]
 
 ## In other repositories
 
+- [ ] nulabreport, irspec: check that every approved review fix landed, collision handling included [D48]
 - [ ] inkmd: a quote right after a list is read as a paragraph; fix upstream, re-vendor [3ci]
 - [ ] nulabreport: grid tables cannot be kept whole (`labtabular`) [3cf]
 - [ ] nulabreport: `smiles: true` inside its `cache: {aux, plots}` in the three metadata files, +0.0.1, once the chemfig cache exists (approved) [3ec]
