@@ -19,6 +19,76 @@ same commit as the change.
 
 ---
 
+## v3.33.211 — 2026-11-15
+
+Pre-edit state: commit `6fa3a2e`. Phase 2 of the split, wave 1, move 2: **`pdfmd --edit` and `pdfmd --init-vscode` move to
+`lib/pdfmd_edit/command.py`**, a new module of the existing package `pdfmd_edit` (its `__init__` is the built-in editor),
+which `pdfmd.py` does not load at start: `VSCODE_TASKS`, `init_vscode_command`, `editor_command`, `tree_stamp`,
+`deliver_edited_pdf`, `edit_pdf_command`, `put_outside_blocks`, `source_carried`, `source_lost`, `edit_command`, and the
+three helpers of the build's stamp and history right below them, `gather_stamp_texts`, `stamp_scope_matches` and
+`part_digests`, text and docstrings unchanged. `scripts/split_move.py pdfmd_edit.command` moved the 13 statements, one
+stretch of `pdfmd.py` but for the pointer comment of `history_view_command` and the rest between `edit_command` and
+`gather_stamp_texts`, which stays; no comment block sits on any of them, so none was carried. It made 48 `core.NAME` rewrites
+and changed no `global` line; its self-check passed, and with the `core.` prefixes taken out the module's code is the old
+text line for line. It wrote the module with the imports the code needs (`hashlib`, `json`, `os`, `re`, `shlex`, `shutil`,
+`subprocess`, `sys`, `tempfile`, `time`, `datetime`, `Path`, `PurePosixPath`) and `from pdfmd_base import core`, and in
+`pdfmd.py`, after the last `DEFERRED_NAMES.update(...)`, the names table's first `names(...)` line,
+`names("pdfmd_edit.command", "put_outside_blocks source_carried source_lost")` (only the tests read these, as `pdfmd.X`), and
+stand-ins for the five that code staying in `pdfmd.py` calls bare: `edit_command` and `init_vscode_command` (`run_main`),
+`gather_stamp_texts` and `stamp_scope_matches` (`stamp_after_success`, `record_partial_history` and the PDF metadata of a
+LaTeX build; `lib/pdfmd_report` reads both as `core.X` when it runs, which is now the stand-in) and `part_digests`
+(`record_history`, `partial_names`). The four `__file__` of `edit_pdf_command`'s rebuild and `edit_command`'s rebuild and
+watch are `core.__file__`: `core` has no `__file__` of its own and passes the read to pdfmd, so it is `pdfmd.py`'s own path
+as before, whether it runs as a script, is imported by `scripts/pdfmd`, or is the wheel's or the zipapp's copy. By hand:
+-  `atomic_write_bytes` and `split_command`, which `pdfmd.py` no longer calls itself, stay in its
+  `from pdfmd_base import (...)`: lib/ reads them as `core.X` (the moved code; `pdfmd_native`, `pdfmd_flat`, `pdfmd_restore`,
+  `pdfmd_attach`, `pdfmd_assemble` and `pdfmd_serve` the first, `pdfmd_routing` and `pdfmd_view` the second) and the tests as
+  `pdfmd.X`. That line's `# noqa: E402` gains `F401` with that reason (`ruff --select F` named the two).
+-  `restore_target_name` (from `pdfmd_restore`) and `read_pdf_attachments` (from `pdfmd_attach`) are no longer called in
+  `pdfmd.py` either; both import statements carry `F401` already, and their comments, which say what is imported for tests
+  and lib/ only, now say so of these two (the first names `restore_target_name`; the second no longer counts
+  `read_pdf_attachments` among the names `pdfmd.py` calls).
+-  The module docstring is the tool's two lines and a paragraph on what the module holds.
+-  SPLIT.md marks the move done.
+
+What is different: `pdfmd.edit_command`, `pdfmd.init_vscode_command`, `pdfmd.gather_stamp_texts`, `pdfmd.stamp_scope_matches`
+and `pdfmd.part_digests` are stand-ins (`__name__` kept, `__doc__` names the module); the three table names are the module's
+own functions. Every successful build now loads `pdfmd_edit` and `pdfmd_edit.command` when it stamps (`stamp_scope_matches`
+decides the scope; seen for PDF, HTML and Word builds), about 0.45 ms with nothing else new (the standard modules they import
+are loaded already). The two "--edit needs the pdfmd_edit package" messages can no longer be reached: the stand-in loads
+`pdfmd_edit.command`, inside `pdfmd_edit`, so a lib/ without that package ends in the stand-in's ModuleNotFoundError. Phase 1
+moved such checks into their own packages too (`pdfmd_history/backups.py`, `pdfmd_tables/command.py`,
+`pdfmd_buildinfo/build.py`); left as it is.
+
+`pdfmd.py`: 16,955 -> 16,562 lines. Start-up: the same 205 modules after `import pdfmd` with `--version` (`pdfmd_edit` and
+`pdfmd_edit.command` are not among them); `scripts/pdfmd --version` interleaved with HEAD, 22 runs each, best / median 91.0 /
+93.4 against 91.6 / 94.4 ms, and with the order swapped 91.5 / 94.9 against 92.6 / 95.3 (`split_check`'s own: 91 / 93 against
+92 / 95; a second pair later, at a load of about 3.6, 92.4 / 94.9 against 92.3 / 95.8 and 93.3 / 102.3 against 94.3 / 101.8,
+and `split_check`'s second run, ten each, 96 / 106 against 95 / 99). Proof: `ruff --select F`; 449 tests of 23 modules pass,
+2 skipped (both because prompt_toolkit is installed): the move's list (`test_edit_pdf`, `test_standalone_source`), the
+features it serves (`test_edit`, `test_partial_history`, `test_partial_provenance`, `test_history`, `test_versions`,
+`test_report_build`, `test_attach`, `test_pdf_rewrite`, `test_build_time`; `test_command_words` and `test_atomic` for the two
+names whose import line changed), the always-run set and `test_split_tools`. The real cache's build records unchanged but for
+the folders of another project's document that a build outside the tests made during the run (the run's isolation check named
+them, and the real config's `known-lua.txt`, whose new line names that document's filter). An in-process run of the commands
+before and after the move, with `subprocess.Popen`, `time.sleep` and `pdfmd_edit.run` replaced by recorders that never start
+an editor or a viewer: the same 106 lines (the stamp helpers' answers; `--init-vscode` twice; `--edit` on a Markdown file
+with the built-in editor, with `--editor` (the editor's and the watcher's command lines, the watcher stopped), a new file,
+two files and a bad `--editor`; `--edit` on a PDF that carries its source, rebuilt for real: the rebuild's command line,
+`REPLACED`, the old PDF in `.backups/`, the source carried again; no change; a PDF without a source), the rebuild and the
+watch running `pdfmd.py` itself. `scripts/split_check.py` SAME on 40 checks, twice (the second on the final tree), no BOTH
+FAILED, with ten extra builds, in this order in the scratch copy of examples/: `--init-vscode` (`WROTE`), and again as a
+declared failure (the `NOTE` with the whole of `VSCODE_TASKS`, exit 1); `results.md --attach-source -o editme.pdf`, then
+`--edit editme.pdf` with `--editor` a stub that appends a paragraph (`edit_command`, `edit_pdf_command`, `editor_command`,
+`tree_stamp`, which sees the save, `put_outside_blocks`, the rebuild through `core.__file__`, `source_lost` and
+`source_carried`, `deliver_edited_pdf`: the PDF replaced, carrying the edit, the old one in `.backups/`), again with
+`--editor true` (no change), and on the default build's PDF, which carries no source (a declared failure); a
+`--stamp --stamp-store file` build of `parts/report.md`, a `--stamp-partial` build of its part 20 and `--history` of it
+(`part_digests` through `record_history` and `partial_names`, "nothing changed"; the two trees' `report.hst` differ only in
+the version and the `took` seconds, with the same `shas`); and `--edit results.md` with `--editor` a stub that waits 30 s
+(the watcher, `pdfmd.py --watch` through `core.__file__`, builds, and is stopped when the editor ends). Every default build
+reaches `gather_stamp_texts` and `stamp_scope_matches` (`-r book` through `lib/pdfmd_report`, `-b -j 2` in its workers).
+
 ## v3.33.210 — 2026-11-15
 
 Pre-edit state: commit `11b4f43`. Phase 2 of the split, wave 1, the step between moves 1 and 2 (not a move): **the six

@@ -132,7 +132,7 @@ Note: `lib/pdfmd_base` exists since 3.33.188 (`core`; `names_into` since 3.33.18
 
 Tests: `test_atomic`, `test_build_log`, `test_install_python`, `test_command_words`, `test_embedding`, `test_check_source`, `test_attach`, `test_odt_route`, `test_build_time`, `test_cache_location`.
 
-#### 2. `pdfmd_edit.command` (existing package): 12 definitions, 1 constants, ~408 lines
+#### 2. `pdfmd_edit.command` (existing package): 12 definitions, 1 constants, ~408 lines; done in 3.33.211 (a new module, three names in the table and five stand-ins, as the tool wrote them; `pdfmd.py` keeps importing `atomic_write_bytes`, `split_command`, `restore_target_name` and `read_pdf_attachments` for lib/ and the tests)
 
 Goes to `lib/pdfmd_edit/command.py`.
 
