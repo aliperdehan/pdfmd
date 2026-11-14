@@ -12,8 +12,9 @@ wait for an answer before any code.
 
 - [ ] No release until this queue is done, the GUI decided and built; CI runs on the branch `fixes-3.33.168` [D60]
 - [ ] 1. Split phase 2, wave 1 (base helpers, the `_timed` copies, edit, run, direct, build), then the full suite [3fi D29]
-- [ ] 2. After wave 1: lossless PDF shrinking, project metadata (`metadata-parents`, default 1 from the scaffold's folder), built-in fullcite and `bibliography-indent` [D42 D43 D51 D52 D53 D59]
-- [ ] 2b. After wave 1: TeX self-repair for five broken-TeX cases (`tex-repair: auto|off`), tests from the TeX log corpus, then the corpus to the Trash [3fm D70]
+- [ ] 2. After wave 1: lossless PDF shrinking, project metadata (`metadata-parents`, default 1 from the scaffold's folder), built-in fullcite and `bibliography-indent` [D42 D43 D51 D52 D53 D59 3fp]
+- [ ] 2b. After wave 1: TeX self-repair for six broken-TeX cases (`tex-repair: auto|off`), tests from the TeX log corpus, then the corpus to the Trash [3fm D70 3fo D74]
+- [ ] 2c. After wave 1 or later: wikilinks eat `[[x:y]]` filter markers; Typst fails on a metadata `csl:` with no citations; a relative `--lua-filter` is resolved from the metadata folder [3fp D75]
 - [ ] 3. Bibliography: every layer's sources add up and a clashing key warns; a `bib` auto kind, also for keys the named files lack [D60 D61]
 - [ ] 4. Wave 2, then the biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
 - [ ] 5. Waves 3 to 5 (the docstring becomes `docs/reference.md`, `--doc reference`), then the full suite [3fi D29]
@@ -31,6 +32,8 @@ wait for an answer before any code.
 - [ ] **decide** Text shorthands such as `+/-` -> ±, beside the `--`/`---` dashes: which set, the default, never inside code; postponed while the author weighs the list [D44]
 - [ ] **later** PlantUML as a diagram language next to mermaid, d2 and dot: not now (author, 2026-11-02: no second Java for it); pick up if asked [3en]
 - [ ] Build record: LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
+- [ ] **decide** a length for the document-level `indent:` (`indent: 0.5in`), not only on the `{indent=...}` div [3fp]
+- [ ] **decide** a way to run a named Lua filter before `--citeproc` (`lua-filter-before:` or a `pre:` list) [3fp]
 
 ## Features, agreed
 
@@ -57,6 +60,8 @@ wait for an answer before any code.
 - [ ] Fetch templates (pandoc-templates.org index, `owner/repo`, URL) and CSL styles by name or link, cached; generalises the Eisvogel line [3dl]
 - [ ] Install source: pdfmd records how it was installed; `pdfmd --upgrade`; `--version` says when a newer release exists [3dk]
 - [ ] Older audit leftovers, each to verify first: raw `<img>` in LaTeX builds, `\texttt` wrapping, unreachable remote SVG, a dialect-change warning, `--doctor` hint at `--deep` [Audit]
+- [ ] Typst: warn when a figure and its caption are taller than the text area (they run into the footer) [3fp]
+- [ ] A NOTE when, with no `title:`, the Typst template prints no author or date [3fp]
 
 ## Tables line, one feature line (3.31.0, full suite) [3dj]
 
