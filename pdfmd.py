@@ -1511,13 +1511,8 @@ from __future__ import annotations
 # unreliable 1.x history from those gaps, versioning restarts at 2.0.0 here
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
-def write_text_lf(path: Path, text: str) -> None:
-    """``path.write_text(text, encoding="utf-8", newline="\\n")``, which Python 3.9 lacks the `newline` of; all or nothing
-    (atomic_write_text)."""
-    atomic_write_text(path, text, newline="\n")
 
-
-PDFMD_VERSION = "3.33.208"
+PDFMD_VERSION = "3.33.209"
 import argparse
 import atexit
 import contextlib
@@ -1561,71 +1556,6 @@ from textwrap import dedent
 from typing import Callable, Iterator
 
 
-# -- Writing a file in place: through a temporary file in the same folder and os.replace() -------------------------
-# A file pdfmd rewrites (the document's BUILD NOTES, the config, the metadata, a restored source, a PDF it finishes) is written
-# whole to `.NAME.<pid>.<random>.part` beside it and then renamed over it: a crash, a full disk or ^C half-way leaves the old
-# file as it was (and the temporary file is removed). A symlink is written through, as write_text() does (the link stays); the
-# mode of the file it replaces is kept; text is written as write_text() would (newline=None: the platform's, "\n" for
-# write_text_lf). Not used for scratch files in a temporary folder, nor for a cache that is only ever replaced whole.
-@contextmanager
-def atomic_file(path: Path) -> Iterator[Path]:
-    """The path of a temporary file beside ``path`` to write into; on leaving the block it is renamed over ``path``, or removed
-    when the block raised (``path`` is then untouched)."""
-    path = Path(path)
-    target = Path(os.path.realpath(path)) if path.is_symlink() else path
-    temporary = target.with_name(f".{target.name}.{os.getpid()}.{os.urandom(4).hex()}.part")
-    try:
-        yield temporary
-        try:
-            shutil.copymode(target, temporary)
-        except OSError:
-            pass                                          # a new file: the umask's mode, as the open() gave it
-        os.replace(temporary, target)
-    except BaseException:
-        try:
-            temporary.unlink()
-        except OSError:
-            pass
-        raise
-
-
-def atomic_write_text(path: Path, text: str, encoding: str = "utf-8", newline: str | None = None) -> None:
-    """``Path.write_text(text, encoding=...)`` (``newline`` as open() takes it), all or nothing."""
-    with atomic_file(path) as temporary:
-        with open(temporary, "x", encoding=encoding, newline=newline) as handle:
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-
-
-def atomic_write_bytes(path: Path, data: bytes) -> None:
-    """``Path.write_bytes(data)``, all or nothing."""
-    with atomic_file(path) as temporary:
-        with open(temporary, "xb") as handle:
-            handle.write(data)
-            handle.flush()
-            os.fsync(handle.fileno())
-
-
-def atomic_write_pdf(writer, path: Path) -> None:
-    """A pypdf writer's document over ``path``, all or nothing."""
-    with atomic_file(path) as temporary:
-        with open(temporary, "xb") as handle:
-            writer.write(handle)
-            handle.flush()
-            os.fsync(handle.fileno())
-
-
-def own_python_folder() -> Path:
-    """Where `pdfmd --install` puts Python packages when the Python it runs from is managed by the system (PEP 668:
-    Homebrew, Debian), one folder per Python version, beside pdfmd's other tools (data_root())."""
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
-    return base / "pdfmd" / "python" / f"{sys.version_info[0]}.{sys.version_info[1]}"
-
-
 # A checkout keeps the pdfmd_* packages in lib/ beside this file; an installed copy has them in site-packages and a zipapp at
 # its root, where there is no lib/ to add. Resolved, so the symlink ~/dev/python-projects/pdfmd.py finds the real lib/.
 try:
@@ -1634,6 +1564,15 @@ try:
         sys.path.insert(0, str(_checkout_lib))
 except (OSError, RuntimeError):
     pass
+
+# pdfmd.py needs its packages from 3.33 on (the author, 2026-11-09): a copy without lib/ stops here and says why.
+if importlib.util.find_spec("pdfmd_comments") is None:
+    raise SystemExit("pdfmd: this pdfmd.py has no lib/ folder beside it, and the pdfmd_* packages it needs are not "
+                     "installed; keep pdfmd.py together with its lib/ folder, or install pdfmd: pipx install pdfmd-cli")
+
+from pdfmd_base import (BUILD, atomic_write_bytes, atomic_write_pdf, atomic_write_text, natural_key, noted,  # noqa: E402
+                        own_python_folder, read_text_best_effort, read_text_or_none, record_note, sha1_file, sha256_text,
+                        split_command, timed, vprint, write_text_lf)
 
 # behind the Python's own packages, before the optional ones below are imported
 try:
@@ -1709,11 +1648,6 @@ def __getattr__(name: str):
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-
-# pdfmd.py needs its packages from 3.33 on (the author, 2026-11-09): a copy without lib/ stops here and says why.
-if importlib.util.find_spec("pdfmd_comments") is None:
-    raise SystemExit("pdfmd: this pdfmd.py has no lib/ folder beside it, and the pdfmd_* packages it needs are not "
-                     "installed; keep pdfmd.py together with its lib/ folder, or install pdfmd: pipx install pdfmd-cli")
 
 import pdfmd_base  # noqa: E402
 pdfmd_base.bind(sys.modules[__name__])      # every package's `core`, before any of them is imported; the first binding wins
@@ -2889,13 +2823,6 @@ def headers_as_metadata(cmd: list[str]) -> list[str]:
     for number, name in enumerate(files, 1):
         result += ["-M", f"pdfmd-header-file-{number}={name}"]
     return [*result, "--lua-filter", str(merge)]
-
-
-def read_text_best_effort(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8-sig")
-    except (OSError, UnicodeDecodeError):
-        return ""
 
 
 @contextmanager
@@ -4499,15 +4426,6 @@ ANSI_WIDTH_ENV, ANSI_COLOR_ENV, ANSI_LINKS_ENV = "PDFMD_ANSI_WIDTH", "PDFMD_ANSI
 ANSI_FALLBACK_WIDTH = 120                                  # no terminal and no --width
 # (the --view reader: its child arguments, stdin and sources, the pager and terminal_view moved to lib/pdfmd_view, v3.33.16)
 # ansi_width_argument, ansi_columns, ansi_colour_on, ansi_math, ansi_document_text, ansi_finish and ansi_without_pandoc: lib/pdfmd_ansi/cli.py (v3.33.6)
-
-
-def split_command(text: str) -> list[str]:
-    """A command line typed by a person (`$PAGER`, `--editor`) as words. POSIX rules eat the backslashes of a Windows path
-    (`C:\\Tools\\less.exe` -> `C:Toolsless.exe`), so on Windows the backslashes stay and only the quotes around a word go."""
-    if os.name != "nt":
-        return shlex.split(text)
-    return [word[1:-1] if len(word) > 1 and word[0] == word[-1] and word[0] in "\"'" else word
-            for word in shlex.split(text, posix=False)]
 
 
 # Engines are tried in this order only when the user did not request one.
@@ -9691,23 +9609,7 @@ def timing_module():
         return None
 
 
-# begin_timer: lib/pdfmd_buildinfo/build.py (v3.33.23); `timed` below stays here, 15 definitions apply it at import
-
-
-def timed(name):
-    """Decorator: the call is a step of the build's timer. ``name`` is the step's name, or a function of (args, kwargs) that
-    gives it, or None for a call that does no work of its own (it is then not a step)."""
-    def decorate(function):
-        @functools.wraps(function)
-        def wrapper(*args, **kwargs):
-            timer = BUILD.get("timer")
-            step = name(args, kwargs) if callable(name) and timer is not None else name
-            if timer is None or step is None:
-                return function(*args, **kwargs)
-            with timer.step(step):
-                return function(*args, **kwargs)
-        return wrapper
-    return decorate
+# begin_timer: lib/pdfmd_buildinfo/build.py (v3.33.23)
 
 
 # resolve_build_time and attach_time: lib/pdfmd_buildinfo/build.py (v3.33.23)
@@ -9733,43 +9635,6 @@ def time_label(result) -> str:
 BUILD_LOG_CLI: str | None = None
 # BUILD_LOG_MODES: lib/pdfmd_args (v3.33.40)
 # BUILD_LOG_KEEP, BUILD_LOG_KILOBYTES and record_module: lib/pdfmd_buildinfo/build.py (v3.33.23)
-
-
-def record_note(text: str) -> None:
-    """Add lines to the record of the build that is running (nothing when there is none)."""
-    lines = BUILD.get("record")
-    if lines is not None and text:
-        lines.extend(text.rstrip("\n").split("\n"))
-
-
-def vprint(shown: bool, *args, **kwargs) -> None:
-    """print() for a line that only --verbose shows: on the console when ``shown``, and always in the record of the build
-    (the first step of `emit`: the sites that print under --verbose go through here, the chatter ladder turns it into
-    emit(level, id, text))."""
-    if shown:
-        print(*args, **kwargs)
-    else:
-        record_note(str(kwargs.get("sep", " ")).join(str(item) for item in args))
-
-
-def noted(label, engine: bool = False):
-    """Decorator: what a subprocess answered (exit code, stderr, stdout) goes into the record of the build; with
-    ``engine``, the label also joins the engines the build tried."""
-    def decorate(function):
-        @functools.wraps(function)
-        def wrapper(*args, **kwargs):
-            result = function(*args, **kwargs)
-            if isinstance(result, subprocess.CompletedProcess):
-                name = label(args, kwargs) if callable(label) else label
-                if engine and name not in BUILD["tried"]:
-                    BUILD["tried"].append(name)
-                record_note(f"----- {name}: exit {result.returncode} -----")
-                for stream, text in (("stderr", result.stderr), ("stdout", result.stdout)):
-                    if isinstance(text, str) and text.strip():
-                        record_note(f"[{stream}]\n{text.strip()}")
-            return result
-        return wrapper
-    return decorate
 
 
 # _RecordTee, build_log_mode_word, resolve_build_log, build_record_folders and BuildRecorder: lib/pdfmd_buildinfo/build.py (v3.33.23)
@@ -11096,12 +10961,6 @@ def parts_setting(md_path: Path, metadata_files: list[Path]) -> str | None:
 # parts_directory: lib/pdfmd_parts/__init__.py (v3.33.30)
 
 
-def natural_key(name: str) -> list:
-    """Sort key where digit runs compare as numbers (2-x < 10-y)."""
-    return [int(piece) if index % 2 else piece.casefold()
-            for index, piece in enumerate(re.split(r"(\d+)", name))]
-
-
 # collect_parts to select_parts_and_sections: lib/pdfmd_parts/__init__.py (v3.33.30)
 
 
@@ -12057,10 +11916,6 @@ def resolve_embed(md_path: Path, metadata_files: list[Path],
 
 
 # EmbedPlan: lib/pdfmd_assemble (v3.33.38)
-
-
-def sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def normalized_source(text: str) -> str:
@@ -13065,7 +12920,6 @@ def safe_stem(name: str) -> str:
 STRICT_CLI: bool | None = None             # --strict / --no-strict (set in main)
 ENGINE_CLI: str | None = None              # -e as given ("" a bare -e), for lib/pdfmd_chain's pinned engine (set in main)
 ENGINE_FALLBACK_CLI: str | None = None     # --engine-fallback MODE (lib/pdfmd_chain; set in main)
-BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": [], "partial": None, "root": None, "timer": None, "record": None, "tried": [], "chain": None}     # what built the file convert_one is working on
 
 
 def record_engine(engine: str, failed: list[str] | tuple[str, ...] = ()) -> None:
@@ -13726,13 +13580,6 @@ def kpsewhich_path(name: str) -> Path | None:
     return Path(found[0]) if found else None
 
 
-def read_text_or_none(path: Path | None) -> str | None:
-    try:
-        return path.read_text(encoding="utf-8", errors="replace") if path else None
-    except OSError:
-        return None
-
-
 @lru_cache(maxsize=None)
 def engine_version_line(engine: str) -> str:
     program = engine
@@ -13749,13 +13596,6 @@ def typst_version() -> tuple[int, ...]:
     """The version of the `typst` on PATH, (0,) when there is none or it says something else."""
     found = re.search(r"(\d+(?:\.\d+)+)", engine_version_line("typst"))
     return tuple(int(part) for part in found.group(1).split(".")) if found else (0,)
-
-
-def sha1_file(path: Path) -> str | None:
-    try:
-        return hashlib.sha1(path.read_bytes()).hexdigest()
-    except OSError:
-        return None
 
 
 # tex_tree_stamp: lib/pdfmd_tex (v3.33.36)

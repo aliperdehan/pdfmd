@@ -8,8 +8,8 @@ the code uses (`AutoLog`, `BUILD`, `BUILD_LOG_CLI`, `BUILD_TIME_CLI`, `LOCAL_CAC
 `cache_location`, `cache_root`, `config_options`, `display_path`, `engine_label`, `engine_version_line`, `find_markdown`,
 `first_pdfmd_option`, `option_flag`, `option_flag_number`, `pandoc_version`, `prepare_cache_root`, `record_note`, `safe_stem`,
 `timing_module` and `which`) are read as `core.X` when it runs. `BUILD_LOG_CLI`, `BUILD_TIME_CLI` and `TIME_FORMAT_CLI` are rebound by
-`main`, so they stay in `pdfmd.py`; `timed` stays there too, because 15 definitions apply it as a decorator when the file is loaded,
-and so does `timing_module`, which `pdfmd.py` calls itself. `core.cache_root`, `core.config_options`, `core.pandoc_version` and
+`main`, so they stay in `pdfmd.py`; `timed`, which definitions there apply as a decorator when the file is loaded, is in
+`pdfmd_base` (v3.33.209), which `pdfmd.py` imports at start, and `timing_module`, which `pdfmd.py` calls itself, stays. `core.cache_root`, `core.config_options`, `core.pandoc_version` and
 `core.which` are patched by tests as `pdfmd.X`. `pdfmd.py` starts a record as `load_package("pdfmd_buildinfo.build").BuildRecorder.start(...)`:
 a class attribute, which a stand-in (a function) does not have.
 """

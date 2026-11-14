@@ -19,6 +19,62 @@ same commit as the change.
 
 ---
 
+## v3.33.209 — 2026-11-14
+
+Pre-edit state: commit `c6368f7`. Phase 2 of the split, wave 1, move 1: **the helpers every package uses move to
+`lib/pdfmd_base`**, appended to its `__init__.py` below `core`: `write_text_lf`, `atomic_file`, `atomic_write_text`,
+`atomic_write_bytes`, `atomic_write_pdf`, `own_python_folder`, `read_text_best_effort`, `split_command`, `timed`,
+`record_note`, `vprint`, `noted`, `natural_key`, `sha256_text`, `read_text_or_none`, `sha1_file` and the dictionary `BUILD`,
+from eleven places in `pdfmd.py`, text and docstrings unchanged. `scripts/split_move.py pdfmd_base --import-at-start` moved
+the 17 statements (0 `core.NAME` rewrites, no table line; its self-check passed), added the imports they need
+(`contextlib`, `pathlib`, `typing`, `functools`, `hashlib`, `os`, `re`, `shlex`, `shutil`, `subprocess`, `sys`, all loaded
+at start already) and bound `BUILD`, `noted`, `own_python_folder` and `timed` with a plain import above the first statement
+that needs one (the `own_python_folder()` block). By hand:
+- The 21 comment lines it carried with `write_text_lf` are `pdfmd.py`'s own header ("Versioned from here on", "BEFORE EDITING
+  THIS FILE", the 2.0.0 restart), which only happened to sit on that definition: they are back in `pdfmd.py`, byte for byte,
+  between `from __future__ import annotations` and `PDFMD_VERSION`; `write_text_lf` had no comment of its own.
+- The 6 lines carried with `atomic_file` ("Writing a file in place ...") are the banner of the section of the atomic
+  writes, and everything under it moved (`atomic_file` and the three `atomic_write_*`), so it moved with them, as phase 1
+  moved a banner whose whole section moved (3.33.30 `pdfmd_parts`, 3.33.35 `pdfmd_install`, 3.33.36 `pdfmd_tex`).
+- The tool gave the other twelve functions stand-ins (`deferred("pdfmd_base", ...)`); they are bound with the same plain
+  import instead, one `from pdfmd_base import (...)` for the 15 names `pdfmd.py` reads and `BUILD` (`atomic_file` is used only
+  inside the package). A stand-in exists to load a package on first use (`deferred`'s docstring; phase 1, step 6: a package
+  loaded at start is re-exported plainly), and `pdfmd_base` loads at every start, so a stand-in would defer nothing and add an
+  `importlib.import_module` to every call: measured 1.5 against 0.7 us for `vprint`, which has more than 50 call sites, and 2.8
+  against 1.6 us for `natural_key`, a sort key. SPLIT.md's phase 2 rule allows the plain import for `pdfmd_base` only, and
+  move 1's note calls it the one move that binds names that way. `pdfmd.X` is now the function itself, with its signature,
+  `__wrapped__` and `__module__`.
+- The "no lib/" check (`find_spec("pdfmd_comments")`, its comment and message unchanged) moved from above
+  `import pdfmd_base` to right above the new import, below the block that puts `lib/` on `sys.path`: otherwise a `pdfmd.py`
+  without its `lib/` would end in a ModuleNotFoundError traceback (`tests/test_lua_missing.py`, `NoPackages`). The check now
+  runs before `own_python_folder()` puts pdfmd's own Python folder on `sys.path`; that folder holds only what
+  `pdfmd --install` gets with pip (`INSTALL_SPECS`, batchocr), never the `pdfmd_*` packages, so the answer is the same.
+- The comment "`timed` below stays here, 15 definitions apply it at import" next to `begin_timer`'s pointer lost that clause,
+  and `lib/pdfmd_buildinfo/build.py`'s docstring, which said `timed` stays in `pdfmd.py`, says it is in `pdfmd_base`. The
+  module docstring of `pdfmd_base` names the helpers it now holds. SPLIT.md: move 1 is marked done.
+
+`BUILD` is read directly by the moved `timed`, `noted` and `record_note`, not as `core.BUILD`, although SPLIT.md's trap list
+names those calls: nothing rebinds `BUILD` (its one binding was `pdfmd.py`'s; `pdfmd.py` changes it with `.clear()` and
+`.update()`, the tests with `mock.patch.dict` and item sets, `lib/pdfmd_report` reads `core.BUILD`), so `pdfmd.BUILD`,
+`core.BUILD` and `pdfmd_base.BUILD` are one dictionary and every patch reaches the moved code. A second copy of `pdfmd.py` in
+one process (a test loads one) now shares `BUILD` with the first, as it shares every package. `pdfmd.py`: 17,115 -> 16,955
+lines. Start-up: the same 205 modules after `import pdfmd` with `--version`; `scripts/pdfmd --version` interleaved with HEAD
+on a machine at a load of about 12, best 236.5 against 234.0 ms, median 279.5 against 271.4 ms (22 runs each), and
+`-X importtime` puts `pdfmd_base` itself at about 0.5 ms (0.3 to 0.45 before); split_check's own runs, one tree after
+the other at a lower load, 142 / 145 against 149 / 154 ms (best / median of ten). Proof: `ruff --select F`; 587 tests of 25
+modules pass, 3 skipped (move 1's list, the always-run set, `test_split_tools`, `test_lua_missing`,
+`test_ranking_generated`, `test_polish`, `test_native`, `test_flat`), the real cache's build records unchanged (the run's
+isolation check named the real config's `known-lua.txt`, which a build of another project in another folder appended to
+during the run: its new lines name a filter and folders that no test uses);
+`scripts/split_check.py` SAME on 36 checks, no BOTH FAILED, with six extra builds that reach the moved code through its
+callers in `lib/`: `-e inkmd` (`pdfmd_native`: `atomic_write_bytes`, then `atomic_write_pdf` for the title), `--to ascii` of
+`scripts.md` (`pdfmd_flat`: `atomic_write_bytes`, which only a document with non-ASCII text reaches), `--to ansi`
+(`pdfmd_ansi`: `write_text_lf`), `--restore` of the attached-source PDF (`pdfmd_restore`: its atomic writes), and a LaTeX build of `lecture.md` followed by `--last-build`, which prints the record
+that `record_note`, `vprint` and `noted` wrote (`----- lualatex: exit 0 -----`; the default logs show only the console).
+`own_python_folder` runs at every start and `timed` gives every default build's TIME lines; `split_command` (editor, pager,
+`$PDFMD_BATCHOCR`) and the pip branch of `own_python_folder` (network) have no build here: `test_command_words` and
+`test_install_python` cover them.
+
 ## v3.33.208a — 2026-11-13
 
 Pre-edit state: commit `1c1f60e`. Tests only, from CI round 12. `tests/test_docs_consistency.py` (`LiveBoundary`, 3.33.194) read README.md without `encoding="utf-8"`, so the Windows jobs decoded it as cp1252 and the test errored; it now names the encoding. `tests/test_serve.py` (`test_cli_preview_keeps_unicode_separators_before_images`, 3.33.193) required `data-pos` on the `<p>` around the image, which is where Pandoc 3.13 puts it; Pandoc 3.1.3 puts it on the `<img>`, with the image itself intact, so the test now accepts either and still fails on a cut image. No shipped code changed.
