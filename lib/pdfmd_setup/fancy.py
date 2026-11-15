@@ -253,6 +253,13 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
                     else:
                         state["message"] = "A non-negative whole number, please."
                         continue
+                elif setting.check == "parents":
+                    from pdfmd_metadata import parse_depth
+                    try:
+                        value = parse_depth(value)
+                    except SystemExit as error:
+                        state["message"] = str(error)
+                        continue
                 elif setting.check == "count":
                     if value.lower() == "all":
                         value = "all"

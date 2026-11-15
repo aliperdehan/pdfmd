@@ -217,6 +217,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "seed-labels": "options.seed-labels", "seed-calc": "options.seed-calc",
     "metadata-precedence": "options.metadata-precedence",
     "metadata-append": "options.metadata-append",
+    "metadata-parents": "options.metadata-parents",
     "path-style": "options.path-style", "path-up": "options.path-up",
     "found-style": "options.found-style", "ok-delimiter": "options.ok-delimiter",
     "rewrite": "options.rewrite", "rewrite-name": "options.rewrite-name", "rewrite_name": "options.rewrite-name",

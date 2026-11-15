@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.230"
+PDFMD_VERSION = "3.33.231"
 import argparse
 import atexit
 import contextlib
@@ -2085,7 +2085,7 @@ def resource_path_option(document_directory: Path, pandoc_cwd: Path,
             extra.append(real_directory)
     for metadata in metadata_files or []:                      # a kit's own folder (its csl and bibliography are found by name),
         folder = KIT_METADATA.get(metadata)                    # a folder layer's and the global metadata's: they do not move the cwd
-        if folder is None and (is_folder_metadata(metadata) or is_global_metadata(metadata)):
+        if folder is None and (is_folder_metadata(metadata) or is_global_metadata(metadata) or deferred("pdfmd_metadata", "is_parent_metadata")(metadata)):
             folder = metadata.parent
         if folder is not None and folder not in extra and folder != pandoc_cwd:
             extra.append(folder)
@@ -6280,12 +6280,12 @@ PICTURE_FORMATS = ("pdf", *PICTURE_ONLY)
 # office_render_fragments, office_convert_asset and init_reference: lib/pdfmd_office/build.py (v3.33.27)
 
 
-def config_report(init: bool = False) -> bool:
+def config_report(init: bool = False, document: Path | None = None, no_auto=None, metadata_request=None) -> bool:
     """--show-config / --init-config."""
     path = config_path()
     if path is None:
         print("The config file is switched off (PDFMD_CONFIG is empty).")
-        return True
+        return deferred("pdfmd_metadata", "metadata_sources")(document, no_auto, metadata_request) if not init else True
     if init:
         if path.exists():
             print(f"{path} exists already; left alone.")
@@ -6305,7 +6305,7 @@ def config_report(init: bool = False) -> bool:
             print(f"  {key}: {data[key]}")
     if config_root().is_dir():
         print(f"state kept beside it: {config_root()}")
-    return True
+    return deferred("pdfmd_metadata", "metadata_sources")(document, no_auto, metadata_request)
 
 
 def migrate_state(old: Path, new: Path) -> None:
@@ -6796,7 +6796,7 @@ def document_preambles(md_path: Path, pandoc_options: list[str], no_auto: list[s
     """The preambles of a document: the ones found beside it (not for off or explicit-only) and the ones it names (not for off)."""
     found = [] if discovery_disabled(no_auto, "preamble") else find_preambles(md_path.parent, md_path.stem, pandoc_options)
     named = [] if auto_disabled(no_auto, "preamble") else frontmatter_extra_preambles(md_path, metadata_files)
-    return found + named
+    return deferred("pdfmd_metadata", "with_parent_preambles")(found, md_path, pandoc_options, no_auto, metadata_files) + named
 
 
 class AutoLog:
@@ -10368,10 +10368,10 @@ def pandoc_metadata_order(metadata_files: list[Path]) -> list[Path]:
     extra = next((path for path in metadata_files if is_global_metadata(path)), None)
     supplied = [path for path in metadata_files if path != extra and path in KIT_METADATA]            # a kit's defaults, in its order
     folders = [path for path in metadata_files if path != extra and path not in KIT_METADATA and is_folder_metadata(path)]       # nearest first
-    local = [path for path in metadata_files if path != extra and path not in KIT_METADATA and not is_folder_metadata(path)]
+    parents, local = deferred("pdfmd_metadata", "parent_metadata_order")(metadata_files, extra)
     if len(local) > 1 and metadata_precedence() == "first":
         local.reverse()
-    return [*([extra] if extra is not None else []), *supplied, *reversed(folders), *local]
+    return [*([extra] if extra is not None else []), *supplied, *reversed(folders), *parents, *local]
 
 
 def metadata_files_by_priority(metadata_files) -> list[Path]:
@@ -10395,6 +10395,7 @@ def find_metadata(directory: Path, requested: list[str] | None, report: bool = F
     if requested is None and found is not AUTO_METADATA_DISABLED:
         extra = chosen_global_metadata(document, [found] if isinstance(found, Path) else list(found or []))
         folders = folder_metadata_files(str(directory.resolve()))          # the folders' own, between the files and the global
+        found = deferred("pdfmd_metadata", "with_metadata_parents")(found, directory, document, report, document_class, document_stem, discover, folders, extra)
     supplied: list[Path] = []
     if kits and document is not None and found is not AUTO_METADATA_DISABLED:
         here = [*(found if isinstance(found, list) else [found] if found is not None else []), *folders,
@@ -10409,12 +10410,11 @@ def find_metadata(directory: Path, requested: list[str] | None, report: bool = F
 
 def find_local_metadata(directory: Path, requested: list[str] | None, report: bool = False,
                         document_class: str | None = None,
-                        document_stem: str | None = None) -> Path | list[Path] | object | None:
+                        document_stem: str | None = None, search_dirs: list[Path] | None = None) -> Path | list[Path] | object | None:
     """Choose metadata files, supporting explicit stacks and automatic discovery."""
     if requested == []:
         return AUTO_METADATA_DISABLED
-    search_dirs = accessory_directories(directory, document_stem)
-    if requested is None and document_stem:
+    if search_dirs is None and requested is None and document_stem:
         unpacked = directory / f"{document_stem}{UNPACKED_SUFFIX}"
         unpacked_yaml = (sorted([*unpacked.glob("*.yaml"), *unpacked.glob("*.yml")],
                                 key=lambda item: natural_key(item.name)) if unpacked.is_dir() else [])
@@ -10422,6 +10422,7 @@ def find_local_metadata(directory: Path, requested: list[str] | None, report: bo
             # The folder --unpack made for this document holds ITS metadata,
             # in the order it was merged in: nothing else is guessed at.
             return order_metadata(unpacked_yaml)
+    search_dirs = accessory_directories(directory, document_stem) if search_dirs is None else search_dirs
     if requested is not None:
         if requested == ["all"]:
             candidates = [item for folder in search_dirs

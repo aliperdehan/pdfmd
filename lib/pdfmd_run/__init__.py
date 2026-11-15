@@ -361,7 +361,8 @@ def run_main() -> None:
     if args.init_vscode:
         raise SystemExit(core.init_vscode_command(args))
     if args.show_config or args.init_config:
-        raise SystemExit(0 if core.config_report(init=args.init_config) else 1)
+        raise SystemExit(0 if core.config_report(init=args.init_config, document=args.path[0] if args.path else None,
+                                                no_auto=args.no_auto, metadata_request=args.metadata_file) else 1)
     if args.presets:
         raise SystemExit(0 if core.presets_report(args.path[0] if args.path else None) else 1)
     if args.kits is not None:

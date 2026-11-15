@@ -19,6 +19,37 @@ same commit as the change.
 
 ---
 
+## v3.33.231 — 2026-11-16
+
+Pre-edit state: commit `b2c71f5`. **Visible project metadata above a document is now discovered** (TODO item 2, metadata;
+decisions D43, D51 and D60). Previously `project/report/doc.md` ignored `project/metadata/`, although `.pdfmd/` settings
+walked upwards. `pdfmd-options: {metadata-parents: 1}` is the new default: count parent folders above the scaffold's folder
+for a scaffold or a part, otherwise above the document's folder, including folders without metadata. **This changes the
+default** for existing documents whose parent has `metadata/`; turn it off with `metadata-parents: 0`. `all` or any negative
+whole number walks as far as the `.pdfmd` walk; `inherit: false` includes that folder and stops above it, and in the document's
+folder stops parent discovery entirely. The key has a global and per-folder `--setup` row, its unset words and inventory entry.
+Its value comes from the document and the already known local, folder and global layers; a parent cannot extend its own search.
+Explicit `-y` keeps its existing scope; `--no-auto metadata` drops discovery, and explicit-only discovers no visible parent.
+
+Each parent `metadata/` uses the existing local YAML choice, without searching loose YAML above the document. The layer order,
+strongest first, is the command line, the document's front matter or `% title`, its local metadata, visible parents nearest
+first, `.pdfmd/metadata.yaml` layers nearest first, kits, then global metadata. `metadata-precedence: first` reverses files
+within a layer, never the parent layers. Parent folders join the existing resource path; bibliography, CSL, named preambles
+and named Lua filters retain their existing relative-path rules. Intentionally named preambles and document/package Lua
+filters there use the usual discovery and Lua trust notices (`--strict` skips unknown filters). `--verbose` names each YAML
+layer; `--show-config DOCUMENT` lists metadata sources even with the global config switched off. The new deferred package
+`pdfmd_metadata` holds the implementation and is included in wheels and zipapps; `pdfmd.py` grows by one discovery call
+(14,211 to 14,212 lines). No new behavioural constant: the depth is the approved setting.
+
+Tests: `tests/test_metadata_parents.py` checks bounded depth, all/negative/zero, inheritance boundaries, file selection and
+ambiguity, depth settings, both precedence modes, worker serialisation, explicit/off discovery, setup, and real builds through
+`scripts/pdfmd`: title/author and command-line precedence, bibliography/CSL resources with and without local metadata, named
+and discovered preambles/filters and strict trust handling, scaffold and nested-part origins, configuration sources, batch
+workers and a Typst PDF (25 tests). The new discovery/build cases fail on the pre-edit tree; existing off-switch behaviour stays covered.
+Read-only check of the chemistry package's starter layout: its report has linked local metadata and no visible metadata
+folder immediately above it, so the new default adds no second layer there. The existing four-ancestor scaffold search is
+unchanged.
+
 ## v3.33.230 — 2026-11-16
 
 Pre-edit state: commit `4a447c0`. **Unread upload refusals survive a lingering close**: `--serve` previously answered 413 and

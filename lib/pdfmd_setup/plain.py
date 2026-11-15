@@ -108,6 +108,13 @@ def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: C
             else:
                 say("A non-negative whole number, please.")
                 return False
+        elif setting.check == "parents":
+            from pdfmd_metadata import parse_depth
+            try:
+                answer = parse_depth(answer)
+            except SystemExit as error:
+                say(str(error))
+                return False
         elif setting.check == "count":
             if answer.strip().lower() == "all":
                 answer = "all"
