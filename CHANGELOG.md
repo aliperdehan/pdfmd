@@ -305,6 +305,8 @@ folder/kit layers, CLI token forms, collision notes and precedence, and removal 
 split/packaging/docs/setup/isolation tests: 115 run, 114 pass and one skip. Ruff has no new findings, and the isolation
 check reports no writes to the real cache/config/data. `pdfmd.py` stays at 14,208 lines (version only).
 
+Review fix (same version, not released): the HTML and Typst colour tests skip when the installed Pandoc's default template does not use those variables (CI's Pandoc 3.1.3 has no `backgroundcolordark` in HTML and no link colours in Typst).
+
 ## v3.33.223a — 2026-11-16
 
 Pre-edit state: commit `52c64af`. A test file only, no shipped code, so no `PDFMD_VERSION` bump. **`tests/test_tex_repair.py` made

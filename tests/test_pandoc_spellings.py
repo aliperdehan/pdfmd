@@ -18,6 +18,15 @@ sys.path.insert(0, str(ROOT))
 import pdfmd  # noqa: F401
 
 
+def template_has(writer: str, *variables: str) -> bool:
+    """Whether the installed Pandoc's default template for ``writer`` uses every variable: older Pandoc (3.1.3 in CI) has no
+    `backgroundcolordark` in HTML and no link colours in Typst, so a test of those spellings means nothing there."""
+    if not shutil.which("pandoc"):
+        return False
+    done = subprocess.run(["pandoc", "-D", writer], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    return done.returncode == 0 and all(variable in done.stdout for variable in variables)
+
+
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Spellings(unittest.TestCase):
     def setUp(self):
@@ -49,11 +58,13 @@ class Spellings(unittest.TestCase):
         self.assertIn("linkcolor={red}", text)
         self.assertIn("urlcolor={blue}", text)
 
+    @unittest.skipUnless(template_has("html5", "fontcolor", "backgroundcolordark"), "this Pandoc's HTML template has no such colours")
     def test_html_css_light_and_dark_colours(self):
         text, _ = self.build("fontcolour: '#123456'\nbackgroundcolourdark: '#abcdef'\n", "html5")
         self.assertIn("#123456", text)
         self.assertIn("#abcdef", text)
 
+    @unittest.skipUnless(template_has("typst", "linkcolor", "citecolor", "filecolor"), "this Pandoc's Typst template has no link colours")
     def test_typst_link_colours(self):
         text, _ = self.build("linkcolour: '123456'\ncitecolour: 'abcdef'\nfilecolour: '654321'\n", "typst")
         for key, colour in (("linkcolor", "123456"), ("citecolor", "abcdef"), ("filecolor", "654321")):
