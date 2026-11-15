@@ -180,19 +180,19 @@ Traps: none found by the audit.
 
 Tests: `test_direct`.
 
-#### 5. `pdfmd_build` (new package): 9 definitions, 6 constants, ~1309 lines
+#### 5. `pdfmd_build` (new package): 9 definitions, 5 constants, ~1309 lines; done in 3.33.214 (as the tool of 3.33.213a wrote it: ten names in the table, the stand-in `_convert_one`, 422 `core.` rewrites, the nine state writes as `core.X = ...`, `@timed` and `@noted` imported from `pdfmd_base`, the nine quoted annotations kept as text with seven `# noqa: F821`; `DEFAULT_MARGIN` stayed in `pdfmd.py`, see the note and move 6; every build loads `pdfmd_build`, and so do `--doctor` and the runs that get past `run_main`'s `core.DEFAULT_VARS`)
 
 Goes to `lib/pdfmd_build/__init__.py`.
 
 Definitions: `run_engine_command`, `_convert_one`, `_convert_one_core`, `finish_build`, `set_soffice_limit`, `convert_one`, `make_embed_plan`, `_convert_one_recorded`, `convert_via_cache`.
 
-Constants that move with it: `PREAMBLE`, `PREFERRED_FONT`, `DEFAULT_MONOFONT`, `DEFAULT_MARGIN`, `DEFAULT_VARS`, `WEASYPRINT_CSS_NOISE`.
+Constants that move with it: `PREAMBLE`, `PREFERRED_FONT`, `DEFAULT_MONOFONT`, `DEFAULT_VARS`, `WEASYPRINT_CSS_NOISE`.
 
 Facts: 12 of its names are read from outside it (the table); 188 pdfmd names read through `core`; read by lib/ already: pdfmd_attach, pdfmd_batch, pdfmd_bridge, pdfmd_doctor, pdfmd_native, pdfmd_report, pdfmd_unicode.
 
 Traps: decorators: `run_engine_command` @timed, @noted; needs at import time, from outside: `noted`, `timed`; writes state that stays in pdfmd.py (`core.X = ...`): `CALC_BELOW`, `CALC_DUMP`, `CALC_SEED`, `LAST_EXACT`, `LAST_SCANNED`, `LAST_SEEDED`, `LAST_SKIPPED`, `LAST_WHOLE`, `SOFFICE_TIMEOUT_NOW`; patched by tests: `_convert_one_core`; calls to patched names inside the move (through `core.`): `_convert_one->_convert_one_core`; temporary bindings (2): `DEFAULT_MARGIN`, `_convert_one`.
 
-Note: Nine state names written (`CALC_BELOW`, `CALC_DUMP`, `CALC_SEED`, the `LAST_*`, `SOFFICE_TIMEOUT_NOW`). `@timed` and `@noted` come from `pdfmd_base`, imported by the module (the tool does it since 3.33.213a; before, it refused them as reads at import). The module references in the code (`pdfmd_chain.engine_failed`, `pdfmd_cache.check_location`, `pdfmd_native.warn_nameless_authors`) are imported by the module. `convert_one` goes to `-j` workers, which the shared `core` makes safe. `convert_via_native_bibliography` goes with `pdfmd_cite` (move 6). Run the full suite after this move (D6).
+Note: `DEFAULT_MARGIN`, which the audit put on this list, stays in `pdfmd.py` (3.33.214): `convert_via_native_bibliography`, which stays until move 6, reads it bare, and a constant can have no stand-in; the moved code reads `core.DEFAULT_MARGIN` (see move 6). Nine state names written (`CALC_BELOW`, `CALC_DUMP`, `CALC_SEED`, the `LAST_*`, `SOFFICE_TIMEOUT_NOW`). `@timed` and `@noted` come from `pdfmd_base`, imported by the module (the tool does it since 3.33.213a; before, it refused them as reads at import). The module references in the code (`pdfmd_cache.check_location`, `pdfmd_native.warn_nameless_authors`, `pdfmd_install.typst_too_old`) are imported by the module; `engine_failed` is read as `core.chain_engine_failed`, pdfmd.py's stand-in for `pdfmd_chain.engine_failed` (3.33.214: this note named `pdfmd_chain` among the imports). `convert_one` goes to `-j` workers, which the shared `core` makes safe. `convert_via_native_bibliography` goes with `pdfmd_cite` (move 6). Run the full suite after this move (D6).
 
 Tests: `test_odt_route`, `test_engine_filters`, `test_build_record`, `test_soffice_timeout`.
 
@@ -210,7 +210,7 @@ Facts: 10 of its names are read from outside it (the table); 42 pdfmd names read
 
 Traps: patched by tests: `fetch_csl`; calls to patched names inside the move (through `core.`): `remote_csl->fetch_csl`.
 
-Note: `remote_csl -> fetch_csl` through `core.` (patched). The `urllib` imports stay inside the functions.
+Note: `remote_csl -> fetch_csl` through `core.` (patched). The `urllib` imports stay inside the functions. `DEFAULT_MARGIN` is still in `pdfmd.py` (move 5 left it there, 3.33.214), as `convert_via_native_bibliography` reads it bare; it is not on this list. After this move nothing in `pdfmd.py` reads it bare (lib/pdfmd_build, pdfmd_bridge, pdfmd_native and pdfmd_report read `core.DEFAULT_MARGIN`), so it can move: with this function, its last bare reader, or to `pdfmd_build`, with the other build defaults; decide at the move.
 
 Tests: `test_remote_csl`, `test_setup`.
 

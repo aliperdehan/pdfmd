@@ -19,6 +19,136 @@ same commit as the change.
 
 ---
 
+## v3.33.214 — 2026-11-15
+
+Pre-edit state: commit `3e1cd03`. Phase 2 of the split, wave 1, move 5: **the build moves to the new package
+`lib/pdfmd_build`**, which `pdfmd.py` does not load at start: `convert_one`, `_convert_one_recorded`, `_convert_one`,
+`_convert_one_core`, `convert_via_cache`, `run_engine_command`, `finish_build`, `set_soffice_limit`, `make_embed_plan`,
+`PREAMBLE`, `PREFERRED_FONT`, `DEFAULT_MONOFONT`, `DEFAULT_VARS` and `WEASYPRINT_CSS_NOISE`, text and docstrings unchanged.
+`DEFAULT_MARGIN`, on the move's list, stays in `pdfmd.py`: `convert_via_native_bibliography`, which stays until move 6
+(`pdfmd_cite`), reads it bare, and a constant can have no stand-in (`split_move.py` refused it). The pure answer: SPLIT.md's
+list for move 5 loses it before the tool runs, the moved code reads `core.DEFAULT_MARGIN` like lib/pdfmd_bridge,
+pdfmd_native and pdfmd_report, and move 6's note says that after that move nothing in `pdfmd.py` reads it bare and where it
+goes is decided then (with its last bare reader, or to `pdfmd_build` with the other defaults). `DEFAULT_VARS`, which no code
+left in `pdfmd.py` reads, moves (lib/pdfmd_run reads `core.DEFAULT_VARS`). `scripts/split_move.py pdfmd_build` (as of
+3.33.213a) moved the 14 statements, from five stretches of `pdfmd.py` (the constants', around `DEFAULT_MARGIN`, among them);
+it carried two comment blocks, both the constants' own (the eight lines on why STIX Two Text is tried first, above
+`PREFERRED_FONT`, and the two on WeasyPrint's CSS noise), and left the pointer comments between the stretches where they
+were. It made 422 `core.NAME` rewrites (the four reads of `DEFAULT_MARGIN` among them, two inside f-strings) and took out
+the three `global` lines (`set_soffice_limit`, `_convert_one_recorded`, `convert_via_cache`), whose nine names are written
+as `core.X = ...` (18 writes): `CALC_BELOW`, `CALC_DUMP`, `CALC_SEED`, `LAST_EXACT`, `LAST_SCANNED`, `LAST_SEEDED`,
+`LAST_SKIPPED`, `LAST_WHOLE`, `SOFFICE_TIMEOUT_NOW`, all state that stays: each is still bound in `pdfmd.py`, which reads
+the `CALC_*` bare in `calc_filter_args` and `SOFFICE_TIMEOUT_NOW` in `soffice_limit`, and lib/pdfmd_run reads the `LAST_*`
+as `core.X`, so every reader sees the one module global (no copy is taken anywhere). `_convert_one`'s two uses of
+`_convert_one_core`, which tests/test_odt_route patches on pdfmd, are `core._convert_one_core` (the one handed to
+lib/pdfmd_bridge's ODT route included); the module's other calls of moved names (`convert_one` -> `_convert_one_recorded` ->
+`_convert_one`, `convert_via_cache`, `finish_build`, `set_soffice_limit`, `make_embed_plan`, `run_engine_command`,
+`WEASYPRINT_CSS_NOISE`, `PREAMBLE`) stay bare, and so does `_convert_one_core`'s local `noted` (a set), which is also the
+name of the decorator. `@timed` and `@noted` on `run_engine_command` are the module's own
+`from pdfmd_base import noted, timed`, on the line under `from pdfmd_base import core`; the nine quoted annotations are kept
+as text (the module has `from __future__ import annotations`, as `pdfmd.py` has, so `__annotations__` holds the same
+strings; nothing in the checkout calls `get_type_hints`, `get_annotations` or `annotationlib` or passes `eval_str`;
+`inspect.signature`, which `convert_one`, lib/pdfmd_bridge/odt.py and tests/test_odt_route's `autospec=True` use, does not
+evaluate them, and that test passes under Python 3.14). Its self-check passed, and with the `core.` prefixes, the three
+`global` lines and the comments below taken out, the module's code is the old text line for line. A resolver of Python's
+scoping written apart from the tool (move 3's, with this move's names), run over the original 14 statements, agrees at all
+422 places and at every name left bare. It wrote the module with `contextlib`, `inspect`, `os`, `pdfmd_cache`,
+`pdfmd_install`, `pdfmd_native`, `re`, `shutil`, `subprocess`, `sys`, `tempfile`, `time`, `datetime`, `Path`, `mkdtemp`,
+`NamedTemporaryFile` (the three packages are loaded at start, so importing them loads nothing new) and, in `pdfmd.py`, after
+the table's `pdfmd_direct.route` line, `names("pdfmd_build", "PREFERRED_FONT DEFAULT_MONOFONT DEFAULT_VARS
+WEASYPRINT_CSS_NOISE run_engine_command _convert_one_core finish_build set_soffice_limit convert_one make_embed_plan")`
+(lib/pdfmd_doctor and lib/pdfmd_unicode read the fonts, lib/pdfmd_run `DEFAULT_VARS` and `finish_build`, lib/pdfmd_report
+`run_engine_command`, lib/pdfmd_batch, pdfmd_report and pdfmd_run `convert_one`, lib/pdfmd_attach `make_embed_plan`; tests
+the noise pattern, `set_soffice_limit` and the patched `_convert_one_core`) and the stand-in
+`_convert_one = deferred("pdfmd_build", "_convert_one")`, as `build_label_scan`, which stays, calls it bare. By hand:
+-  SPLIT.md, before the tool ran: `DEFAULT_MARGIN` off move 5's list, and the notes of moves 5 and 6 (above).
+-  Packaging: `pdfmd_build` in `pyproject.toml` (`packages`, `[tool.setuptools.package-dir]`) and in `PACKAGES` of
+  `scripts/build_zipapp.py`.
+-  `ruff --select F` named the quoted names, which the module does not bind (`F821`): seven lines of signatures end in
+  `# noqa: F821 -- quoted, never evaluated: pdfmd.py's ...` (`EmbedRequest` twice, `LabelScan` twice, `Built` twice, and
+  `EmbedRequest` with pdfmd_assemble's `EmbedPlan` on `make_embed_plan`'s); comments only, the AST is the tool's. And three
+  imports of `pdfmd.py` that only the moved code read (`F401`) stay, as a move removes no import, with the reason:
+  `import inspect` (lib/pdfmd_bridge/odt.py reads `core.inspect`, tests/test_odt_route `pdfmd.inspect`),
+  `import pdfmd_cache` and `import pdfmd_native` (tests read `pdfmd.pdfmd_cache` and `pdfmd.pdfmd_native`).
+-  The module docstring is the tool's two lines and a paragraph on what the module holds.
+-  SPLIT.md marks the move done (and its heading counts five constants).
+
+What is different: every build loads `pdfmd_build`, and so do the commands that read one of its names without building:
+`--doctor` (the fonts), and any run that gets past `run_main`'s `core.DEFAULT_VARS` (`--list-parts`, a refused `--no-auto`
+kind and the other refusals after it); `--version`, `--help` and the commands before that line do not. Its imports are all
+loaded already, so it costs its own import, about 1.0 to 1.8 ms. `convert_one` reaches the `-j` workers as
+`pdfmd_build.convert_one` (pickled by name, as `pdfmd.convert_one` was): the worker's initializer, `restore_worker_state`,
+stays in `pdfmd.py` and binds `core` first, both through `scripts/pdfmd` (split_check's `-b -j 2`) and with `pdfmd.py` run
+as a script (`__mp_main__`): `python3 pdfmd.py -b . -j 2 --to latex` in a copy of examples/ makes the same four `.tex` files
+in a copy of the parent and in the move, but for the cache's own path in one of them, and the same log but for temporary
+names and the build records' folder names.
+
+`pdfmd.py`: 15,499 -> 14,208 lines. Start-up: the same 205 modules after `import pdfmd` with `--version`. At exit (move 4's
+probe, `scripts/pdfmd` run with `runpy` in a fresh copy of examples/ with fresh cache, config and data folders, twice per
+tree and the same both times), `pdfmd_build` is the one new module: `--version` 207 -> 207, a PDF 335 -> 336, `--to html`
+330 -> 331, `-b . -j 2 --to latex` 260 -> 261, `--stop-at tex` 336 -> 337, `--doctor` 269 -> 270, `--list-parts` 224 -> 225,
+a refused `--no-auto bogus` 216 -> 217. `scripts/pdfmd --version` interleaved with a copy of the parent, 22 runs each, best
+/ median 94.0 / 113.8 against 95.8 / 114.7 ms, and with the order swapped 108.8 / 176.3 against 108.0 / 187.7 (load average
+about 4; `split_check`'s own, after / before: 107 / 109 against 120 / 125 ms in its last run). Proof: `ruff --select F`;
+2,412 tests of 137 modules (`scripts/test_parallel.py -j 4`), 15 skipped (six that need KaTeX installed, four because a
+library here spells Chinese, and one each: pymd2pdf is not installed, `PDFMD_GOLDEN` unset, prompt_toolkit is installed, no
+Windows drive letters, the mhchem development check): the move's list (`test_odt_route`, `test_engine_filters`,
+`test_build_record`, `test_soffice_timeout`), the modules that name a moved name (`test_probes`, `test_plot_cache`,
+`test_auto_states`), those that patch on pdfmd a name the moved code reads as `core.X` (`test_build_log`, `test_build_time`,
+`test_cache_manage`, `test_diagram_timeout`, `test_engine_chain`, `test_engine_fallback`, `test_folder_settings`,
+`test_named_files`, `test_native`, `test_path_display`, `test_table_widths`, `test_tool_locations`, `test_unicode`), the
+engines (`test_browser_engine`, `test_typst_input`, `test_font_retry_note`, `test_mathfont`, `test_direct`,
+`test_latex_errors`, `test_tex_cause`, `test_html_math`, `test_katex_scale`, `test_paper`, `test_cover`), the cache
+(`test_cache_location`, `test_batch_cache`, `test_picture_cache_protocol`, `test_partial_history`,
+`test_partial_provenance`), the calculator (`test_calc`, `test_formula`, `test_csv_table`, `test_csv_switch`), `-b`
+(`test_batch_paths`), the embed plan and the attachments (`test_embedding`, `test_embeds`, `test_attach`,
+`test_attach_format`, `test_attach_layers`, `test_keep_source`, `test_hybrid_folder`, `test_standalone_source`), labels and
+parts (`test_labels`, `test_sections`, `test_parts_filters`, `test_soffice_parts`, `test_symlinked_parts`,
+`test_scaffold_probe`), the bibliography (`test_native_bibliography_markup`, `test_biber_direct`, which passes here this
+time, `test_remote_csl`, `test_author_meta`), the office routes (`test_office`, `test_office_latex`,
+`test_office_margin_paper`, `test_docx_tables`, `test_indent_office`, `test_spreadsheets`), the flat and ANSI targets and
+the report (`test_flat`, `test_ascii`, `test_table_ascii`, `test_report_build`, `test_ansi`), and the build's other features
+(`test_history`, `test_backup_keep`, `test_backup_pdfs`, `test_backup_summary`, `test_polish`, `test_isolation`,
+`test_interrupt`, `test_lua_missing`, `test_api`, `test_api_relative_output`, `test_stdin`, `test_raw`, `test_rewrite`,
+`test_kits`, `test_kit_preamble`, `test_kit_texinputs`, `test_kit_no_auto`, `test_chem`, `test_smiles`, `test_diagrams`,
+`test_images`, `test_code_blocks`, `test_tables`, `test_header_includes`, `test_header_filters`, `test_slide_notes`,
+`test_pagebreak`, `test_paragraph_spacing`, `test_budget`, `test_nonmath_dollars`, `test_autolog`, `test_settings_routes`,
+`test_display_path`, `test_obsidian`, `test_mhchem`, `test_markdown_features`, `test_celltags`, `test_cellalign`,
+`test_ebook_input`, `test_text_input`, `test_pdf_input`, `test_calibre_markdown`, `test_quarto_without_pandoc`,
+`test_check`, `test_doctor`, `test_help`, `test_doc`, `test_completion`, `test_texpackages`, `test_tex_bin`,
+`test_metadata_append`, `test_presets`, `test_css`, `test_css_v2`, `test_translit`, `test_svg_profile`, `test_newline`,
+`test_linebreak`), the always-run set and `test_split_tools`. In that run the three tests that read the changelog's first
+heading failed (`test_doc`, `test_docs_consistency`, `test_packaging`: the entry was not written yet); a second run with
+`unittest`, after it, of 302 tests in 12 modules (those three, `test_split`, `test_split_tools` and the seven with the
+skips) passes. 55 tests of `test_calibre` and `test_calibre_targets`, the classes that run no Calibre (`Finding`,
+`Choosing`, `Commands`, `TableStyle`; `Decision`, `SofficeDecision`, `Job`, `Math`, `EbookFilter`, and `Build` and
+`SofficeBuild` with their stand-ins), pass; `Builds` and `RealCalibre` would run the real one and were left out. One test of
+the large run does run it when `ebook-convert` is on PATH, as here: `test_office_latex`'s `test_a_calibre_pdf` (`-e calibre`
+in its own scratch folder). The real cache's build records and the real config's `known-lua.txt` unchanged around both runs.
+`scripts/split_check.py` SAME on 58 checks, no BOTH FAILED, with 28 extra builds in the scratch copy of examples/, each
+through `run_main`'s own dispatch: the engine families beside the default builds' LuaLaTeX, `-e xelatex`, `-e typst`
+(Pandoc's), `-e weasyprint` (its CSS warnings, which `--verbose` keeps), `-e soffice`, `-e inkmd` (the native tier), and
+`-e chrome` and `-e calibre` with stand-ins (`PDFMD_BROWSER`, `PDFMD_CALIBRE`: `run_engine_command`'s print routes; no real
+browser or Calibre ran); the chain, `scripts.md` with `-e pdflatex,lualatex --engine-fallback on` (pdflatex fails on its
+scripts, LuaLaTeX builds it) and, as a declared failure, `-e pdflatex --engine-fallback off`; `--cache`
+(`convert_via_cache`); `--to odt` (lib/pdfmd_bridge's ODT route, handed `core._convert_one_core`, with the real
+LibreOffice), and `--to odt` of a document from a folder outside the copy with `soffice-timeout: 0` (`set_soffice_limit`
+reads it: LibreOffice is not run, Pandoc's own writer's WARN); `-p` of `slides.md`, `--to epub`, `--to txt`,
+`--to html --strict` (`finish_build`), `--assemble-only --embed-metadata all` (`make_embed_plan`), `--stop-at tex`, and a
+section of an ordinary document (`lecture.md#key-ideas`, a `source_override`); then a document from outside the copy with
+the calculator in four sections and a cross-reference, `--split` into the copy as a parts document, its `#procedure` to
+LaTeX (`CALC_SEED` and `CALC_BELOW`: "1 names taken from part 10, 2 from parts 30-40 (defined below)"), to PDF (the label
+scan, `LAST_SCANNED`: "4 labels") and to HTML (`LAST_WHOLE`), the whole with `--calc-export calc.csv` (`CALC_DUMP`: the CSV
+written), the whole with `--cache` and then `#procedure --cache` (`LAST_SEEDED`: "numbers of parts left out come from the
+last full build"), and `--list-parts`; and `--doctor`. The quoted lines are what the same builds print by hand in the move.
+Both trees made the same files; some differ in size by a byte or two (the WeasyPrint and XeLaTeX PDFs, the EPUB, ODT and
+DOCX), from their dates, the EPUB's UUID and LibreOffice's random `Rsid`: the PDFs' text and the packages' other files are
+the same. Two earlier runs: the first, with a 29th extra build, `-e prince`, differed only in the name of the temporary page
+Pandoc hands Prince (`toPdfViaTempFile<pid>-0.html`, in Prince's warnings; split_check does not mask it), and the same build
+by hand with `--verbose` in a copy of the parent and in the move logs the same lines with that name masked, and the PDFs
+have the same text; the second, without it, was SAME too, with the two `--cache` builds named `-o calc-all.pdf` and
+`-o calc-proc-c.pdf`, which does not reach `LAST_SEEDED` (the full build's .aux is found by the document's own name), so the
+third names neither.
 ## v3.33.213a — 2026-11-15
 
 Pre-edit state: commit `68fff61`. Scripts, their test and SPLIT.md only, no shipped code, so no `PDFMD_VERSION` bump. Phase 2
