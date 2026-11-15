@@ -19,6 +19,30 @@ same commit as the change.
 
 ---
 
+## v3.33.225 — 2026-11-16
+
+Pre-edit state: commit `0addaae`. **Read non-clashing pdfmd options at the top level of metadata** (D78, second part).
+Known options such as `flavour` previously required `pdfmd-options:` even when their names meant nothing to Pandoc.
+The existing document and metadata readers now call a deferred helper in `pdfmd_args.options`; each layer takes known
+top-level keys except Pandoc template/documented metadata/citeproc clashes, with its explicit block winning per key.
+The original metadata remains available to custom templates, and `--verbose` names each top-level key and source once.
+The recommended form remains `pdfmd-options:`; the setup inventory already covers these keys, with no new flag or option.
+The legacy engine fallback also respects an explicit null instead of reading that same top-level key a second time.
+
+`scripts/pandoc_keys.py` derives and checks the shipped JSON from every installed Pandoc writer's default template and
+partials, the installed manual and Quarto's front-matter schema. Quarto/R Markdown front matter also reserves the derived
+Quarto keys; absent a reliable schema, top-level reading is disabled for those inputs. Builds only read the shipped data,
+never start tools for this check. The wheel and zipapp carry the data. The read-only compatibility survey found no changed
+build among the available sources; one requested source folder was absent (details remain in the review report).
+
+Checked: regressions fail against the pre-edit commit and pass after; real launcher builds make a Typst PDF, honour an
+explicit XeLaTeX override, read document/metadata/folder/kit layers, retain custom-template metadata and hand a Quarto
+document over unchanged. Tests cover known keys, false/null/mapping precedence, reserved Pandoc/citeproc/Quarto keys,
+the missing-schema fallback, verbose deduplication, packaged data and drift detection. Area tests: 186 pass in 12 modules;
+required split/packaging/docs/setup/isolation tests: 115 run, 114 pass and one skip. Ruff has no new findings, and the
+isolation checks report no writes to real cache/config/data. `pdfmd.py` shrinks from 14,208 to 14,207 lines.
+The alias token test now imports the core before its helper at module scope, so it also runs alone under test discovery.
+
 ## v3.33.224 — 2026-11-16
 
 Pre-edit state: commit `ea11307`. **British spellings of Pandoc's own keys** (D78, first part). Front matter,

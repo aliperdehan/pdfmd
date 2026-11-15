@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import isolation_support  # noqa: F401
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+import pdfmd  # noqa: F401
 
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
@@ -124,10 +126,7 @@ class Spellings(unittest.TestCase):
         self.assertEqual(sum(line.startswith("NOTE") and "urlcolour" in line for line in log.splitlines()), 1, log)
 
     def test_alias_values_and_tokens_after_separator_remain_literal(self):
-        sys.path.insert(0, str(ROOT))
         from pdfmd_args.metadata import command_aliases
-
-        import pdfmd  # noqa: F401
 
         original = ["-M", "title=urlcolour: red", "-Vlinkcolour=https://example.org/a=b:c", "--", "-Vurlcolour=red"]
         self.assertEqual(command_aliases(original),

@@ -132,6 +132,7 @@ pdfmd_yaml = "lib/pdfmd_yaml"
 pdfmd_yaml_support = "lib/pdfmd_yaml_support"
 
 [tool.setuptools.package-data]
+pdfmd_args = ["*.json"]
 pdfmd_yaml = ["LICENSE", "VENDORED.md"]
 pdfmd_docs = ["*.md"]
 pdfmd_inkmd = ["py.typed", "LICENSE", "VENDORED.md", "assets/fonts/*"]

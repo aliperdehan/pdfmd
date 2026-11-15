@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.224"
+PDFMD_VERSION = "3.33.225"
 import argparse
 import atexit
 import contextlib
@@ -2205,8 +2205,7 @@ def frontmatter_pdfmd_options(md_path: Path) -> dict:
         return {}
     if not isinstance(data, dict):
         return {}
-    options = data.get("pdfmd-options")
-    return options if isinstance(options, dict) else {}
+    return load_package("pdfmd_args.options").from_mapping(data, md_path)
 
 
 def frontmatter_no_auto(md_path: Path) -> list[str] | None:
@@ -9105,7 +9104,7 @@ def metadata_file_yaml(path: Path) -> dict:
         data = front_matter_dict(text) if LEADING_FRONT_MATTER_RE.match(text) else yaml.safe_load(text)
     except (yaml.YAMLError, OSError):
         return {}
-    return data if isinstance(data, dict) else {}
+    return load_package("pdfmd_args.options").metadata_mapping(data, path)
 
 
 def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | None:
@@ -9141,7 +9140,7 @@ def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | 
     value = options.get("pdf-engine") or options.get("engine")
     if value is not None:
         return words(value)
-    own = frontmatter_value(md_path, "pdf-engine") or frontmatter_value(md_path, "engine")
+    own = load_package("pdfmd_args.options").legacy_engine(md_path, options)
     if own is not None:
         return own.strip("[]")
     for metadata_file in metadata_files_by_priority(metadata_files):
@@ -9149,7 +9148,7 @@ def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | 
         options = data.get("pdfmd-options")
         value = (options.get("pdf-engine") or options.get("engine")) if isinstance(options, dict) else None
         if value is None:
-            top = data.get("pdf-engine") or data.get("engine")
+            top = load_package("pdfmd_args.options").legacy_engine(data, options or {})
             value = words(top) if top is not None else None
         if value is not None:
             return words(value)

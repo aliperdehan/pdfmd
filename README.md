@@ -3139,7 +3139,8 @@ Pandoc's lookup; paths written inside front matter, metadata or defaults files k
 
 ### Settings inside the document
 
-Or put settings in the document itself, so nobody has to remember the flag:
+Put settings in the document itself, so nobody has to remember the flag. The recommended form is an explicit
+`pdfmd-options:` block:
 
 ```yaml
 ---
@@ -3149,6 +3150,16 @@ pdfmd-options:
   pdf-engine: tex        # only TeX engines; never fall back to HTML ones
 ---
 ```
+
+A known pdfmd option may also sit at the top level (`engine: typst`, `flavour: pandoc`) when its name does not clash with
+a Pandoc template variable, documented metadata key or citeproc key. The same file's explicit `pdfmd-options:` wins for
+each key, including a false or null value; document, metadata, kit and folder layers keep their normal precedence.
+Top-level keys stay in the metadata for custom templates. `--verbose` prints an `OPTIONS` line naming each key read this
+way and its source. For `.qmd` and R Markdown front matter, Quarto's schema keys are reserved too (`engine: jupyter`,
+`editor: visual`, `format`, `execute`, `output`, and others); if no reliable Quarto schema was available when the key data
+was generated, top-level reading is disabled for those inputs. Explicit blocks continue to work.
+The shipped clash lists are generated locally by `python3 scripts/pandoc_keys.py`; `--check` reports drift against the
+installed Pandoc templates/manual and, when available, Quarto schema. This adds no setting or flag to pdfmd.
 
 `flavour:` (also spelt `flavor:` or `reader:`: one setting) fixes the reader of a Markdown file: a flavour word (`pandoc`, `gfm`,
 `commonmark`; see *Flavours*) or a Pandoc reader (`markdown`, `gfm+smart`, `commonmark_x`, ...); `auto` is the default choice
