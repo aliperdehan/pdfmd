@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.226"
+PDFMD_VERSION = "3.33.227"
 import argparse
 import atexit
 import contextlib
@@ -4965,6 +4965,9 @@ def dependency_report() -> bool:
     font = inkmd_emoji_font()
     print(f"{'OK  ' if font else 'MISS'}  colour emoji font for inkmd"
           + (f"  ({font})" if font else "  (pdfmd --install emoji)"))
+    print("Smaller PDFs (lossless, the first one installed shrinks every PDF; see --shrink):")
+    for row in load_package("pdfmd_shrink").check_rows():
+        print(row)
     print("Reading PDFs (PDF to Markdown, through batchocr):")
     reader = find_batchocr()
     reader_version = batchocr_version(reader) if reader else None
@@ -12788,7 +12791,8 @@ def check_output_budget(output: Path | None, sources: list[Path], md_path: Path,
     behind = ("; the largest images: " + ", ".join(f"{display_path(path)} {size_text(value)}" for path, value in biggest)) \
         if biggest and biggest[0][1] > 1048576 else ""
     print(f"WARN  {display_path(md_path)}: {display_path(output)} is {size_text(size)}, over the {limit:g} MB output budget "
-          f"(--max-output-mb, pdfmd-options.max-output-mb){behind}", file=sys.stderr)
+          f"(--max-output-mb, pdfmd-options.max-output-mb){behind}"
+          + (load_package("pdfmd_shrink").budget_hint(md_path, metadata_files) if output.suffix.lower() == ".pdf" else ""), file=sys.stderr)
 
 
 def strict_message(lines: list[str]) -> str:

@@ -684,6 +684,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "Original.odt (.odp, .ods), and LibreOffice opens the PDF as that editable document. An "
                              "Office file is converted by LibreOffice; anything else is built to .odt by pdfmd. "
                              "`pdfmd-options: {hybrid: true}` or --setup makes it the default")
+    parser.add_argument("--shrink", action=argparse.BooleanOptionalAction, default=None,
+                        help="the last step on every PDF: rewrite it losslessly, smaller (object streams and Flate streams "
+                             "deflated again), through qpdf, pikepdf or mutool, whichever is installed first. On by default; "
+                             "--no-shrink leaves the PDF as the engine and pdfmd wrote it. `pdfmd-options: {shrink: true | fast "
+                             "| false}` (fast: object streams only), or --setup, sets it for a document or every document")
     parser.add_argument("--doctor", action="store_true",
                         help="one report on everything pdfmd uses (Pandoc and engines, fonts, emoji, PDF "
                              "reading, OCR, config, cache) and the command that fixes each missing piece")

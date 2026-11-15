@@ -50,6 +50,7 @@ UNSET = {
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
+    "options.shrink": "on: object streams and recompression, when qpdf, pikepdf or mutool is installed", "options.shrink-timeout": "120 seconds",
     "options.smiles.engine": "auto", "options.smiles.format": "auto", "options.smiles.office-format": "png", "options.smiles.palette": "color", "options.smiles.cell-width": "250", "options.smiles.cell-height": "200", "options.smiles.per-row": "3", "options.smiles.bond-length": "40", "options.smiles.dpi": "300",
     "options.raw": "off", "options.pagebreak": "every family, in the pdfmd and obsidian flavours", "options.markup": "all but space, in the pdfmd and obsidian flavours", "options.show-comments": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.typeset": "off", "options.calc.typeset-upright": "none", "options.calc.typeset-italic": "none", "options.calc.noindent": "lines", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
@@ -94,7 +95,7 @@ FOLDER_OPTIONS = frozenset({
     "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.css-scope", "options.paragraph-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
-    "options.keep-source", "options.hybrid", "options.odt.engine",
+    "options.keep-source", "options.hybrid", "options.shrink", "options.shrink-timeout", "options.odt.engine",
     "options.stamp.enabled", "options.stamp.store", "options.stamp.mode", "options.stamp.scope", "options.stamp.packages",
     "options.stamp.include-output", "options.stamp.pdf-metadata", "options.stamp.restored-note", "options.stamp.partial",
     "options.backup.enabled", "options.backup.format", "options.backup.keep", "options.backup.pdfs",
@@ -481,6 +482,15 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.attach-links", "Attach linked files to the PDF", on_off, "", "", "PDF finishing"),
         choice("options.hybrid", "Make the PDF editable in LibreOffice (hybrid PDF)", on_off, "",
                "Attaches an OpenDocument copy as Original.odt; LibreOffice then opens the PDF as that document.", "PDF finishing"),
+        choice("options.shrink", "Shrink the finished PDF, losslessly",
+               (("true", "object streams and recompression (the default)"), ("fast", "object streams only"), ("false", "off")), "",
+               "The last step on every PDF: it is rewritten by qpdf, pikepdf or mutool (the first one installed) with object "
+               "streams (PDF 1.5) and Flate streams deflated again, about a tenth smaller here. Nothing is lost: no image or font "
+               "is touched, and the file is replaced only when it is valid, has the same pages and is smaller. Without one of "
+               "the tools nothing happens. Per run: --shrink / --no-shrink.", "PDF finishing"),
+        text("options.shrink-timeout", "Time limit of one shrink run (seconds)",
+             "A run that takes longer is stopped and the PDF stays as it was built. Default 120. 0 or a negative number: no "
+             "limit.", "PDF finishing", "config", "number"),
         # -- build history
         choice("options.stamp.enabled", "A \"Compiled with...\" line in the source", on_off, "",
                "Written into the document's BUILD NOTES after each build. Off unless set.", "Build history"),

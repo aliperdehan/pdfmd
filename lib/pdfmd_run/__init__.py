@@ -213,6 +213,8 @@ def run_main() -> None:
     core.ENGINE_CLI, core.ENGINE_FALLBACK_CLI = args.engine, args.engine_fallback
     if args.strict is not None:
         os.environ["PDFMD_STRICT"] = "1" if args.strict else "0"
+    if args.shrink is not None:
+        os.environ["PDFMD_SHRINK"] = "true" if args.shrink else "false"      # a -j worker is a fresh process: it reads this
     core.BUILD_TIME_CLI, core.TIME_FORMAT_CLI, core.BUILD_LOG_CLI = args.build_time, args.time_format, args.build_log
     if args.build_log:
         os.environ["PDFMD_BUILD_LOG"] = args.build_log

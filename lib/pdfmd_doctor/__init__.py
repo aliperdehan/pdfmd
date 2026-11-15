@@ -301,6 +301,14 @@ def doctor_report(deep: bool = False) -> bool:
         own = tessdata.installed(core.tessdata_directory())
         line(None, f"OCR languages from pdfmd: {', '.join(own) if own else 'none'}  (pdfmd --install ocr:rus)")
 
+    print("\nSmaller PDFs (lossless; --shrink):")
+    shrinkers = core.load_package("pdfmd_shrink").available()
+    if shrinkers:
+        for number, (name, where) in enumerate(shrinkers):
+            line(True, f"{name}  ({where})" + ("  -- shrinks every PDF" if number == 0 else "  -- takes over when the one above is gone"))
+    else:
+        line(None, f"no PDF shrinker (optional: PDFs stay about a tenth larger)  ({core.load_package('pdfmd_shrink').install_hint()})")
+
     foreign = foreign_commands()
     if foreign:
         print("\nCommand names:")

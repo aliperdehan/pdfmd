@@ -19,6 +19,33 @@ same commit as the change.
 
 ---
 
+## v3.33.227 — 2026-11-16
+
+Pre-edit state: commit `b8a8127`. **Every PDF is now shrunk losslessly, by default** (TODO item 2; D42, and the author's answer in D51: "default `shrink: true`"). A
+build now ends by rewriting its PDF through `pdfmd_shrink` (the previous version's provider layer): after the stamp, the
+attached source, the polish and the hybrid step, before the size-budget check, so `--max-output-mb` judges the final size; in
+`convert_one`, so every route and every `-b -j` worker, `-r` reports and parts included. **This is a changed default**: an
+existing document that has qpdf, pikepdf or mutool on the machine now comes out about a tenth smaller (13% on a 19-page
+LuaLaTeX PDF, 22% on a small Typst one) with object streams, a PDF 1.5 file (every reader since 2003 opens it). The content
+is the same: nothing is resampled or re-subset, and the file is replaced only when the tool succeeded, the page count is the
+same and the file is smaller. **To turn it off**: `--no-shrink` for a run, `pdfmd-options: {shrink: false}` for a document,
+a folder or the config (a recipient that needs a PDF 1.3 or 1.4 file), or the `--setup` row "Shrink the finished PDF,
+losslessly". `shrink: fast` (object streams only; also `--setup`) skips the recompression, which gains little on LaTeX output
+and is most of the time; `--shrink` over a document's `false` turns it on for one run. `shrink-timeout` (seconds, default 120,
+`--setup`; 0 or negative: no limit) stops a tool that runs too long, and the PDF stays as built. Without any of the three tools
+the build is exactly what it was: silent, with one `--verbose` line (`SHRINK  none of qpdf, pikepdf or mutool is installed`),
+a row in `--check-dependencies` and `--doctor`, and, when the output budget fires, the sentence that one of them would help.
+`--verbose` also prints the command and `SHRINK  a.pdf: 381 KB -> 331 KB (qpdf)`; the TIME rows get a `shrink PDF` step.
+New in the `--setup` inventory: the rows `shrink` and `shrink-timeout` (PDF finishing; both work per folder), the flag
+`--shrink` / `--no-shrink` (`PDFMD_SHRINK` carries it to a worker). `pdfmd.py` grows by four lines (the
+`--check-dependencies` rows and the budget hint; the build step lives in `pdfmd_build`).
+
+Tests: `tests/test_shrink.py`, class `Build` (typst builds through `scripts/pdfmd`; the six fail before): a default build has
+object streams, is smaller than its `--no-shrink` twin, and has the same pages, text and Info entries (the dates aside), a
+silent stderr and no temporary file; `shrink: false`, `fast`, `--shrink` and `--no-shrink` over each other; the two workers of
+`-b -j 2` follow the switch; `--verbose` and the TIME row; with no tool installed (a PATH without qpdf and mutool, pikepdf
+hidden) the build is the same, `--strict` still passes and the budget warning names what would help; `--check-dependencies`.
+
 ## v3.33.226 — 2026-11-16
 
 Pre-edit state: commit `f0ed2b7`. **Lossless PDF shrinking, the provider layer** (TODO item 2; decisions D42 and D51). The new package `lib/pdfmd_shrink` (loaded

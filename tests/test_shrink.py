@@ -283,5 +283,122 @@ class Providers(unittest.TestCase):
         self.assertEqual(names, [name for name in shrink.PROVIDERS if name in names])
 
 
+DOCUMENT = "---\ntitle: Shrink\nauthor: The author\n%s---\n\n# One\n\nSome text of the first page.\n\n" + "".join(
+    f"Paragraph {number} with words to fill the page, and a few more so that it is long enough.\n\n" for number in range(400))
+
+
+@unittest.skipUnless(shutil.which("pandoc") and shutil.which("typst"), "needs Pandoc and Typst")
+class Build(unittest.TestCase):
+    """Through pdfmd itself: the default, the switches, a worker, no tool, and what the build prints."""
+
+    def setUp(self):
+        self.directory = Path(tempfile.mkdtemp(prefix="pdfmd-shrink-build-"))
+        self.addCleanup(shutil.rmtree, self.directory, ignore_errors=True)
+
+    def document(self, name: str = "a.md", options: str = "") -> Path:
+        path = self.directory / name
+        path.write_text(DOCUMENT % options, encoding="utf-8")
+        return path
+
+    def run_pdfmd(self, *arguments: str, env: dict | None = None) -> subprocess.CompletedProcess:
+        environment = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1", **(env or {})}
+        for variable in ("PDFMD_SHRINK", "PDFMD_STRICT", "PDFMD_MAX_OUTPUT_MB"):
+            if not env or variable not in env:
+                environment.pop(variable, None)
+        return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *arguments, "-e", "typst"], capture_output=True,
+                              text=True, encoding="utf-8", cwd=self.directory, env=environment, stdin=subprocess.DEVNULL)
+
+    def need_a_tool(self):
+        if not installed():
+            self.skipTest("none of qpdf, pikepdf, mutool is installed")
+
+    def test_every_pdf_is_shrunk_by_default_and_nothing_is_lost(self):
+        self.need_a_tool()
+        self.document()
+        plain = self.run_pdfmd("a.md", "-o", "plain.pdf", "--no-shrink")
+        self.assertEqual(plain.returncode, 0, plain.stdout + plain.stderr)
+        done = self.run_pdfmd("a.md", "-o", "small.pdf")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(done.stderr, "")
+        plain_bytes, small_bytes = (self.directory / "plain.pdf").read_bytes(), (self.directory / "small.pdf").read_bytes()
+        self.assertNotIn(b"/ObjStm", plain_bytes)
+        self.assertIn(b"/ObjStm", small_bytes)
+        self.assertLess(len(small_bytes), len(plain_bytes))
+        before, after = facts(self.directory / "plain.pdf"), facts(self.directory / "small.pdf")
+        self.assertGreater(after["pages"], 1)
+        self.assertEqual(after["pages"], before["pages"])
+        self.assertEqual(after["text"], before["text"])
+        stamps = ("/CreationDate", "/ModDate", "/PdfmdBuildDate")             # two builds, two moments
+        self.assertEqual({key: value for key, value in after["info"].items() if key not in stamps},
+                         {key: value for key, value in before["info"].items() if key not in stamps})
+        self.assertEqual(sorted(after["info"]), sorted(before["info"]))
+        self.assertEqual(sorted(item.name for item in self.directory.iterdir() if item.suffix == ".part"), [])
+
+    def test_the_document_the_command_line_and_the_mode(self):
+        self.need_a_tool()
+        self.document("off.md", "pdfmd-options:\n  shrink: false\n")
+        self.document("fast.md", "pdfmd-options:\n  shrink: fast\n")
+        self.run_pdfmd("off.md")
+        self.run_pdfmd("fast.md")
+        self.assertNotIn(b"/ObjStm", (self.directory / "off.pdf").read_bytes())
+        self.assertIn(b"/ObjStm", (self.directory / "fast.pdf").read_bytes())
+        self.run_pdfmd("off.md", "--shrink")                      # the command line over the document, both ways
+        self.assertIn(b"/ObjStm", (self.directory / "off.pdf").read_bytes())
+        self.run_pdfmd("fast.md", "--no-shrink")
+        self.assertNotIn(b"/ObjStm", (self.directory / "fast.pdf").read_bytes())
+
+    def test_a_worker_of_a_batch_gets_the_switch(self):
+        self.need_a_tool()
+        folder = self.directory / "batch"
+        folder.mkdir()
+        for name in ("one.md", "two.md"):
+            (folder / name).write_text(DOCUMENT % "", encoding="utf-8")
+        self.run_pdfmd("batch", "-b", "-j", "2", "--no-shrink")
+        self.assertEqual(len(list(folder.glob("*.pdf"))), 2)
+        for path in folder.glob("*.pdf"):
+            self.assertNotIn(b"/ObjStm", path.read_bytes())
+        self.run_pdfmd("batch", "-b", "-j", "2")
+        for path in folder.glob("*.pdf"):
+            self.assertIn(b"/ObjStm", path.read_bytes())
+
+    def test_verbose_says_what_was_done_and_the_time_is_a_step(self):
+        self.need_a_tool()
+        self.document()
+        done = self.run_pdfmd("a.md", "--verbose")
+        self.assertRegex(done.stdout, r"(?m)^SHRINK  .*a\.pdf: \d+ KB -> \d+ KB \((qpdf|pikepdf|mutool)\)$")
+        self.assertRegex(done.stdout, r"(?m)^TIME +shrink PDF +[\d.]+ ?m?s")
+
+    def test_without_a_tool_nothing_changes_and_the_budget_says_what_would_help(self):
+        document = self.document()
+        scratch_bin = self.directory / "bin"
+        scratch_bin.mkdir()
+        for tool in ("pandoc", "typst"):
+            os.symlink(shutil.which(tool), scratch_bin / tool)
+        blocker = self.directory / "site"
+        blocker.mkdir()
+        (blocker / "sitecustomize.py").write_text(
+            "import sys\n"
+            "class Blocker:\n"
+            "    def find_spec(self, name, path=None, target=None):\n"
+            "        if name.split('.')[0] == 'pikepdf':\n"
+            "            raise ModuleNotFoundError(name)\n"
+            "sys.meta_path.insert(0, Blocker())\n", encoding="utf-8")
+        env = {"PATH": str(scratch_bin) + os.pathsep + str(Path(sys.executable).parent), "PYTHONPATH": str(blocker)}
+        done = self.run_pdfmd("a.md", "--verbose", "--strict", "--max-output-mb", "0.0001", env=env)
+        self.assertEqual(self.run_pdfmd("a.md", "--strict", env=env).returncode, 0)
+        self.assertTrue(document.with_suffix(".pdf").is_file())
+        self.assertNotIn(b"/ObjStm", document.with_suffix(".pdf").read_bytes())
+        self.assertIn("SHRINK  none of qpdf, pikepdf or mutool is installed", done.stdout)
+        self.assertRegex(done.stdout + done.stderr, r"over the 0\.0001 MB output budget.*a lossless shrink needs one of qpdf")
+        quiet = self.run_pdfmd("a.md", "--strict", env=env)
+        self.assertEqual((quiet.returncode, quiet.stdout.count("SHRINK"), quiet.stderr), (0, 0, ""))
+
+    def test_the_dependency_report_names_the_tools(self):
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--check-dependencies"], capture_output=True, text=True,
+                              encoding="utf-8", env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}, stdin=subprocess.DEVNULL)
+        self.assertIn("Smaller PDFs", done.stdout)
+        self.assertRegex(done.stdout, r"(?m)^(OK    (qpdf|pikepdf|mutool)  |MISS  qpdf, pikepdf, mutool \(optional)")
+
+
 if __name__ == "__main__":
     unittest.main()

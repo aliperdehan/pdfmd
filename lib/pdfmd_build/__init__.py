@@ -987,6 +987,7 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
             pdfmd_native.warn_nameless_authors(md_path, metadata_files)
             result = _convert_one_recorded(md_path, *args, **kwargs)
             if result[1]:
+                core.load_package("pdfmd_shrink").shrink_output(core.BUILD["output"], md_path, metadata_files, bool(bound.get("verbose")))
                 core.check_output_budget(core.BUILD["output"], core.BUILD["sources"] or [md_path], md_path, metadata_files)
         built = finish_build(result, seen, md_path, metadata_files)
     except BaseException as error:
