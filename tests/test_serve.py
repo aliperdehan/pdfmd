@@ -14,6 +14,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -573,6 +574,100 @@ class PageFixtures(unittest.TestCase):
             self.assertTrue((WEB / name).is_file(), name)
 
 
+class UnreadRefusals(unittest.TestCase):
+    """Exercise the refusal and cleanup without binding a socket (also runs in the sandbox)."""
+
+    def handler(self, length="100000", limit=64):
+        from pdfmd_serve.shell import Handler
+        handler = Handler.__new__(Handler)
+        handler.headers = {"Content-Length": length}
+        handler.server = SimpleNamespace(max_body=limit)
+        handler.connection = mock.Mock()
+        handler.rfile = mock.Mock()
+        handler.rfile.read1.return_value = b""
+        handler.wfile = mock.Mock()
+        handler.refuse = mock.Mock()
+        return handler
+
+    def test_unread_refusals_send_then_half_close_before_discarding(self):
+        import socket
+        for length, limit, status in (("100000", 64, 413), ("100000", 0, 403), ("-1", 64, 400), ("invalid", 64, 400)):
+            with self.subTest(length=length, limit=limit):
+                handler = self.handler(length, limit)
+                events = mock.Mock()
+                for name in ("refuse", "wfile", "connection", "rfile"):
+                    events.attach_mock(getattr(handler, name), name)
+                handler.handle_any()
+                self.assertEqual(handler.refuse.call_args.args[0], status)
+                self.assertTrue(handler.close_connection)
+                handler.rfile.read.assert_not_called()
+                handler.connection.shutdown.assert_called_once_with(socket.SHUT_WR)
+                calls = events.mock_calls
+                self.assertEqual(calls[0][0], "refuse", "the response precedes all transport cleanup")
+                self.assertLess(calls.index(mock.call.wfile.flush()), calls.index(mock.call.connection.shutdown(socket.SHUT_WR)))
+                self.assertLess(calls.index(mock.call.connection.shutdown(socket.SHUT_WR)),
+                                next(i for i, call in enumerate(calls) if call[0] == "rfile.read1"))
+
+    def test_discard_has_a_byte_budget_even_when_the_peer_keeps_sending(self):
+        from pdfmd_serve.shell import MAX_REQUEST_MB
+        handler = self.handler()
+        discarded = 0
+
+        def read(size):
+            nonlocal discarded
+            discarded += size
+            self.assertLessEqual(discarded, MAX_REQUEST_MB * 1024 * 1024)
+            return b"x" * size
+
+        handler.rfile.read1.side_effect = read
+        with mock.patch("time.monotonic", return_value=0):
+            handler.handle_any()
+        self.assertEqual(discarded, MAX_REQUEST_MB * 1024 * 1024)
+
+    def test_discard_has_an_absolute_deadline_even_when_the_peer_trickles(self):
+        handler = self.handler()
+        handler.rfile.read1.return_value = b"x"
+        with mock.patch("time.monotonic", side_effect=(0, 0, 0.75, 2)):
+            handler.handle_any()
+        self.assertEqual(handler.rfile.read1.call_count, 2)
+        waits = [call.args[0] for call in handler.connection.settimeout.call_args_list]
+        self.assertEqual(len(waits), 2)
+        self.assertGreater(waits[0], waits[1], "each read gets only the time left, not a fresh timeout")
+
+    def test_a_stalled_or_disconnected_peer_does_not_escape_cleanup(self):
+        for error in (TimeoutError, ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            with self.subTest(error=error):
+                handler = self.handler()
+                handler.rfile.read1.side_effect = error
+                handler.handle_any()
+                handler.rfile.read1.assert_called_once()
+
+    def test_an_interrupted_body_read_also_half_closes(self):
+        import socket
+        handler = self.handler(length="32")
+        handler.rfile.read.side_effect = ConnectionResetError
+        handler.handle_any()
+        self.assertEqual(handler.refuse.call_args.args[0], 400)
+        handler.connection.shutdown.assert_called_once_with(socket.SHUT_WR)
+
+    def test_the_client_still_requires_a_response_after_each_os_send_error(self):
+        response = b"HTTP/1.1 413 Request Entity Too Large\r\n\r\n"
+        for error in (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            with self.subTest(error=error), mock.patch("socket.create_connection") as connect:
+                sock = connect.return_value.__enter__.return_value
+                sock.sendall.side_effect = error
+                sock.recv.side_effect = (response, b"")
+                self.assertEqual(Http.raw_request(1234, "request"), response)
+
+    def test_the_client_keeps_a_response_before_each_os_receive_error(self):
+        response = b"HTTP/1.1 413 Request Entity Too Large\r\n\r\n"
+        for error in (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            with self.subTest(error=error), mock.patch("socket.create_connection") as connect:
+                sock = connect.return_value.__enter__.return_value
+                sock.recv.side_effect = (response, error)
+                self.assertEqual(Http.raw_request(1234, "request"), response)
+
+
 class Http(Folder):
     def setUp(self):
         super().setUp()
@@ -601,17 +696,21 @@ class Http(Folder):
     def bearer(self):
         return {"Authorization": "Bearer tok-123"}
 
-    def raw_request(self, port, head: str) -> bytes:
-        """Headers sent with no body; the answer read until the server closes the connection (it does after refusing a
-        body), since the status line and the JSON body can arrive in separate packets (a server waiting for the body times out)."""
+    @staticmethod
+    def raw_request(port, head: str) -> bytes:
+        """Send the supplied request, then collect the answer across packets, including after a refused upload interrupts sending.
+        A header-only refusal must answer without waiting for the body; a server that waits for it times out here."""
         import socket
         answer = b""
         with socket.create_connection(("127.0.0.1", port), timeout=10) as sock:
-            sock.sendall(head.encode("ascii"))
+            try:
+                sock.sendall(head.encode("ascii"))
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+                pass        # a refused upload can fail while sending; still require the response below
             while True:
                 try:
                     chunk = sock.recv(65536)
-                except (socket.timeout, ConnectionResetError):
+                except (socket.timeout, ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
                     break
                 if not chunk:
                     break
@@ -665,6 +764,20 @@ class Http(Folder):
         self.assertIn(b" 201 ", self._post_file(unbound, "x" * 100000).split(b"\r\n")[0])
         capped = self._serve_with(64)
         self.assertIn(b" 413 ", self._post_file(capped, "x" * 100000).split(b"\r\n")[0])
+
+    def test_large_unread_bodies_deliver_the_refusal(self):
+        body = "x" * (4 * 1024 * 1024)        # larger than the TCP socket buffers, not just a header-only refusal
+        for limit, length, status, code in ((64, str(len(body)), 413, "too_large"),
+                                          (0, str(len(body)), 403, "bodies_off"),
+                                          (64, "-1", 400, "length"), (64, "invalid", 400, "length")):
+            port = self._serve_with(limit)
+            for attempt in range(3):
+                with self.subTest(limit=limit, length=length, attempt=attempt):
+                    answer = self.raw_request(port, f"POST /api/file HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                                                   f"Content-Length: {length}\r\n\r\n{body}")
+                    self.assertIn(f" {status} ".encode(), answer.split(b"\r\n")[0])
+                    self.assertEqual(json.loads(answer.split(b"\r\n\r\n", 1)[1])["code"], code)
+        self.assertFalse((self.root / "new.md").exists())
 
     def test_the_setup_value_of_the_request_limit_zero_negative_positive(self):
         # 0.000000001 MB is under one byte: a cap of one byte (413), never 0, which would switch bodies off (403)
@@ -886,6 +999,30 @@ class CommandLine(unittest.TestCase):
                 connection.request("POST", "/api/file", body=json.dumps({"path": f"n{len(text)}.md", "text": text}), headers=headers)
                 self.assertEqual(connection.getresponse().status, status)
                 connection.close()
+        finally:
+            process.terminate()
+            process.communicate(timeout=30)
+
+    def test_large_refused_upload_gets_413_through_the_launcher(self):
+        config_home = self.folder / "config"
+        config = config_home / "pdfmd" / "config.yaml"
+        config.parent.mkdir(parents=True)
+        config.write_text(f"options:\n  serve-max-request-mb: {64 / (1024 * 1024)}\n", encoding="utf-8")
+        process = subprocess.Popen([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--serve"], cwd=self.folder,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                   env={**os.environ, "XDG_CONFIG_HOME": str(config_home), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+        try:
+            announcement = process.stdout.readline()
+            self.assertTrue(announcement, "--serve could not start; check whether the sandbox blocks socket binding")
+            port = json.loads(announcement)["port"]
+            body = "x" * (4 * 1024 * 1024)
+            for attempt in range(3):
+                with self.subTest(attempt=attempt):
+                    answer = Http.raw_request(port, f"POST /api/file HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                                                    f"Content-Length: {len(body)}\r\n\r\n{body}")
+                    self.assertIn(b" 413 ", answer.split(b"\r\n")[0])
+                    self.assertEqual(json.loads(answer.split(b"\r\n\r\n", 1)[1])["code"], "too_large")
+            self.assertEqual(list(self.folder.glob("*.md")), [self.folder / "a.md"], "a refused upload writes nothing")
         finally:
             process.terminate()
             process.communicate(timeout=30)

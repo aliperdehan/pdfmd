@@ -15,7 +15,9 @@ import hmac
 import json
 import os
 import secrets
+import socket
 import sys
+import time
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -42,6 +44,11 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
 # render). 0: request bodies are switched off (every request that carries one is refused; the studio is read-only). A negative
 # number: no limit.
 MAX_REQUEST_MB = 100
+
+# Transport cleanup after the response has already been sent, not a request acceptance policy. A single short deadline keeps a
+# stalled/trickling upload from holding a handler; the chunk size bounds temporary memory, not the amount a client may upload.
+LINGER_SECONDS = 1.0
+LINGER_CHUNK_BYTES = 64 * 1024
 
 
 class ParentGone(Exception):
@@ -128,6 +135,29 @@ class Handler(BaseHTTPRequestHandler):
     def refuse(self, status: int, code: str, message: str) -> None:
         self.send_json(status, {"api": API_VERSION, "error": message, "code": code})
 
+    def refuse_unread(self, status: int, code: str, message: str) -> None:
+        """Deliver the refusal before closing a socket that may still have an upload in flight (otherwise close can reset TCP)."""
+        self.close_connection = True
+        try:
+            self.refuse(status, code, message)
+            self.wfile.flush()
+            self.connection.shutdown(socket.SHUT_WR)
+            # Reuse the default request cap as a cleanup budget even for a tiny/zero configured cap: draining only that tiny
+            # amount would still reset an ordinary upload. A larger configured cap also supplies a larger cleanup budget.
+            remaining = max(self.server.max_body or 0, MAX_REQUEST_MB * 1024 * 1024)
+            deadline = time.monotonic() + LINGER_SECONDS
+            while remaining > 0:
+                timeout = deadline - time.monotonic()
+                if timeout <= 0:
+                    break
+                self.connection.settimeout(timeout)
+                chunk = self.rfile.read1(min(remaining, LINGER_CHUNK_BYTES))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except OSError:          # a stalled or disconnected peer needs no further cleanup; the handler will close the socket
+            pass
+
     # ---- checks -----------------------------------------------------------------------------------------------------------------
 
     def authorised(self) -> bool:
@@ -161,22 +191,18 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 size = -1
             if size < 0:                                     # read(-1) would wait for the end of the connection
-                self.close_connection = True
-                return self.refuse(400, "length", "a bad Content-Length")
+                return self.refuse_unread(400, "length", "a bad Content-Length")
             limit = self.server.max_body
             if limit == 0 and size > 0:                      # bodies switched off: refused unread, whatever the method
-                self.close_connection = True
-                return self.refuse(403, "bodies_off", "this server takes no request body: the setting serve-max-request-mb is 0, "
+                return self.refuse_unread(403, "bodies_off", "this server takes no request body: the setting serve-max-request-mb is 0, "
                                                       "which switches bodies off (the studio is read-only)")
             if limit is not None and size > limit:           # refused unread: the connection cannot carry another request
-                self.close_connection = True
-                return self.refuse(413, "too_large", f"the request body is {size} bytes, over the limit of {limit} "
+                return self.refuse_unread(413, "too_large", f"the request body is {size} bytes, over the limit of {limit} "
                                                      "(the setting serve-max-request-mb)")
             try:
                 self.body = self.rfile.read(size)
             except OSError:
-                self.close_connection = True
-                return self.refuse(400, "length", "a bad Content-Length")
+                return self.refuse_unread(400, "length", "a bad Content-Length")
         if self.headers.get("Host", "") not in self.server.hosts:
             return self.refuse(403, "host", "this server answers only to 127.0.0.1 and localhost")
         parts = urlsplit(self.path)

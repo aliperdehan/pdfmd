@@ -19,6 +19,26 @@ same commit as the change.
 
 ---
 
+## v3.33.230 — 2026-11-16
+
+Pre-edit state: commit `4a447c0`. **Unread upload refusals survive a lingering close**: `--serve` previously answered 413 and
+closed with the body still arriving, so TCP could reset the connection before the client received the answer (including a reset
+inside `sendall`, or an aborted connection on Windows). The handler now sends and flushes the refusal, shuts down its write side,
+then discards input within an absolute deadline and a byte budget before closing. The same treatment covers bodies switched off
+(403), invalid or negative Content-Length (400), and an interrupted body read. Accepted request limits are unchanged. The discard
+budget reuses the larger of the configured request cap and the existing default request cap, so a tiny or zero cap still allows
+an in-flight upload to finish. Two transport constants remain: `LINGER_SECONDS` (one second, an absolute cleanup deadline against
+stalled or trickling peers after the response has been sent) and `LINGER_CHUNK_BYTES` (64 KiB, bounded temporary read memory).
+They introduce no request acceptance setting. `pdfmd.py` changes only its version line; its line count stays 14,211.
+
+Tests: `tests/test_serve.py` checks send/flush/half-close ordering, bounded discard, the absolute deadline, disconnects, and all
+three OS connection errors during sending and receiving. Five socket-free regressions failed before and pass after;
+seven socket-free checks pass after the fix. Repeated 4 MiB uploads to a 64-byte cap require the complete 413, including through
+`scripts/pdfmd`; the same large-body test covers the 403 and 400 refusals. The original smaller capped upload still requires
+413. Localhost binding is forbidden in the sandbox (three pre-edit attempts), so the live TCP fail-before/pass-after checks need
+an outside run. The serve module runs 67 tests: 48 pass, 19 are socket-blocked (all 14 Http tests and five server command-line
+tests). The required split, packaging, docs consistency, setup and isolation checks run 115 tests successfully, with one skip.
+
 ## v3.33.229 — 2026-11-16
 
 Pre-edit state: commit `55c978c`. **`bibliography-indent`: one hanging indent for the reference list and for the entries `fullcite`
