@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.227a — 2026-11-16
+
+Pre-edit state: commit `88b6259`. Docs only, no shipped code, so no `PDFMD_VERSION` bump. **The shrink step is described**: a README
+section, "Smaller PDFs, losslessly: `shrink`" (the switches, the settings, what is kept, the PDF 1.5 header, what happens without
+a tool), a paragraph and a link in the recipes' "Keep images and the result small", and `--shrink` / `--no-shrink` in the
+recipes' flag table.
+
 ## v3.33.227 — 2026-11-16
 
 Pre-edit state: commit `b8a8127`. **Every PDF is now shrunk losslessly, by default** (TODO item 2; D42, and the author's answer in D51: "default `shrink: true`"). A

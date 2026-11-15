@@ -31,6 +31,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [A small editor](#a-small-editor)
   - [In VS Code](#in-vs-code)
   - [A size budget for images and output](#a-size-budget-for-images-and-output)
+  - [Smaller PDFs, losslessly: `shrink`](#smaller-pdfs-losslessly-shrink)
   - [Start from a template](#start-from-a-template)
   - [One section](#one-section)
   - [Other output formats](#other-output-formats)
@@ -905,6 +906,30 @@ There is no budget unless one is set. With one, a build says which image is over
 (`WARN  report.md: figs/scan.png is 14.2 MB, over the 5 MB asset budget`) and, when the file made is over the output
 budget, names it and the three largest images behind it. They are `WARN` lines, so `--strict` fails them. `--max-asset-mb 0`
 switches a document's budget off for one run.
+
+### Smaller PDFs, losslessly: `shrink`
+
+```sh
+pdfmd report.md                  # the PDF is shrunk as its last step (qpdf, pikepdf or mutool, whichever is installed first)
+pdfmd report.md --no-shrink      # as the engine and pdfmd wrote it (also `pdfmd-options: {shrink: false}`)
+pdfmd report.md --verbose        # SHRINK  report.pdf: 381 KB -> 331 KB (qpdf)
+```
+
+```yaml
+pdfmd-options:
+  shrink: true           # the default: object streams and Flate streams deflated again. fast: object streams only. false: off
+  shrink-timeout: 120    # seconds one run of the tool may take; 0 or a negative number: no limit
+```
+
+Every PDF pdfmd writes is a PDF without object streams, because pdfmd's own pass that stamps the build into the file
+rewrites it with pypdf, which cannot write them. The last step of a build rewrites it with them, through the first of
+`qpdf`, `pikepdf` (`pip install pikepdf`; wheels for Windows, macOS and Linux) and `mutool` that is installed: about a tenth
+smaller on a LaTeX report, a fifth on a small Typst one, in a fraction of a second. It is lossless: no image is resampled, no
+font touched; the page count, the text, the Info dictionary, the XMP and the attachments are those the build wrote, and the
+file is replaced only when the tool succeeded, the page count is the same and the file is smaller (any other outcome leaves
+it as built, and the build still succeeds). The file becomes PDF 1.5, which every reader since 2003 opens; a PDF/A-1 file
+(PDF 1.4) gets no object streams, only the recompression. Without any of the three tools nothing happens, and `--verbose`,
+`--check-dependencies` and `--doctor` say so. `--max-output-mb` judges the size after the shrink. `pdfmd --setup` has the rows.
 
 ### Start from a template
 

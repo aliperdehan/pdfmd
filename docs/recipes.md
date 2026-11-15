@@ -513,6 +513,10 @@ pdfmd report --check --max-asset-mb 5                  # only list the images ov
 Or once for the document: `pdfmd-options: {max-asset-mb: 5, max-output-mb: 20}`. With `--strict` the warnings fail the
 build ([README](../README.md#a-size-budget-for-images-and-output)).
 
+A PDF is also made smaller by default: its last step rewrites it losslessly with object streams (qpdf, pikepdf or mutool,
+whichever is installed; about a tenth smaller). `--no-shrink` or `pdfmd-options: {shrink: false}` leaves it as built
+([README](../README.md#smaller-pdfs-losslessly-shrink)).
+
 ### 5.2a Diagrams as code
 
 ````markdown
@@ -973,7 +977,7 @@ Each call runs the command-line tool, so a document builds exactly as `pdfmd` wo
 | raw pieces | `--raw`, `--no-raw`, `--raw-for` |
 | history | `--history`, `--history-all`, `--history-diff`, `--history-restore`, `--no-restored-note`, `--init-backups`, `--backup-folder`, `--global`, `--stamp`, `--stamp-mode`, `--stamp-store`, `--stamp-partial`, `--no-stamp-partial`, `--history-to-file`, `--history-to-notes`, `--merge-history`, `--backup`, `--backup-format` |
 | fonts and scripts | `-f`, `--fallback`, `--missing`, `--check-fonts`, `--translit`, `--emoji-fallback` |
-| PDF finishing | `--bookmarks`, `--header`, `--footer`, `--attach-links`, `--pdf-title`, `--pdf-author`, `--pdf-subject`, `--pdf-keywords`, `--paper` |
+| PDF finishing | `--bookmarks`, `--header`, `--footer`, `--attach-links`, `--shrink`, `--no-shrink`, `--pdf-title`, `--pdf-author`, `--pdf-subject`, `--pdf-keywords`, `--paper` |
 | cache | `--cache`, `--cache-location`, `--cache-plots`, `--no-cache`, `--clear-cache`, `--cache-info` |
 | Word / direct builds | `--check-docx`, `--init-reference`, `--apply-defaults` |
 | check the source | `--check`, `--check-ignore`, `--strict`, `--max-asset-mb`, `--max-output-mb` |
