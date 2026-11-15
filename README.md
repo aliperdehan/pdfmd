@@ -379,6 +379,11 @@ assumes the file is there and mends nothing. The cases, one by one as they were 
   (`File 'lmodern.sty' not found`), although the fonts of xelatex and lualatex come from fontspec. They get an empty
   stand-in package from a temporary folder (searched after the real ones, so an installed file always wins), and `pdflatex`,
   which needs the real fonts, is skipped while another engine is left. A `.tex` file of your own is compiled as it is.
+- **`soul.sty` missing, and the text is struck out** (v3.33.220): Pandoc's template loads soul for `~~struck~~` text (and
+  underline) on every engine except LuaLaTeX, which uses lua-ul; without it those documents fail. `lualatex` goes first when
+  the chain is pdfmd's own (a pinned `-e` list, or the engine that made the PDF, keeps its order), and `xelatex` and
+  `pdflatex` get a stand-in `soul.sty` that draws the line with ulem's `\sout` (`\uline` for underline); with no ulem either
+  the text is printed plain, with a WARN.
 
 `-e calibre` prints the document with [Calibre](https://calibre-ebook.com)'s `ebook-convert`
 instead: Pandoc writes one HTML page (math as MathML, which Calibre draws with its own

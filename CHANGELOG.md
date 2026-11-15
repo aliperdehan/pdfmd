@@ -19,6 +19,32 @@ same commit as the change.
 
 ---
 
+## v3.33.220 — 2026-11-15
+
+Pre-edit state: commit `749f1de`. **TeX self-repair, third remedy: a missing `soul.sty` when the text is struck out** (queue
+item 2b, 3fm). Pandoc's template loads `soul` for `~~strikeout~~` and underline on every engine but LuaLaTeX (which uses
+lua-ul), so with `soul.sty` missing (the corpus's case 3: `apt remove texlive-plain-generic`) a document with struck-out text
+fails under xelatex and pdflatex with `File 'soul.sty' not found`, while a document without it builds. Under `tex-repair: auto`,
+when the build's sources (`core.BUILD["sources"]`, the parts too) hold `~~text~~`, `<del>`, `<s>`, `<strike>`, `<u>` or
+`{.underline}` and kpsewhich does not find `soul.sty` (the same one call as for the files of the other remedies, which now
+asks for `soul.sty`, `ulem.sty`, `lua-ul.sty` and `luacolor.sty` too, only for such a document): (a) `lualatex` goes first when
+lua-ul and luacolor are installed and the chain is pdfmd's own, which `plan_build` now says (`reorder=`: not pinned by `-e`,
+`pdf-engine:` or the config, and not started with the engine that made the PDF by `engine-fallback auto`; a pinned or mirrored
+chain keeps its order, as the README promises); (b) `xelatex` and `pdflatex` get a stand-in `soul.sty` (`SOUL_STUB`, written
+into this run's `pdfmd-tex-stubs-*` folder, after the default path like the lmodern one) in which `\st` is ulem's `\sout` and
+`\ul` its `\uline` (ulem loaded with `[normalem]` so `\emph` stays italic, and only when no earlier package loaded it), while
+`\hl`, `\so`, `\caps` and the colour commands print their argument so a document that uses them still builds; when ulem is
+missing too the stand-in prints the text plain and a WARN says that struck-out text has no line. One NOTE names what was done.
+A `.tex` of the user's is not touched. `off` changes nothing and runs no probe.
+
+Test: `tests/test_tex_repair.py`, class `SoulMissing`: xelatex builds a struck-out document with the stand-in (fails before,
+passes after; the fake engine succeeds only with the stand-in's folder on TEXINPUTS), a chain of pdfmd's own starts with
+lualatex and a pinned or mirrored one keeps its order (`plan()` called with `reorder=`), a document without struck-out text
+gets nothing, no ulem gives the plain stand-in and the WARN, `off` keeps the failure, and both stand-ins are packages real
+xelatex loads (ulem is loaded in the one).
+
+---
+
 ## v3.33.219 — 2026-11-15
 
 Pre-edit state: commit `cb2d07a`. **TeX self-repair, second remedy: a missing `lmodern.sty`** (queue item 2b, 3fm). Pandoc's

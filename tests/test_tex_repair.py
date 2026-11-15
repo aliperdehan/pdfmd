@@ -8,6 +8,8 @@ the case is about and asks the real one for everything else. The builds go throu
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -15,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -272,6 +275,93 @@ class LmodernMissing(FakeTeX):
                               text=True, env={**os.environ, "TEXINPUTS": f"{folder}{os.pathsep}"})
         self.assertEqual(done.returncode, 0, done.stdout)
         self.assertIn("pdfmd stub", (self.work / "s.log").read_text(encoding="utf-8", errors="replace"))
+
+
+@needs_tex("xelatex", "lualatex")
+class SoulMissing(FakeTeX):
+    """Remedy 3: soul.sty is not installed and the text is struck out. xelatex and pdflatex need soul for that (lualatex has
+    lua-ul), so lualatex goes first when the chain is pdfmd's own, and xelatex and pdflatex get a stand-in soul.sty that
+    draws the line with ulem's \\sout (plain text and a WARN when ulem is missing too)."""
+
+    def setUp(self):
+        super().setUp()
+        works = {"ok_if": {"env_in": ["TEXINPUTS", STUBS]}}
+        self.engine("xelatex", "soul-missing.txt", delegate=REAL["xelatex"], **works)
+        self.engine("pdflatex", "soul-missing.txt", **works)
+        self.engine("lualatex", "soul-missing.txt", ok_if={"env_set": "PATH"}, delegate=REAL["lualatex"])
+        self.kpsewhich("soul.sty")
+        self.write("d.md", STRUCK)
+
+    def test_xelatex_gets_a_stand_in_soul_that_builds(self):
+        code, said = self.pdfmd("d.md", "-e", "xelatex")                           # pinned: never reordered
+        self.assertEqual(code, 0, said)
+        self.assertIn(STUBS, self.started("xelatex")[0]["TEXINPUTS"])
+        self.assertEqual(said.count(": tex-repair: "), 1, said)
+        self.assertRegex(said, r"NOTE .*tex-repair: soul\.sty is not installed")
+        self.assertIn("\\sout", said)
+        self.assertEqual(self.started("lualatex"), [])
+
+    def test_a_chain_of_pdfmds_own_starts_with_lualatex(self):
+        import pdfmd
+        repair = pdfmd.load_package("pdfmd_tex.repair")
+        document = self.write("e.md", STRUCK)
+        with unittest.mock.patch.dict(os.environ, {"PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}", "FAKE_KPSE_HIDE": "soul.sty"}):
+            repair.PROBED.clear()
+            repair.NOTED.clear()
+            with contextlib.redirect_stderr(io.StringIO()):
+                chain = repair.plan(document, [], ["xelatex", "pdflatex", "lualatex"], reorder=True)
+        self.assertEqual(chain, ["lualatex", "xelatex", "pdflatex"])
+
+    def test_a_pinned_or_mirrored_chain_keeps_its_order(self):
+        import pdfmd
+        repair = pdfmd.load_package("pdfmd_tex.repair")
+        document = self.write("e.md", STRUCK)
+        with unittest.mock.patch.dict(os.environ, {"PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}", "FAKE_KPSE_HIDE": "soul.sty"}):
+            repair.PROBED.clear()
+            repair.NOTED.clear()
+            with contextlib.redirect_stderr(io.StringIO()):
+                chain = repair.plan(document, [], ["xelatex", "pdflatex", "lualatex"], reorder=False)
+        self.assertEqual(chain, ["xelatex", "pdflatex", "lualatex"])
+
+    def test_a_document_without_struck_text_is_left_alone(self):
+        self.write("d.md", GOOD)
+        self.spec["xelatex"]["ok_if"] = {"env_set": "PATH"}
+        code, said = self.pdfmd("d.md", "-e", "xelatex")
+        self.assertEqual(code, 0, said)
+        self.assertNotIn(STUBS, self.started("xelatex")[0]["TEXINPUTS"])
+        self.assertNotIn("tex-repair", said)
+
+    def test_without_ulem_the_text_is_plain_and_a_warning_says_so(self):
+        self.kpsewhich("soul.sty", "ulem.sty")
+        code, said = self.pdfmd("d.md", "-e", "xelatex")
+        self.assertEqual(code, 0, said)
+        self.assertRegex(said, r"WARN .*soul\.sty and ulem\.sty are not installed")
+        self.assertIn("struck-out text is printed without its line", said)
+
+    def test_off_keeps_the_failure(self):
+        self.write("d.md", "---\ntitle: R\npdfmd-options: {tex-repair: off}\n---\n\nSome ~~struck~~ text.\n")
+        code, said = self.pdfmd("d.md", "-e", "xelatex")
+        self.assertEqual(code, 1, said)
+        self.assertNotIn("tex-repair", said)
+        self.assertIn("the LaTeX package soul.sty is missing", said)
+
+    def test_the_stand_in_is_a_package_xelatex_loads(self):
+        import pdfmd
+        repair = pdfmd.load_package("pdfmd_tex.repair")
+        folder = self.folder / "stubs"
+        folder.mkdir()
+        repair.write_stub(folder, "soul.sty", ulem=True)
+        (self.work / "s.tex").write_text("\\documentclass{article}\\usepackage{soul}\\begin{document}Some \\st{struck} and \\emph{kept}.\\end{document}\n", encoding="utf-8")
+        done = subprocess.run([REAL["xelatex"], "-interaction=nonstopmode", "-halt-on-error", "s.tex"], cwd=self.work, capture_output=True,
+                              text=True, env={**os.environ, "TEXINPUTS": f"{folder}{os.pathsep}"})
+        self.assertEqual(done.returncode, 0, done.stdout)
+        log = (self.work / "s.log").read_text(encoding="utf-8", errors="replace")
+        self.assertIn("pdfmd stub", log)
+        self.assertIn("ulem.sty", log)                                             # the line is drawn by ulem
+        repair.write_stub(folder, "soul.sty", ulem=False)                          # the plain one loads as well
+        done = subprocess.run([REAL["xelatex"], "-interaction=nonstopmode", "-halt-on-error", "s.tex"], cwd=self.work, capture_output=True,
+                              text=True, env={**os.environ, "TEXINPUTS": f"{folder}{os.pathsep}"})
+        self.assertEqual(done.returncode, 0, done.stdout)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ mended by mistake.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -49,7 +50,26 @@ STATE: dict = {"mode": None, "label": "", "stubs": {}}
 LMODERN_STUB = r"""\NeedsTeXFormat{LaTeX2e}
 \ProvidesPackage{lmodern}[2026/01/01 pdfmd stub: no-op, fonts come from fontspec]
 """
-STUBS = {"lmodern.sty": LMODERN_STUB}
+# soul's \st (strikeout) and \ul (underline), which Pandoc's template uses on every engine but LuaLaTeX, drawn with ulem when it is
+# installed (`[normalem]`: \emph stays italic; not loaded again when the document loaded ulem first); soul's other commands print
+# their argument, so a document that uses them still builds
+SOUL_STUB = r"""\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{soul}[2026/01/01 pdfmd stub: st and ul through ulem, the rest plain]
+%ULEM%\DeclareRobustCommand*{\st}[1]{%STRIKE%}
+\DeclareRobustCommand*{\ul}[1]{%UNDERLINE%}
+\providecommand*{\hl}[1]{#1}
+\providecommand*{\so}[1]{#1}
+\providecommand*{\caps}[1]{#1}
+\providecommand*{\sethlcolor}[1]{}
+\providecommand*{\setstcolor}[1]{}
+\providecommand*{\setulcolor}[1]{}
+\providecommand*{\soulregister}[2]{}
+"""
+ULEM_LOAD = "\\@ifpackageloaded{ulem}{}{\\RequirePackage[normalem]{ulem}}\n"
+STUBS = {"lmodern.sty": LMODERN_STUB, "soul.sty": SOUL_STUB}
+# a struck-out or underlined text in a Markdown source: ~~text~~, <del>, <s>, <strike>, <u>, [text]{.underline} (what makes
+# Pandoc's template load soul); a match inside code is a false alarm that costs a NOTE and a stand-in no engine reads
+STRIKES = re.compile(r"(?<![~\\])~~(?=\S)[^~\n]+?(?<=\S)~~(?!~)|<(?:del|s|strike|u)[ >]|\{\.(?:underline|ul)\}", re.IGNORECASE)
 
 
 def mode_word(value) -> str | None:
@@ -114,10 +134,14 @@ def stub_folder() -> Path:
     return core.temporary_place("tex-stubs")
 
 
-def write_stub(folder: Path, name: str, **how) -> Path:
-    """The stand-in package ``name`` in ``folder``."""
+def write_stub(folder: Path, name: str, ulem: bool = True) -> Path:
+    """The stand-in package ``name`` in ``folder`` (soul's draws with ulem when ``ulem``, else prints plain text)."""
+    text = STUBS[name]
+    if name == "soul.sty":
+        text = (text.replace("%ULEM%", ULEM_LOAD if ulem else "")
+                .replace("%STRIKE%", "\\sout{#1}" if ulem else "#1").replace("%UNDERLINE%", "\\uline{#1}" if ulem else "#1"))
     path = folder / name
-    path.write_text(STUBS[name], encoding="utf-8", newline="\n")
+    path.write_text(text, encoding="utf-8", newline="\n")
     return path
 
 
@@ -136,9 +160,9 @@ def overlay(engine: str, base: dict | None = None) -> dict[str, str]:
     names = STATE["stubs"].get(engine)
     if names:
         folder = stub_folder()
-        for name in names:
+        for name, how in names.items():
             if not (folder / name).is_file():
-                write_stub(folder, name)
+                write_stub(folder, name, **how)
         changes["TEXINPUTS"] = texinputs_with((os.environ if base is None else base).get("TEXINPUTS"), folder)
     return changes
 
@@ -183,15 +207,28 @@ def say(key: str, text: str) -> None:
         lines.append(line)
 
 
-def plan(md_path: Path, metadata_files: list[Path], engines: list[str]) -> list[str]:
+def struck_out(sources: list[Path]) -> bool:
+    """Whether a Markdown source has text that Pandoc's template needs soul for (STRIKES)."""
+    for source in sources:
+        if source.suffix.lower() in (".md", ".markdown"):
+            text = core.read_text_or_none(source)
+            if text and STRIKES.search(text):
+                return True
+    return False
+
+
+def plan(md_path: Path, metadata_files: list[Path], engines: list[str], reorder: bool = False) -> list[str]:
     """The engine chain of the build after the remedies that change it (called by lib/pdfmd_chain's plan_build, for a PDF
-    build whose chain has a TeX engine). The chain is never left empty."""
+    build whose chain has a TeX engine). The chain is never left empty. ``reorder``: the chain is pdfmd's own (not pinned,
+    not started with the engine that made the PDF), so an engine may go first."""
     STATE.update(mode=resolve_mode(md_path, metadata_files), label=core.display_path(md_path), stubs={})
     if STATE["mode"] == "off" or not any(engine in TEX_ENGINES for engine in engines):
         return engines
     chain = list(engines)
     pandoc_made = md_path.suffix.lower() != ".tex"          # a .tex of the user's is compiled as it is (the cases below are Pandoc's template)
-    installed(tuple(["luaotfload-main.lua"] * ("lualatex" in chain) + ["lmodern.sty"] * pandoc_made))      # one kpsewhich call
+    strikes = pandoc_made and any(engine in chain for engine in ("xelatex", "pdflatex")) and struck_out(core.BUILD.get("sources") or [md_path])
+    installed(tuple(["luaotfload-main.lua"] * ("lualatex" in chain) + ["lmodern.sty"] * pandoc_made
+                    + ["soul.sty", "ulem.sty", "lua-ul.sty", "luacolor.sty"] * strikes))      # one kpsewhich call
     # 1. luaotfload, LuaTeX's font loader, is missing: lualatex would fail whatever the document
     if "lualatex" in chain and len(chain) > 1 and missing("luaotfload-main.lua"):
         chain.remove("lualatex")
@@ -202,7 +239,7 @@ def plan(md_path: Path, metadata_files: list[Path], engines: list[str]) -> list[
     if pandoc_made and missing("lmodern.sty"):
         standins = [engine for engine in ("xelatex", "lualatex") if engine in chain]
         for engine in standins:
-            STATE["stubs"].setdefault(engine, []).append("lmodern.sty")
+            STATE["stubs"].setdefault(engine, {})["lmodern.sty"] = {}
         skipped = "pdflatex" in chain and len(chain) > 1
         if skipped:
             chain.remove("pdflatex")
@@ -215,4 +252,28 @@ def plan(md_path: Path, metadata_files: list[Path], engines: list[str]) -> list[
                 doing.append("pdflatex is skipped (it needs the real fonts)")
             say("lmodern", "lmodern.sty is not installed (Pandoc's LaTeX template loads it): " + "; ".join(doing)
                 + " (this run only; `tex-repair: off` changes nothing)")
+    # 3. soul.sty is missing and the text is struck out or underlined: LuaLaTeX draws it with lua-ul, so it goes first when the
+    # chain may be reordered; xelatex and pdflatex get a stand-in soul.sty that draws it with ulem (plain text, and a WARN,
+    # when ulem is missing too)
+    if strikes and missing("soul.sty"):
+        lines = []
+        lua_ok = "lualatex" in chain and not missing("lua-ul.sty") and not missing("luacolor.sty")
+        if reorder and lua_ok and chain[0] != "lualatex":
+            chain.remove("lualatex")
+            chain.insert(0, "lualatex")
+            lines.append("lualatex goes first (its lua-ul draws the line)")
+        ulem = not missing("ulem.sty")
+        standins = [engine for engine in ("xelatex", "pdflatex") if engine in chain]
+        for engine in standins:
+            STATE["stubs"].setdefault(engine, {})["soul.sty"] = {"ulem": ulem}
+        if standins:
+            lines.append(" and ".join(standins) + (" use" if len(standins) > 1 else " uses") + " a stand-in soul.sty that "
+                         + ("draws the line with ulem's \\sout and \\uline" if ulem else "prints the text plain"))
+        if lines:
+            say("soul", "soul.sty is not installed and the text is struck out or underlined: " + "; ".join(lines)
+                + " (this run only; `tex-repair: off` changes nothing)")
+        if standins and not ulem and "soul-plain" not in NOTED:
+            NOTED.add("soul-plain")
+            print(f"WARN  {STATE['label']}: tex-repair: soul.sty and ulem.sty are not installed, so struck-out text is printed "
+                  "without its line (install soul: tlmgr install soul)", file=sys.stderr)
     return chain

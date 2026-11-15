@@ -219,6 +219,7 @@ def plan_build(md_path: Path, metadata_files: list[Path], engines: list[str], ou
     """The chain this build runs (``engines``, perhaps started with the engine that made the output) and its Plan, kept in
     core.BUILD["chain"] for the engine loops."""
     asked, where = resolve_mode(md_path, metadata_files)
+    original = list(engines)
     name = output.name
     exists = output.is_file()
     mode, why = asked, {"on": "any failure tries the next engine", "missing": "only an engine that cannot run here falls through",
@@ -245,7 +246,8 @@ def plan_build(md_path: Path, metadata_files: list[Path], engines: list[str], ou
                     engines = order
                     why = f"{name} was made by {engine} ({how}); starting with {order[0]}"
     core.vprint(verbose, f"ENGINE  engine-fallback {asked}{'' if where == 'default' else f' ({where})'}: {why}")
-    engines = core.load_package("pdfmd_tex.repair").plan(md_path, metadata_files, engines)        # TeX self-repair (v3.33.218)
+    engines = core.load_package("pdfmd_tex.repair").plan(                       # TeX self-repair (v3.33.218); pdfmd's own order only
+        md_path, metadata_files, engines, reorder=engines == original and not pinned(md_path, metadata_files))
     core.BUILD["chain"] = Plan(mode, asked, where, output)
     return engines
 
