@@ -38,6 +38,13 @@ def parse_depth(value) -> int | str:
     raise SystemExit(f"pdfmd-options: metadata-parents: {value!r}: use a whole number (0 = off), all, or a negative number")
 
 
+def _resolved(path) -> Path:
+    try:
+        return Path(path).resolve()
+    except OSError:
+        return Path(path)
+
+
 def with_metadata_parents(found, directory, document, report, document_class, document_stem, discover, folders, extra):
     """Add nearest-first parent layers, using precisely the local YAML selection rule in each visible metadata/ folder."""
     if not discover:
@@ -56,6 +63,7 @@ def with_metadata_parents(found, directory, document, report, document_class, do
             boundary = folder.parent
             break
     parents = []
+    seen = {_resolved(path) for path in local}     # a local metadata/ linked to a parent's (`metadata -> ../metadata`) is one layer
     if boundary != start:
         for distance, ancestor in enumerate(start.parents, start=1):
             if isinstance(depth, int) and depth >= 0 and distance > depth:
@@ -63,8 +71,10 @@ def with_metadata_parents(found, directory, document, report, document_class, do
             folder = ancestor / core.ACCESSORY_DIRNAME
             if folder.is_dir():
                 selected = core.find_local_metadata(folder, None, report, document_class, document_stem, search_dirs=[folder])
-                parents.extend(ParentMetadata(path) for path in
-                               (selected if isinstance(selected, list) else [selected] if selected is not None else []))
+                for path in selected if isinstance(selected, list) else [selected] if selected is not None else []:
+                    if _resolved(path) not in seen:
+                        seen.add(_resolved(path))
+                        parents.append(ParentMetadata(path))
             if ancestor == boundary:
                 break
     if not parents:

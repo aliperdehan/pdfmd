@@ -323,3 +323,23 @@ class Builds(Fixture):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn('Parent', self.doc.with_suffix('.html').read_text())
         self.assertIn('LocalSecond', (self.doc.parent / 'second.html').read_text())
+
+
+class LinkedFolder(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "a directory symlink needs a privilege on Windows")
+    def test_a_local_metadata_folder_linked_to_the_parents_is_one_layer(self):
+        """`report/metadata -> ../metadata` (a project sharing its metadata with one report): the parent's folder is the same
+        folder, so its files are not added a second time as a parent layer (Pandoc would read each file twice)."""
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        root = Path(scratch.name).resolve()
+        (root / "metadata").mkdir()
+        (root / "metadata" / "metadata.yaml").write_text("title: Shared\n", encoding="utf-8")
+        report = root / "report"
+        report.mkdir()
+        (report / "metadata").symlink_to(root / "metadata", target_is_directory=True)
+        doc = report / "r.md"
+        doc.write_text("Body\n", encoding="utf-8")
+        found = pdfmd.find_metadata(report, None, document=doc, document_stem=doc.stem)
+        files = found if isinstance(found, list) else [found]
+        self.assertEqual([Path(f).resolve() for f in files], [root / "metadata" / "metadata.yaml"], files)

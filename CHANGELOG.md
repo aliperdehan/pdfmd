@@ -61,6 +61,8 @@ Read-only check of the chemistry package's starter layout: its report has linked
 folder immediately above it, so the new default adds no second layer there. The existing four-ancestor scaffold search is
 unchanged.
 
+Review fix (same version, not released): a parent `metadata/` folder that is the same folder as one already found (a report's `metadata` linked to the project's, `metadata -> ../metadata`) is not added a second time: Pandoc was handed the same file twice. Test: `LinkedFolder` in `tests/test_metadata_parents.py`.
+
 ## v3.33.230 — 2026-11-16
 
 Pre-edit state: commit `4a447c0`. **Unread upload refusals survive a lingering close**: `--serve` previously answered 413 and
