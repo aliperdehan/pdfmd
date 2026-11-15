@@ -23,8 +23,11 @@ mended by mistake.
 
 from __future__ import annotations
 
+import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 from pdfmd_base import core
 
@@ -38,7 +41,15 @@ WITNESS = "article.cls"
 
 PROBED: dict[str, bool | None] = {}      # file name -> found by kpsewhich (None: unknown); asked once per run
 NOTED: set[str] = set()                  # the remedies whose NOTE was printed this run
-STATE: dict = {"mode": None, "label": ""}   # this build's: the mode in force, the document as it is named in a NOTE
+# this build's: the mode in force, the document as a NOTE names it, the stand-in files each engine gets on TEXINPUTS
+STATE: dict = {"mode": None, "label": "", "stubs": {}}
+
+# The stand-in packages (file-format facts: what the package would define). They are written when an engine needs one, into
+# this run's temporary folder, and put on TEXINPUTS AFTER the default path, so a real file always wins.
+LMODERN_STUB = r"""\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{lmodern}[2026/01/01 pdfmd stub: no-op, fonts come from fontspec]
+"""
+STUBS = {"lmodern.sty": LMODERN_STUB}
 
 
 def mode_word(value) -> str | None:
@@ -98,6 +109,69 @@ def missing(name: str) -> bool:
     return installed((name,))[name] is False
 
 
+def stub_folder() -> Path:
+    """The folder this run's stand-in files are written in (made once, removed when the run ends)."""
+    return core.temporary_place("tex-stubs")
+
+
+def write_stub(folder: Path, name: str, **how) -> Path:
+    """The stand-in package ``name`` in ``folder``."""
+    path = folder / name
+    path.write_text(STUBS[name], encoding="utf-8", newline="\n")
+    return path
+
+
+def texinputs_with(current: str | None, folder: Path) -> str:
+    """TEXINPUTS that keeps ``current`` and the default path and ends with ``folder`` (an empty entry stands for the default)."""
+    base = (current or "").rstrip(os.pathsep)
+    return f"{base}{os.pathsep}{os.pathsep}{folder}" if base else f"{os.pathsep}{folder}"
+
+
+def overlay(engine: str, base: dict | None = None) -> dict[str, str]:
+    """The environment variables this build's remedies change for ``engine`` (empty: none), given the environment it would
+    otherwise have (``base``, else the process's)."""
+    if current_mode() == "off":
+        return {}
+    changes: dict[str, str] = {}
+    names = STATE["stubs"].get(engine)
+    if names:
+        folder = stub_folder()
+        for name in names:
+            if not (folder / name).is_file():
+                write_stub(folder, name)
+        changes["TEXINPUTS"] = texinputs_with((os.environ if base is None else base).get("TEXINPUTS"), folder)
+    return changes
+
+
+@contextmanager
+def engine_environment(engine: str) -> Iterator[None]:
+    """The process's environment with this build's remedies for ``engine`` while a command that inherits it runs (the
+    Pandoc command of an engine, whose environment is built in several places)."""
+    changes = overlay(engine)
+    if not changes:
+        yield
+        return
+    saved = {name: os.environ.get(name) for name in changes}
+    os.environ.update(changes)
+    try:
+        yield
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def engine_env(engine: str, env: dict | None) -> dict | None:
+    """``env`` (None: the process's) with this build's remedies for ``engine``, for a command pdfmd starts itself; ``env``
+    itself when nothing applies."""
+    changes = overlay(engine, env)
+    if not changes:
+        return env
+    return {**(os.environ if env is None else env), **changes}
+
+
 def say(key: str, text: str) -> None:
     """The NOTE of the remedy ``key`` (printed once per run) and its line for --strict (once per build)."""
     line = f"NOTE  {STATE['label']}: tex-repair: {text}"
@@ -112,14 +186,33 @@ def say(key: str, text: str) -> None:
 def plan(md_path: Path, metadata_files: list[Path], engines: list[str]) -> list[str]:
     """The engine chain of the build after the remedies that change it (called by lib/pdfmd_chain's plan_build, for a PDF
     build whose chain has a TeX engine). The chain is never left empty."""
-    STATE["mode"] = resolve_mode(md_path, metadata_files)
-    STATE["label"] = core.display_path(md_path)
+    STATE.update(mode=resolve_mode(md_path, metadata_files), label=core.display_path(md_path), stubs={})
     if STATE["mode"] == "off" or not any(engine in TEX_ENGINES for engine in engines):
         return engines
     chain = list(engines)
+    pandoc_made = md_path.suffix.lower() != ".tex"          # a .tex of the user's is compiled as it is (the cases below are Pandoc's template)
+    installed(tuple(["luaotfload-main.lua"] * ("lualatex" in chain) + ["lmodern.sty"] * pandoc_made))      # one kpsewhich call
     # 1. luaotfload, LuaTeX's font loader, is missing: lualatex would fail whatever the document
     if "lualatex" in chain and len(chain) > 1 and missing("luaotfload-main.lua"):
         chain.remove("lualatex")
         say("luaotfload", f"luaotfload (LuaTeX's font loader) is not installed, so lualatex is skipped and {chain[0]} is tried "
                           "first (found with kpsewhich; this run only; `tex-repair: off` tries lualatex anyway)")
+    # 2. lmodern.sty is missing, and Pandoc's template loads it for every LaTeX engine: xelatex and lualatex (fontspec sets
+    # their fonts) load an empty stand-in; pdflatex needs the real fonts, so it is skipped when another engine can run
+    if pandoc_made and missing("lmodern.sty"):
+        standins = [engine for engine in ("xelatex", "lualatex") if engine in chain]
+        for engine in standins:
+            STATE["stubs"].setdefault(engine, []).append("lmodern.sty")
+        skipped = "pdflatex" in chain and len(chain) > 1
+        if skipped:
+            chain.remove("pdflatex")
+        if standins or skipped:
+            doing = []
+            if standins:
+                doing.append(" and ".join(standins) + (" use" if len(standins) > 1 else " uses")
+                             + " an empty stand-in for it (fontspec sets the fonts)")
+            if skipped:
+                doing.append("pdflatex is skipped (it needs the real fonts)")
+            say("lmodern", "lmodern.sty is not installed (Pandoc's LaTeX template loads it): " + "; ".join(doing)
+                + " (this run only; `tex-repair: off` changes nothing)")
     return chain

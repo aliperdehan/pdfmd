@@ -375,6 +375,10 @@ assumes the file is there and mends nothing. The cases, one by one as they were 
   next engine of the chain is tried first and no run is wasted: `NOTE  report.md: tex-repair: luaotfload (LuaTeX's font
   loader) is not installed, so lualatex is skipped and xelatex is tried first`. An engine that is the only one of the chain
   (`-e lualatex`) is never skipped.
+- **`lmodern.sty` missing** (v3.33.219): Pandoc's LaTeX template loads it for every engine, so every PDF build fails
+  (`File 'lmodern.sty' not found`), although the fonts of xelatex and lualatex come from fontspec. They get an empty
+  stand-in package from a temporary folder (searched after the real ones, so an installed file always wins), and `pdflatex`,
+  which needs the real fonts, is skipped while another engine is left. A `.tex` file of your own is compiled as it is.
 
 `-e calibre` prints the document with [Calibre](https://calibre-ebook.com)'s `ebook-convert`
 instead: Pandoc writes one HTML page (math as MathML, which Calibre draws with its own

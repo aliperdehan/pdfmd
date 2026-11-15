@@ -19,6 +19,32 @@ same commit as the change.
 
 ---
 
+## v3.33.219 — 2026-11-15
+
+Pre-edit state: commit `cb2d07a`. **TeX self-repair, second remedy: a missing `lmodern.sty`** (queue item 2b, 3fm). Pandoc's
+LaTeX template loads `lmodern` for every engine, so a TeX installation without it (the corpus's case 2: `apt remove lmodern`,
+a minimal TeX Live) fails every PDF build with `! LaTeX Error: File 'lmodern.sty' not found.`, xelatex and lualatex included,
+although fontspec sets their fonts anyway. Under `tex-repair: auto`, when kpsewhich does not find `lmodern.sty` (the same one
+call as for luaotfload, `installed()`), `xelatex` and `lualatex` get pdfmd's empty stand-in package (`LMODERN_STUB`, written at
+run time into this run's temporary folder `pdfmd-tex-stubs-*`, so it works from the zipapp too) on TEXINPUTS, put AFTER the
+default path (`TEXINPUTS=<old>::<folder>`, an empty entry standing for the default path), so a real file always wins even when
+kpsewhich and the engine come from different TeX installations; `pdflatex`, which needs the real Latin Modern fonts, is skipped
+while another engine is left. One NOTE names both. The stand-in reaches the engine where its environment is made: on the
+Pandoc route `run_engine_command` (lib/pdfmd_build, which lib/pdfmd_report calls too) runs the command inside
+`repair.engine_environment(engine)`, which sets TEXINPUTS in the process's environment for that command only and puts it back
+(the command's environment is built at three places, all from `os.environ`); the direct routes (a `.tex`, the cache route,
+the biblatex route, the office route) get it through `run_tex_engine` (`repair.engine_env`). Only Pandoc's template is meant:
+a `.tex` of the user's is compiled as it is, and a document that loads lmodern itself keeps the error that names it. A
+chain of `pdflatex` alone is not emptied and gets no stand-in. `tex-repair: off` changes nothing, and no probe runs.
+`wc -l pdfmd.py` is 14208 before and after (only the version line changes).
+
+Test: `tests/test_tex_repair.py`, class `LmodernMissing` (fake engines that print the corpus's `lmodern.sty not found` log unless
+the stand-in's folder is on TEXINPUTS; a fake kpsewhich that hides the file): xelatex builds with the stand-in and pdflatex
+is never started (fails before, passes after), lualatex gets it too, `--strict` fails the build, `off` and a pdflatex-only chain
+keep the failure, and the stand-in is a package real xelatex loads (compiled with it first on the path).
+
+---
+
 ## v3.33.218 — 2026-11-15
 
 Pre-edit state: commit `d1c3e75`. **TeX self-repair, first remedy: a missing luaotfload** (queue item 2b; the design is 3fm,

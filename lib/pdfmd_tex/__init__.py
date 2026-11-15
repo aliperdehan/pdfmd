@@ -361,7 +361,7 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         core.log_cmd(cmd, cwd, verbose)
         return subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
 
-    engine_env = env
+    engine_env = core.load_package("pdfmd_tex.repair").engine_env(engine, env)          # TeX self-repair (v3.33.219)
     cmd = latex_engine_command(engine, tex_path, output_dir,
                                [folder for folder in (engine_env or {}).get(core.TECTONIC_SEARCH_ENV, "").split(os.pathsep) if folder])
     if cmd is None:

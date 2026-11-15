@@ -69,7 +69,9 @@ def run_engine_command(cmd: list[str], engine: str, output: Path, run_pandoc, pa
     """Run one engine's Pandoc command: `run_pandoc(command, target)` as it is, or for "calibre" into an HTML
     page that ebook-convert then prints (`page_options()` gives its paper, margins and language). Pandoc's own
     warnings are kept in the result; WeasyPrint's about the CSS it ignores only with --verbose."""
-    with core.calibre_html_command(cmd, engine) as (command, html):
+    environment = (core.load_package("pdfmd_tex.repair").engine_environment(engine) if engine in core.LATEX_ENGINES
+                   else contextlib.nullcontext())                  # TeX self-repair (v3.33.219)
+    with environment, core.calibre_html_command(cmd, engine) as (command, html):
         result = run_pandoc(command, html or output)
         if engine == "weasyprint" and result.returncode == 0 and not verbose and result.stderr:
             result = subprocess.CompletedProcess(result.args, 0, result.stdout,

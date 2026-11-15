@@ -204,5 +204,75 @@ class LuaotfloadMissing(FakeTeX):
         self.assertNotIn("tex-repair", said)
 
 
+STUBS = "pdfmd-tex-stubs"        # the name of the temporary folder the stand-in files are made in
+
+
+@needs_tex("xelatex")
+class LmodernMissing(FakeTeX):
+    """Remedy 2: lmodern.sty is not installed. Pandoc's LaTeX template loads it for every engine, so xelatex and lualatex get
+    pdfmd's empty stand-in (their fonts come from fontspec) and pdflatex, which needs the real fonts, is skipped."""
+
+    def setUp(self):
+        super().setUp()
+        works = {"ok_if": {"env_in": ["TEXINPUTS", STUBS]}}
+        self.engine("pdflatex", "lmodern-missing.txt", **works)
+        self.engine("xelatex", "lmodern-missing.txt", delegate=REAL["xelatex"], **works)
+        self.engine("lualatex", "lmodern-missing.txt", **works)
+        self.kpsewhich("lmodern.sty")
+        self.write("d.md", GOOD)
+
+    def test_xelatex_gets_a_stand_in_and_pdflatex_is_skipped(self):
+        code, said = self.pdfmd("d.md", "-e", "pdflatex,xelatex")
+        self.assertEqual(code, 0, said)
+        self.assertEqual(self.started("pdflatex"), [], said)
+        self.assertTrue(self.started("xelatex"), said)                              # (Pandoc runs it more than once)
+        for run in self.started("xelatex"):
+            self.assertIn(STUBS, run["TEXINPUTS"])
+        self.assertEqual(said.count(": tex-repair: "), 1, said)
+        self.assertRegex(said, r"NOTE .*tex-repair: lmodern\.sty is not installed")
+        self.assertIn("pdflatex is skipped", said)
+        self.assertNotIn("failed", said)
+
+    def test_lualatex_gets_the_stand_in_too(self):
+        code, said = self.pdfmd("d.md", "-e", "lualatex")                          # the fake succeeds with the stand-in
+        self.assertEqual(code, 0, said)
+        self.assertIn(STUBS, self.started("lualatex")[0]["TEXINPUTS"])
+        self.assertIn("empty stand-in", said)
+
+    def test_off_keeps_the_failure(self):
+        self.write("d.md", "---\ntitle: R\npdfmd-options: {tex-repair: off}\n---\n\nGood text.\n")
+        code, said = self.pdfmd("d.md", "-e", "pdflatex,xelatex")
+        self.assertEqual(code, 1, said)
+        self.assertEqual(len(self.started("pdflatex")), 1, said)
+        self.assertNotIn(STUBS, self.started("xelatex")[0]["TEXINPUTS"])
+        self.assertIn("the LaTeX package lmodern.sty is missing", said)
+        self.assertNotIn("tex-repair", said)
+
+    def test_pdflatex_alone_is_not_skipped_and_gets_no_stand_in(self):
+        code, said = self.pdfmd("d.md", "-e", "pdflatex")
+        self.assertEqual(code, 1, said)
+        self.assertEqual(len(self.started("pdflatex")), 1, said)
+        self.assertNotIn(STUBS, self.started("pdflatex")[0]["TEXINPUTS"])
+
+    def test_strict_counts_it(self):
+        code, said = self.pdfmd("d.md", "-e", "pdflatex,xelatex", "--strict")
+        self.assertEqual(code, 1, said)
+        self.assertIn("--strict: the build printed 1 warning", said)
+
+    def test_the_stand_in_is_a_package_xelatex_loads(self):
+        # the files themselves: a document that loads lmodern, compiled with the stand-in FIRST on the path (a real one is
+        # installed here, so the build above never reads the stand-in)
+        import pdfmd
+        repair = pdfmd.load_package("pdfmd_tex.repair")
+        folder = self.folder / "stubs"
+        folder.mkdir()
+        repair.write_stub(folder, "lmodern.sty")
+        (self.work / "s.tex").write_text("\\documentclass{article}\\usepackage{lmodern}\\begin{document}Hi.\\end{document}\n", encoding="utf-8")
+        done = subprocess.run([REAL["xelatex"], "-interaction=nonstopmode", "-halt-on-error", "s.tex"], cwd=self.work, capture_output=True,
+                              text=True, env={**os.environ, "TEXINPUTS": f"{folder}{os.pathsep}"})
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertIn("pdfmd stub", (self.work / "s.log").read_text(encoding="utf-8", errors="replace"))
+
+
 if __name__ == "__main__":
     unittest.main()
