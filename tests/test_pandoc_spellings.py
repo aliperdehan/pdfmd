@@ -23,8 +23,11 @@ def template_has(writer: str, *variables: str) -> bool:
     `backgroundcolordark` in HTML and no link colours in Typst, so a test of those spellings means nothing there."""
     if not shutil.which("pandoc"):
         return False
-    done = subprocess.run(["pandoc", "-D", writer], capture_output=True, text=True, stdin=subprocess.DEVNULL)
-    return done.returncode == 0 and all(variable in done.stdout for variable in variables)
+    text = ""
+    for command in (["pandoc", "-D", writer], ["pandoc", "--print-default-data-file", "templates/styles.html"]):
+        done = subprocess.run(command, capture_output=True, text=True, stdin=subprocess.DEVNULL)    # HTML's CSS is a partial
+        text += done.stdout if done.returncode == 0 else ""
+    return all(variable in text for variable in variables)
 
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
