@@ -19,6 +19,29 @@ same commit as the change.
 
 ---
 
+## v3.33.223a — 2026-11-16
+
+Pre-edit state: commit `52c64af`. A test file only, no shipped code, so no `PDFMD_VERSION` bump. **`tests/test_tex_repair.py` made
+independent of the machine it runs on**: its first run on GitHub (run 43704349747, at `8097397`) failed in three ways that the author's Mac does
+not show, all in the tests and none in `lib/pdfmd_tex/repair.py`:
+-  The native jobs have no TeX on PATH, and `unwritable_cache` and `provide_writable_places` move nothing without an engine, so the
+   two `CacheUnwritable` tests that call `provide_writable_places()` found no scratch folder (`KeyError: 'texmf'`; the "off" and
+   "left alone" tests of that class passed there for nothing). `CacheUnwritable.provide` now has `pdfmd.which` find a `lualatex`.
+-  `--strict` counted two warnings, not one, where the runner has no STIX Two Text: pdfmd's own `WARN font: STIX Two Text is not
+   installed; using DejaVu Serif instead` sits in the same list as the repair NOTE. The five tests that said "printed 1 warning" use
+   `assert_strict_counts_the_repair`, which wants exactly one `tex-repair` line and no line that is neither it nor a `font:` one.
+-  With Pandoc 3.1.3 (the CI's other Pandoc) the fake engines are started twice for every Pandoc run (that Pandoc runs the engine twice, a
+   newer one once, and stops after a failure), and pdfmd's one-page probe (`probe.tex`) is asked when Pandoc's message does not name the
+   cause, so the tests that counted starts saw 2 for 1 and 4 for 2. `FakeTeX.started` leaves the probe out (`probed` lists it) and
+   folds a run that repeats the one before it with the same command line and environment; a run pdfmd repeats on purpose
+   (a fresh TEXMFVAR, the stand-ins on TEXINPUTS) differs in its environment and stays.
+
+Checked: the first by running the module with a PATH of one folder holding only `python3` (the two errors, then none), the second by a
+fake `fc-list` that knows DejaVu only (the four failures that the CI's newest Pandoc job showed, then none), the third by logging every
+fake run twice (the failures, then none; Pandoc 3.1.3 itself was not run). Not changed: `tests/test_serve.py`'s
+`test_a_negative_request_limit_is_no_limit_and_a_positive_one_is_the_cap`, which failed once on Windows and once on macOS: the
+server closes a connection whose refused body it did not read, and the reset can overtake its 413, a matter of the server.
+
 ## v3.33.223 — 2026-11-15
 
 Pre-edit state: commit `da92e03`. **TeX self-repair, sixth remedy: Biber's stale PAR cache** (queue item 2b, 3fm; the sixth

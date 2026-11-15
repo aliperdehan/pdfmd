@@ -12,6 +12,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -156,12 +157,40 @@ class FakeTeX(unittest.TestCase):
                               capture_output=True, text=True, cwd=self.work, env=environment, stdin=subprocess.DEVNULL)
         return done.returncode, done.stdout + done.stderr
 
-    def started(self, name: str | None = None) -> list[dict]:
-        """What the fake engines were run with, in order (only ``name``'s when given); `--version` asks are left out."""
+    def rows(self) -> list[dict]:
         if not self.runs.is_file():
             return []
-        rows = [json.loads(line) for line in self.runs.read_text(encoding="utf-8").splitlines() if line.strip()]
-        return [row for row in rows if "--version" not in row["args"] and (name is None or row["engine"] == name)]
+        return [json.loads(line) for line in self.runs.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    def started(self, name: str | None = None) -> list[dict]:
+        """What the fake engines were run with, in order (only ``name``'s when given), one row for each run pdfmd asked Pandoc
+        or the engine for. Left out: `--version` asks; pdfmd's own one-page probe (``probed``), which only runs when Pandoc's
+        message does not say why lualatex failed (Pandoc 3.1.3 prints less of the log than a newer one); and the run that
+        repeats the one before it with the same command line and environment, which is Pandoc itself running the engine
+        again (3.1.3 runs it twice for every document, a newer Pandoc once; a failed run is not run again by a newer one, an older
+        one does). A run pdfmd repeats on purpose differs in its environment (a fresh TEXMFVAR, the stand-ins on TEXINPUTS)."""
+        kept: list[dict] = []
+        for row in self.rows():
+            if "--version" in row["args"] or row["args"][-1:] == ["probe.tex"] or (name is not None and row["engine"] != name):
+                continue
+            if not (kept and kept[-1] == row):
+                kept.append(row)
+        return kept
+
+    def probed(self, name: str = "lualatex") -> list[dict]:
+        """The runs of pdfmd's one-page probe (`probe_tex_cause`)."""
+        return [row for row in self.rows() if row["engine"] == name and row["args"][-1:] == ["probe.tex"]]
+
+    def assert_strict_counts_the_repair(self, said: str) -> None:
+        """`--strict` counted the repair, as one warning beside any the machine adds of its own: pdfmd warns that STIX Two Text
+        is not installed (a CI runner has DejaVu only), and that is the font line of the same list."""
+        match = re.search(r"--strict: the build printed (\d+) warnings?[^\n]*\n((?:  [^\n]*\n)+)", said)
+        self.assertIsNotNone(match, said)
+        lines = match.group(2).splitlines()
+        repairs = [line for line in lines if "tex-repair" in line]
+        self.assertEqual(len(repairs), 1, said)
+        self.assertEqual(int(match.group(1)), len(lines), said)
+        self.assertEqual([line for line in lines if line not in repairs and "font:" not in line], [], said)
 
 
 def needs_tex(*names: str):
@@ -201,8 +230,7 @@ class LuaotfloadMissing(FakeTeX):
     def test_strict_counts_the_repair_as_a_warning(self):
         code, said = self.pdfmd("d.md", "-e", "lualatex,xelatex", "--strict")
         self.assertEqual(code, 1, said)
-        self.assertIn("--strict: the build printed 1 warning", said)
-        self.assertIn("tex-repair", said)
+        self.assert_strict_counts_the_repair(said)
         self.assertTrue((self.work / "d.pdf").is_file())                             # the output is kept
 
     def test_the_only_engine_is_never_skipped(self):
@@ -273,7 +301,7 @@ class LmodernMissing(FakeTeX):
     def test_strict_counts_it(self):
         code, said = self.pdfmd("d.md", "-e", "pdflatex,xelatex", "--strict")
         self.assertEqual(code, 1, said)
-        self.assertIn("--strict: the build printed 1 warning", said)
+        self.assert_strict_counts_the_repair(said)
 
     def test_the_stand_in_is_a_package_xelatex_loads(self):
         # the files themselves: a document that loads lmodern, compiled with the stand-in FIRST on the path (a real one is
@@ -390,9 +418,12 @@ class CacheUnwritable(FakeTeX):
         self.var.mkdir()
 
     def provide(self, config: dict | None = None, **environment) -> tuple[dict, str]:
-        """pdfmd.provide_writable_places() with these variables; the environment it left, and what it said."""
+        """pdfmd.provide_writable_places() with these variables; the environment it left, and what it said. A TeX engine is
+        found on PATH (a name, nothing is started), whatever this machine has: nothing is moved without one, and a CI runner
+        with no TeX (the native jobs) would otherwise move nothing, so the tests of what is moved would fail there."""
         import pdfmd
         from unittest import mock
+        which = pdfmd.which
         for folder in pdfmd.TEMPORARY_PLACES.values():
             shutil.rmtree(folder, ignore_errors=True)
         pdfmd.TEMPORARY_PLACES.clear()
@@ -403,9 +434,10 @@ class CacheUnwritable(FakeTeX):
             if "TEXMFCACHE" not in environment:
                 os.environ.pop("TEXMFCACHE", None)
             with mock.patch.object(pdfmd, "config_options", lambda *a, **k: config or {}):
-                with contextlib.redirect_stderr(io.StringIO()) as seen:
-                    pdfmd.provide_writable_places()
-                    pdfmd.provide_writable_places()                                 # a second call says nothing more
+                with mock.patch.object(pdfmd, "which", lambda name, *a, **k: "/usr/bin/lualatex" if name == "lualatex" else which(name, *a, **k)):
+                    with contextlib.redirect_stderr(io.StringIO()) as seen:
+                        pdfmd.provide_writable_places()
+                        pdfmd.provide_writable_places()                             # a second call says nothing more
             after = dict(os.environ)
         return after, seen.getvalue()
 
@@ -459,7 +491,7 @@ class CacheUnwritable(FakeTeX):
         code, said = self.pdfmd("d.md", "-e", "lualatex", "--strict",             # a repaired run is a warning for --strict
                                 env={"TEXMFVAR": str(self.var), "TEXMFCACHE": str(self.blocked / "cache")})
         self.assertEqual(code, 1, said)
-        self.assertIn("--strict: the build printed 1 warning", said)
+        self.assert_strict_counts_the_repair(said)
 
     @needs_tex()
     def test_strict_does_not_count_it_for_a_build_that_tex_did_not_make(self):
@@ -510,10 +542,9 @@ class DatabaseCorrupt(FakeTeX):
         self.spec["lualatex"]["ok_if"] = {}                           # the fresh cache is no better
         code, said = self.pdfmd("d.md", "-e", "lualatex")
         self.assertEqual(code, 1, said)
-        probes = [run for run in self.started("lualatex") if run["args"][-1] == "probe.tex"]
-        builds = [run for run in self.started("lualatex") if run["args"][-1] != "probe.tex"]
+        builds = self.started("lualatex")
         self.assertEqual(len(builds), 2, said)                         # the build, and the one repeat
-        self.assertTrue(probes, said)
+        self.assertTrue(self.probed(), said)
         self.assertIn("the LuaTeX font database is corrupt", said)    # the old message, with its cause
         self.assertNotIn("tex-repair", said)                          # no NOTE for a repair that did not help
         self.check_user_cache_untouched()
@@ -523,7 +554,8 @@ class DatabaseCorrupt(FakeTeX):
         code, said = self.pdfmd("t.tex", "-e", "lualatex")
         self.assertEqual(code, 0, said)
         runs = self.started("lualatex")
-        self.assertEqual(len(runs), 2, runs)                           # no probe: the log says it
+        self.assertEqual(len(runs), 2, runs)
+        self.assertEqual(self.probed(), [])                            # no probe: the log says it
         self.assertEqual(runs[0]["TEXMFVAR"], str(self.broken))
         self.assertNotEqual(runs[1]["TEXMFVAR"], str(self.broken))
         self.assertEqual(said.count(": tex-repair: "), 1, said)
@@ -533,14 +565,14 @@ class DatabaseCorrupt(FakeTeX):
         self.write("d.md", "---\ntitle: R\npdfmd-options: {tex-repair: off}\n---\n\nGood text.\n")
         code, said = self.pdfmd("d.md", "-e", "lualatex")
         self.assertEqual(code, 1, said)
-        self.assertEqual(len([run for run in self.started("lualatex") if run["args"][-1] != "probe.tex"]), 1, said)
+        self.assertEqual(len(self.started("lualatex")), 1, said)
         self.assertIn("cause: the LuaTeX font database is corrupt", said)
         self.assertNotIn("tex-repair", said)
 
     def test_strict_counts_it(self):
         code, said = self.pdfmd("d.md", "-e", "lualatex", "--strict")
         self.assertEqual(code, 1, said)
-        self.assertIn("--strict: the build printed 1 warning", said)
+        self.assert_strict_counts_the_repair(said)
 
     def test_a_missing_package_is_not_a_database(self):
         self.engine("lualatex", "lmodern-missing.txt")                # fails for another reason: no repeat
@@ -648,7 +680,7 @@ class BiberStaleCache(FakeTeX):
     def test_strict_counts_it(self):
         code, said, text = self.build("--strict")
         self.assertEqual(code, 1, said)
-        self.assertIn("--strict: the build printed 1 warning", said)
+        self.assert_strict_counts_the_repair(said)
         self.assertIn("tex-repair: Biber could not start", said)                    # the repair, not Biber's own warning
         self.assertNotIn("biber reported errors", said)
         self.assertTrue((self.work / "paper.pdf").is_file())
