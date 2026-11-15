@@ -10,13 +10,13 @@ wait for an answer before any code.
 
 ## The queue, paused after the 3.33.191 release (2026-11-12): resume in this order
 
-- [ ] No release until this queue is done, the GUI decided and built; CI runs on the branch `fixes-3.33.168` [D60]
-- [ ] 1. Split phase 2, wave 1 (base helpers, the `_timed` copies, edit, run, direct, build), then the full suite [3fi D29]
+- [ ] No release until this queue is done, the GUI decided and built; CI runs on the branch `fixes-3.33.168`, at a wave end, before a release or for a CI-only risk [D60 Q73]
 - [ ] 2. After wave 1: lossless PDF shrinking, project metadata (`metadata-parents`, default 1 from the scaffold's folder), built-in fullcite and `bibliography-indent` [D42 D43 D51 D52 D53 D59 3fp]
 - [ ] 2d. British spellings of Pandoc's own keys (`colourlinks`, `linkcolour` ...); pdfmd-options keys read at the top level when no Pandoc key clashes [D78]
 - [ ] 3. Bibliography: every layer's sources add up and a clashing key warns; a `bib` auto kind, also for keys the named files lack [D60 D61]
 - [ ] 4. Wave 2, then the biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
 - [ ] 5. Waves 3 to 5 (the docstring becomes `docs/reference.md`, `--doc reference`), then the full suite [3fi D29]
+- [ ] 5b. After wave 5: excerpts (source tracking: `[@key#N]` markers, `excerpts.json`, pagecite), pdfmd first, then Colophon's Source pane; spec approved [3fq 3fr 3fs D79 D80 Q74]
 - [ ] 6. Colophon by hand (`--smoke-web`, Cmd-Q with an unsaved tab, `gui.yml` on main), then the GUI decisions and build [D59 D60]
 - [ ] 7. nulabreport last: the full smoke test; a biochem report as `.docx` beside its PDF [D59]
 
@@ -33,6 +33,7 @@ wait for an answer before any code.
 - [ ] Build record: LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
 - [ ] **decide** a length for the document-level `indent:` (`indent: 0.5in`), not only on the `{indent=...}` div [3fp]
 - [ ] **decide** a way to run a named Lua filter before `--citeproc` (`lua-filter-before:` or a `pre:` list) [3fp]
+- [ ] **decide** Source `<!-- comments -->` reach HTML and EPUB output verbatim: drop them by default there, a `--check` code, or both [3ft]
 
 ## Features, agreed
 
@@ -105,7 +106,7 @@ wait for an answer before any code.
 
 ## Making the main `pdfmd.py` main code more manageable [3fi]
 
-- [ ] The split of `pdfmd.py`, phase 2 (`SPLIT.md`, 47 moves): wave 0 done (3.33.187i to 3.33.191b); waves 1 to 5 open; a local full suite (`scripts/test_parallel.py`) after waves 1 and 5 only [3fi D28 D29]
+- [ ] The split of `pdfmd.py`, phase 2 (`SPLIT.md`, 47 moves): wave 0 done (3.33.187i to 3.33.191b); wave 1 done (its local full suite still to run); waves 2 to 5 open; a local full suite (`scripts/test_parallel.py`) after waves 1 and 5 only [3fi D28 D29]
 - [ ] After phase 1: the gathered oddities and bugs (split_check's weaknesses, Typst `indent: true`, cache-location words, a real `--install` check), then the full suite [3fi]
 - [ ] Runtime: lazy heavy imports (pypdf alone is about half of every start), a probe cache, fewer engine re-runs; no Rust/Go rewrite [3fj]
 - [ ] After the whole queue: pytest + pytest-xdist as an optional development extra (CI stays on unittest); `scripts/test_parallel.py` stays the runner unless it keeps failing in the waves [3fi D62]
