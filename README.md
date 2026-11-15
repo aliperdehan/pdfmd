@@ -384,6 +384,10 @@ assumes the file is there and mends nothing. The cases, one by one as they were 
   the chain is pdfmd's own (a pinned `-e` list, or the engine that made the PDF, keeps its order), and `xelatex` and
   `pdflatex` get a stand-in `soul.sty` that draws the line with ulem's `\sout` (`\uline` for underline); with no ulem either
   the text is printed plain, with a WARN.
+- **A TeX cache that cannot be written** (v3.33.221): LuaTeX stops at once (`no writeable cache path`) when no folder for its
+  font cache can be written (a read-only home, a sandbox). When `TEXMFVAR`, the TeX user tree or `TEXMFCACHE` point at such a
+  place, the run keeps them in a temporary folder instead (the first LuaTeX build indexes the fonts again, and is slow). This
+  one is done when pdfmd starts, before any document is read, so only the `tex-repair` of the config file decides it.
 
 `-e calibre` prints the document with [Calibre](https://calibre-ebook.com)'s `ebook-convert`
 instead: Pandoc writes one HTML page (math as MathML, which Calibre draws with its own

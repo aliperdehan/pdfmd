@@ -251,7 +251,7 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": [], "partial": None, "root": None, "timer": None, "record": None, "tried": [], "chain": None, "repaired": []}     # what built the file convert_one is working on
+BUILD: dict = {"engine": None, "failed": [], "output": None, "sources": [], "partial": None, "root": None, "timer": None, "record": None, "tried": [], "chain": None, "repaired": [], "repaired_run": []}     # what built the file convert_one is working on
 
 
 def read_text_or_none(path: Path | None) -> str | None:

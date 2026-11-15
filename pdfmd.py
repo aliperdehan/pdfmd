@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.220"
+PDFMD_VERSION = "3.33.221"
 import argparse
 import atexit
 import contextlib
@@ -12222,7 +12222,7 @@ def tex_user_tree_writable() -> bool:
 def provide_writable_places() -> None:
     """Redirect what cannot be written to a temporary folder (see above); called once, at the start of main()."""
     cache = cache_root()
-    redirected: list[str] = []
+    redirected: list[str] = deferred("pdfmd_tex.repair", "unwritable_cache")() if os.environ.get("TEXMFCACHE") else []    # v3.33.221
     if not folder_is_writable(cache):
         folder = temporary_place("cache")
         variable = "LOCALAPPDATA" if sys.platform == "win32" else "XDG_CACHE_HOME"

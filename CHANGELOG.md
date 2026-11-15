@@ -19,6 +19,30 @@ same commit as the change.
 
 ---
 
+## v3.33.221 — 2026-11-15
+
+Pre-edit state: commit `ce4eecf`. **TeX self-repair, fourth remedy: a TeX cache that cannot be written** (queue item 2b, 3fm).
+LuaTeX stops at once, whatever the document, when no cache folder can be written (`system : no writeable cache path`, the
+corpus's case 4: `TEXMFVAR=/proc/nope TEXMFCACHE=/proc/nope HOME=/proc/nohome`). `provide_writable_places()` already moved a
+`TEXMFVAR` that is set and cannot be written, and the TeX user tree of a home that cannot be written, to a temporary folder (a
+test, `test_a_texmfvar_that_cannot_be_written_was_already_moved`, now pins that half); `TEXMFCACHE`, which LuaTeX reads first, stayed.
+It is now moved too: `provide_writable_places()` calls `repair.unwritable_cache()` (new, lib/pdfmd_tex/repair.py, loaded only
+when `TEXMFCACHE` is set, so a run without it loads nothing new) when it starts, and when TEXMFCACHE is set and none of its
+entries can be written (a list needs one that can; a value with kpathsea's braces is left alone) and a TeX engine is installed, it
+becomes `texmf-cache` in the run's `texmf` temporary folder, removed when the run ends. The function's one NOTE names it with
+the other places that were moved (`the TeX font cache (TEXMFCACHE) ... cannot be written (a read-only home?): this run uses a
+temporary folder instead`), and the line is kept for --strict (`core.BUILD["repaired_run"]`, which `finish_build` adds to the
+problems of every build of the run; the other keys are per build). Nothing is read from a document at that point, so only the
+config's `tex-repair: off` stops this remedy (the setup row says so). `wc -l pdfmd.py` is 14208 before and after: the one call
+replaces the empty list the function started with.
+
+Test: `tests/test_tex_repair.py`, class `CacheUnwritable`: an unwritable TEXMFCACHE goes to a scratch folder with one NOTE (fails
+before, passes after), a writable or an unset one, and a list with one writable entry, are left alone, `off` in the config keeps it,
+a build whose fake lualatex stops with the corpus's `no writeable cache path` unless TEXMFCACHE is somewhere usable now succeeds,
+and `--strict` fails it with the output kept.
+
+---
+
 ## v3.33.220 — 2026-11-15
 
 Pre-edit state: commit `749f1de`. **TeX self-repair, third remedy: a missing `soul.sty` when the text is struck out** (queue

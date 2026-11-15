@@ -100,10 +100,23 @@ def fixture(name: str) -> str:
     return str(FIXTURES / name)
 
 
+def forget() -> None:
+    """What a test that calls the repair or provide_writable_places in this process leaves in pdfmd's state (the lines for
+    --strict, the answers kpsewhich gave, the NOTEs said), so no other test of the process sees it."""
+    import pdfmd
+    repair = pdfmd.load_package("pdfmd_tex.repair")
+    pdfmd.BUILD["repaired"], pdfmd.BUILD["repaired_run"] = [], []
+    repair.PROBED.clear()
+    repair.NOTED.clear()
+    repair.STATE.update(mode=None, label="", stubs={})
+
+
 class FakeTeX(unittest.TestCase):
     """A folder with fake engines and a fake kpsewhich on PATH, and pdfmd run with them."""
 
     def setUp(self):
+        forget()
+        self.addCleanup(forget)
         self.temporary = tempfile.TemporaryDirectory(prefix="pdfmd-texrepair-")
         self.addCleanup(self.temporary.cleanup)
         self.folder = Path(self.temporary.name).resolve()
@@ -362,6 +375,91 @@ class SoulMissing(FakeTeX):
         done = subprocess.run([REAL["xelatex"], "-interaction=nonstopmode", "-halt-on-error", "s.tex"], cwd=self.work, capture_output=True,
                               text=True, env={**os.environ, "TEXINPUTS": f"{folder}{os.pathsep}"})
         self.assertEqual(done.returncode, 0, done.stdout)
+
+
+class CacheUnwritable(FakeTeX):
+    """Remedy 4: a TeX cache that cannot be written. LuaTeX stops at once (`system : no writeable cache path`), whichever font
+    the document names. provide_writable_places() (at the start of the run) already moved a TEXMFVAR that cannot be written and
+    the TeX user tree of a home that cannot be written; it now moves TEXMFCACHE too, when none of its entries can be written."""
+
+    def setUp(self):
+        super().setUp()
+        self.blocked = self.folder / "a-file"                       # nothing can be made under a regular file, as root too
+        self.blocked.write_text("not a folder\n", encoding="utf-8")
+        self.var = self.folder / "texmf-var"
+        self.var.mkdir()
+
+    def provide(self, config: dict | None = None, **environment) -> tuple[dict, str]:
+        """pdfmd.provide_writable_places() with these variables; the environment it left, and what it said."""
+        import pdfmd
+        from unittest import mock
+        for folder in pdfmd.TEMPORARY_PLACES.values():
+            shutil.rmtree(folder, ignore_errors=True)
+        pdfmd.TEMPORARY_PLACES.clear()
+        pdfmd.NOTED_PLACES.clear()
+        self.addCleanup(pdfmd.TEMPORARY_PLACES.clear)
+        base = {"XDG_CACHE_HOME": str(self.folder / "xdg"), "TEXMFVAR": str(self.var)}
+        with mock.patch.dict(os.environ, {**base, **environment}):
+            if "TEXMFCACHE" not in environment:
+                os.environ.pop("TEXMFCACHE", None)
+            with mock.patch.object(pdfmd, "config_options", lambda *a, **k: config or {}):
+                with contextlib.redirect_stderr(io.StringIO()) as seen:
+                    pdfmd.provide_writable_places()
+                    pdfmd.provide_writable_places()                                 # a second call says nothing more
+            after = dict(os.environ)
+        return after, seen.getvalue()
+
+    def test_an_unwritable_texmfcache_goes_to_a_scratch_folder_with_one_note(self):
+        import pdfmd
+        after, said = self.provide(TEXMFCACHE=str(self.blocked / "cache"))
+        self.assertTrue(after["TEXMFCACHE"].startswith(str(pdfmd.TEMPORARY_PLACES["texmf"])), after["TEXMFCACHE"])
+        self.assertTrue(Path(after["TEXMFCACHE"]).is_dir())
+        self.assertEqual(said.count("NOTE  "), 1, said)
+        self.assertIn("TEXMFCACHE", said)
+        self.assertEqual(after["TEXMFVAR"], str(self.var))                            # a writable one is not touched
+
+    def test_a_cache_that_can_be_written_or_is_not_set_is_left_alone(self):
+        writable = self.folder / "cache"
+        writable.mkdir()
+        after, said = self.provide(TEXMFCACHE=str(writable))
+        self.assertEqual((after["TEXMFCACHE"], said), (str(writable), ""))
+        after, said = self.provide()
+        self.assertNotIn("TEXMFCACHE", after)
+        self.assertEqual(said, "")
+
+    def test_one_entry_that_can_be_written_is_enough(self):
+        writable = self.folder / "cache"
+        writable.mkdir()
+        both = os.pathsep.join([str(self.blocked / "a"), str(writable)])
+        after, said = self.provide(TEXMFCACHE=both)
+        self.assertEqual((after["TEXMFCACHE"], said), (both, ""))
+
+    def test_off_in_the_config_keeps_it(self):
+        after, said = self.provide(config={"tex-repair": "off"}, TEXMFCACHE=str(self.blocked / "cache"))
+        self.assertEqual(after["TEXMFCACHE"], str(self.blocked / "cache"))
+        self.assertEqual(said, "")
+
+    def test_a_texmfvar_that_cannot_be_written_was_already_moved(self):
+        import pdfmd
+        after, said = self.provide(TEXMFVAR=str(self.blocked / "var"), TEXMFCACHE=str(self.blocked / "cache"))
+        self.assertTrue(after["TEXMFVAR"].startswith(str(pdfmd.TEMPORARY_PLACES["texmf"])), after["TEXMFVAR"])
+        self.assertTrue(after["TEXMFCACHE"].startswith(str(pdfmd.TEMPORARY_PLACES["texmf"])), after["TEXMFCACHE"])
+        self.assertEqual(said.count("NOTE  "), 1, said)                             # one NOTE for the places together
+
+    @needs_tex("xelatex")
+    def test_a_build_with_the_corpus_failure_works(self):
+        # the fake lualatex stops with the corpus's `no writeable cache path` unless TEXMFCACHE is a place it can use
+        self.engine("lualatex", "cache-unwritable.txt", ok_if={"env_not": ["TEXMFCACHE", str(self.blocked / "cache")]})
+        self.write("d.md", GOOD)
+        code, said = self.pdfmd("d.md", "-e", "lualatex", env={"TEXMFVAR": str(self.var), "TEXMFCACHE": str(self.blocked / "cache")})
+        self.assertEqual(code, 0, said)
+        self.assertNotEqual(self.started("lualatex")[0]["TEXMFCACHE"], str(self.blocked / "cache"))
+        self.assertIn("NOTE", said)
+        self.assertNotIn("lualatex failed", said)
+        code, said = self.pdfmd("d.md", "-e", "lualatex", "--strict",             # a repaired run is a warning for --strict
+                                env={"TEXMFVAR": str(self.var), "TEXMFCACHE": str(self.blocked / "cache")})
+        self.assertEqual(code, 1, said)
+        self.assertIn("--strict: the build printed 1 warning", said)
 
 
 if __name__ == "__main__":

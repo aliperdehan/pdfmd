@@ -944,7 +944,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
 def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Path]) -> "Built":  # noqa: F821 -- quoted, never evaluated: pdfmd.py's Built
     """Attach the engine that built the file and apply --strict: a build that printed a warning (or about which Pandoc
     warned) fails, its output kept."""
-    problems = [*seen, *(core.BUILD.get("repaired") or [])]               # a repair is a warning too (lib/pdfmd_tex/repair.py)
+    problems = [*seen, *core.BUILD["repaired_run"], *core.BUILD["repaired"]]     # a repair is a warning too (lib/pdfmd_tex/repair.py)
     if result[1] and len(result) > 2 and isinstance(result[2], str):
         known = {line.strip() for line in problems}
         problems += [line for line in re.findall(r"(?m)^(?:\[WARNING\]|WARN\b).*$", result[2]) if line.strip() not in known]

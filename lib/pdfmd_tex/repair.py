@@ -129,6 +129,30 @@ def missing(name: str) -> bool:
     return installed((name,))[name] is False
 
 
+def unwritable_cache() -> list[str]:
+    """Called when a run starts, by pdfmd's `provide_writable_places`, with TEXMFCACHE set in the environment: when none of its
+    entries can be written (LuaTeX stops at once with `system : no writeable cache path`) it goes to a scratch folder of this
+    run, and what was moved is returned for that function's one NOTE (and kept for --strict). Nothing is read from a
+    document at that point, so only the config's `tex-repair` decides; nothing is moved without a TeX engine, and a value that
+    uses kpathsea's braces is left alone. (A TEXMFVAR that cannot be written, or a home that cannot, was moved before.)"""
+    entries = [Path(entry.removeprefix("!!")) for entry in os.environ.get("TEXMFCACHE", "").split(os.pathsep) if entry]
+    if not entries or "{" in os.environ["TEXMFCACHE"] or any(core.folder_is_writable(entry) for entry in entries):
+        return []
+    try:
+        if mode_word(core.config_options().get("tex-repair")) == "off":
+            return []
+    except Exception:          # noqa: BLE001 -- an unreadable config fails elsewhere, with its own message
+        pass
+    if not any(core.which(name) for name in ("lualatex", "xelatex", "pdflatex", "latexmk", "tectonic")):
+        return []
+    folder = core.temporary_place("texmf") / "texmf-cache"
+    folder.mkdir(parents=True, exist_ok=True)
+    os.environ["TEXMFCACHE"] = str(folder)
+    core.BUILD["repaired_run"].append("NOTE  tex-repair: TEXMFCACHE cannot be written, so this run keeps the TeX font cache in a "
+                                      "temporary folder (LuaTeX's first run indexes the fonts again)")
+    return ["the TeX font cache (TEXMFCACHE)"]
+
+
 def stub_folder() -> Path:
     """The folder this run's stand-in files are written in (made once, removed when the run ends)."""
     return core.temporary_place("tex-stubs")
