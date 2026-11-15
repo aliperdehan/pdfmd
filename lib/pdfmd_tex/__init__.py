@@ -405,6 +405,9 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         bib_cmd = (["biber", f"--input-directory={work_dir}", str((output_dir / f"{tex_path.stem}.bcf").resolve())] if bib_tool == "biber"
                    else ["bibtex", tex_path.stem])
         bib_result = run(bib_cmd, output_dir, env=bib_env)
+        if bib_result.returncode != 0 and bib_tool == "biber":                   # a stale PAR cache: once more, with a fresh one
+            bib_result = core.load_package("pdfmd_tex.repair").retry_biber(
+                bib_cmd, bib_env, lambda fresh: run(bib_cmd, output_dir, env=fresh)) or bib_result
         if bib_result.returncode != 0:
             print(f"WARN  {tex_path}: {bib_tool} reported errors; continuing"
                   + (f" ({bib_result.stderr.strip().splitlines()[-1]})" if bib_result.stderr.strip() else ""),

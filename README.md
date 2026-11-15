@@ -393,6 +393,12 @@ assumes the file is there and mends nothing. The cases, one by one as they were 
   once with an empty cache in a temporary folder, the rest of the run keeps using it, and the NOTE says that the first run
   was slow because the fonts were indexed again. Your own cache is not touched: `luaotfload-tool --update --force` repairs it
   for good. When the repeat fails too, the failure is reported as before, with its cause.
+- **Biber's stale cache** (v3.33.223): Biber, which biblatex needs (`.tex` files and `--biblatex`), is a packed Perl program that
+  unpacks itself into the temporary folder once and trusts that copy afterwards. macOS deletes files there that were not
+  used for about three days, and a copy with holes makes Biber stop without a word, so the citations stay `?`. When Biber
+  fails and its copy is under the temporary folder, it is run once more with a fresh unpack folder of this run (about 20
+  seconds the first time); the old copy is left as it is (delete its folder to make Biber unpack itself again for good).
+  Not done when you set `PAR_GLOBAL_TEMP` or `PAR_TEMP` yourself. Pandoc's `--citeproc` does not use Biber.
 
 `-e calibre` prints the document with [Calibre](https://calibre-ebook.com)'s `ebook-convert`
 instead: Pandoc writes one HTML page (math as MathML, which Calibre draws with its own

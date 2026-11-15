@@ -19,6 +19,32 @@ same commit as the change.
 
 ---
 
+## v3.33.223 — 2026-11-15
+
+Pre-edit state: commit `da92e03`. **TeX self-repair, sixth remedy: Biber's stale PAR cache** (queue item 2b, 3fm; the sixth
+case is the author's answer D74 to 3fo). Biber is a PAR-packed Perl program: its first run unpacks its modules into
+`$TMPDIR/par-<user>/cache-<hash>/` and later runs trust that folder while its `_CANARY_.txt` is there. macOS deletes files of
+`/var/folders/.../T` that have not been read for about three days, so a cache that lost part of its files while the canary stayed
+makes Biber die without a word (exit 25 right after `Found BibTeX data source`), and a `--biblatex` or biblatex `.tex` build
+printed `biber reported errors; continuing` and built a PDF with unresolved citations. Under `tex-repair: auto`, when Biber
+exits non-zero in `run_tex_engine` (the only place pdfmd runs it: the direct routes, `--biblatex`, the cache route) and its cache
+is under the temporary folder (`repair.par_cache`: the folder `biber --cache` names; checked after resolving both, since macOS
+maps `/var` to `/private/var`; when `--cache` says nothing, as it does when the damage stops Biber even there (checked on a
+cache with half of its `inc/` files deleted: exit 2), the `par-*/cache-*` folders of the temporary folder TMPDIR/TEMP/TMP as PAR
+reads them), it is run ONCE more with `PAR_GLOBAL_TEMP` set to a scratch folder of this run (`pdfmd-biber-par-*`, removed when
+it ends; Biber unpacks itself there, which takes about 20 s). One NOTE when that works, naming the stale cache; the stale
+cache itself is left alone. Not tried when the user set `PAR_GLOBAL_TEMP` or `PAR_TEMP` themselves, when the cache is somewhere
+else, or under `off`; a retry that fails too leaves the old warning (`biber reported errors; continuing`) as it was. Pandoc's
+`--citeproc` does not use Biber and is not affected.
+
+Test: `tests/test_tex_repair.py`, class `BiberStaleCache` (a fake `biber` whose `--cache` names a folder under TMPDIR, which dies
+silently with exit 25 unless PAR_GLOBAL_TEMP is set; for the first test it then becomes the real Biber, so the bibliography entry
+is in the PDF): Biber is run again with a PAR_GLOBAL_TEMP that is not the stale folder, the reference is in the PDF (fails before,
+passes after), the one NOTE, the stale cache untouched; a cache that `--cache` cannot name is found in TMPDIR; `off` (the
+config's) and a cache outside TMPDIR keep the old warning; `--strict` counts the repair.
+
+---
+
 ## v3.33.222 — 2026-11-15
 
 Pre-edit state: commit `2891eea`. **TeX self-repair, fifth remedy: a corrupt LuaTeX font database** (queue item 2b, 3fm). When

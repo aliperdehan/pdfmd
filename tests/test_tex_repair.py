@@ -539,5 +539,109 @@ class DatabaseCorrupt(FakeTeX):
         self.assertNotIn("tex-repair", said)
 
 
+# a fake `biber`: `--cache` names a folder under TMPDIR (where PAR unpacks the Perl program); a run fails, silent, with exit 25
+# (what Perl's die gave in the real failure) unless PAR_GLOBAL_TEMP is set, and then it is the real Biber (spec["delegate"]; with
+# none it just succeeds, which spares the 20 seconds the real one needs to unpack itself)
+FAKE_BIBER = r'''#!{python}
+import json, os, sys
+from pathlib import Path
+spec = json.loads(Path(os.environ["FAKE_TEX_SPEC"]).read_text(encoding="utf-8"))
+mine = spec["biber"]
+with open(spec["log"], "a", encoding="utf-8") as handle:
+    handle.write(json.dumps({{"engine": "biber", "args": sys.argv[1:], "PAR_GLOBAL_TEMP": os.environ.get("PAR_GLOBAL_TEMP", ""),
+                 "TEXINPUTS": "", "TEXMFVAR": "", "TEXMFCACHE": ""}}) + "\n")
+if sys.argv[1:] == ["--cache"]:
+    if mine.get("cache"):
+        print(mine["cache"])
+    sys.exit(0)
+if os.environ.get("PAR_GLOBAL_TEMP"):
+    if not mine.get("delegate"):
+        sys.exit(0)
+    # the packed Biber finds itself by looking its name up on PATH: without this fake's folder there it finds the real one
+    here = str(Path(sys.argv[0]).resolve().parent)
+    os.environ["PATH"] = os.pathsep.join(item for item in os.environ["PATH"].split(os.pathsep) if item and str(Path(item).resolve()) != here)
+    os.execv(mine["delegate"], [mine["delegate"], *sys.argv[1:]])
+print("INFO - Found BibTeX data source 'references.bib'")
+sys.exit(25)
+'''
+
+
+@unittest.skipUnless(all(shutil.which(name) for name in ("pdflatex", "biber", "pdftotext")) and os.name != "nt",
+                     "needs TeX, Biber and pdftotext")
+class BiberStaleCache(FakeTeX):
+    """Remedy 6: Biber is a PAR-packed Perl program that unpacks its modules into $TMPDIR/par-*/cache-* and trusts that folder
+    while its canary file is there; macOS deletes files in $TMPDIR that were not read for about three days, so a half-empty
+    cache makes Biber die silently with exit 25. Biber is run once more with PAR_GLOBAL_TEMP set to a fresh scratch folder;
+    the stale cache is left alone."""
+
+    def setUp(self):
+        super().setUp()
+        self.tmp = self.folder / "tmp"
+        self.stale = self.tmp / "par-test" / "cache-0123"
+        self.stale.mkdir(parents=True)
+        (self.stale / "_CANARY_.txt").write_text("stale\n", encoding="utf-8")
+        self.spec["biber"] = {"cache": str(self.stale)}
+        path = self.bin / "biber"
+        path.write_text(FAKE_BIBER.format(python=sys.executable), encoding="utf-8")
+        path.chmod(0o755)
+        self.environment = {"TMPDIR": str(self.tmp)}
+        self.write("references.bib", "@book{fresh, author={Example, Alice}, title={Fresh Bibliography}, year={2020}}\n")
+        self.write("paper.tex", "\\documentclass{article}\n\\usepackage[backend=biber]{biblatex}\n\\addbibresource{references.bib}\n"
+                   "\\begin{document}\n\\cite{fresh}\\printbibliography\n\\end{document}\n")
+
+    def build(self, *args: str) -> tuple[int, str, str]:
+        code, said = self.pdfmd("paper.tex", "-e", "pdflatex", *args)
+        text = ""
+        if (self.work / "paper.pdf").is_file():
+            text = subprocess.run(["pdftotext", str(self.work / "paper.pdf"), "-"], capture_output=True, text=True).stdout
+        return code, said, text
+
+    def test_biber_runs_again_with_a_fresh_unpack_folder(self):
+        self.spec["biber"]["delegate"] = shutil.which("biber")                      # the real one, to see the reference built
+        code, said, text = self.build()
+        self.assertEqual(code, 0, said)
+        self.assertIn("Fresh Bibliography", text)                                    # the reference is there
+        runs = [run for run in self.started("biber") if run["args"] != ["--cache"]]
+        self.assertEqual([bool(run["PAR_GLOBAL_TEMP"]) for run in runs], [False, True], runs)
+        self.assertNotIn(str(self.stale), runs[1]["PAR_GLOBAL_TEMP"])
+        self.assertEqual(said.count(": tex-repair: "), 1, said)
+        self.assertRegex(said, r"NOTE .*tex-repair: Biber could not start: .*stale")
+        self.assertNotIn("biber reported errors", said)
+        self.assertEqual(sorted(path.name for path in self.stale.iterdir()), ["_CANARY_.txt"])      # the stale cache is left alone
+
+    def test_off_keeps_the_old_warning(self):
+        config = self.folder / "config.yaml"
+        config.write_text("options:\n  tex-repair: off\n", encoding="utf-8")
+        self.environment["PDFMD_CONFIG"] = str(config)
+        code, said, text = self.build()
+        self.assertNotIn("Fresh Bibliography", text)
+        self.assertIn("biber reported errors; continuing", said)
+        self.assertEqual([run for run in self.started("biber") if run["PAR_GLOBAL_TEMP"]], [])
+        self.assertNotIn("tex-repair", said)
+
+    def test_a_cache_outside_tmpdir_is_not_a_case_for_this(self):
+        elsewhere = self.folder / "elsewhere" / "cache-1"
+        elsewhere.mkdir(parents=True)
+        self.spec["biber"]["cache"] = str(elsewhere)
+        code, said, text = self.build()
+        self.assertIn("biber reported errors; continuing", said)
+        self.assertEqual([run for run in self.started("biber") if run["PAR_GLOBAL_TEMP"]], [])
+
+    def test_a_cache_that_biber_cannot_name_is_found_in_tmpdir(self):
+        self.spec["biber"]["cache"] = ""                                             # `biber --cache` itself fails to say
+        code, said, text = self.build()
+        self.assertEqual(code, 0, said)
+        self.assertEqual([bool(run["PAR_GLOBAL_TEMP"]) for run in self.started("biber") if run["args"] != ["--cache"]], [False, True])
+        self.assertIn("tex-repair: Biber could not start", said)
+
+    def test_strict_counts_it(self):
+        code, said, text = self.build("--strict")
+        self.assertEqual(code, 1, said)
+        self.assertIn("--strict: the build printed 1 warning", said)
+        self.assertIn("tex-repair: Biber could not start", said)                    # the repair, not Biber's own warning
+        self.assertNotIn("biber reported errors", said)
+        self.assertTrue((self.work / "paper.pdf").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -26,6 +26,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -260,6 +261,46 @@ def retry_lualatex(engine: str, text: str, call):
     say("database", "LuaTeX's font database in the TeX cache is corrupt (luaotfload cannot read it), so lualatex was run again with "
                     "a fresh cache in a temporary folder; its first run indexes the fonts again and is slow, and your own cache is "
                     "left as it is (`luaotfload-tool --update --force` repairs it)")
+    return again
+
+
+def par_cache(biber: str, env: dict) -> Path | None:
+    """The folder where Biber, a PAR-packed Perl program, keeps the modules it unpacked, when that is under the temporary folder
+    (TMPDIR, TEMP or TMP as PAR reads them, else the system's), else None. `biber --cache` says; when it cannot (a cache
+    damaged badly enough stops it too) the `par-*/cache-*` folders of the temporary folder are looked at."""
+    temp = Path(env.get("TMPDIR") or env.get("TEMP") or env.get("TMP") or tempfile.gettempdir())
+    try:
+        root = temp.resolve()
+    except OSError:
+        return None
+    done = core.run_probe([biber, "--cache"], env=env)
+    said = [line.strip() for line in (done.stdout or "").splitlines() if line.strip()] if done is not None and done.returncode == 0 else []
+    candidates = [Path(said[-1])] if said else sorted(root.glob("par-*/cache-*"))
+    for candidate in candidates:
+        try:
+            if candidate.resolve().is_relative_to(root):
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
+def retry_biber(command: list[str], env: dict, call):
+    """After Biber failed: when its PAR unpack cache is under the temporary folder, ``call(env)`` runs it once more with
+    PAR_GLOBAL_TEMP set to a scratch folder of this run, so Biber unpacks itself afresh; the old cache is left as it is. macOS
+    deletes files of the temporary folder that were not read for about three days, and a half-empty cache whose canary file is
+    still there makes Biber die without a word (exit 25). Returns the result of the run again (one NOTE when it worked), or None
+    when this is not the case (`off`, PAR_TEMP or PAR_GLOBAL_TEMP set by the user, a cache elsewhere)."""
+    if current_mode() == "off" or "PAR_GLOBAL_TEMP" in env or "PAR_TEMP" in env:
+        return None
+    cache = par_cache(command[0], env)
+    if cache is None:
+        return None
+    again = call({**env, "PAR_GLOBAL_TEMP": str(core.temporary_place("biber-par"))})
+    if again.returncode == 0:
+        say("biber", f"Biber could not start: its unpacked program in {core.under_home(cache)} is stale (the system deletes "
+                     "files of the temporary folder that were not used for some days), so it was run again with a fresh unpack "
+                     "folder of this run; the stale one is left as it is (delete it to make Biber unpack itself again)")
     return again
 
 
