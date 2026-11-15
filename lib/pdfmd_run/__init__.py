@@ -107,6 +107,9 @@ def run_main() -> None:
             del reader_parser._option_string_actions[flag]     # `-cwd`: older argparse still abbreviates it
         args, pandoc_options = reader_parser.parse_known_args()
     core.use_managed_tools()
+    if not (args.path and all(path.suffix.lower() == ".pdf" for path in args.path)):
+        from pdfmd_args.paths import invocation_paths
+        pandoc_options = invocation_paths(pandoc_options, Path.cwd())
     core.provide_writable_places()
     if args.merge:
         # --merge (v3.27.6): one Markdown file that builds alone, = --assemble-only --embed-metadata all

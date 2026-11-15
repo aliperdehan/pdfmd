@@ -19,6 +19,23 @@ same commit as the change.
 
 ---
 
+## v3.33.217 — 2026-11-15
+
+Pre-edit state: commit `ba05208`. A command-line `--lua-filter doc/f.lua` reached Pandoc unchanged after pdfmd changed the
+build's working folder to the metadata folder, so a filter present relative to the invocation folder could not be opened.
+`lib/pdfmd_args/paths.py` now makes CLI Lua-filter paths absolute before dispatch, including long equals and short attached
+forms. The same defect was reproduced for resource paths, includes, templates and defaults; the shared normaliser also
+covers local bibliography/CSL, citation abbreviations, reference documents, syntax/highlight files, EPUB input files,
+explicit external filter/engine paths, data directories, extraction directories and logs. Search-path components retain
+their order. URLs, stdin, executable names on PATH, bare Pandoc data-file names and built-in highlight styles keep their
+meaning. Metadata/variable values and paths named inside files are not rewritten. `-y` already resolves its files; CSS has
+its own document-relative handling and is not a pass-through file option. PDF-reader arguments are left to the PDF reader.
+README explains CLI path origins. The isolated regression tests failed before the fix and pass afterwards, including the
+reported Typst PDF build, HTML builds with discovered and explicit metadata, aliases of the flags, resource lookup,
+bibliography/CSL, includes/templates/defaults, external filters and unchanged front-matter/metadata filter origins.
+CLI, launcher, batch-path, header, metadata and wikilink area tests and the required split, packaging, docs, setup and
+isolation checks were run. `pdfmd.py` stays at 14,208 lines (version only); no thresholds or settings added.
+
 ## v3.33.216 — 2026-11-15
 
 Pre-edit state: commit `2166ea3`. An uncited Typst document with `csl: apa6.csl` in a metadata file failed when the style

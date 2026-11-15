@@ -3084,6 +3084,11 @@ pdfmd lecture --toc --number-sections
 pdfmd lecture -V fontsize=12pt
 ```
 
+Relative paths passed to Pandoc on the command line, such as `--lua-filter doc/f.lua`, are based on the folder where pdfmd
+was started, even when a discovered metadata file changes the build's working folder. This also applies to resource paths,
+local CSL/bibliography files, includes, templates and defaults files. Bare data-file and built-in style names keep Pandoc's
+lookup; paths written inside front matter, metadata or defaults files keep their existing rules.
+
 ### Settings inside the document
 
 Or put settings in the document itself, so nobody has to remember the flag:
