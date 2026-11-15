@@ -19,6 +19,35 @@ same commit as the change.
 
 ---
 
+## v3.33.218 — 2026-11-15
+
+Pre-edit state: commit `d1c3e75`. **TeX self-repair, first remedy: a missing luaotfload** (queue item 2b; the design is 3fm,
+the author's answers D70 and D74). New setting `tex-repair: auto|off` (a `pdfmd-options` key, default `auto`; a `--setup` row,
+`options.tex-repair`, in the folder setups too; `inventory.OPTIONS` and the README paragraph "A broken TeX installation").
+Under `auto` a remedy changes only this run's environment (an engine skipped, a stand-in file on TEXINPUTS, a scratch cache
+folder) and prints one `NOTE  DOC: tex-repair: ...`; `off` keeps today's behaviour exactly, and runs no probe at all. A repaired
+build is a warning for `--strict`: the NOTE lines are kept in `core.BUILD["repaired"]` (reset by `convert_one`, added to the
+problems by `finish_build`), so the build fails with the output kept, as for a WARN.
+
+The new module `lib/pdfmd_tex/repair.py`, loaded on first use by `lib/pdfmd_chain`'s `plan_build` (its last step, for a PDF
+build whose chain has a TeX engine): `plan()` reads the setting (`resolve_mode`: the document's `pdfmd-options`, its metadata
+files, its folders, the config; a `.tex` or an office file reads the config), asks `kpsewhich` ONCE per run which of the files it
+cares about exist (`installed()`; `article.cls` rides along as a witness that kpsewhich answers, and no kpsewhich, a timeout, a
+missing witness or Windows (MiKTeX installs a package on demand) all mean "unknown", and unknown means "present", so a healthy
+machine is never mended by mistake), and drops `lualatex` from the chain when `luaotfload-main.lua` is not found, unless it is the
+only engine left (a pinned `-e lualatex` fails with the cause named, as before). Trigger: the corpus's case 1 (`module
+'luaotfload-main' not found`, `Font ... not loadable: metric d`). Before: lualatex ran once, failed with that text, and xelatex
+built the PDF after a wasted run and a WARN; after: lualatex does not start, one NOTE, xelatex builds. `pdfmd.py` gets no
+new line (`wc -l pdfmd.py` is 14208 before and after; only its version line changes).
+
+Test: `tests/test_tex_repair.py` (new; fake engines on PATH that print the real log text of each failure, a fake `kpsewhich`
+that hides one file and asks the real one for the rest, the builds through `scripts/pdfmd`; the log excerpts are in
+`tests/fixtures/tex-repair/`, a few KB each, taken from a collection of real logs of Ubuntu 24.04 with TeX Live 2023): lualatex
+is not started and one NOTE says why (fails before, passes after), `--strict` fails the build with the output kept (the same),
+`tex-repair: off` and a pinned `-e lualatex` keep the failed run, a healthy installation gets no NOTE.
+
+---
+
 ## v3.33.217 — 2026-11-15
 
 Pre-edit state: commit `ba05208`. A command-line `--lua-filter doc/f.lua` reached Pandoc unchanged after pdfmd changed the

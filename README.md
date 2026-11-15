@@ -360,6 +360,22 @@ by lualatex (build record 2026-11-10 09:03); starting with lualatex`). `-b` deci
 Outputs other than PDF (Word, HTML, EPUB ...), `.typ` and `.html` inputs built by their own engine, and the built-in renderers
 (no Pandoc) have no engine chain of this kind and are not affected.
 
+**A broken TeX installation: `tex-repair`** (v3.33.218; `pdfmd-options: {tex-repair: auto|off}`, a `--setup` row, `auto` by
+default). A sandbox, a container or a fresh server often has a TeX Live that lacks a piece, and the same few breakages come
+back. Under `auto` pdfmd works around each one **for this run only**: it skips an engine, puts a stand-in `.sty` on the
+engine's search path, or gives it a scratch cache folder, and prints one `NOTE` that names what it did and why. The TeX
+installation, the user's TeX caches and every file outside the run's own temporary folders are never changed, and `--strict`
+counts a repaired build as a warning. `off` keeps the old behaviour: the engine fails and pdfmd names the cause. The
+setting is read per document (its `pdfmd-options`, its metadata files, its folders, then the config). What is missing is asked
+of `kpsewhich` once per run; when it cannot answer (not installed, MiKTeX, which installs a package when it is needed) pdfmd
+assumes the file is there and mends nothing. The cases, one by one as they were added:
+
+- **luaotfload missing** (v3.33.218): LuaTeX's font loader is not installed, so `lualatex` would fail on every document
+  (`module 'luaotfload-main' not found`, then a font that is `not loadable`). pdfmd skips `lualatex` before it runs, so the
+  next engine of the chain is tried first and no run is wasted: `NOTE  report.md: tex-repair: luaotfload (LuaTeX's font
+  loader) is not installed, so lualatex is skipped and xelatex is tried first`. An engine that is the only one of the chain
+  (`-e lualatex`) is never skipped.
+
 `-e calibre` prints the document with [Calibre](https://calibre-ebook.com)'s `ebook-convert`
 instead: Pandoc writes one HTML page (math as MathML, which Calibre draws with its own
 MathJax) and Calibre turns it into a PDF with the document's paper, margins, `fontsize:` and

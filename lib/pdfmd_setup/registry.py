@@ -42,6 +42,7 @@ UNSET = {
     "options.attach-bibliography": "only the cited entries", "options.attach-csl": "off",
     "options.pdf-engine": "first installed: lualatex, xelatex, ...",
     "options.engine-fallback": "auto: the whole chain for a new PDF; for an existing one, its engine first, and an error in the document keeps it",
+    "options.tex-repair": "auto: a broken TeX installation is mended for the run, with a NOTE",
     "options.html.self-contained": "off", "options.html.math": "MathML", "options.css-scope": "html", "options.css": "none",
     "options.odt.engine": "auto",
     "options.line-numbers": "off", "options.line-number-step": "1", "options.column-outlier": "2", "options.column-outlier-rows": "4", "options.column-outlier-length": "30", "options.column-word-floor-limit": "16",
@@ -90,7 +91,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 # change nothing. tests/test_setup_folder.py walks this list against the folder layers.
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
-    "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.css-scope", "options.paragraph-spacing",
+    "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.css-scope", "options.paragraph-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid", "options.odt.engine",
@@ -287,6 +288,13 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("off", "the first failure stops the build")), "",
                "A stopped build exits 1 and leaves the existing PDF as it was. A pinned engine (-e, pdf-engine) is never "
                "reordered. Per run: --engine-fallback MODE.", "Output"),
+        choice("options.tex-repair", "Mend a broken TeX installation for the run",
+               (("auto", "what is broken in the TeX installation (a missing package or font loader, a cache that cannot be "
+                         "used, a stale Biber cache) is worked around for this run only, with a NOTE for each"),
+                ("off", "nothing is mended: the engine fails as the installation says")), "",
+               "The TeX installation and its caches are never changed: the build skips an engine, puts a stand-in file or a "
+               "scratch cache folder on its own search path, or runs a tool again. --strict counts a repaired build as a "
+               "warning. Per document: `tex-repair` in `pdfmd-options`.", "Output"),
         text("options.editor", "Editor for pdfmd --edit",
              "A command: code --wait, vim, \"nano -l\". Without one --edit uses its built-in editor (pdfmd --install tui). "
              "Per run: --editor.", "Output"),

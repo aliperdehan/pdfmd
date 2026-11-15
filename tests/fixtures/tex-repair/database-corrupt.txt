@@ -1,0 +1,20 @@
+This is LuaHBTeX, Version 1.17.0 (TeX Live 2023/Debian) 
+ restricted system commands enabled.
+(./t-fontspec.tex
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-01-22>
+ (/usr/share/texlive/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2023/05/17 v1.4n Standard LaTeX document class
+(/usr/share/texlive/texmf-dist/tex/latex/base/size10.clo...texmf-dist/tex/luate
+x/luaotfload/luaotfload-database.lua:537: [string "t"]:1: unexpected symbol nea
+r <eof>.
+<to be read again> 
+relax 
+l.54 \normalsize
+              
+ 307 words of node memory still in use:
+   1 hlist, 1 dir, 3 kern, 1 glyph, 1 attribute, 39 glue_spec, 1 attribute_list
+, 3 if_stack nodes
+   avail lists: 2:7,3:3,4:1,5:1
+!  ==> Fatal error occurred, no output PDF file produced!
+Transcript written on t-fontspec.log.

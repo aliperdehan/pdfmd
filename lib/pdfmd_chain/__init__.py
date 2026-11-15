@@ -245,6 +245,7 @@ def plan_build(md_path: Path, metadata_files: list[Path], engines: list[str], ou
                     engines = order
                     why = f"{name} was made by {engine} ({how}); starting with {order[0]}"
     core.vprint(verbose, f"ENGINE  engine-fallback {asked}{'' if where == 'default' else f' ({where})'}: {why}")
+    engines = core.load_package("pdfmd_tex.repair").plan(md_path, metadata_files, engines)        # TeX self-repair (v3.33.218)
     core.BUILD["chain"] = Plan(mode, asked, where, output)
     return engines
 

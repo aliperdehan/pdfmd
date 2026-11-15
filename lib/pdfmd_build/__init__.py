@@ -942,7 +942,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
 def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Path]) -> "Built":  # noqa: F821 -- quoted, never evaluated: pdfmd.py's Built
     """Attach the engine that built the file and apply --strict: a build that printed a warning (or about which Pandoc
     warned) fails, its output kept."""
-    problems = list(seen)
+    problems = [*seen, *(core.BUILD.get("repaired") or [])]               # a repair is a warning too (lib/pdfmd_tex/repair.py)
     if result[1] and len(result) > 2 and isinstance(result[2], str):
         known = {line.strip() for line in problems}
         problems += [line for line in re.findall(r"(?m)^(?:\[WARNING\]|WARN\b).*$", result[2]) if line.strip() not in known]
@@ -964,7 +964,7 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
     core.BUILD["engine"], core.BUILD["failed"], core.BUILD["output"], core.BUILD["sources"], core.BUILD["partial"], core.BUILD["root"] = None, [], None, [], None, None
     core.begin_timer()
-    core.BUILD["tried"], core.BUILD["chain"] = [], None
+    core.BUILD["tried"], core.BUILD["chain"], core.BUILD["repaired"] = [], None, []
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
