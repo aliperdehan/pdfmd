@@ -28,6 +28,8 @@ class Tokens(unittest.TestCase):
                          "--include-in-header", "-", "--highlight-style", "pygments", "--template", "named",
                          "--filter", "pandoc-crossref", "--pdf-engine", "typst"]
             self.assertEqual(invocation_paths(arguments, origin), arguments)
+            (origin / "f.lua").write_text("", encoding="utf-8")
+            (origin / "filter.py").write_text("", encoding="utf-8")
             self.assertEqual(invocation_paths(["--lua-filter", "f.lua", "--filter=./filter.py"], origin),
                              ["--lua-filter", str(origin / "f.lua"), "--filter=" + str(origin / "filter.py")])
 
@@ -37,6 +39,27 @@ class Tokens(unittest.TestCase):
             (origin / "style.csl").write_text("local", encoding="utf-8")
             self.assertEqual(invocation_paths(["--csl", "style.csl", "--reference-doc=named.docx"], origin),
                              ["--csl", str(origin / "style.csl"), "--reference-doc=named.docx"])
+
+    def test_an_input_absent_from_the_start_folder_is_left_for_the_build_folder(self):
+        # Before 3.33.217 every CLI path counted from the build's working folder; one not found here keeps that meaning.
+        with tempfile.TemporaryDirectory(prefix="pdfmd-cli-tokens-") as scratch:
+            origin = Path(scratch)
+            arguments = ["--lua-filter", "f.lua", "-Hsub/head.tex", "--filter=./absent.py", "--data-dir", "data",
+                         "--epub-embed-font", "fonts/*.ttf", "--resource-path", os.pathsep.join(["", ".", "missing"])]
+            self.assertEqual(invocation_paths(arguments, origin), arguments)
+
+    def test_outputs_count_from_the_start_folder_and_found_inputs_and_globs_are_anchored(self):
+        with tempfile.TemporaryDirectory(prefix="pdfmd-cli-tokens-") as scratch:
+            origin = Path(scratch)
+            (origin / "fonts").mkdir()
+            (origin / "fonts" / "a.ttf").write_text("", encoding="utf-8")
+            (origin / "here").mkdir()
+            self.assertEqual(
+                invocation_paths(["--extract-media", "media", "--log=build.log", "--epub-embed-font", "fonts/*.ttf",
+                                  "--resource-path", os.pathsep.join([".", "missing", "here"])], origin),
+                ["--extract-media", str(origin / "media"), "--log=" + str(origin / "build.log"),
+                 "--epub-embed-font", str(origin / "fonts/*.ttf"),
+                 "--resource-path", os.pathsep.join([".", "missing", str(origin / "here")])])
 
     def test_metadata_variables_and_tokens_after_the_separator_are_literal(self):
         with tempfile.TemporaryDirectory(prefix="pdfmd-cli-tokens-") as scratch:
@@ -72,8 +95,8 @@ class Builds(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
         return path
 
-    def build(self, *options, target="html", suffix="html"):
-        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "doc/c.md", "--to", target,
+    def build(self, *options, target="html", suffix="html", document="doc/c.md"):
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), document, "--to", target,
                                "-o", "out." + suffix, "--no-backup", *options],
                               cwd=self.base, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -85,6 +108,27 @@ class Builds(unittest.TestCase):
             for metadata in ((), ("-y", "doc/metadata/metadata.yaml")):
                 with self.subTest(spelling=spelling, metadata=metadata):
                     self.assertIn("Passed.", self.build(*spelling, *metadata))
+
+    def test_a_path_relative_to_the_build_folder_still_works_when_absent_from_the_start_folder(self):
+        # 3.33.217 first broke these: the build's working folder is the metadata folder, else the document's folder.
+        self.write("plain/p.md", "Hello.\n")
+        self.write("plain/near.lua", 'function Str(s) if s.text == "Hello." then return pandoc.Str("Plain.") end end\n')
+        self.assertIn("Plain.", self.build("--lua-filter", "near.lua", document="plain/p.md"))
+        self.write("doc/metadata/near.lua", 'function Str(s) if s.text == "Hello." then '
+                   'return pandoc.Str("Metadata folder.") end end\n')
+        self.assertIn("Metadata folder.", self.build("--lua-filter", "near.lua"))
+
+    def test_one_cli_filter_name_serves_documents_in_different_folders(self):
+        for folder in ("a", "b"):
+            self.write(folder + "/x.md", "Hello.\n")
+            self.write(folder + "/near.lua", 'function Str(s) if s.text == "Hello." then '
+                       'return pandoc.Str("From ' + folder + '.") end end\n')
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "a/x.md", "b/x.md", "--to", "html",
+                               "--no-backup", "--lua-filter", "near.lua"], cwd=self.base, env=self.env,
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        for folder in ("a", "b"):
+            self.assertIn("From " + folder + ".", (self.base / folder / "x.html").read_text(encoding="utf-8"))
 
     @unittest.skipUnless(shutil.which("typst"), "needs Typst")
     def test_the_reported_typst_pdf_build(self):

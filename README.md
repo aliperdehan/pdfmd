@@ -3085,9 +3085,12 @@ pdfmd lecture -V fontsize=12pt
 ```
 
 Relative paths passed to Pandoc on the command line, such as `--lua-filter doc/f.lua`, are based on the folder where pdfmd
-was started, even when a discovered metadata file changes the build's working folder. This also applies to resource paths,
-local CSL/bibliography files, includes, templates and defaults files. Bare data-file and built-in style names keep Pandoc's
-lookup; paths written inside front matter, metadata or defaults files keep their existing rules.
+was started when the file is there, even when a discovered metadata file changes the build's working folder. This also
+applies to resource paths, local CSL/bibliography files, includes, templates and defaults files. A path that is not found
+from the start folder keeps its older meaning: relative to the build's working folder (the metadata folder, else the
+document's own folder), so `pdfmd notes/a.md notes2/b.md --lua-filter f.lua` uses each document's own `f.lua`. Output
+paths (`--extract-media`, `--log`) count from the start folder, like `-o`. Bare data-file and built-in style names keep
+Pandoc's lookup; paths written inside front matter, metadata or defaults files keep their existing rules.
 
 ### Settings inside the document
 

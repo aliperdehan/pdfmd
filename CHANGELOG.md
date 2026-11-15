@@ -36,6 +36,17 @@ bibliography/CSL, includes/templates/defaults, external filters and unchanged fr
 CLI, launcher, batch-path, header, metadata and wikilink area tests and the required split, packaging, docs, setup and
 isolation checks were run. `pdfmd.py` stays at 14,208 lines (version only); no thresholds or settings added.
 
+Fixed in review, before release (commit `33d4943` broke it): the build's working folder is the metadata folder, else the
+document's own folder, so a command-line path relative to that folder used to work, and the first version of this change
+made it absolute from the start folder, where it was not found (`pdfmd plain/p.md --lua-filter f.lua`, run from the
+parent with `f.lua` only beside the document, failed with "cannot open"). An input path (Lua and external filters,
+the file options, `--data-dir`, each `--resource-path` component, an `--epub-embed-font` glob when it matches) is now made
+absolute only when it exists from the start folder; otherwise it reaches Pandoc unchanged, as before. An empty or `.`
+resource-path component stays as it was. Output paths (`--extract-media`, `--log`) still count from the start folder,
+like `-o`. The only change from 3.33.214 is a path found in both places, which now means the start folder's. New tests
+(token rules, a filter beside the document and one in the metadata folder, two documents in different folders sharing
+one `--lua-filter f.lua`) fail at `33d4943` and pass now; the README paragraph says the rule.
+
 ## v3.33.216 — 2026-11-15
 
 Pre-edit state: commit `2166ea3`. An uncited Typst document with `csl: apa6.csl` in a metadata file failed when the style
