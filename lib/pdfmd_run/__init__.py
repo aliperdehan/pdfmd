@@ -251,8 +251,6 @@ def run_main() -> None:
         os.environ[core.CALC_SPACE_ENV] = args.calc_space
     if args.paragraph_spacing is not None:
         core.paragraph_spacing_command_line(args.paragraph_spacing)
-    if args.bibliography_indent is not None:
-        core.bibliography_indent_command_line(args.bibliography_indent)
     if args.fullcite_list is not None:
         core.fullcite_command_line(args.fullcite_list)
     if args.calc_align is not None:

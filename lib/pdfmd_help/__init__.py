@@ -18,7 +18,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "output": ("where the result goes, in what format, with which engine", (
         "-o", "-d", "--rewrite", "--no-rewrite", "-e", "--engine-fallback", "-t", "--from", "--flavour", "--flavor", "--unclosed-comment", "--edit", "--init-vscode", "-f", "--editor", "-y", "--metadata-precedence", "--preset", "--presets", "--kit", "--kit-stack", "--kits", "--global-metadata", "-V", "--css", "--css-scope", "--open", "--bopen", "-w", "--keep-aux", "--self-contained",
         "--no-self-contained", "--paper", "--paragraph-spacing", "--pdf-title", "--pdf-subject", "--pdf-author", "--pdf-keywords",
-        "--bookmarks", "--header", "--footer", "--attach-links", "--shrink", "--no-shrink", "--no-citeproc", "--extract", "--text-to-markdown")),
+        "--bookmarks", "--header", "--footer", "--attach-links", "--shrink", "--no-shrink", "--no-citeproc", "--fullcite-list", "--extract", "--text-to-markdown")),
     "modes": ("several files, one report, slides, a long document in parts", (
         "-p", "--slide-level", "-b", "-r", "--recursive", "-j", "-i", "--exclude-unnumbered", "--section",
         "--split", "--split-depth", "--list-parts", "--newest", "--all", "--include-never", "--which")),

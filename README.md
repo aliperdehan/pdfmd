@@ -3229,8 +3229,8 @@ entries that `fullcite` places in the text, so the two match: a length (`0.5in`,
 not) has one. Unset, each writer keeps the list it had (LaTeX 1.5em, HTML's style sheet, Word 0.5 in) and Typst, whose writer
 ignores the style's hanging indent, now gets Pandoc's 1.5em; set, the value is the same in every writer (`\cslhangindent` in LaTeX,
 `#set par(hanging-indent:)` in Typst, a style on each entry in HTML, a paragraph style per length in Word and OpenDocument).
-`bibliography-indent: 0` turns it off, in Typst too. `--bibliography-indent 0.5in` sets it for one run; it is also a row in `pdfmd --setup`
-and a kit's metadata file may carry it (APA wants `0.5in`).
+`bibliography-indent: 0` turns it off, in Typst too. It is also a row in `pdfmd --setup`, and a kit's metadata file may carry it (APA
+wants `0.5in`). There is no command-line flag: a name starting `--bibliography` would be taken for Pandoc's own `--bibliography FILE`.
 
 `linestretch:` and `fontsize:` give Typst the line spacing LaTeX has (since 3.33.73): lines `linestretch` x the LaTeX class's
 line distance apart (12, 13.6 and 14.5 pt at 10, 11 and 12 pt; 1.2 x any other size), in any font, so a page holds as many

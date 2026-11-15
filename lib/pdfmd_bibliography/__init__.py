@@ -1,7 +1,7 @@
 """The hanging indent of a bibliography: one setting for every writer (`bibliography-indent`).
 
-`pdfmd-options: {bibliography-indent: 0.5in}` (the document, its metadata files, the folder layers, the global setup), or
-`--bibliography-indent LENGTH` for a run: how far the lines of an entry after its first are set in, in the combined reference
+`pdfmd-options: {bibliography-indent: 0.5in}` (the document, its metadata files, the folder layers, the global setup; there is no
+command-line flag, a name starting `--bibliography` would be read as Pandoc's own `--bibliography`): how far the lines of an entry after its first are set in, in the combined reference
 list and in the entries `fullcite` places in the text, so the two match. A length (pt, mm, cm, in, em), `0` for none, or
 `auto` / not set: Pandoc's own, 1.5em, which writers other than Typst already apply to the list as they do today (LaTeX 1.5em,
 HTML 2em from its style sheet, Word 0.5in) and Typst, whose writer ignores the style's `hanging-indent`, now gets (1.5em).
@@ -18,13 +18,11 @@ around the list for Typst, a style on each entry for HTML, and a paragraph style
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
 from pdfmd_base import core
 
-ENV = "PDFMD_BIBLIOGRAPHY_INDENT"         # --bibliography-indent, set by main(), so -j workers read it too
 KEY = "bibliography-indent"
 DEFAULT = "1.5em"                         # Pandoc's own (\cslhangindent); the author decided it (entry D53)
 ACCEPTED = "a length such as 0.5in or 1.5em (pt, mm, cm, in, em), 0 for none, or auto"
@@ -48,24 +46,8 @@ def normalise(value) -> str | None:
     raise ValueError(value)
 
 
-def command_line_value(value: str) -> str:
-    """--bibliography-indent as main() hands it to the builds (`auto` for auto); a bad value stops the run."""
-    try:
-        return normalise(value) or "auto"
-    except ValueError:
-        raise SystemExit(f"--bibliography-indent must be {ACCEPTED}, not {value!r}") from None
-
-
-def bibliography_indent_command_line(value: str) -> None:
-    """Pass a validated command-line value to this run and its batch workers."""
-    os.environ[ENV] = command_line_value(value)
-
-
 def setting(md_path: Path, metadata_files: list[Path]) -> str | None:
-    """The indent asked for (`0pt` for none), None for auto: --bibliography-indent, else `pdfmd-options.bibliography-indent`."""
-    value = os.environ.get(ENV)
-    if value is not None:
-        return command_line_value(value) if value != "auto" else None
+    """The indent asked for (`0pt` for none), None for auto: `pdfmd-options.bibliography-indent`."""
     value = core.first_pdfmd_option(md_path, metadata_files, KEY)
     try:
         return normalise(value)

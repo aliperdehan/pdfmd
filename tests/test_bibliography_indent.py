@@ -41,32 +41,23 @@ class Values(unittest.TestCase):
             with self.assertRaises(ValueError, msg=value):
                 normalise(value)
 
-    def test_the_layers_and_the_command_line(self):
+    def test_the_layers(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             document = root / "d.md"
             document.write_text("---\ntitle: T\n---\n\nx\n", encoding="utf-8")
             metadata = root / "meta.yaml"
             metadata.write_text("pdfmd-options:\n  bibliography-indent: 0.5in\n", encoding="utf-8")
-            old = os.environ.pop(self.package.ENV, None)
-            try:
-                self.assertIsNone(self.package.setting(document, []))
-                self.assertEqual(self.package.setting(document, [metadata]), "0.5in")
-                document.write_text("---\npdfmd-options:\n  bibliography-indent: 0\n---\n\nx\n", encoding="utf-8")
-                self.assertEqual(self.package.setting(document, [metadata]), "0pt")
-                document.write_text("---\npdfmd-options:\n  bibliography-indent: wide\n---\n\nx\n", encoding="utf-8")
-                with self.assertRaises(SystemExit) as caught:
-                    self.package.setting(document, [])
-                self.assertIn("pdfmd-options.bibliography-indent must be a length", str(caught.exception))
-                os.environ[self.package.ENV] = "2cm"
-                self.assertEqual(self.package.setting(document, [metadata]), "2cm")
-                os.environ[self.package.ENV] = "auto"
-                document.write_text("---\ntitle: T\n---\n\nx\n", encoding="utf-8")
-                self.assertIsNone(self.package.setting(document, [metadata]))          # auto on the command line beats the file
-            finally:
-                os.environ.pop(self.package.ENV, None)
-                if old is not None:
-                    os.environ[self.package.ENV] = old
+            self.assertIsNone(self.package.setting(document, []))
+            self.assertEqual(self.package.setting(document, [metadata]), "0.5in")
+            document.write_text("---\npdfmd-options:\n  bibliography-indent: 0\n---\n\nx\n", encoding="utf-8")
+            self.assertEqual(self.package.setting(document, [metadata]), "0pt")
+            document.write_text("---\npdfmd-options:\n  bibliography-indent: auto\n---\n\nx\n", encoding="utf-8")
+            self.assertIsNone(self.package.setting(document, []))
+            document.write_text("---\npdfmd-options:\n  bibliography-indent: wide\n---\n\nx\n", encoding="utf-8")
+            with self.assertRaises(SystemExit) as caught:
+                self.package.setting(document, [])
+            self.assertIn("pdfmd-options.bibliography-indent must be a length", str(caught.exception))
 
     def test_the_filter_goes_in_when_set_and_for_typst(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -105,6 +96,22 @@ class OfficeStyles(unittest.TestCase):
             styles = zipfile.ZipFile(path).read("styles.xml").decode()
             self.assertIn('style:name="pdfmd-hang-0p5in"', styles)
             self.assertIn('fo:margin-left="0.5000in" fo:text-indent="-0.5000in"', styles)
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class NoAbbreviation(unittest.TestCase):
+    def test_no_pandoc_option_is_taken_for_an_abbreviation_of_a_pdfmd_one(self):
+        """argparse reads `--bibliography` as an abbreviation of a longer pdfmd option (`--bibliography-indent` was one) and the build
+        stops, where the option is Pandoc's, left to it through parse_known_args. None of Pandoc's long options may be one."""
+        help_text = subprocess.run([PANDOC, "--help"], capture_output=True, text=True, encoding="utf-8").stdout
+        pandoc_options = set(re.findall(r"(?<![\w-])(--[a-z][a-z0-9-]*)", help_text))
+        self.assertGreater(len(pandoc_options), 50)
+        ours = {option for option in pdfmd.build_parser()._option_string_actions if option.startswith("--")}
+        # exactly one longer option: argparse takes it (two or more it calls ambiguous, which pdfmd already meets for
+        # `--ascii` and `--metadata`, and has handled since before this check)
+        swallowed = {option: matches for option in sorted(pandoc_options - ours)
+                     if len(matches := [name for name in ours if name.startswith(option)]) == 1}
+        self.assertEqual(swallowed, {})
 
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")
@@ -198,7 +205,6 @@ class Builds(unittest.TestCase):
         self.assertIn("#set par(hanging-indent: 1.5em)", self.text("typ"))
         self.assertNotIn("hanging-indent: 1.5em", self.text("typ", "bibliography-indent: 0").replace("#set terms(hanging-indent: 1.5em)", ""))
         self.assertIn("#set par(hanging-indent: 0.5in)", self.text("typ", "bibliography-indent: 0.5in"))
-        self.assertIn("#set par(hanging-indent: 2cm)", self.text("typ", extra=("--bibliography-indent", "2cm")))
 
     def test_the_other_writers_keep_their_own_unless_it_is_set(self):
         self.assertNotIn("text-indent: -", self.text("html"))                 # the style sheet's

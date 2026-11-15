@@ -56,7 +56,7 @@ FLAGS: dict[str, str | Omitted] = {
     "attach_bibliography": "options.attach-bibliography", "attach_csl": "options.attach-csl", "attach_source": "options.attach-source",
     "keep_source": "options.keep-source", "bundle": "options.bundle", "bundle_packages": "options.bundle-packages",
     "bookmarks": "options.bookmarks", "header": "options.header", "footer": "options.footer",
-    "attach_links": "options.attach-links", "paper": "papersize", "paragraph_spacing": "options.paragraph-spacing", "fullcite_list": "options.fullcite-list", "bibliography_indent": "options.bibliography-indent",
+    "attach_links": "options.attach-links", "paper": "papersize", "paragraph_spacing": "options.paragraph-spacing", "fullcite_list": "options.fullcite-list",
     "css": "options.css", "css_scope": "options.css-scope",
     "family": BUILTIN, "no_autolinks": BUILTIN, "no_html": BUILTIN, "allow_unsafe_urls": BUILTIN,
     "allow_remote_images": BUILTIN, "emoji_fallback": BUILTIN,

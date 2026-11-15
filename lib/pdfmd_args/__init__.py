@@ -252,11 +252,6 @@ def build_parser() -> argparse.ArgumentParser:
                              "em), 0 for none, or auto (the default: each engine's own; with `indent: true` none). LaTeX and "
                              "Typst; the HTML engines take it from a style sheet. Also "
                              "`pdfmd-options: {paragraph-spacing: 6pt}`, or --setup")
-    parser.add_argument("--bibliography-indent", metavar="LENGTH", default=None,
-                        help="how far the lines of a reference after its first are set in, in the reference list and in the entries "
-                             "`[@key]{.fullcite}` places: a length (0.5in, 1.5em; pt mm cm in em), 0 for none, or auto (the "
-                             "default: each writer's own list, Pandoc's 1.5em for Typst). Also "
-                             "`pdfmd-options: {bibliography-indent: 0.5in}`, or --setup")
     parser.add_argument("--fullcite-list", choices=("rest", "all", "none"), default=None, metavar="WHAT",
                         help="what becomes of the combined reference list when entries were placed in the text with "
                              "`[@key]{.fullcite}`: rest (the placed ones leave it; the default), all (it stays whole) or none "
