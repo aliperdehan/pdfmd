@@ -128,7 +128,8 @@ copied from an old shell history, or a Makefile in every folder. `pdfmd` turns t
   (raw LaTeX, `^[inline footnotes]`, grid tables, `@citations`) is read as Pandoc's Markdown too, and one that uses
   syntax gfm can take (`H~2~O`, `x^2^`, `{#id}`, `:::` divs, definition lists) gets it added to gfm.
 - **It finds your project files.** A `metadata.yaml`, `preamble.tex` or `<name>.lua` beside the document (or in a
-  `metadata/` folder next to it) is used without a flag, so every document in a folder shares one house style.
+  `metadata/` folder next to it) is used without a flag. It also finds a shared `metadata/` one parent folder above
+  the document (or its parts scaffold), controlled by [`metadata-parents`](#project-files).
 - **It does not give up on the first engine.** If `lualatex` fails or is missing it tries the next one, and says why
   each failed.
 - **It writes real Word files** that follow the page setup, fonts and LaTeX of the PDF (see [Word and OpenDocument
@@ -3160,7 +3161,8 @@ a folder can now switch back on what the config switched off, `auto: {margin: on
 `preamble` (and `files` and `tex`, which cover them) a folder only ever tightens. Its `on` is ignored with a `WARN`, and the strictest
 state of the config's and of every folder's stands; only the document's own `pdfmd-options` (or the command line) can loosen what your
 config switched off. So `auto: {lua: explicit-only}` in the config keeps a folder you did not write from running its own filter while
-you can still name one. `explicit-only` for `metadata` looks for no metadata file beside the document; the folders' `.pdfmd/metadata.yaml`
+you can still name one. `explicit-only` for `metadata` looks for no metadata file beside the document or in visible parent
+`metadata/` folders; the folders' `.pdfmd/metadata.yaml`
 and your global `metadata.yaml` still apply (`off` drops them all, as it always did). A metadata file's own `no-auto`
 is not read (it would have to be read to know whether metadata files are read). `pdfmd --setup` has the rows *Automatic behaviour to switch
 off* and *Look for nothing, use only what the document names*, and in a folder's setup *Switch back on*.
@@ -3257,7 +3259,8 @@ the two path rows (`bibliography`, `csl`), adds a row *Also use the settings of 
 the files, and the folder, when everything is back to the default. A row the folder has no value for shows where its value comes
 from, `9  (global)` or `3  (folder ~/proj)`, or `(default)`. A name that is `plain` or `fancy` is the screen, not a folder:
 write `./plain`.
-`inherit: false` in a folder's file stops the walk upward there. A folder cannot set what belongs to this computer (`translit`,
+`inherit: false` in a folder's file stops the walk upward there, including visible parent
+`metadata/` discovery ([`metadata-parents`](#project-files)). A folder cannot set what belongs to this computer (`translit`,
 `setup-ui`, `disabled`): they are ignored with a `WARN`. A mapping such as `stamp:` or `backup:` in a folder's file stays off
 until it says `enabled: true`, as in the global file. A build lists the folder files it used on its `FOUND` line
 (`--verbose`: `AUTO SETTINGS`). A folder's options cannot name code (a Lua filter or a preamble is read from the document's own
@@ -3347,6 +3350,43 @@ files could apply and none is clearly meant, `pdfmd` stops and asks you to
 choose with `-y FILE`, rather than guessing. `-y` alone turns discovery
 off.
 
+**Shared metadata above the document: `metadata-parents`.** By default pdfmd also looks for a visible `metadata/`
+folder **one parent folder above** the document's folder. For example:
+
+```text
+project/
+  metadata/metadata.yaml
+  metadata/refs.bib          # named by bibliography: refs.bib in metadata.yaml
+  SR/SR.md
+  SR/parts/01-introduction.md
+```
+
+`pdfmd project/SR/SR.md` uses `project/metadata/metadata.yaml`; its own front matter or Pandoc `% title` still wins.
+If `SR.md` is a parts scaffold, the depth is counted from **the scaffold's folder**, including when you build a part
+by path. Otherwise it is counted from the document's folder. Empty intermediate folders count too. Only the visible
+`metadata/` folders above it are searched, not loose YAML files beside those folders.
+
+This is a **changed default** for a document with a parent `metadata/`. To keep only its local visible metadata, write
+`pdfmd-options: {metadata-parents: 0}`. A positive whole number looks that many parent folders up; `all` or any negative
+whole number walks as far as the `.pdfmd` settings walk, to the filesystem root unless stopped. `inherit: false` in
+`.pdfmd/config.yaml` includes that folder but stops above it; in the document's folder it prevents all parent discovery.
+The key can be set in the document, its local metadata, `.pdfmd` settings or the global configuration, and has an Input row
+in `pdfmd --setup` (also `pdfmd --setup FOLDER`). Its value is read before looking for parent metadata; a newly found parent
+cannot extend the search itself. Explicit `-y FILE` keeps its existing scope; `-y` alone or `--no-auto metadata` switches
+metadata discovery off.
+
+Each parent folder uses the same YAML choice as a local `metadata/`: shared `metadata.yaml`, document-named YAML over it,
+`report.yaml`/`book.yaml` for `-r`, otherwise an unambiguous candidate. The priority, strongest first, is the command line
+(`-M`, `-V`, `-y FILE`), the document's front matter or `% title`, its own local metadata, visible parents nearest first,
+`.pdfmd/metadata.yaml` layers nearest first, kits, then global metadata. A parent supplies keys left unset by a stronger
+layer. `--metadata-precedence first` changes file order within each layer; it keeps nearer parent layers stronger.
+
+Relative bibliography and CSL paths use the existing metadata-folder resource lookup. Named preambles and Lua filters
+resolve relative to the file that names them. A discovered parent metadata folder also supplies intentionally named
+preambles and document/package Lua filters under the usual rules below: an unrelated `.lua` never runs automatically,
+and the existing trust notice and `--strict` checks apply. Use `--verbose` to see every discovered YAML file and
+`pdfmd project/SR/SR.md --show-config` to list its metadata sources without building, even with `PDFMD_CONFIG=`.
+
 **When two metadata files set the same key, the later one wins**, as in Pandoc:
 `<name>.yaml` over `metadata.yaml`, `report.yaml` over `metadata.yaml`, and the
 second of `-y base.yaml -y extra.yaml`. This holds for Pandoc's keys and for
@@ -3359,7 +3399,8 @@ the later file.
 
 **Adding to a value instead of replacing it** (3.31.40). The layers, lowest first, are: the global `metadata.yaml`
 (`pdfmd --setup`), a kit's defaults, the `.pdfmd/metadata.yaml` of the folders above the document (the farthest first),
-the document folder's own metadata files, the document's front matter. A key set higher up replaces the value below it,
+visible parent `metadata/` layers (also farthest first), the document folder's own metadata files, then the document's front
+matter. A key set higher up replaces the value below it,
 lists too. To add instead, write the key with a plus: `author+: [B. Partner]` is the value the layers below hold, then
 `B. Partner`. It works in any layer (a course folder's `author+` adds to the global author), a single value counts as a list
 of one, nothing below means just the names written, and `author:` and `author+:` in one place are taken in that order.

@@ -272,9 +272,27 @@ labreports/
   LR2/report.md
 ```
 
-or the same files directly in each report's folder. Put everything that should be the same in `metadata.yaml`
-(fonts, margins, bibliography, CSL, `pdfmd-options`) and the documents carry only their text. What a document or the
-command line says wins over the shared file.
+This layout works without flags: the default `metadata-parents: 1` finds `labreports/metadata/` one parent above each
+report's folder. Put everything shared in its `metadata.yaml` (fonts, margins, bibliography, CSL, `pdfmd-options`) and
+keep each document's own title or `% title` block beside its text. A `bibliography: refs.bib` resolves through that
+metadata folder's usual resource lookup. Named `pdfmd-options` preambles and Lua filters stay relative to the file naming
+them, and ordinary discovered preambles and document/package filters there keep their usual names and Lua trust checks.
+A report's own `metadata/` overrides the parent layer; the command line and the document override both.
+
+`metadata-parents` counts from the **scaffold's folder** when a report uses `parts/`, even for a part built by path;
+otherwise from the document's folder. Set it in local metadata or the document, a `.pdfmd` layer, or the global config
+(`pdfmd --setup`, Input; also available per folder). `0` turns parent discovery off, a positive whole number chooses
+how many parent folders to check, `all` or any negative whole number climbs as far as the `.pdfmd` walk. An
+`inherit: false` in `.pdfmd/config.yaml` stops above that folder; in the document's folder it stops all parent discovery.
+A parent's own depth setting cannot extend the search that found it. `--no-auto metadata` or bare `-y` turns metadata
+discovery off; explicit `-y FILE` keeps its existing scope. The default changes existing builds that have a parent's
+`metadata/`; `pdfmd-options: {metadata-parents: 0}` keeps their previous local scope.
+
+Metadata layers, strongest first: command line, document front matter or `% title`, local metadata, visible parents
+nearest first, `.pdfmd/metadata.yaml` layers nearest first, kits, global metadata. `--metadata-precedence first` only
+changes file order within each layer. `pdfmd LR1/report.md --verbose` names the files discovered;
+`pdfmd LR1/report.md --show-config` lists the metadata sources without building. See the README's
+[Project files](../README.md#project-files) for the YAML selection rule and the off switches.
 
 ### 2.2 Settings inside the document
 

@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.231a — 2026-11-16
+
+Pre-edit state: commit `60c3129`. Docs only, no shipped code, so no `PDFMD_VERSION` bump. **Project-wide metadata is described**:
+the README's Project files section and the recipes' course-folder example now explain the changed default of one parent,
+`metadata-parents: 0` to retain the previous local scope, positive depths, all/negative depths and the `.pdfmd` inheritance
+boundary. They give the scaffold origin for part builds, the exact metadata layer order, selection within a parent folder,
+existing resource and named-file path rules, Lua trust checks, the `--setup` row and the verbose/configuration source reports.
+The README's feature overview, explicit-only description, folder-boundary note and append-layer order agree with the new
+behaviour. Tests: the documentation checks and the required split, packaging, setup and isolation checks; the preceding
+implementation's regression tests already cover these behaviours through pdfmd, including a real PDF and batch workers.
+
 ## v3.33.231 — 2026-11-16
 
 Pre-edit state: commit `b2c71f5`. **Visible project metadata above a document is now discovered** (TODO item 2, metadata;
