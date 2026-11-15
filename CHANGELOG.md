@@ -39,6 +39,8 @@ seven socket-free checks pass after the fix. Repeated 4 MiB uploads to a 64-byte
 an outside run. The serve module runs 67 tests: 48 pass, 19 are socket-blocked (all 14 Http tests and five server command-line
 tests). The required split, packaging, docs consistency, setup and isolation checks run 115 tests successfully, with one skip.
 
+Review fix (same version, not released): `CommandLine.test_large_refused_upload_gets_413_through_the_launcher` now points `PDFMD_CONFIG` at its config file and sets a cap of 0.001 MB (about 1 KB): with `PDFMD_CONFIG` empty no config was read, and a cap written as a tiny float did not apply, so the request was refused for its missing token (403) instead (the sandbox the commit was made in blocks sockets, so the test had not run).
+
 ## v3.33.229 — 2026-11-16
 
 Pre-edit state: commit `55c978c`. **`bibliography-indent`: one hanging indent for the reference list and for the entries `fullcite`

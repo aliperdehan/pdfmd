@@ -1007,10 +1007,10 @@ class CommandLine(unittest.TestCase):
         config_home = self.folder / "config"
         config = config_home / "pdfmd" / "config.yaml"
         config.parent.mkdir(parents=True)
-        config.write_text(f"options:\n  serve-max-request-mb: {64 / (1024 * 1024)}\n", encoding="utf-8")
+        config.write_text("options:\n  serve-max-request-mb: 0.001\n", encoding="utf-8")        # about 1 KB, far under the 4 MB body
         process = subprocess.Popen([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--serve"], cwd=self.folder,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True, encoding="utf-8",
-                                   env={**os.environ, "XDG_CONFIG_HOME": str(config_home), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+                                   env={**os.environ, "PDFMD_CONFIG": str(config), "PDFMD_NO_PROMPT": "1"})
         try:
             announcement = process.stdout.readline()
             self.assertTrue(announcement, "--serve could not start; check whether the sandbox blocks socket binding")
