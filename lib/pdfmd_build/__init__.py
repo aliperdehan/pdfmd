@@ -73,6 +73,13 @@ def run_engine_command(cmd: list[str], engine: str, output: Path, run_pandoc, pa
                    else contextlib.nullcontext())                  # TeX self-repair (v3.33.219)
     with environment, core.calibre_html_command(cmd, engine) as (command, html):
         result = run_pandoc(command, html or output)
+        if result.returncode != 0 and engine == "lualatex":                    # a corrupt font database: once more, with a fresh cache
+            repair = core.load_package("pdfmd_tex.repair")
+
+            def again():
+                with repair.engine_environment(engine):
+                    return run_pandoc(command, html or output)
+            result = repair.retry_lualatex(engine, (result.stderr or "") + "\n" + (result.stdout or ""), again) or result
         if engine == "weasyprint" and result.returncode == 0 and not verbose and result.stderr:
             result = subprocess.CompletedProcess(result.args, 0, result.stdout,
                                                  WEASYPRINT_CSS_NOISE.sub("", result.stderr))

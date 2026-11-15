@@ -44,6 +44,10 @@ PROBED: dict[str, bool | None] = {}      # file name -> found by kpsewhich (None
 NOTED: set[str] = set()                  # the remedies whose NOTE was printed this run
 # this build's: the mode in force, the document as a NOTE names it, the stand-in files each engine gets on TEXINPUTS
 STATE: dict = {"mode": None, "label": "", "stubs": {}}
+# the scratch TEXMFVAR and TEXMFCACHE lualatex runs with once the user's font database has proved corrupt (for the rest of the
+# run), and whether a run with them failed too (then it is not tried again)
+FRESH: dict = {"vars": None, "failed": False}
+DATABASE = "the LuaTeX font database is corrupt"          # the wording of pdfmd_tex.TEX_CAUSES for it
 
 # The stand-in packages (file-format facts: what the package would define). They are written when an engine needs one, into
 # this run's temporary folder, and put on TEXINPUTS AFTER the default path, so a real file always wins.
@@ -181,6 +185,8 @@ def overlay(engine: str, base: dict | None = None) -> dict[str, str]:
     if current_mode() == "off":
         return {}
     changes: dict[str, str] = {}
+    if engine == "lualatex" and FRESH["vars"]:
+        changes.update(FRESH["vars"])
     names = STATE["stubs"].get(engine)
     if names:
         folder = stub_folder()
@@ -218,6 +224,43 @@ def engine_env(engine: str, env: dict | None) -> dict | None:
     if not changes:
         return env
     return {**(os.environ if env is None else env), **changes}
+
+
+def fresh_variables() -> dict[str, str]:
+    """TEXMFVAR and TEXMFCACHE in a scratch folder of this run (removed when it ends): LuaTeX makes its font database there."""
+    folder = core.temporary_place("luatex-cache")
+    places = {"TEXMFVAR": folder / "texmf-var", "TEXMFCACHE": folder / "texmf-cache"}
+    for place in places.values():
+        place.mkdir(parents=True, exist_ok=True)
+    return {name: str(place) for name, place in places.items()}
+
+
+def corrupt_database(text: str) -> bool:
+    """Whether the text of a failed lualatex run says its font database is corrupt: the log's own signature (the direct
+    routes), or, for Pandoc's bare `Fatal error occurred`, the answer of pdfmd's one-page probe (asked once per run)."""
+    cause = core.tex_failure_cause(text)
+    if cause is None and "Fatal error occurred" in text:
+        cause = core.probe_tex_cause("lualatex")
+    return cause is not None and cause[0] == DATABASE
+
+
+def retry_lualatex(engine: str, text: str, call):
+    """After a failed run of ``engine`` whose ``text`` (its messages and log) says LuaTeX's font database is corrupt: ``call()``
+    runs it once more with a fresh scratch TEXMFVAR and TEXMFCACHE (the first LuaTeX run there indexes the fonts again, so it is
+    slow; the user's cache is neither deleted nor repaired) and its result is returned; None when this is not the case (another
+    engine, `off`, another cause, or a retry that failed already this run). ``call`` builds its environment after this
+    function has set `FRESH`, which `overlay` reads. One NOTE when the retry worked; a retry that did not leaves no trace."""
+    if engine != "lualatex" or current_mode() == "off" or FRESH["failed"] or FRESH["vars"] or not corrupt_database(text):
+        return None
+    FRESH["vars"] = fresh_variables()
+    again = call()
+    if again.returncode != 0:
+        FRESH["vars"], FRESH["failed"] = None, True
+        return again
+    say("database", "LuaTeX's font database in the TeX cache is corrupt (luaotfload cannot read it), so lualatex was run again with "
+                    "a fresh cache in a temporary folder; its first run indexes the fonts again and is slow, and your own cache is "
+                    "left as it is (`luaotfload-tool --update --force` repairs it)")
+    return again
 
 
 def say(key: str, text: str) -> None:

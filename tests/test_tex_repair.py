@@ -462,5 +462,82 @@ class CacheUnwritable(FakeTeX):
         self.assertIn("--strict: the build printed 1 warning", said)
 
 
+@needs_tex("xelatex")
+class DatabaseCorrupt(FakeTeX):
+    """Remedy 5: LuaTeX's font database (in the TeX cache) holds garbage, and every lualatex run stops with
+    `luaotfload-database.lua:537: [string "t"]:1: unexpected symbol near <eof>`. The run is repeated ONCE with a fresh scratch
+    TEXMFVAR and TEXMFCACHE (the first LuaTeX run there indexes the fonts again, which is slow); the user's cache is never
+    deleted or repaired. Pandoc shows only `Fatal error occurred` for it, so the cause is read from pdfmd's one-page probe."""
+
+    def setUp(self):
+        super().setUp()
+        self.broken = self.folder / "texmf-var"                      # the user's cache: the fake lualatex cannot use it
+        self.broken.mkdir()
+        (self.broken / "keep.txt").write_text("the user's cache\n", encoding="utf-8")
+        self.engine("lualatex", "database-corrupt.txt", ok_if={"env_not": ["TEXMFVAR", str(self.broken)]})
+        self.environment = {"TEXMFVAR": str(self.broken)}
+        self.write("d.md", GOOD)
+
+    def check_user_cache_untouched(self):
+        self.assertEqual(sorted(path.name for path in self.broken.iterdir()), ["keep.txt"])
+
+    def test_pandoc_route_runs_lualatex_again_with_a_fresh_cache(self):
+        code, said = self.pdfmd("d.md", "-e", "lualatex")
+        self.assertEqual(code, 0, said)
+        runs = self.started("lualatex")
+        self.assertEqual(runs[0]["TEXMFVAR"], str(self.broken), runs)
+        self.assertNotEqual(runs[-1]["TEXMFVAR"], str(self.broken), runs)
+        self.assertTrue(runs[-1]["TEXMFCACHE"].startswith(runs[-1]["TEXMFVAR"].rsplit("/", 1)[0]), runs[-1])
+        self.assertEqual(said.count(": tex-repair: "), 1, said)
+        self.assertRegex(said, r"NOTE .*tex-repair: LuaTeX's font database .*is corrupt.*fresh")
+        self.assertIn("slow", said)
+        self.assertNotIn("lualatex failed", said)
+        self.assertIn("(lualatex)", said)
+        self.check_user_cache_untouched()
+
+    def test_it_is_tried_once(self):
+        self.spec["lualatex"]["ok_if"] = {}                           # the fresh cache is no better
+        code, said = self.pdfmd("d.md", "-e", "lualatex")
+        self.assertEqual(code, 1, said)
+        probes = [run for run in self.started("lualatex") if run["args"][-1] == "probe.tex"]
+        builds = [run for run in self.started("lualatex") if run["args"][-1] != "probe.tex"]
+        self.assertEqual(len(builds), 2, said)                         # the build, and the one repeat
+        self.assertTrue(probes, said)
+        self.assertIn("the LuaTeX font database is corrupt", said)    # the old message, with its cause
+        self.assertNotIn("tex-repair", said)                          # no NOTE for a repair that did not help
+        self.check_user_cache_untouched()
+
+    def test_direct_route_reads_the_signature_from_the_log(self):
+        self.write("t.tex", "\\documentclass{article}\\begin{document}Hello.\\end{document}\n")
+        code, said = self.pdfmd("t.tex", "-e", "lualatex")
+        self.assertEqual(code, 0, said)
+        runs = self.started("lualatex")
+        self.assertEqual(len(runs), 2, runs)                           # no probe: the log says it
+        self.assertEqual(runs[0]["TEXMFVAR"], str(self.broken))
+        self.assertNotEqual(runs[1]["TEXMFVAR"], str(self.broken))
+        self.assertEqual(said.count(": tex-repair: "), 1, said)
+        self.check_user_cache_untouched()
+
+    def test_off_keeps_the_failure(self):
+        self.write("d.md", "---\ntitle: R\npdfmd-options: {tex-repair: off}\n---\n\nGood text.\n")
+        code, said = self.pdfmd("d.md", "-e", "lualatex")
+        self.assertEqual(code, 1, said)
+        self.assertEqual(len([run for run in self.started("lualatex") if run["args"][-1] != "probe.tex"]), 1, said)
+        self.assertIn("cause: the LuaTeX font database is corrupt", said)
+        self.assertNotIn("tex-repair", said)
+
+    def test_strict_counts_it(self):
+        code, said = self.pdfmd("d.md", "-e", "lualatex", "--strict")
+        self.assertEqual(code, 1, said)
+        self.assertIn("--strict: the build printed 1 warning", said)
+
+    def test_a_missing_package_is_not_a_database(self):
+        self.engine("lualatex", "lmodern-missing.txt")                # fails for another reason: no repeat
+        code, said = self.pdfmd("d.md", "-e", "lualatex")
+        self.assertEqual(code, 1, said)
+        self.assertEqual(len(self.started("lualatex")), 1, said)
+        self.assertNotIn("tex-repair", said)
+
+
 if __name__ == "__main__":
     unittest.main()

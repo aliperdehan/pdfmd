@@ -375,6 +375,13 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         return True, ""
 
     result = run(cmd, work_dir, env=engine_env)
+    if result.returncode != 0 and engine == "lualatex":                      # a corrupt font database: once more, with a fresh cache
+        repair = core.load_package("pdfmd_tex.repair")
+        again = repair.retry_lualatex(engine, result.stderr + "\n" + log_text(),
+                                      lambda: run(cmd, work_dir, env=repair.engine_env(engine, env)))
+        if again is not None:
+            result = again
+            engine_env = repair.engine_env(engine, env)                        # the reruns below use the fresh cache too
     if result.returncode != 0:
         return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
 

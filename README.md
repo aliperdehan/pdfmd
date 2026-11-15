@@ -388,6 +388,11 @@ assumes the file is there and mends nothing. The cases, one by one as they were 
   font cache can be written (a read-only home, a sandbox). When `TEXMFVAR`, the TeX user tree or `TEXMFCACHE` point at such a
   place, the run keeps them in a temporary folder instead (the first LuaTeX build indexes the fonts again, and is slow). This
   one is done when pdfmd starts, before any document is read, so only the `tex-repair` of the config file decides it.
+- **A corrupt LuaTeX font database** (v3.33.222): the files LuaTeX keeps in the TeX cache hold garbage, and every `lualatex`
+  run stops (`luaotfload-database.lua ... unexpected symbol`; Pandoc shows only `Fatal error occurred`). The run is repeated
+  once with an empty cache in a temporary folder, the rest of the run keeps using it, and the NOTE says that the first run
+  was slow because the fonts were indexed again. Your own cache is not touched: `luaotfload-tool --update --force` repairs it
+  for good. When the repeat fails too, the failure is reported as before, with its cause.
 
 `-e calibre` prints the document with [Calibre](https://calibre-ebook.com)'s `ebook-convert`
 instead: Pandoc writes one HTML page (math as MathML, which Calibre draws with its own

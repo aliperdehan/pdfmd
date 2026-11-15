@@ -19,6 +19,33 @@ same commit as the change.
 
 ---
 
+## v3.33.222 — 2026-11-15
+
+Pre-edit state: commit `2891eea`. **TeX self-repair, fifth remedy: a corrupt LuaTeX font database** (queue item 2b, 3fm). When
+the files luaotfload keeps in the TeX cache hold garbage (the corpus's case 5: `luaotfload-database.lua:537: [string "t"]:1:
+unexpected symbol near <eof>`), every lualatex run stops, whatever the document, and Pandoc reports only `Fatal error occurred`.
+Under `tex-repair: auto`, a failed lualatex run whose cause is that database (`repair.retry_lualatex`: the signature in the
+log of a direct route, and for the Pandoc route pdfmd's own one-page probe, `probe_tex_cause`, which the failure report asks
+for anyway and which is asked once per run) is run ONCE more with a fresh scratch `TEXMFVAR` and `TEXMFCACHE` (a folder of the run,
+`pdfmd-luatex-cache-*`, removed when it ends; LuaTeX's first run there indexes the fonts again, which is slow). The retry sits at
+the two places every TeX run passes through: `run_engine_command` (Pandoc's command, the report route too) and `run_tex_engine`
+(a `.tex`, the cache route, the biblatex route, the office route), so no engine loop changed. When it works the build goes on
+as if lualatex had not failed (no `lualatex failed; trying xelatex` WARN, no wasted fall-through to a degraded engine), the
+rest of the run (more documents, the reruns of this one) uses the fresh cache too (`overlay`), and one NOTE says what happened and
+how to repair the real cache; when it does not, nothing is said about it, the old failure and its cause are reported, and no
+second retry is made this run. The user's cache is never deleted, repaired or written to. Only `lualatex` is retried (the
+engine reads that cache); `off` makes no probe and no retry. The notes' other variant, going straight to the next engine on this
+signature as a setting, is NOT built now.
+
+Test: `tests/test_tex_repair.py`, class `DatabaseCorrupt` (a fake lualatex that prints the corpus's corrupt-database log
+unless TEXMFVAR is another folder than the user's, which holds one file that must still be the only one after the run): the
+Pandoc route repeats the run once with a fresh TEXMFVAR and TEXMFCACHE and builds (fails before, passes after; the probe is
+the fake's own `probe.tex` run), a retry that fails is made once (two builds, the probe, the old message with its cause, no
+NOTE), the direct route reads the signature from the log with no probe, `off` keeps the failure and its cause, `--strict`
+counts the repair, and a failure of another cause (a missing package) is not repeated.
+
+---
+
 ## v3.33.221 — 2026-11-15
 
 Pre-edit state: commit `ce4eecf`. **TeX self-repair, fourth remedy: a TeX cache that cannot be written** (queue item 2b, 3fm).
