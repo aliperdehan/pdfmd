@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.216 — 2026-11-15
+
+Pre-edit state: commit `2166ea3`. An uncited Typst document with `csl: apa6.csl` in a metadata file failed when the style
+existed only in Pandoc's user data folder: without citeproc, Pandoc's Typst template wrote a bibliography style rule whose
+bare filename Typst could not find. Typst builds selecting a document/metadata CSL now enable the existing automatic
+citeproc path even without citations, so Pandoc resolves and applies the selected style itself, exactly as in the cited
+build. The cited path and explicit `--no-citeproc` opt-out are unchanged. No style is discarded or replaced. The isolated
+regression uses `scripts/pdfmd` with a scratch Pandoc data folder, shared metadata and bibliography, with and without a
+citation; the uncited build failed before the fix and both pass afterwards. Engine-filter, CSL and engine-selection tests,
+and the required split, packaging, docs, setup and isolation checks were run. `pdfmd.py` stays at 14,208 lines (version only);
+no thresholds or settings added.
+
 ## v3.33.215 — 2026-11-15
 
 Pre-edit state: commit `d015a9f`. Wikilink rewriting consumed `[[fullcite:key]]` before user Lua filters could read it in the

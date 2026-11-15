@@ -248,6 +248,36 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(typ.returncode, 0, typ.stdout + typ.stderr)
         self.assertIn('image("pictures/dot.png"', (self.directory / "doc.typ").read_text(encoding="utf-8"))
 
+    def test_uncited_csl_in_pandocs_data_directory_builds_like_the_cited_document(self):
+        metadata = self.directory / "doc" / "metadata"
+        metadata.mkdir(parents=True)
+        (metadata / "r.bib").write_text('@book{k, author={A, B}, title={T}, year={2000}, publisher={P}}\n',
+                                        encoding="utf-8")
+        (metadata / "metadata.yaml").write_text(
+            "csl: apa6.csl\nbibliography: r.bib\npdfmd-options:\n  engine: typst\n", encoding="utf-8")
+        env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+               "XDG_CONFIG_HOME": str(self.directory / "config"), "XDG_CACHE_HOME": str(self.directory / "cache"),
+               "XDG_DATA_HOME": str(self.directory / "data"), "APPDATA": str(self.directory / "config")}
+        # Ask Pandoc for its directory under this environment; no access to the real user data folder.
+        version = subprocess.run([PANDOC, "--version"], env=env, capture_output=True, text=True, check=True)
+        data = Path(next(line.partition(":")[2].strip() for line in version.stdout.splitlines()
+                         if line.startswith("User data directory:")))
+        style = data / "csl" / "apa6.csl"
+        style.parent.mkdir(parents=True)
+        default = subprocess.run([PANDOC, "--print-default-data-file", "default.csl"], env=env,
+                                 capture_output=True, text=True, check=True)
+        style.write_text(default.stdout, encoding="utf-8")
+        for cited in (False, True):
+            with self.subTest(cited=cited):
+                source = self.directory / "doc" / ("cited.md" if cited else "uncited.md")
+                source.write_text("Cite @k.\n" if cited else "No citations here.\n", encoding="utf-8")
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(source), "--verbose"],
+                                      cwd=self.directory, env=env, stdin=subprocess.DEVNULL,
+                                      capture_output=True, text=True)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertTrue(source.with_suffix(".pdf").is_file())
+                self.assertIn("--citeproc", done.stdout + done.stderr)
+
     @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
     def test_reference_entries_do_not_overlap(self):
         """v3.33.59: with a CSL's entry-spacing 0 the entries' lines are the document's line spacing apart (each entry's
