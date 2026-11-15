@@ -19,6 +19,29 @@ same commit as the change.
 
 ---
 
+## v3.33.226 — 2026-11-16
+
+Pre-edit state: commit `f0ed2b7`. **Lossless PDF shrinking, the provider layer** (TODO item 2; decisions D42 and D51). The new package `lib/pdfmd_shrink` (loaded
+only when a PDF was written; nothing calls it yet, the next version does) rewrites a finished PDF through the first of three
+tools that is installed: `qpdf` (the binary), `pikepdf` (qpdf's Python binding, which pip installs on Windows and macOS too),
+`mutool` (MuPDF, when its `clean` has `-Z`). Object streams (PDF 1.5) and, for `shrink: true`, Flate streams deflated again at
+zlib's best level (`fast`: object streams only; MuPDF has no separate recompression, so both are `clean -z -Z` there). Measured
+on a 19-page LuaLaTeX PDF (381,603 bytes): qpdf 331,416, pikepdf 331,463, mutool 331,304 (-13.2%), 0.06 to 0.1 s each. Lossless
+only: no image is resampled, no font touched; the page count, the text of every page, the Info dictionary, the XMP and the
+attachments are the same afterwards (the tests check each of them for each installed provider). The new file replaces the old
+one only when the tool succeeded (qpdf's exit 3, warnings, counts as failed), the page count is the same and the file is
+smaller, through a temporary file beside it and one rename (`atomic_file`); anything else, a timeout included, leaves the
+original untouched and never fails the build. A file whose XMP says PDF/A-1 gets no object streams (PDF 1.4), only the
+recompression. An old qpdf without `--recompress-flate` makes object streams only. pikepdf is told not to re-serialise the XMP
+(`fix_metadata_version=False, preserve_pdfa=False`: by default it rewrote the packet, which the first test run caught). The
+setting is read here too (`shrink: true | fast | false`, `shrink-timeout` seconds, `PDFMD_SHRINK` from the command line);
+`--setup` rows, flags and the build step come in the next version.
+
+Tests: `tests/test_shrink.py` (fails before: the package is not there; 15 tests): the setting's values; each installed provider
+shrinks and keeps pages, text, Info, XMP and both attachments, and `qpdf --check` is clean; two runs give the same bytes; an old
+qpdf; PDF/A-1 (found even when the XMP is split between two reads); a broken file, a result that is not smaller, a page count
+that differs and a timeout leave the original byte for byte and no temporary file behind.
+
 ## v3.33.225 — 2026-11-16
 
 Pre-edit state: commit `0addaae`. **Read non-clashing pdfmd options at the top level of metadata** (D78, second part).
