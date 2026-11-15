@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.33.215 — 2026-11-15
+
+Pre-edit state: commit `d015a9f`. Wikilink rewriting consumed `[[fullcite:key]]` before user Lua filters could read it in the
+`pdfmd` and `obsidian` flavours. A colon in the target, before any alias or heading/block anchor, now leaves the entire
+marker unchanged; picture embeds use the same rule without attempting a file lookup. Colons in aliases and anchors still
+work, and ordinary note links still become display text. README documents the rule. Regression tests failed before the fix
+and pass afterwards: target/alias/anchor cases, embeds, and `scripts/pdfmd --to md` with a user filter in every flavour.
+The wikilink, embed and Obsidian area tests and the required split, packaging, docs, setup and isolation checks were run.
+`pdfmd.py` stays at 14,208 lines (version only); no thresholds or settings added.
+
 ## v3.33.214 — 2026-11-15
 
 Pre-edit state: commit `3e1cd03`. Phase 2 of the split, wave 1, move 5: **the build moves to the new package

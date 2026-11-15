@@ -48,6 +48,8 @@ def embed_images(text: str, find: Callable[[str], str | None], px_to_pt: float =
         if match.lastgroup != "embed":
             return match.group(0)
         name = match.group("name").strip()
+        if ":" in name.split("^", 1)[0]:
+            return match.group(0)
         if not name.lower().endswith(IMAGE_SUFFIXES):
             return match.group(0)
         options = (match.group("options") or "").split("|")

@@ -2804,6 +2804,8 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
 - **Links between notes: `[[Note]]`** (v3.32.26, in `obsidian` and `pdfmd`). A printed document has no other notes to open, so a wikilink is
   written as the text Obsidian shows for it: `[[Note|an alias]]` is `an alias`, `[[Note]]` is `Note`, `[[Note#Heading]]` is `Note > Heading`
   and `[[#Heading]]`, a link inside the note, is `Heading`; `[[Note\|alias]]` works in a table. A name with `_` or `*` in it is kept as text.
+  A target containing `:` (before any `|` alias or `#`/`^` anchor), such as `[[fullcite:key]]`, is kept exactly as text in every
+  flavour; the same rule applies to `![[...]]` embeds. An alias may contain `:`, so `[[Note|Time: 10]]` still shows `Time: 10`.
   Left as they are: `![[note]]` (a note embed comes later), `[[_TOC_]]` (the contents marker) and `[[1]](url)` (a link whose text is `[1]`).
   Links become real links to a heading of the same document in a later release.
 - **Pictures by name: `![[picture.png|300]]`** (v3.32.25, in `obsidian` and `pdfmd`). Obsidian's wikilink names a file, not a path: the

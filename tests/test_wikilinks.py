@@ -41,6 +41,14 @@ class Transform(unittest.TestCase):
     def test_a_pipe_escaped_for_a_table_is_still_the_bar(self):
         self.assertEqual(self.text("| [[Note\\|alias]] |"), "| alias |")
 
+    def test_a_colon_in_the_target_keeps_the_marker_but_aliases_and_anchors_allow_it(self):
+        for marker in ("[[fullcite:key]]", "[[fullcite:key|shown]]", "[[name:key#Heading]]", "[[name:key^block]]"):
+            with self.subTest(marker=marker):
+                self.assertEqual(self.text(marker), marker)
+        self.assertEqual(self.text("[[Note|Time: 10]]"), "Time: 10")
+        self.assertEqual(self.text("[[Note#Time: 10]]"), "Note > Time: 10")
+        self.assertEqual(self.text("[[Note^block:one|shown]]"), "shown")
+
     def test_markdown_in_a_name_is_kept_as_text(self):
         self.assertEqual(self.text("[[a_b*c]]"), "a\\_b\\*c")
 
@@ -72,6 +80,28 @@ class Build(unittest.TestCase):
         self.assertIn("A alias and Other &gt; Part.", html)
         html = self.build("---\npdfmd-options:\n  flavour: pandoc\n---\n\nA [[Note|alias]].\n", "html")
         self.assertIn("[[Note|alias]]", html)
+
+    def test_colon_markers_reach_pandoc_and_user_filters_in_every_flavour(self):
+        source = "before\n\n[[fullcite:key]]\n\n[[Note|Time: 10]]\n\n[[Note]]\n\nafter\n"
+        note = self.directory / "n.md"
+        note.write_text(source, encoding="utf-8")
+        probe = self.directory / "probe.lua"
+        probe.write_text('function Pandoc(doc)\n'
+                         '  assert(pandoc.utils.stringify(doc):find("[[fullcite:key]]", 1, true))\n'
+                         'end\n', encoding="utf-8")
+        for flavour in ("pdfmd", "obsidian", "pandoc", "gfm", "commonmark"):
+            with self.subTest(flavour=flavour):
+                output = self.directory / "out.md"
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(note), "--to", "md",
+                                       "--flavour", flavour, "--lua-filter", str(probe), "-o", str(output)],
+                                      cwd=self.directory, env={**self.env, "PDFMD_NO_PROMPT": "1"},
+                                      stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                text = output.read_text(encoding="utf-8").replace("\\[", "[").replace("\\]", "]")
+                self.assertIn("[[fullcite:key]]", text)
+                if flavour in ("pdfmd", "obsidian"):
+                    self.assertIn("Time: 10", text)
+                    self.assertNotIn("[[Note", text)
 
     def test_underline_is_the_writers_own(self):
         source = "x <u>under</u> and <ins>ins</ins> y\n"

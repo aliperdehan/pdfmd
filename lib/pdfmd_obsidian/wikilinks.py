@@ -38,6 +38,8 @@ def wikilinks_as_text(text: str) -> Wikilinks:
         if match.lastgroup != "link":
             return match.group(0)
         target = (match.group("target") or "").strip()
+        if ":" in target.split("^", 1)[0]:
+            return match.group(0)
         heading = (match.group("heading") or "").strip()
         alias = (match.group("alias") or "").strip()
         shown = alias or " > ".join(part for part in (target, heading) if part)

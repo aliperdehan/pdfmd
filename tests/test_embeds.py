@@ -57,6 +57,16 @@ class Transform(unittest.TestCase):
         self.assertEqual(result.text, "x\n**[missing image: gone.png]**\n")
         self.assertEqual(result.missing, [(2, "gone.png")])
 
+    def test_colons_in_embed_targets_are_kept_without_a_lookup(self):
+        def unexpected(name):
+            self.fail(f"looked up a marker: {name}")
+        for marker in ("![[name:key.png]]", "![[name:key.png|caption]]", "![[name:key.png#H]]",
+                       "![[name:key.png^block]]"):
+            with self.subTest(marker=marker):
+                result = embed_images(marker, unexpected)
+                self.assertEqual((result.text, result.count, result.missing), (marker, 0, []))
+        self.assertEqual(self.run_on("![[a.png|Time: 10]]").text, "![Time: 10](img/a.png)")
+
     def test_code_math_front_matter_comments_and_other_files_are_left_alone(self):
         text = "---\nt: '![[a.png]]'\n---\n\n`![[a.png]]` $![[a.png]]$ <!-- ![[a.png]] -->\n\n```\n![[a.png]]\n```\n\n![[note]] ![[doc.pdf]]\n"
         result = self.run_on(text)
