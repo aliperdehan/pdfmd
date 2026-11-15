@@ -149,8 +149,27 @@ class Options(unittest.TestCase):
         self.assertNotIn("OPTIONS  editor:", log)
 
 
+def same_pandoc_as_the_shipped_data() -> bool:
+    """The drift check means something only against the Pandoc the data was made from, with its manual installed: CI's
+    other Pandoc versions (3.1.3, latest) have other keys and a different version line, and may have no manual."""
+    if not shutil.which("pandoc"):
+        return False
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import pandoc_keys
+    finally:
+        sys.path.pop(0)
+    shipped = json.loads((ROOT / "lib/pdfmd_args/pandoc_keys.json").read_text(encoding="utf-8"))["pandoc"]
+    line = subprocess.run(["pandoc", "--version"], capture_output=True, text=True, stdin=subprocess.DEVNULL).stdout
+    return line.splitlines()[:1] == [shipped] and pandoc_keys.manual_path() is not None
+
+
+SAME_PANDOC = same_pandoc_as_the_shipped_data()
+NOT_THE_SAME = "the shipped key data was made from another Pandoc (or its manual is missing)"
+
+
 class DerivedKeys(unittest.TestCase):
-    @unittest.skipUnless(shutil.which("pandoc"), "needs installed Pandoc")
+    @unittest.skipUnless(SAME_PANDOC, NOT_THE_SAME)
     def test_shipped_data_matches_installed_pandoc_and_quarto(self):
         script = ROOT / "scripts/pandoc_keys.py"
         done = subprocess.run([sys.executable, str(script), "--check"], check=False, capture_output=True, text=True,
@@ -158,18 +177,21 @@ class DerivedKeys(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
     def test_key_data_is_shipped_with_the_wheel(self):
-        import tomllib
+        try:
+            import tomllib
+        except ImportError:  # Python 3.9 and 3.10
+            self.skipTest("needs tomllib (Python 3.11)")
 
-        config = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertIn("*.json", config["tool"]["setuptools"]["package-data"]["pdfmd_args"])
-        data = json.loads((ROOT / "lib/pdfmd_args/pandoc_keys.json").read_text())
+        data = json.loads((ROOT / "lib/pdfmd_args/pandoc_keys.json").read_text(encoding="utf-8"))
         self.assertTrue({"toc", "lang", "fontsize"} <= set(data["template_keys"]))
         self.assertIn("link-citations", data["documented_keys"])
 
-    @unittest.skipUnless(shutil.which("pandoc"), "needs installed Pandoc")
+    @unittest.skipUnless(SAME_PANDOC, NOT_THE_SAME)
     def test_drift_is_an_error(self):
         with tempfile.TemporaryDirectory(prefix="pdfmd-key-drift-") as scratch:
-            data = json.loads((ROOT / "lib/pdfmd_args/pandoc_keys.json").read_text())
+            data = json.loads((ROOT / "lib/pdfmd_args/pandoc_keys.json").read_text(encoding="utf-8"))
             data["template_keys"].remove("toc")
             path = Path(scratch) / "keys.json"
             path.write_text(json.dumps(data), encoding="utf-8")

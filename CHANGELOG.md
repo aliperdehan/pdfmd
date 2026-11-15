@@ -43,6 +43,8 @@ required split/packaging/docs/setup/isolation tests: 115 run, 114 pass and one s
 isolation checks report no writes to real cache/config/data. `pdfmd.py` shrinks from 14,208 to 14,207 lines.
 The alias token test now imports the core before its helper at module scope, so it also runs alone under test discovery.
 
+Review fix (same version, not released): the two drift tests of the key data (`DerivedKeys`) run only when the installed Pandoc is the one the data was made from and its manual is installed, and skip with that reason otherwise (CI's Pandoc 3.1.3 and latest jobs have other keys and another version line); the test that reads `pyproject.toml` skips on Python 3.9 and 3.10, which have no `tomllib`.
+
 ## v3.33.224 — 2026-11-16
 
 Pre-edit state: commit `ea11307`. **British spellings of Pandoc's own keys** (D78, first part). Front matter,
