@@ -43,8 +43,6 @@ is in the PDF): Biber is run again with a PAR_GLOBAL_TEMP that is not the stale 
 passes after), the one NOTE, the stale cache untouched; a cache that `--cache` cannot name is found in TMPDIR; `off` (the
 config's) and a cache outside TMPDIR keep the old warning; `--strict` counts the repair.
 
----
-
 ## v3.33.222 — 2026-11-15
 
 Pre-edit state: commit `2891eea`. **TeX self-repair, fifth remedy: a corrupt LuaTeX font database** (queue item 2b, 3fm). When
@@ -70,8 +68,6 @@ the fake's own `probe.tex` run), a retry that fails is made once (two builds, th
 NOTE), the direct route reads the signature from the log with no probe, `off` keeps the failure and its cause, `--strict`
 counts the repair, and a failure of another cause (a missing package) is not repeated.
 
----
-
 ## v3.33.221 — 2026-11-15
 
 Pre-edit state: commit `ce4eecf`. **TeX self-repair, fourth remedy: a TeX cache that cannot be written** (queue item 2b, 3fm).
@@ -94,7 +90,10 @@ before, passes after), a writable or an unset one, and a list with one writable 
 a build whose fake lualatex stops with the corpus's `no writeable cache path` unless TEXMFCACHE is somewhere usable now succeeds,
 and `--strict` fails it with the output kept.
 
----
+Fixed in review, before release: the run-wide line went into the --strict problems of every build of the run, so with an
+unwritable TEXMFCACHE and a TeX engine installed a `--to html --strict` build failed over a cache it never read. It now counts
+only for a build that a LaTeX engine made (`core.BUILD["engine"]`); per-build repairs are unchanged. Test:
+`test_strict_does_not_count_it_for_a_build_that_tex_did_not_make` fails before and passes after.
 
 ## v3.33.220 — 2026-11-15
 
@@ -120,8 +119,6 @@ lualatex and a pinned or mirrored one keeps its order (`plan()` called with `reo
 gets nothing, no ulem gives the plain stand-in and the WARN, `off` keeps the failure, and both stand-ins are packages real
 xelatex loads (ulem is loaded in the one).
 
----
-
 ## v3.33.219 — 2026-11-15
 
 Pre-edit state: commit `cb2d07a`. **TeX self-repair, second remedy: a missing `lmodern.sty`** (queue item 2b, 3fm). Pandoc's
@@ -145,8 +142,6 @@ Test: `tests/test_tex_repair.py`, class `LmodernMissing` (fake engines that prin
 the stand-in's folder is on TEXINPUTS; a fake kpsewhich that hides the file): xelatex builds with the stand-in and pdflatex
 is never started (fails before, passes after), lualatex gets it too, `--strict` fails the build, `off` and a pdflatex-only chain
 keep the failure, and the stand-in is a package real xelatex loads (compiled with it first on the path).
-
----
 
 ## v3.33.218 — 2026-11-15
 
@@ -174,8 +169,6 @@ that hides one file and asks the real one for the rest, the builds through `scri
 `tests/fixtures/tex-repair/`, a few KB each, taken from a collection of real logs of Ubuntu 24.04 with TeX Live 2023): lualatex
 is not started and one NOTE says why (fails before, passes after), `--strict` fails the build with the output kept (the same),
 `tex-repair: off` and a pinned `-e lualatex` keep the failed run, a healthy installation gets no NOTE.
-
----
 
 ## v3.33.217 — 2026-11-15
 

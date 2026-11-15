@@ -461,6 +461,17 @@ class CacheUnwritable(FakeTeX):
         self.assertEqual(code, 1, said)
         self.assertIn("--strict: the build printed 1 warning", said)
 
+    @needs_tex()
+    def test_strict_does_not_count_it_for_a_build_that_tex_did_not_make(self):
+        # the cache is still moved (a TeX engine is installed), but an HTML build never read it
+        self.engine("lualatex", "cache-unwritable.txt")
+        self.write("d.md", GOOD)
+        code, said = self.pdfmd("d.md", "--to", "html", "--strict",
+                                env={"TEXMFVAR": str(self.var), "TEXMFCACHE": str(self.blocked / "cache")})
+        self.assertEqual(code, 0, said)
+        self.assertIn("TEXMFCACHE", said)
+        self.assertTrue((self.work / "d.html").is_file())
+
 
 @needs_tex("xelatex")
 class DatabaseCorrupt(FakeTeX):
