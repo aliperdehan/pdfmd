@@ -223,7 +223,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "Added to the line spacing at a paragraph break: a length (6pt, 1em, 2mm; units pt, mm, cm, in, em), 0 for none, "
              "or auto. LaTeX and Typst; the HTML engines take it from a style sheet. Empty: each engine's own (none with "
              "indent: true). Per run: --paragraph-spacing.", "Every document (global metadata)"),
-        choice("colorlinks", "Coloured links", on_off, "", "", "Every document (global metadata)", "metadata"),
+        choice("colorlinks", "Coloured links", on_off, "", "Metadata accepts colourlinks or Pandoc's colorlinks.", "Every document (global metadata)", "metadata"),
         choice("toc", "Table of contents", on_off, "", "", "Every document (global metadata)", "metadata"),
         choice("options.global-metadata", "Use the global metadata above", on_off, "",
                "Off: no document gets the rows above (nor a preset). Per run: --no-global-metadata / --global-metadata; "

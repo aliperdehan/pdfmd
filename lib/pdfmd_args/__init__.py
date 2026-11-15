@@ -1022,6 +1022,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def normalise_metadata_options(arguments: list[str]) -> list[str]:
     """Preserve Pandoc's --metadata spelling despite pdfmd's similarly named options."""
+    from .metadata import command_aliases
+
+    arguments = command_aliases(arguments)
     before, separator, after = arguments, [], []
     if "--" in arguments:
         index = arguments.index("--")
@@ -1052,12 +1055,9 @@ def metadata_command_layers(arguments: list[str]) -> list[tuple[dict, bool]]:
 
 
 def merged_cli_metadata(core, layers, append, where, arguments):
-    command_layers = metadata_command_layers(arguments)
-    cli_appends = {key[:-1] for layer, _ in command_layers for key in layer if core.metadata_plus_key(key)}
-    merged = core.merge_metadata_layers([*layers, *command_layers], append, where)
-    for key in metadata_keys(arguments) - cli_appends:
-        merged.pop(key, None)
-    return merged
+    from .metadata import merged_alias_metadata
+
+    return merged_alias_metadata(layers, append, where, arguments)
 
 
 def metadata_keys(arguments: list[str]) -> set[str]:

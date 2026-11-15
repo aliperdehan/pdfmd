@@ -10,6 +10,10 @@
 function Meta(meta)
   local merged = meta["pdfmd-merged"]
   if merged ~= nil then
+    for _, key in ipairs(merged["pdfmd-remove-keys"] or {}) do
+      meta[pandoc.utils.stringify(key)] = nil
+    end
+    merged["pdfmd-remove-keys"] = nil
     local keys = {}
     for key in pairs(merged) do keys[#keys + 1] = key end
     for _, key in ipairs(keys) do meta[key] = merged[key] end

@@ -2491,6 +2491,11 @@ query is read as a browser prints (v3.29): `print` and `all` apply, `screen` and
 a width (`(min-width: 600px)`) is not for a printed page and is named. A body size LaTeX has no class for (anything but 10, 11
 and 12 pt) is named, not used. It is a small reader on purpose: a CSS cascade has no counterpart in LaTeX.
 
+Pandoc's own variable names accept British spellings too: `colourlinks`, `linkcolour`, `urlcolour`, `citecolour`,
+`fontcolour`, `backgroundcolour` and the other `colour` variants, plus `centre`, `licence` and `organisation`.
+Use them in front matter, metadata files, kits, folder or global metadata, and `-V`/`--variable` or `-M`/`--metadata`.
+pdfmd passes Pandoc its own spelling; when both spellings occur in one place, Pandoc's wins and a NOTE names the ignored alias.
+
 Headings (v3.29): `h1`-`h5` with a `color`, `font-size` (`em`, `%`, `pt`, `px`: of the body's size), `font-family`,
 `font-weight` or `font-style` are set for LaTeX too, as titlesec's starred formats (the numbering and the spacing stay the
 class's; `h1` is `\section`, `h2` `\subsection` ... `h5` `\subparagraph`; `h6` has no LaTeX level). It is done only for the plain

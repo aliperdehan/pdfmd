@@ -19,6 +19,31 @@ same commit as the change.
 
 ---
 
+## v3.33.224 — 2026-11-16
+
+Pre-edit state: commit `ea11307`. **British spellings of Pandoc's own keys** (D78, first part). Front matter,
+metadata files (including global, folder and kit layers) and CLI variables previously passed British names through
+unchanged, so Pandoc ignored them. pdfmd now normalises each layer before merging, restores the canonical values before
+user filters, and rewrites `-V`/`--var`/`--variable` and `-M`/`--metadata` keys without changing their values. Pandoc's own
+spelling wins when both occur in one place, with one NOTE naming the ignored alias; a higher layer still wins over a lower
+one regardless of spelling. The setup row documents both `colourlinks` and `colorlinks`; these are aliases, no new setting.
+
+Survey: Pandoc 3.13's `-D` for every output writer, recursively including its template partials, and the installed manual's
+Variables section found these American names: `backgroundcolor`, `backgroundcolordark`, `citecolor`, `colorlinks`,
+`colortheme`, `colorthemeoptions`, `contrastcolor`, `filecolor`, `fontcolor`, `fontcolordark`, `linkcolor`, `linkcolordark`,
+`linkcontrastcolor`, `monobackgroundcolor`, `monobackgroundcolordark`, `quotebordercolor`, `quotebordercolordark`, `quotecolor`,
+`quotecolordark`, `toccolor`, `urlcolor`, `center`, `license`, `organization`. Each `color` accepts `colour`; the last three
+accept `centre`, `licence`, `organisation`. CSS properties, slide attributes and the `xcolor` package name are not metadata
+keys and are unchanged. The manual calls ConTeXt's variable `contrastcolor`; its template uses `linkcontrastcolor`, so both
+have aliases.
+
+Checked: new regressions fail against the pre-edit commit and pass after the change; real checkout-launcher builds check
+LaTeX's hypersetup, HTML light/dark CSS, Typst link colours, Beamer and the other spellings, document/metadata/global-preset/
+folder/kit layers, CLI token forms, collision notes and precedence, and removal of aliases before user filters. Area tests:
+236 run, 219 pass; the 17 socket-dependent cases in `test_serve` fail under the sandbox. Required
+split/packaging/docs/setup/isolation tests: 115 run, 114 pass and one skip. Ruff has no new findings, and the isolation
+check reports no writes to the real cache/config/data. `pdfmd.py` stays at 14,208 lines (version only).
+
 ## v3.33.223a — 2026-11-16
 
 Pre-edit state: commit `52c64af`. A test file only, no shipped code, so no `PDFMD_VERSION` bump. **`tests/test_tex_repair.py` made
