@@ -58,7 +58,9 @@ name, packaging in three places, `split_check`. Phase 2 adds five things, all in
    as `core.X`, the state it writes, every kind of test patch, what is read when a module loads (both ways), cached
    functions and their `.cache_clear()` callers, `__file__` / `__name__` / `globals()`. `scripts/split_move.py KEY`
    (3.33.187k, decision D5) does the mechanical part and checks itself (each moved statement parses back to the original's
-   AST with exactly its substitutions); it refuses, and writes nothing, what needs a decision.
+   AST with exactly its substitutions); it refuses, and writes nothing, what needs a decision. Since 3.33.213a it imports from
+   `pdfmd_base` a decorator the moved code needs when its module loads (`timed`, `noted`), and keeps a quoted annotation of
+   a function's signature as text when nothing in the checkout evaluates annotations.
 5. **The safety net** (3.33.187i, `tests/test_split.py`, `SafetyNet`): every `core.NAME` in lib/ is something pdfmd has,
    every table entry and stand-in names something its module has, no name is both a pdfmd global and a table entry, no
    code in lib/ binds a bare name that is one of pdfmd's state names (a `global X` lost in a move makes `X = ...` a local),
@@ -190,7 +192,7 @@ Facts: 12 of its names are read from outside it (the table); 188 pdfmd names rea
 
 Traps: decorators: `run_engine_command` @timed, @noted; needs at import time, from outside: `noted`, `timed`; writes state that stays in pdfmd.py (`core.X = ...`): `CALC_BELOW`, `CALC_DUMP`, `CALC_SEED`, `LAST_EXACT`, `LAST_SCANNED`, `LAST_SEEDED`, `LAST_SKIPPED`, `LAST_WHOLE`, `SOFFICE_TIMEOUT_NOW`; patched by tests: `_convert_one_core`; calls to patched names inside the move (through `core.`): `_convert_one->_convert_one_core`; temporary bindings (2): `DEFAULT_MARGIN`, `_convert_one`.
 
-Note: Nine state names written (`CALC_BELOW`, `CALC_DUMP`, `CALC_SEED`, the `LAST_*`, `SOFFICE_TIMEOUT_NOW`). `@timed` and `@noted` come from `pdfmd_base`, imported by the module (the tool refuses them as reads at import). The module references in the code (`pdfmd_chain.engine_failed`, `pdfmd_cache.check_location`, `pdfmd_native.warn_nameless_authors`) are imported by the module. `convert_one` goes to `-j` workers, which the shared `core` makes safe. `convert_via_native_bibliography` goes with `pdfmd_cite` (move 6). Run the full suite after this move (D6).
+Note: Nine state names written (`CALC_BELOW`, `CALC_DUMP`, `CALC_SEED`, the `LAST_*`, `SOFFICE_TIMEOUT_NOW`). `@timed` and `@noted` come from `pdfmd_base`, imported by the module (the tool does it since 3.33.213a; before, it refused them as reads at import). The module references in the code (`pdfmd_chain.engine_failed`, `pdfmd_cache.check_location`, `pdfmd_native.warn_nameless_authors`) are imported by the module. `convert_one` goes to `-j` workers, which the shared `core` makes safe. `convert_via_native_bibliography` goes with `pdfmd_cite` (move 6). Run the full suite after this move (D6).
 
 Tests: `test_odt_route`, `test_engine_filters`, `test_build_record`, `test_soffice_timeout`.
 

@@ -19,6 +19,46 @@ same commit as the change.
 
 ---
 
+## v3.33.213a — 2026-11-15
+
+Pre-edit state: commit `68fff61`. Scripts, their test and SPLIT.md only, no shipped code, so no `PDFMD_VERSION` bump. Phase 2
+of the split, wave 1, before move 5: **`scripts/split_move.py` learns the two things move 5 needs**, which it refused
+(`split_move.py pdfmd_build --dry-run` at `68fff61` wrote nothing: two load-time reads and nine quoted annotations, beside
+`DEFAULT_MARGIN`, which is the move's own decision):
+-  A name that `pdfmd.py` imports from `pdfmd_base` and the moved code reads when its module loads (a decorator: `@timed`,
+  `@noted` on `run_engine_command`) is imported by the module itself, `from pdfmd_base import noted, timed`, on a line of
+  its own under `from pdfmd_base import core` (`tests/test_split.py`, SharedCore, wants that one alone), as SPLIT.md's
+  pattern (step 3) and the six modules of 3.33.210 do; `pdfmd_base` loads at every start, so the import loads nothing new.
+  Only when tests do not rebind the name on pdfmd, no `global` declares it and `pdfmd.py` binds it nowhere else; read when
+  the code runs, the same name is still `core.NAME`. Any other load-time read (a helper of `pdfmd.py`, a name from another
+  package) is refused as before. Appended to an existing module, the missing lines come in the same order.
+-  A quoted annotation in a function's signature (an argument's or the return value's) is kept as it is when the module has
+  `from __future__ import annotations` (a new module always has it; an existing one is read) and nothing in the checkout
+  evaluates annotations: the AST of `pdfmd.py`, `lib/` (not the vendored copies), `scripts/` and `tests/` has no
+  `get_type_hints`, `get_annotations`, `call_annotate_function`, `call_evaluate_function` or `annotationlib` and no
+  `eval_str=` other than False (the words in a string or a comment do not count). Its names are not rewritten, so the
+  strings in `__annotations__` are the ones `pdfmd.py`'s own `from __future__ import annotations` gives; reading
+  `__annotations__` is therefore not on the list, as only an evaluation, in the moved function's own globals, where the
+  quoted names are not bound, would differ. Each kept one is a `note:` line. Refused as before: a variable's annotation (a
+  class body's or the module's), one under a `.register` decorator (`functools.singledispatch` evaluates it), one when the
+  module lacks the future import or something evaluates annotations (the refusal names up to five places).
+
+The module docstring says both, and SPLIT.md's tools paragraph and move 5's note (which said the tool refuses `@timed` and
+`@noted`). A `--keep NAME` option, to leave a listed constant in `pdfmd.py`, was not added: the tool reads the move's list
+from SPLIT.md, and move 5 takes `DEFAULT_MARGIN` off that list in its own commit. `tests/test_split_tools.py`: the test that
+a quoted annotation is refused gives way to four, on synthetic sources: kept in a signature (positional, `*rest`,
+keyword-only and the return value; the module's `__annotations__` equal the original's), refused with `get_type_hints` or
+`eval_str=True` in a test, without the future import in an existing module, for a variable's annotation and under
+`@g.register`; a decorator from `pdfmd_base` imported beside `core` (a new module and an appended one, `BUILD` read at run
+time still `core.BUILD`); and still refused for a decorator tests patch (a made-up name: `split_spec` reads the patches in
+tests/ line by line, the strings of this file too, so a patch of `timed` written there made the real move refuse `timed`),
+one from another package and one `pdfmd.py` rebinds. Against the old tool seven of the new tests and subtests fail; against
+this one all pass. On the checkout, `split_move.py pdfmd_build --dry-run` now plans the two imports, keeps the nine
+annotations and refuses only `DEFAULT_MARGIN`. The scan also showed that `tests/test_svg_profile.py`'s docstring has an
+invalid escape (`C:\...`), a `SyntaxWarning` when it is compiled; the tool silences that warning while it scans and leaves
+the test as it is. Proof: `ruff --select F`; `test_split_tools` and `test_split` (49 tests) pass, the real cache's build
+records unchanged.
+
 ## v3.33.213 — 2026-11-15
 
 Pre-edit state: commit `282e31c`. Phase 2 of the split, wave 1, move 4: **the direct routes move to

@@ -17,6 +17,13 @@ It reads the section (`scripts/split_spec.py` finds it: the definitions and cons
 - reads a moved name that tests rebind on pdfmd (`patch.object(pdfmd, "x")`, `patch("pdfmd.x")`, `setattr`, `pdfmd.x = ...`)
   as `core.NAME` inside the move too, so the patch still reaches the moved callers;
 - `__file__` becomes `core.__file__` and `sys.modules[__name__]` becomes `core`;
+- (3.33.213a) imports from `pdfmd_base`, which loads at every start, a name that pdfmd.py imports from there and the moved
+  code reads when its module loads (a decorator: `timed`, `noted`), on a line of its own under `from pdfmd_base import
+  core`; read when the code runs, the same name is still `core.NAME`;
+- (3.33.213a) leaves a quoted annotation in a function's signature as it is when the module has `from __future__ import
+  annotations` and nothing in the checkout evaluates annotations (`get_type_hints`, `get_annotations`, `annotationlib`,
+  an `eval_str=` that is not False, found in the AST of pdfmd.py, lib/, scripts/ and tests/): its names are not
+  rewritten, so `__annotations__` holds the same strings as in pdfmd.py; each one is a note;
 - adds the table line to pdfmd.py (`names("pdfmd_x.role", "a b c")`, after the last one) for the moved names read from
   outside the move, and a stand-in (`NAME = deferred(...)`) for a moved function that code staying in pdfmd.py calls bare;
 - with `--import-at-start`, binds the moved names that code staying in pdfmd.py needs when it loads (a decorator, a
@@ -25,11 +32,13 @@ It reads the section (`scripts/split_spec.py` finds it: the definitions and cons
 
 It lists every comment block it carries: the rule (the comment lines right above a statement, no blank line between)
 cannot tell a definition's comment from a section's banner that happens to sit on it. It checks itself: every moved statement, parsed from the text it wrote, has the same AST as the original with exactly these
-substitutions. It refuses, and writes nothing, when the move needs a decision: a pdfmd name read when the module loads (a
-decorator, a default argument, a class body, a constant built from it: `core` cannot serve it then), a moved name that
-staying code needs when pdfmd.py loads, or reads bare when it is not a function, or rebinds with `global`, a local or a
-parameter named `core`, a name bound by a module-level `if`/`try` or bound twice, `globals()`, `vars()`, `__name__` other
-than in `sys.modules[__name__]`, a state write it cannot spell as an attribute (a walrus, `except ... as`, an import). The
+substitutions. It refuses, and writes nothing, when the move needs a decision: a pdfmd name read when the module loads
+(a decorator, a default argument, a class body, a constant built from it: `core` cannot serve it then; a name pdfmd.py
+imports from `pdfmd_base` is imported instead), a quoted annotation of a variable or one that something may evaluate (or
+under a `.register` decorator, which functools.singledispatch evaluates), a moved name that staying code needs when
+pdfmd.py loads, or reads bare when it is not a function, or rebinds with `global`, a local or a parameter named `core`,
+a name bound by a module-level `if`/`try` or bound twice, `globals()`, `vars()`, `__name__` other than in
+`sys.modules[__name__]`, a state write it cannot spell as an attribute (a walrus, `except ... as`, an import). The
 packaging of a new package, the changelog and the proof stay with whoever runs it (SPLIT.md).
 
 Python's scoping is computed here from the AST, not with `symtable`: from 3.12 on `symtable` reports an inlined
@@ -45,6 +54,7 @@ import builtins
 import re
 import sys
 import tempfile
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -57,6 +67,10 @@ COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
 REBINDING = {"patch.object", "patch", "setattr", "assigned"}     # test patches that rebind pdfmd.X (patch.dict does not)
 SELF_REFUSED = {"__name__", "globals", "__doc__", "__spec__", "__loader__", "__package__", "__builtins__"}
 GENERATED = {"pdfmd_inkmd", "pdfmd_yaml", "node_modules", "__pycache__"}
+BASE = "pdfmd_base"                          # loads at every start: a moved module may import from it what it needs then
+# What evaluates annotations, in the function's own globals (where a moved function's quoted names are not bound). Reading
+# __annotations__ is not on the list: under `from __future__ import annotations` it holds the same strings in either module.
+EVALUATORS = {"get_type_hints", "get_annotations", "call_annotate_function", "call_evaluate_function", "annotationlib"}
 
 
 # ---------------------------------------------------------------------------------------------------- scopes
@@ -273,6 +287,38 @@ def table_entries(tree: ast.Module) -> set[str]:
     return found
 
 
+def annotation_evaluators(root: Path) -> list[str]:
+    """Where the checkout's own Python evaluates annotations when it runs (`typing.get_type_hints`,
+    `inspect.get_annotations`, `annotationlib`, an `eval_str=` that is not False), read from the AST, so a word in a
+    string or a comment is not one: with none, a quoted annotation is text that nothing turns into objects."""
+    found: list[str] = []
+    paths = [*sorted(root.glob("*.py")), *(path for folder in ("lib", "scripts", "tests")
+                                           for path in sorted((root / folder).rglob("*.py")))]
+    for path in paths:
+        relative = path.relative_to(root).as_posix()
+        if GENERATED & set(path.relative_to(root).parts):
+            continue
+        try:
+            with warnings.catch_warnings():              # an invalid escape in a test's docstring is not ours to report
+                warnings.simplefilter("ignore", SyntaxWarning)
+                tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"), relative)
+        except SyntaxError:
+            found.append(f"{relative} (does not parse)")
+            continue
+        for node in ast.walk(tree):
+            words = ({node.id} if isinstance(node, ast.Name) else {node.attr} if isinstance(node, ast.Attribute)
+                     else set(node.name.split(".")) if isinstance(node, ast.alias) else set())
+            if words & EVALUATORS or isinstance(node, ast.keyword) and node.arg == "eval_str" \
+                    and not (isinstance(node.value, ast.Constant) and node.value.value is False):
+                found.append(f"{relative}:{node.lineno}")
+    return found
+
+
+def future_annotations(module: str) -> bool:
+    return any(isinstance(node, ast.ImportFrom) and node.module == "__future__"
+               and any(alias.name == "annotations" for alias in node.names) for node in ast.parse(module).body)
+
+
 def is_sys_modules_name(node: ast.AST) -> bool:
     return (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Name) and node.slice.id == "__name__"
             and isinstance(node.value, ast.Attribute) and node.value.attr == "modules"
@@ -339,24 +385,56 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
                    and not any(name in module_changes(other) for other in tree.body
                                if not isinstance(other, (ast.Import, ast.ImportFrom)))}
     staying = (pdfmd_names | set(imports)) - moving - for_package
+    from_base = {name for name, node in imports.items()        # what the module may import from pdfmd_base for its loading
+                 if isinstance(node, ast.ImportFrom) and node.module == BASE and name != "core"
+                 and name not in rebound_by_tests
+                 and name not in declared_anywhere
+                 and not any(name in module_changes(other) for other in tree.body
+                             if not isinstance(other, (ast.Import, ast.ImportFrom)))}
+    target_future = not plan.target.exists() or future_annotations(plan.target.read_text(encoding="utf-8"))
+    evaluators: list[str] | None = None
     core_read: set[str] = set()
 
     for statement in plan.statements:
         label = ", ".join(split_spec.bound_names(statement))
         uses, scopes = name_uses(statement)
         for node in ast.walk(statement):
-            annotations = []
-            if isinstance(node, ast.arg) and node.annotation is not None:
-                annotations.append(node.annotation)
-            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.returns is not None:
-                annotations.append(node.returns)
+            # A quoted annotation's names are not rewritten. In a function's signature it stays as text when the module
+            # has `from __future__ import annotations` (its __annotations__ then hold the same strings as pdfmd.py's) and
+            # nothing evaluates annotations; a variable's (a class body's, the module's) is refused as before.
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                arguments = node.args
+                annotations = [argument.annotation for argument in (*arguments.posonlyargs, *arguments.args,
+                                                                    *arguments.kwonlyargs, arguments.vararg, arguments.kwarg)
+                               if argument is not None and argument.annotation is not None]
+                annotations += [node.returns] if node.returns is not None else []
+                registered = any(isinstance(decorator, ast.Attribute) and decorator.attr == "register"
+                                 for decorator in node.decorator_list)
             elif isinstance(node, ast.AnnAssign):
-                annotations.append(node.annotation)
+                annotations, registered = [node.annotation], None
+            else:
+                continue
             for annotation in annotations:
                 for quoted in ast.walk(annotation):
-                    if isinstance(quoted, ast.Constant) and isinstance(quoted.value, str):
-                        plan.refused.append(f"{label}: quoted annotation {quoted.value!r} at line {quoted.lineno}; "
-                                            "resolve its dependencies by hand before moving")
+                    if not (isinstance(quoted, ast.Constant) and isinstance(quoted.value, str)):
+                        continue
+                    said = f"{label}: quoted annotation {quoted.value!r} at line {quoted.lineno}"
+                    if registered is None:
+                        why = "a variable's annotation"
+                    elif not target_future:
+                        why = f"{plan.target.relative_to(root).as_posix()} has no `from __future__ import annotations`"
+                    elif registered:
+                        why = "a `.register` decorator (functools.singledispatch) evaluates it"
+                    else:
+                        if evaluators is None:
+                            evaluators = annotation_evaluators(root)
+                        why = ("the checkout reads annotations when it runs (" + ", ".join(evaluators[:5])
+                               + (", ..." if len(evaluators) > 5 else "") + ")") if evaluators else ""
+                    if why:
+                        plan.refused.append(f"{said}; {why}: resolve its dependencies by hand before moving")
+                    else:
+                        plan.notes.append(f"{said}: kept as text (the module has `from __future__ import annotations` "
+                                          "and nothing in the checkout evaluates annotations)")
         if any("core" in scope.bound for scope in scopes):
             plan.refused.append(f"{label}: has a local or a parameter named `core`")
         for cls in (node for node in ast.walk(statement) if isinstance(node, ast.ClassDef)):
@@ -426,7 +504,9 @@ def plan_move(key: str, root: Path, text: str | None, phase: int | None,
                 else:
                     plan.imports[name] = import_line(imports[name], name)
             elif name in staying:
-                if use.eager:
+                if use.eager and name in from_base:
+                    plan.imports[name] = import_line(imports[name], name)   # a decorator: pdfmd_base is loaded already
+                elif use.eager:
                     plan.refused.append(f"{label}: reads {name} when the module loads (line {node.lineno}): core cannot "
                                         "serve it then; import it, move it too, or rewrite the statement by hand")
                 else:
@@ -561,11 +641,14 @@ def module_header(plan: Plan) -> str:
         if line.startswith("from "):
             module, _, spelled = line[len("from "):].partition(" import ")
             joined.setdefault(module, []).append(spelled)
+    base = joined.pop(BASE, [])                  # under `from pdfmd_base import core`, which stays on a line of its own
     imports = plain + [f"from {module} import {', '.join(sorted(set(names), key=str.lower))}"
                        for module, names in sorted(joined.items())]
     uses_core = any(replacement.startswith("core") for replacement in plan.edits.values())
+    ours = (["from pdfmd_base import core"] if uses_core else []) + \
+        ([f"from {BASE} import {', '.join(sorted(set(base), key=str.lower))}"] if base else [])
     return "\n".join([docstring, "from __future__ import annotations", "", *imports, *([""] if imports else []),
-                      *(["from pdfmd_base import core", ""] if uses_core else []), "", ""])
+                      *([*ours, ""] if ours else []), "", ""])
 
 
 def table_lines(key: str, names: list[str], width: int = 124) -> list[str]:
@@ -683,9 +766,11 @@ def apply(plan: Plan, source: str, tree: ast.Module, out: Path, root: Path) -> l
                                     f"{name}; requires {line}")
         if plan.refused:
             return []
-        missing = [line for name, line in sorted(plan.imports.items()) if name not in have]
+        missing = [line for name, line in sorted(plan.imports.items())
+                   if name not in have and not line.startswith(f"from {BASE} ")]
         if "core" not in have and any(replacement.startswith("core") for replacement in plan.edits.values()):
             missing.append("from pdfmd_base import core")
+        missing += [line for name, line in sorted(plan.imports.items()) if name not in have and line.startswith(f"from {BASE} ")]
         if missing:
             ends = [node.end_lineno for node in present.body if isinstance(node, (ast.Import, ast.ImportFrom))]
             docstring = present.body[0].end_lineno if present.body and isinstance(present.body[0], ast.Expr) else 0

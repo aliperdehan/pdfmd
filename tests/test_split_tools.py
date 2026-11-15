@@ -1,4 +1,4 @@
-"""v3.33.187j, v3.33.187k: the tools of the split (SPLIT.md), on synthetic sources, so they do not depend on what pdfmd.py holds.
+"""v3.33.187j, v3.33.187k, v3.33.213a: the tools of the split (SPLIT.md), on synthetic sources, so they do not depend on what pdfmd.py holds.
 
 `scripts/split_spec.py` finds a move's section by its key under SPLIT.md's `## Phase 2:` heading (phase 1's sections share
 six keys with phase 2's) and reports what the move needs: what runs when a module loads, cached functions, test patches of
@@ -463,14 +463,93 @@ class Mover(unittest.TestCase):
         exec(module.replace("from pdfmd_base import core", ""), namespace)
         self.assertEqual(namespace["f"](), [1, 2])
 
-    def test_quoted_annotations_are_refused(self):
-        code = 'from pathlib import Path\ndef f(x: "Path"):\n    return x\n'
+    def test_quoted_annotations_in_a_signature_stay_text(self):
+        # v3.33.213a: under `from __future__ import annotations` they are strings nothing evaluates, the same as pdfmd.py's
+        code = ('from __future__ import annotations\nfrom pathlib import Path\n\n\n'
+                'def f(x: "Path", *rest: "list[Path]", flag: "bool | None" = None) -> "Path | None":\n    return x\n')
+        mover_tree(self.root, code, "`f`", test='x = "typing.get_type_hints(f)"  # a string, not a call\n')
+        done = self.move()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("f: quoted annotation 'Path | None' at line 5: kept as text", done.stdout)
+        module = (self.root / "lib" / "pdfmd_probe" / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn('def f(x: "Path", *rest: "list[Path]", flag: "bool | None" = None) -> "Path | None":\n', module)
+        self.assertTrue(module.split("\n\n", 1)[1].startswith("from __future__ import annotations\n"), module)
+        before, after = {}, {}
+        exec(code, before)
+        exec(module, after)
+        self.assertEqual(after["f"].__annotations__, before["f"].__annotations__)
+        self.assertEqual(after["f"].__annotations__["return"], "'Path | None'")
+
+    def test_quoted_annotations_are_refused_when_they_may_be_evaluated(self):
+        signature = 'from __future__ import annotations\nfrom pathlib import Path\n\n\ndef f(x: "Path"):\n    return x\n'
+        cases = {
+            "get_type_hints in a test": (signature, "import typing\nimport pdfmd\ntyping.get_type_hints(pdfmd.f)\n", None,
+                                         "reads annotations when it runs (tests/test_probe.py:3)"),
+            "eval_str in a test": (signature, "import inspect\nimport pdfmd\ninspect.signature(pdfmd.f, eval_str=True)\n",
+                                   None, "reads annotations when it runs (tests/test_probe.py:3)"),
+            "a module without the future import": (signature, "", "def present():\n    pass\n",
+                                                   "has no `from __future__ import annotations`"),
+            "a variable's annotation": ('from pathlib import Path\n\n\ndef f():\n    x: "Path" = 1\n    return x\n', "",
+                                        None, "a variable's annotation"),
+            "a singledispatch register": (('import functools\n\n\n@functools.singledispatch\ndef g(x):\n    pass\n\n\n'
+                                           '@g.register\ndef f(x: "int"):\n    pass\n'), "", None, "singledispatch"),
+        }
+        for case, (code, test, existing, reason) in cases.items():
+            with self.subTest(case):
+                self.root = Path(tempfile.mkdtemp(dir=self.root))
+                mover_tree(self.root, code, "`f`", test=test)
+                if existing is not None:
+                    (self.root / "lib" / "pdfmd_probe").mkdir()
+                    (self.root / "lib" / "pdfmd_probe" / "__init__.py").write_text(existing, encoding="utf-8")
+                done = self.move()
+                self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+                self.assertIn("f: quoted annotation", done.stdout)
+                self.assertIn(reason, done.stdout)
+                self.assertEqual((self.root / "pdfmd.py").read_text(encoding="utf-8"), code)
+                if existing is None:
+                    self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
+
+    def test_a_decorator_from_pdfmd_base_is_imported(self):
+        # v3.33.213a: pdfmd_base loads at every start, so the module imports what it needs when it loads (SPLIT.md, step 3)
+        code = ("from __future__ import annotations\n\nfrom pdfmd_base import BUILD, timed  # noqa: F401\n\n\n"
+                "def helper():\n    return 1\n\n\n"
+                '@timed("step")\ndef f():\n    return timed, BUILD, helper()\n')
         mover_tree(self.root, code, "`f`", test="")
         done = self.move()
-        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
-        self.assertIn("f: quoted annotation 'Path'", done.stdout)
-        self.assertEqual((self.root / "pdfmd.py").read_text(), code)
-        self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        module = (self.root / "lib" / "pdfmd_probe" / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn("\nfrom pdfmd_base import core\nfrom pdfmd_base import timed\n\n\n", module)   # core alone on its line
+        self.assertIn('@timed("step")\ndef f():\n    return core.timed, core.BUILD, core.helper()\n', module)
+        self.assertNotIn("import BUILD", module)                            # read when it runs: core.BUILD, as before
+        package = self.root / "lib" / "pdfmd_probe"                         # appended: the missing lines in the same order
+        package.joinpath("__init__.py").write_text('"""Already here."""\nfrom __future__ import annotations\n\nimport re\n',
+                                                   encoding="utf-8")
+        mover_tree(self.root, code, "`f`", test="")
+        done = self.move()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertTrue(package.joinpath("__init__.py").read_text(encoding="utf-8").startswith(
+            '"""Already here."""\nfrom __future__ import annotations\n\nimport re\nfrom pdfmd_base import core\n'
+            'from pdfmd_base import timed\n'))
+
+    def test_other_load_time_names_are_still_refused(self):
+        cases = {
+            # a name pdfmd.py does not have: split_spec reads the patches of tests/ line by line, this file's strings too
+            "a decorator tests patch": ("from pdfmd_base import probe_deco\n\n\n@probe_deco\ndef f():\n    pass\n",
+                                        "from unittest import mock\nimport pdfmd\nmock.patch.object(pdfmd, 'probe_deco')\n",
+                                        "reads probe_deco when the module loads"),
+            "a decorator from another package": ("from pdfmd_other import deco\n\n\n@deco\ndef f():\n    pass\n", "",
+                                                 "reads deco when the module loads"),
+            "a decorator pdfmd.py rebinds": ("from pdfmd_base import timed\ntimed = 1\n\n\n@timed\ndef f():\n    pass\n", "",
+                                             "reads timed when the module loads"),
+        }
+        for case, (code, test, reason) in cases.items():
+            with self.subTest(case):
+                self.root = Path(tempfile.mkdtemp(dir=self.root))
+                mover_tree(self.root, code, "`f`", test=test)
+                done = self.move()
+                self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+                self.assertIn(reason, done.stdout)
+                self.assertFalse((self.root / "lib" / "pdfmd_probe").exists())
 
     def test_a_move(self):
         mover_tree(self.root, MOVER_PDFMD, "`counter`, `outer`, `Holder`, `patched_helper`, `caller`")
