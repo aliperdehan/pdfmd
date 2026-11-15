@@ -3397,6 +3397,20 @@ every file. `--metadata-precedence first` (or `metadata-precedence: first` in
 Until 3.27.22, pdfmd's own keys followed that `first` rule while Pandoc's followed
 the later file.
 
+**Bibliography sources add up across layers.** Every selected layer's `bibliography:` files and `references:` entries
+contribute, including the global and kit defaults, folder and visible parent metadata, local metadata and document front
+matter. This changes the earlier behaviour, where a nearer bibliography replaced the farther one; there is no switch to
+restore that replacement. Remove an unwanted source from the contributing layer or stop inheriting that layer.
+
+On a duplicate citation key, the command line (`--bibliography FILE`, `-M bibliography=FILE`, or an explicit `-y` metadata file)
+wins, then the document, then the metadata layers in their existing priority order. Within each layer, `references:` wins over
+`bibliography:`; within a list or file, the last entry wins as in Pandoc. `bibliography+` and `references+` still add sources.
+Each clashing key produces one warning naming the winning source and every losing source, even for identical entries;
+`--strict` counts these warnings. Naming the same file twice uses it once. `-V references=...` is a template variable and
+`-M references=...` is a string; neither supplies citation entries. BibTeX/BibLaTeX, CSL JSON and CSL YAML sources retain their
+unique entries. Citeproc, `--biblatex` and `--natbib` use the same winners; inline references become a bibliography resource
+for BibTeX/Biber. The built-in renderer still leaves citations as written and reports that citation processing needs Pandoc.
+
 **Adding to a value instead of replacing it** (3.31.40). The layers, lowest first, are: the global `metadata.yaml`
 (`pdfmd --setup`), a kit's defaults, the `.pdfmd/metadata.yaml` of the folders above the document (the farthest first),
 visible parent `metadata/` layers (also farthest first), the document folder's own metadata files, then the document's front

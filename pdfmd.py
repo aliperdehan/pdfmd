@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.231"
+PDFMD_VERSION = "3.33.232"
 import argparse
 import atexit
 import contextlib
@@ -4107,6 +4107,7 @@ def metadata_append_args(sources: Path | list[Path], metadata_files: list[Path],
     append = metadata_append_keys(files[0], metadata_files)
     layers = metadata_layers(files, metadata_files)
     merged = load_package("pdfmd_args").merged_cli_metadata(sys.modules[__name__], layers, append, display_path(files[0]), pandoc_options)
+    merged.update(deferred("pdfmd_bibliography.sources", "merge_sources")(files, metadata_files, pandoc_options))
     if not merged:
         return []
     try:

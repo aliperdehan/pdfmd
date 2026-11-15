@@ -19,6 +19,24 @@ same commit as the change.
 
 ---
 
+## v3.33.232 — 2026-11-16
+
+Pre-edit state: commit `c29516c`. **Bibliography sources now add up across all selected metadata layers** (D61).
+Previously a nearer `bibliography:` or `references:` replaced the farther layer, leaving its citations unresolved.
+This is a changed behaviour; the decisions provide no switch back to replacement. Remove the unwanted source from its
+layer or stop inheriting that layer. Other metadata precedence is unchanged. Command-line bibliography sources and
+explicit `-y` metadata take priority over the document, then the existing metadata layers; within each layer inline
+references precede bibliography files. Within one list/file, Pandoc's measured last-entry-wins rule is retained.
+Every clashing key warns once, naming its winning and losing sources, including identical entries; `--strict` counts it.
+Repeated paths to the same file do not clash. Losing entries are removed in cached copies, preserving BibTeX strings and
+cross-references and CSL JSON/YAML fields. The existing metadata append filter installs the accumulated values before
+user filters, citeproc and the writers; `bibliography+`/`references+` remain supported. Inline entries are translated by
+Pandoc into a bibliography resource for BibTeX/Biber. Template variables are not citation sources. The native tier's note
+that citations stay as written is unchanged. `pdfmd.py` grows by one dispatch call, with the implementation deferred in
+`pdfmd_bibliography.sources`. Tests: regression failures checked on the pre-edit tree; full pdfmd builds for layers,
+command-line forms, clashes/strict, JSON/YAML, resource/symlink lookup, citeproc/natbib/biblatex writers and real PDFs,
+and the native note; metadata append, bibliography indent, fullcite and the required repository checks.
+
 ## v3.33.231a — 2026-11-16
 
 Pre-edit state: commit `60c3129`. Docs only, no shipped code, so no `PDFMD_VERSION` bump. **Project-wide metadata is described**:
