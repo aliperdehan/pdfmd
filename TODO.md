@@ -11,7 +11,6 @@ wait for an answer before any code.
 ## The queue, paused after the 3.33.191 release (2026-11-12): resume in this order
 
 - [ ] No release until this queue is done, the GUI decided and built; CI runs on the branch `fixes-3.33.168`, at a wave end, before a release or for a CI-only risk [D60 Q73]
-- [ ] 3. Bibliography: every layer's sources add up and a clashing key warns; a `bib` auto kind, also for keys the named files lack [D60 D61]
 - [ ] 4. Wave 2, then the biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
 - [ ] 5. Waves 3 to 5 (the docstring becomes `docs/reference.md`, `--doc reference`), then the full suite [3fi D29]
 - [ ] 5b. After wave 5: excerpts (source tracking: `[@key#N]` markers, `excerpts.json`, pagecite), pdfmd first, then Colophon's Source pane; spec approved [3fq 3fr 3fs D79 D80 Q74]
@@ -32,6 +31,7 @@ wait for an answer before any code.
 - [ ] **decide** a length for the document-level `indent:` (`indent: 0.5in`), not only on the `{indent=...}` div [3fp]
 - [ ] **decide** a way to run a named Lua filter before `--citeproc` (`lua-filter-before:` or a `pre:` list) [3fp]
 - [ ] **decide** Source `<!-- comments -->` reach HTML and EPUB output verbatim: drop them by default there, a `--check` code, or both [3ft]
+- [ ] **decide** The `bib` auto kind's candidates: only BibTeX-family files directly in the document's, accessory and metadata folders (built so in 3.33.233), or wider [D60]
 - [ ] **decide** A command-line flag for `bibliography-indent`: any `--bibliography...` name swallows Pandoc's `--bibliography` (argparse abbreviation) [Q75]
 - [ ] `test_colophon_watcher_match` is timing-dependent (a real `--watch` and a 10 s wait): a readiness signal instead [3fx]
 
