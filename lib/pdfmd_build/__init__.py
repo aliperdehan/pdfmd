@@ -573,6 +573,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if "--citeproc" in cmd or "--citeproc" in pandoc_options:
                     cmd += core.csl_args([md_path], metadata_files, pandoc_options, no_auto)
                 cmd += core.fullcite_post_args(all_inputs or md_path, metadata_files, cmd, pandoc_options)   # after citeproc
+                cmd += core.bibliography_indent_args(all_inputs or md_path, metadata_files, cmd, pandoc_options, target_format)
                 # pandoc_options after the citation-engine flag above: a
                 # caller-supplied --lua-filter/--filter needs resolved
                 # citations already in the AST (same invariant as the
@@ -831,6 +832,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if "--citeproc" in cmd or "--citeproc" in pandoc_options:
                         cmd += core.csl_args([md_path], metadata_files, pandoc_options, no_auto)
                     cmd += core.fullcite_post_args(all_inputs or md_path, metadata_files, cmd, pandoc_options)   # after citeproc
+                    cmd += core.bibliography_indent_args(all_inputs or md_path, metadata_files, cmd, pandoc_options, engine)
                     # pandoc_options after --citeproc, same reason as below: a
                     # caller-supplied --lua-filter/--filter needs resolved
                     # citations already in the AST. (This used to sit before

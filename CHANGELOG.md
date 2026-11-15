@@ -19,6 +19,32 @@ same commit as the change.
 
 ---
 
+## v3.33.229 — 2026-11-16
+
+Pre-edit state: commit `55c978c`. **`bibliography-indent`: one hanging indent for the reference list and for the entries `fullcite`
+places** (DECISIONS 53 and 59/60; the rest of TODO item 2). Measured first on a two-entry author-date document with no setting
+(Pandoc 3.13): LaTeX 1.5em (`\cslhangindent`), HTML 1.5em on the list's class but 2em on each entry (the style sheet's
+`.hanging-indent div.csl-entry`), Word a direct 0.5 in on the paragraphs, OpenDocument none, **Typst none** (its writer ignores the
+`hanging-indent` class).
+- **The setting.** `pdfmd-options: {bibliography-indent: 0.5in}` (the document, its metadata files, the folder layers, the global
+  setup; a kit's metadata file may carry it), `--bibliography-indent LENGTH` for a run (wins; `PDFMD_BIBLIOGRAPHY_INDENT` reaches `-j`
+  workers), a `--setup` row. A length (pt, mm, cm, in, em), `0` for none, `auto` or unset: the default. New package `pdfmd_bibliography`.
+- **The writers** (`pdfmd_lua/bibliography_indent.lua`, after `--citeproc`, in every route that adds it; only for a list whose style
+  asks for a hanging indent): LaTeX sets `\cslhangindent`, Typst wraps the list in `#set par(hanging-indent: X)`, HTML puts
+  `margin-left` and a negative `text-indent` on each entry, Word and OpenDocument put each entry in a paragraph style
+  `pdfmd-hang-<length>` and drop the writer's own indent (`pdfmd_office` defines the style: a `w:ind` left and hanging in Word, a margin
+  and a negative text indent in OpenDocument, both on Pandoc's route and through LibreOffice). The entries `fullcite` places take the
+  same value (replacing the constant of the previous entry; LaTeX, Typst, HTML and the office styles).
+- **Changed default:** only **Typst** (D53.3: Pandoc's 1.5em, "closes the Typst gap"): its reference list is now set with a 1.5em
+  hanging indent where it had none. `bibliography-indent: 0` (or `--bibliography-indent 0`) restores the old output. Every other
+  writer keeps its own list exactly as before until the setting is set (so a Word list stays 0.5 in, HTML 2em); a set value is then
+  the same in all of them.
+- Not done here: the apa7 kit's `bibliography-indent: 0.5in` (the kit is its own repository), and the plain-text writers (no list indent).
+
+Tests: `tests/test_bibliography_indent.py` (14: the value, the layers, the command line, when the filter goes in, each writer through
+Pandoc, a numbered style, the Word and OpenDocument styles, real builds, and the `fullcite` entries); checked failing before
+(no package, no filter). pdfmd.py grows from 14,213 to 14,214 lines (one `names(...)` line).
+
 ## v3.33.228 — 2026-11-16
 
 Pre-edit state: commit `2fa2fa1`. **The full reference in place, built in** (DECISIONS 52 and 53; the second half of TODO item 2 with

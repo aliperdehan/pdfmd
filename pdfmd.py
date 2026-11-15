@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.228"
+PDFMD_VERSION = "3.33.229"
 import argparse
 import atexit
 import contextlib
@@ -1840,6 +1840,7 @@ DEFERRED_NAMES.update(installed_font_families="pdfmd_unicode.fonts_choice")
 names("pdfmd_edit.command", "put_outside_blocks source_carried source_lost")
 names("pdfmd_run", "DISABLED_OK_ENV command_line_parser")
 names("pdfmd_fullcite", "fullcite_post_args fullcite_command_line")
+names("pdfmd_bibliography", "bibliography_indent_args bibliography_indent_command_line")
 names("pdfmd_direct.route", "direct_route convert_direct convert_qmd")
 names("pdfmd_build", "PREFERRED_FONT DEFAULT_MONOFONT DEFAULT_VARS WEASYPRINT_CSS_NOISE run_engine_command "
                      "_convert_one_core finish_build set_soffice_limit convert_one make_embed_plan")

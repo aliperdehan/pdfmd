@@ -13,8 +13,8 @@
 --
 -- The indent (`pdfmd-fullcite-indent`, a length; none for 0) is applied when the style asks for a hanging indent (citeproc's
 -- `hanging-indent` class on the list): `\hangindent` in LaTeX, `#par(hanging-indent:)` in Typst (whose writer ignores the
--- class), a margin and a negative text indent in the HTML writers. Word and OpenDocument get the entry in their
--- Bibliography style; the other writers print the entry as it is.
+-- class), a margin and a negative text indent in the HTML writers, a paragraph style `pdfmd-hang-<length>` in Word and OpenDocument
+-- (written by pdfmd_office; the Bibliography style when there is no indent); the other writers print the entry as it is.
 
 local meta = {}
 local hanging = false
@@ -119,7 +119,8 @@ local function entry_blocks(key)
     if length then attributes.style = "margin-left: " .. length .. "; text-indent: -" .. length .. ";" end
     return {pandoc.Div(content, pandoc.Attr("", entry.classes, attributes))}
   elseif OFFICE[target] then
-    return {pandoc.Div(content, pandoc.Attr("", {}, {["custom-style"] = "Bibliography"}))}
+    local style = length and ("pdfmd-hang-" .. length:gsub("%.", "p")) or "Bibliography"      -- pdfmd_office writes the indent into it
+    return {pandoc.Div(content, pandoc.Attr("", {}, {["custom-style"] = style}))}
   end
   return content
 end

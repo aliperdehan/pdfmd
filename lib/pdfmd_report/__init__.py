@@ -298,6 +298,7 @@ def run(core, *,
                 if "--citeproc" in cmd or "--citeproc" in pandoc_options:
                     cmd += csl_args(list(files), metadata_files, pandoc_options, report_no_auto)
                 cmd += core.fullcite_post_args(list(files), metadata_files, cmd, pandoc_options)      # after citeproc
+                cmd += core.bibliography_indent_args(list(files), metadata_files, cmd, pandoc_options, target_format)
                 # pandoc_options after --citeproc: see convert_one's
                 # matching comment.
                 cmd += report_office_arguments
@@ -436,6 +437,7 @@ def run(core, *,
                     if "--citeproc" in cmd or "--citeproc" in pandoc_options:
                         cmd += csl_args(list(files), metadata_files, pandoc_options, report_no_auto)
                     cmd += core.fullcite_post_args(list(files), metadata_files, cmd, pandoc_options)      # after citeproc
+                    cmd += core.bibliography_indent_args(list(files), metadata_files, cmd, pandoc_options, engine)
                     # pandoc_options after --citeproc: see convert_one's
                     # matching comment.
                     cmd += pandoc_options

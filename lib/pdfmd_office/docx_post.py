@@ -197,6 +197,22 @@ def style_indents(styles: str) -> tuple[str, int]:
     return styles, changed
 
 
+HANG_STYLE = re.compile(r'w:styleId="pdfmd-hang-([0-9p]+[a-z]+)"')
+
+
+def style_hangs(styles: str) -> tuple[str, int]:
+    """The hanging indent of the `pdfmd-hang-<length>` paragraph styles pdfmd_lua/bibliography_indent.lua puts on the entries of a
+    reference list (the whole indent hangs: the first line starts at the margin, the rest are set in by the length)."""
+    changed = 0
+    for token in dict.fromkeys(HANG_STYLE.findall(styles)):
+        twips = indent_twips(token)
+        if twips is None:
+            continue
+        styles = _edit_style(styles, f"pdfmd-hang-{token}", "pPr", "ind", f'<w:ind w:left="{twips}" w:hanging="{twips}"/>')
+        changed += 1
+    return styles, changed
+
+
 def final_section(document: str) -> re.Match | None:
     """The `<w:sectPr>` of the whole body: the last one, after every paragraph."""
     found = None
@@ -286,6 +302,8 @@ def finish_markup(path: Path) -> int:
     styles, styled = style_markup(styles) if used else (styles, 0)
     styles, indented = style_indents(styles) if "pdfmd-indent-" in styles else (styles, 0)
     styled += indented
+    styles, hung = style_hangs(styles) if "pdfmd-hang-" in styles else (styles, 0)
+    styled += hung
     document, sections = sections_markup(document)
     if not styled and not sections:
         return 0

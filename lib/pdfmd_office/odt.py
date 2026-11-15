@@ -172,11 +172,12 @@ def patch_odt(data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:
     return out.getvalue()
 
 
-INDENT_USED = re.compile(r'text:style-name="pdfmd-indent-([0-9p]+[a-z]+)"')
+INDENT_USED = re.compile(r'text:style-name="pdfmd-(indent|hang)-([0-9p]+[a-z]+)"')
 
 
 def finish_indents(path: Path) -> int:
-    """Define the `pdfmd-indent-<length>` paragraph styles pdfmd_lua/indent.lua put on a stretch of text (Pandoc only names
+    """Define the `pdfmd-indent-<length>` paragraph styles pdfmd_lua/indent.lua put on a stretch of text (and the `pdfmd-hang-<length>` ones of
+    pdfmd_lua/bibliography_indent.lua, on the entries of a reference list) (Pandoc only names
     them in an `.odt`), based on Text body, with the first-line indent the name says; returns how many were added. A file
     with none of them is not touched. An em is 12 pt here, as in a Word file."""
     with zipfile.ZipFile(path) as archive:
@@ -185,14 +186,17 @@ def finish_indents(path: Path) -> int:
     content = entries.get("content.xml", b"").decode("utf-8")
     styles = entries.get("styles.xml", b"").decode("utf-8")
     added = 0
-    for token in dict.fromkeys(INDENT_USED.findall(content)):
-        name = f"pdfmd-indent-{token}"
+    for kind, token in dict.fromkeys(INDENT_USED.findall(content)):
+        name = f"pdfmd-{kind}-{token}"
         found = re.fullmatch(r"(\d+(?:p\d+)?)([a-z]+)", token)
         twips = length_to_twips(found.group(1).replace("p", ".") + found.group(2)) if found else None
         if twips is None or "</office:styles>" not in styles or _style_span(styles, name) is not None:
             continue
+        # `hang` is a whole hanging indent (the entries of a reference list), `indent` a first-line indent
+        properties = (f'fo:margin-left="{_inch(twips)}" fo:text-indent="-{_inch(twips)}"' if kind == "hang"
+                      else f'fo:text-indent="{_inch(twips)}"')
         style = (f'<style:style style:name="{name}" style:family="paragraph" style:parent-style-name="Text_20_body">'
-                 f'<style:paragraph-properties fo:text-indent="{_inch(twips)}"/></style:style>')
+                 f'<style:paragraph-properties {properties}/></style:style>')
         styles = styles.replace("</office:styles>", style + "</office:styles>", 1)
         added += 1
     if not added:

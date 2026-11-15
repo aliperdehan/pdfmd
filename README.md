@@ -2777,7 +2777,7 @@ written, as every citation is.
 placed entries out of it and, when none is left, the list and the heading right before it; `all` keeps it whole (a report that opens
 with an annotated bibliography); `none` has no combined list. One entry or one block overrides it: `[@key]{.fullcite list=keep}` /
 `list=drop`, `::: {.fullcite list=keep}`. The word `fullcite` is in `markup:`, so it is on in the `pdfmd` and `obsidian` flavours and
-off in `pandoc`, `gfm` and `commonmark`, and `markup: [callouts]` or `--no-markup` switches it off. The indent width is 1.5em, Pandoc's own.
+off in `pandoc`, `gfm` and `commonmark`, and `markup: [callouts]` or `--no-markup` switches it off. The indent width is `bibliography-indent` (1.5em, Pandoc's own, when it is not set).
 
 **Vertical space** (v3.29, `markup: space`). A line of its own that is `\vspace{1cm}` (or `\vspace*`), `\smallskip`, `\medskip`,
 `\bigskip` (3, 6 and 12 pt, as in LaTeX), one or more `<br>` (an em each) or a raw `#v(1cm)` becomes space in every format:
@@ -3222,6 +3222,15 @@ in, em), `0` for none, or `auto`, the default, each engine's own (LaTeX's half l
 with `indent: true`, in Typst too since 3.33.58). It is for LaTeX and Typst, the same gap in both; `--paragraph-spacing 6pt`
 sets it for one run. The HTML engines (WeasyPrint, Calibre, a browser) and `--to html` take it from a style sheet (`p { margin:
 ... }`).
+
+`bibliography-indent:` is how far the lines of a reference after its first are set in, in the combined reference list and in the
+entries that `fullcite` places in the text, so the two match: a length (`0.5in`, `1.5em`, `2cm`; pt, mm, cm, in, em), `0` for none, or
+`auto`, the default. Only a style that asks for a hanging indent (citeproc's `hanging-indent`; APA and Chicago do, a numbered style does
+not) has one. Unset, each writer keeps the list it had (LaTeX 1.5em, HTML's style sheet, Word 0.5 in) and Typst, whose writer
+ignores the style's hanging indent, now gets Pandoc's 1.5em; set, the value is the same in every writer (`\cslhangindent` in LaTeX,
+`#set par(hanging-indent:)` in Typst, a style on each entry in HTML, a paragraph style per length in Word and OpenDocument).
+`bibliography-indent: 0` turns it off, in Typst too. `--bibliography-indent 0.5in` sets it for one run; it is also a row in `pdfmd --setup`
+and a kit's metadata file may carry it (APA wants `0.5in`).
 
 `linestretch:` and `fontsize:` give Typst the line spacing LaTeX has (since 3.33.73): lines `linestretch` x the LaTeX class's
 line distance apart (12, 13.6 and 14.5 pt at 10, 11 and 12 pt; 1.2 x any other size), in any font, so a page holds as many

@@ -29,12 +29,12 @@ import re
 from pathlib import Path
 
 from pdfmd_base import core
+import pdfmd_bibliography as bibliography
 
 ENV = "PDFMD_FULLCITE_LIST"                  # --fullcite-list, set by main(), so -j workers read it too
 KEY = "fullcite-list"
 MODES = ("rest", "all", "none")
 KIND = "fullcite"                            # the word in `markup:`
-INDENT_DEFAULT = "1.5em"                     # Pandoc's own hanging indent (\cslhangindent); one setting for it comes with `bibliography-indent`
 
 # a span with the class, a div with it, the old spelling
 SYNTAX_RE = re.compile(r"\{[^}\n]*\.fullcite\b|^[ \t]*:{3,}[ \t]*fullcite\b|\[\[fullcite:", re.MULTILINE)
@@ -157,6 +157,6 @@ def fullcite_post_args(sources: Path | list[Path], metadata_files: list[Path], c
     if shipped is None:
         return []
     return ["-M", f"pdfmd-fullcite-list={list_mode(files[0], metadata_files)}",
-            "-M", f"pdfmd-fullcite-indent={INDENT_DEFAULT}",
+            "-M", f"pdfmd-fullcite-indent={bibliography.setting(files[0], metadata_files) or bibliography.DEFAULT}",
             "-M", f"pdfmd-fullcite-doc={core.display_path(files[0])}",
             "--lua-filter", str(shipped)]
