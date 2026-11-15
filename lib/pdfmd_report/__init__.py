@@ -297,6 +297,7 @@ def run(core, *,
                     cmd.append("--citeproc")
                 if "--citeproc" in cmd or "--citeproc" in pandoc_options:
                     cmd += csl_args(list(files), metadata_files, pandoc_options, report_no_auto)
+                cmd += core.fullcite_post_args(list(files), metadata_files, cmd, pandoc_options)      # after citeproc
                 # pandoc_options after --citeproc: see convert_one's
                 # matching comment.
                 cmd += report_office_arguments
@@ -434,6 +435,7 @@ def run(core, *,
                         cmd.append("--citeproc")
                     if "--citeproc" in cmd or "--citeproc" in pandoc_options:
                         cmd += csl_args(list(files), metadata_files, pandoc_options, report_no_auto)
+                    cmd += core.fullcite_post_args(list(files), metadata_files, cmd, pandoc_options)      # after citeproc
                     # pandoc_options after --citeproc: see convert_one's
                     # matching comment.
                     cmd += pandoc_options

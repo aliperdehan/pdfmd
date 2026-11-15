@@ -126,6 +126,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                 cmd.append("--citeproc")
             if "--citeproc" in cmd or "--citeproc" in pandoc_options:
                 cmd += core.csl_args([md_path], metadata_files, pandoc_options, no_auto)
+            cmd += core.fullcite_post_args(md_path, metadata_files, cmd, pandoc_options)      # after citeproc
             # pandoc_options after --citeproc: any --lua-filter/--filter a caller
             # passes through needs resolved citations already in the AST, same
             # invariant as the auto-discovered lua_filters below (see run()'s

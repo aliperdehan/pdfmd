@@ -82,12 +82,12 @@ class Build(unittest.TestCase):
         self.assertIn("[[Note|alias]]", html)
 
     def test_colon_markers_reach_pandoc_and_user_filters_in_every_flavour(self):
-        source = "before\n\n[[fullcite:key]]\n\n[[Note|Time: 10]]\n\n[[Note]]\n\nafter\n"
+        source = "before\n\n[[marker:key]]\n\n[[Note|Time: 10]]\n\n[[Note]]\n\nafter\n"
         note = self.directory / "n.md"
         note.write_text(source, encoding="utf-8")
         probe = self.directory / "probe.lua"
         probe.write_text('function Pandoc(doc)\n'
-                         '  assert(pandoc.utils.stringify(doc):find("[[fullcite:key]]", 1, true))\n'
+                         '  assert(pandoc.utils.stringify(doc):find("[[marker:key]]", 1, true))\n'
                          'end\n', encoding="utf-8")
         for flavour in ("pdfmd", "obsidian", "pandoc", "gfm", "commonmark"):
             with self.subTest(flavour=flavour):
@@ -98,7 +98,7 @@ class Build(unittest.TestCase):
                                       stdin=subprocess.DEVNULL, capture_output=True, text=True)
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 text = output.read_text(encoding="utf-8").replace("\\[", "[").replace("\\]", "]")
-                self.assertIn("[[fullcite:key]]", text)
+                self.assertIn("[[marker:key]]", text)
                 if flavour in ("pdfmd", "obsidian"):
                     self.assertIn("Time: 10", text)
                     self.assertNotIn("[[Note", text)

@@ -19,6 +19,50 @@ same commit as the change.
 
 ---
 
+## v3.33.228 — 2026-11-16
+
+Pre-edit state: commit `2fa2fa1`. **The full reference in place, built in** (DECISIONS 52 and 53; the second half of TODO item 2 with
+the next entry). The author's annotated bibliographies used a project filter (`fullcite.lua`) for `[[fullcite:KEY]]`; the feature is
+now pdfmd's, for every project, and the project filter keeps working beside it.
+- **Syntax.** `[@key]{.fullcite}`, a bracketed span around a real citation (the recommended form: citeproc loads the key without a
+  `nocite`, and without pdfmd it is an ordinary citation); `::: fullcite` with one `@key` a line; and the old `[[fullcite:KEY]]`
+  alone in its paragraph, read in every flavour that has the markup, the obsidian one included (3.33.215 had left colon targets alone, so
+  it reaches the filters). Alone in a paragraph the entry is a block; inside a sentence it is the text of the entry. An unknown key
+  prints `WARN  doc.md: fullcite: no reference for 'KEY'` (counted by `--strict`) and the citation stays.
+- **Mechanics** (`lib/pdfmd_fullcite`, `pdfmd_lua/fullcite_mark.lua` and `fullcite.lua`). The first filter runs with the document's own
+  syntax, before `--citeproc`: it turns the other spellings into the span and writes the keys into it (after citeproc the citation is
+  only text). The second runs right after `--citeproc` and `--csl`, before the user's `--lua-filter` options and the discovered
+  filters, in every route that adds citeproc (`pdfmd_build` twice, `pdfmd_report` twice, the Word-through-LibreOffice route in
+  `pdfmd_bridge`). Both go in only for a document that uses a spelling and has the `fullcite` kind of universal markup. A document
+  with only the old spelling now gets `--citeproc` (its keys are citations).
+- **`fullcite` is a kind of `markup:`** (after `appendix`): on in the `pdfmd` and `obsidian` flavours, off in `pandoc`, `gfm` and
+  `commonmark`, switched off by a `markup:` list that lacks it, `--no-markup`, or a kit's `markup-off:`. The `-M pdfmd-markup=` list
+  that markup.lua reads gains the word (markup.lua ignores it).
+- **The combined list.** `fullcite-list: rest | all | none` (default `rest`: the placed entries leave the list, and a list left empty
+  goes with the heading right before it; `all` keeps it whole; `none` has no combined list), read through `first_pdfmd_option` (the
+  document, its metadata files, the folder layers, the global setup), `--fullcite-list V` for a run (wins; reaches `-j` workers as
+  `PDFMD_FULLCITE_LIST`), a `--setup` row (`options.fullcite-list`, also in the folder screen). Per entry `[@key]{.fullcite list=keep}`
+  / `list=drop`, per block `::: {.fullcite list=keep}`.
+- **Writers.** The entry takes the bibliography's hanging indent when the style asks for one (citeproc's `hanging-indent` class):
+  `\hangindent` in LaTeX and Beamer, `#par(hanging-indent: ...)` in Typst, `margin-left` and a negative `text-indent` on the entry's
+  div in HTML and EPUB, a div in the *Bibliography* style in Word and OpenDocument, the entry as it is elsewhere. The width is 1.5em,
+  Pandoc's own, a constant of the package until the next entry makes it the one `bibliography-indent` setting. With
+  `citation-engine: biblatex` / `natbib` (or `--biblatex`/`--natbib`) the span becomes `\fullcite{KEY}` / `\bibentry{KEY}` (natbib gets
+  the `bibentry` package from a header file and a `\nobibliography` of the bibliography files); `fullcite-list` does not apply there.
+- **Changed for existing documents:** a `[[fullcite:key]]` that a project's own filter handled, in a `pdfmd` or `obsidian` flavour
+  document, is now handled first by pdfmd (the same entry, the combined list removed as before, but the hanging indent is 1.5em where
+  the project's filter used 1.27 cm for Typst only). `markup: [callouts]` (a list without `fullcite`), `flavour: pandoc` or `--no-markup`
+  leaves the syntax to the project's filter. `tests/test_wikilinks.py` probes a colon marker that is not `fullcite:` now.
+- Not changed: the native tier (no Pandoc) leaves a citation as written, with its existing note; the source's other syntax is untouched.
+
+Tests: `tests/test_fullcite.py` (23: the syntax and its detection, the markup kind per flavour, the layers and the flag, the filters
+through Pandoc itself for every spelling, list mode, per-entry override, the warning, each writer's indent, biblatex and natbib, and real
+builds through `scripts`-style runs of `pdfmd.py` with `--strict`); they failed before (no `fullcite_*` names, no filter files).
+Verified through pdfmd itself: HTML, Word, Typst, LuaLaTeX, biblatex and natbib PDFs of one annotated bibliography. natbib prints one
+`bibtex reported errors` note (the `\nobibliography` and Pandoc's own `\bibliography` both write a `\bibdata`); the PDF is right.
+pdfmd.py grows from 14,208 to 14,213 lines (three stand-ins and two calls: `fullcite_pre_args` in the filter list and the native
+bibliography route, the old spelling in `contains_citations`); everything else is in the package.
+
 ## v3.33.227a — 2026-11-16
 
 Pre-edit state: commit `88b6259`. Docs only, no shipped code, so no `PDFMD_VERSION` bump. **The shrink step is described**: a README

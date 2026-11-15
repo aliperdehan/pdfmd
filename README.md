@@ -2759,6 +2759,26 @@ numbering of letters and a counter reset). It matters for a document that number
 numbers Typst gets nothing and LaTeX's `\appendix` changes nothing visible. Other writers keep their own numbering and say once
 that the lettering is not made.
 
+**The full reference in place** (`markup: fullcite`). `[@trinkaus1984]{.fullcite}` prints the formatted reference of that source where it
+stands, instead of only the one combined list at the end, as an annotated bibliography wants it. Alone in its paragraph it is the
+entry as a block, with the hanging indent of the bibliography; inside a sentence it is the text of the entry. `::: fullcite` with one
+`@key` a line places several, and the older `[[fullcite:key]]` (alone in its paragraph) is read in every flavour, Obsidian's
+included. The key is a real citation, so citeproc loads it without `nocite`, and without pdfmd the span is an ordinary citation. A
+key with no reference is `WARN  doc.md: fullcite: no reference for 'key'` (counted by `--strict`), and the citation stays. Backslash
+the brackets of the span (`\[@key\]{.fullcite}`) or put any spelling in code to print it as written (the old spelling cannot be
+backslashed: Pandoc reads the escaped brackets as the same text). The entry takes its indent from the style (citeproc's
+`hanging-indent`): `\hangindent` in LaTeX, `#par(hanging-indent:)` in Typst (whose writer ignores that class), a margin and a negative
+`text-indent` in HTML and EPUB, the *Bibliography* style in Word and OpenDocument, the entry as it is in the other writers. With
+`citation-engine: biblatex` / `natbib` it is `\fullcite{key}` / `\bibentry{key}` (and `fullcite-list` does not apply: those packages print their own list). In the native tier (no Pandoc) the citation is left as
+written, as every citation is.
+
+`fullcite-list: rest | all | none` (`pdfmd-options`, the document, its metadata files, a folder's `.pdfmd`, the global setup in
+`pdfmd --setup`; `--fullcite-list` for one run, which wins) says what becomes of the combined list: `rest` (the default) takes the
+placed entries out of it and, when none is left, the list and the heading right before it; `all` keeps it whole (a report that opens
+with an annotated bibliography); `none` has no combined list. One entry or one block overrides it: `[@key]{.fullcite list=keep}` /
+`list=drop`, `::: {.fullcite list=keep}`. The word `fullcite` is in `markup:`, so it is on in the `pdfmd` and `obsidian` flavours and
+off in `pandoc`, `gfm` and `commonmark`, and `markup: [callouts]` or `--no-markup` switches it off. The indent width is 1.5em, Pandoc's own.
+
 **Vertical space** (v3.29, `markup: space`). A line of its own that is `\vspace{1cm}` (or `\vspace*`), `\smallskip`, `\medskip`,
 `\bigskip` (3, 6 and 12 pt, as in LaTeX), one or more `<br>` (an em each) or a raw `#v(1cm)` becomes space in every format:
 `\vspace{..}` in LaTeX, `#v(..)` in Typst, an empty `div` of that height in HTML, EPUB and the HTML engines' PDFs, and a few empty
@@ -2858,8 +2878,8 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   a file without front matter had read as gfm with none of these; `flavour: gfm` or `pandoc` gives the strict readers back.
 
 - **pdfmd's own syntax on** (v3.32.24, in `obsidian` and `pdfmd`, for a Markdown file). `markup` is on for callouts, `toc`, `center`,
-  `highlight`, `underline`, `keep`, `landscape` and `appendix` (`> [!note]`, `[TOC]`, `<center>`, `==text==`, `<u>text</u>`, `::: keep`, `::: landscape`,
-  `\appendix`), and `pagebreak` for every family, with no setting. `space` stays off (a lone `<br>` is often just a blank line), and
+  `highlight`, `underline`, `keep`, `landscape`, `appendix` and `fullcite` (`> [!note]`, `[TOC]`, `<center>`, `==text==`, `<u>text</u>`, `::: keep`, `::: landscape`,
+  `\appendix`, `[@key]{.fullcite}`), and `pagebreak` for every family, with no setting. `space` stays off (a lone `<br>` is often just a blank line), and
   so do `linebreak` and `raw`: name them (`markup: [space]`, `linebreak: true`, `raw: true`) to turn them on. A `markup:` or
   `pagebreak:` setting of any kind, `false` included, replaces the flavour's list; `--markup` and `--no-markup` decide for one run.
 
@@ -2874,8 +2894,8 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
 - **Links between notes: `[[Note]]`** (v3.32.26, in `obsidian` and `pdfmd`). A printed document has no other notes to open, so a wikilink is
   written as the text Obsidian shows for it: `[[Note|an alias]]` is `an alias`, `[[Note]]` is `Note`, `[[Note#Heading]]` is `Note > Heading`
   and `[[#Heading]]`, a link inside the note, is `Heading`; `[[Note\|alias]]` works in a table. A name with `_` or `*` in it is kept as text.
-  A target containing `:` (before any `|` alias or `#`/`^` anchor), such as `[[fullcite:key]]`, is kept exactly as text in every
-  flavour; the same rule applies to `![[...]]` embeds. An alias may contain `:`, so `[[Note|Time: 10]]` still shows `Time: 10`.
+  A target containing `:` (before any `|` alias or `#`/`^` anchor), such as `[[name:key]]`, is kept exactly as text in every
+  flavour (`[[fullcite:key]]` is read by the built-in `fullcite`, below, in the flavours that have it); the same rule applies to `![[...]]` embeds. An alias may contain `:`, so `[[Note|Time: 10]]` still shows `Time: 10`.
   Left as they are: `![[note]]` (a note embed comes later), `[[_TOC_]]` (the contents marker) and `[[1]](url)` (a link whose text is `[1]`).
   Links become real links to a heading of the same document in a later release.
 - **Pictures by name: `![[picture.png|300]]`** (v3.32.25, in `obsidian` and `pdfmd`). Obsidian's wikilink names a file, not a path: the
@@ -3410,7 +3430,7 @@ ignores the key with a warning. `pdfmd --kits NAME` shows it.
 **A kit that does a markup's job itself** (v3.33.68). `markup-off: [landscape]` in the `.kit` takes those kinds of universal markup
 (the kinds `markup:` names) out of the list for documents that use the kit, so a house style with its own landscape pages
 need not list every other kind. It may name any kind of `markup:` (`callouts`, `toc`, `center`, `highlight`, `underline`, `keep`,
-`landscape`, `appendix`, `space`; a list or one string with commas); any other word, `comments` among them (that is
+`landscape`, `appendix`, `fullcite`, `space`; a list or one string with commas); any other word, `comments` among them (that is
 `show-comments`), is a warning naming the kit file. Like `no-auto:`, the kit's switch is weaker than `--markup` and `--no-markup`,
 the document, its own metadata files and the folders' files: a `markup:` set there is used as it is. It is stronger than the
 config file's, a preset's, the global metadata's, the kit's own metadata and the flavour's default list. An older pdfmd ignores the

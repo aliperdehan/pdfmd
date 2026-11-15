@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.227"
+PDFMD_VERSION = "3.33.228"
 import argparse
 import atexit
 import contextlib
@@ -1723,6 +1723,7 @@ from pdfmd_args import build_parser  # noqa: E402, F401 -- read by tests and lib
 paragraph_spacing_latex_args = deferred("pdfmd_paragraph", "latex_args")
 paragraph_spacing_typst_args = deferred("pdfmd_paragraph", "typst_args")
 paragraph_spacing_command_line = deferred("pdfmd_paragraph", "apply_cli")
+fullcite_pre_args, fullcite_old_spelling = (deferred("pdfmd_fullcite", name) for name in ("fullcite_pre_args", "fullcite_old_spelling"))
 chain_plan_build = deferred("pdfmd_chain", "plan_build")
 chain_stopped = deferred("pdfmd_chain", "stopped")
 chain_engine_failed = deferred("pdfmd_chain", "engine_failed")
@@ -1838,6 +1839,7 @@ script_fallback = deferred("pdfmd_unicode.fonts_choice", "script_fallback")     
 DEFERRED_NAMES.update(installed_font_families="pdfmd_unicode.fonts_choice")
 names("pdfmd_edit.command", "put_outside_blocks source_carried source_lost")
 names("pdfmd_run", "DISABLED_OK_ENV command_line_parser")
+names("pdfmd_fullcite", "fullcite_post_args fullcite_command_line")
 names("pdfmd_direct.route", "direct_route convert_direct convert_qmd")
 names("pdfmd_build", "PREFERRED_FONT DEFAULT_MONOFONT DEFAULT_VARS WEASYPRINT_CSS_NOISE run_engine_command "
                      "_convert_one_core finish_build set_soffice_limit convert_one make_embed_plan")
@@ -3006,7 +3008,7 @@ def pagebreak_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
 # Universal markup (v3.29.13, off unless asked, a kind at a time): spellings Markdown dialects share but Pandoc does not know,
 # carried into every writer by pdfmd_lua/markup.lua. `pdfmd-options.markup` (document, metadata files, config: true / all, false,
 # or a list of kinds), `--markup [KIND ...]` (bare: all) and `--no-markup` for a run.
-MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "underline", "keep", "landscape", "appendix", "space")
+MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "underline", "keep", "landscape", "appendix", "fullcite", "space")
 MARKUP_CLI: dict = {"kinds": None, "off": False}
 
 
@@ -4347,7 +4349,7 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     args += cover_filter_args(md_path, metadata_files)
     args += raw_filter_args(inputs, no_auto, metadata_files, flat_pictures=flat_pictures, preamble=preamble, flat_text=flat_text)
     args += crossref_filter_args(crossref_sources or inputs, pandoc_options, no_auto, label or str(md_path))
-    return args
+    return args + fullcite_pre_args(inputs, metadata_files, pandoc_options)
 
 
 # A structure written as text (pdfmd_lua/smiles.lua finds it, pdfmd_smiles draws it): ```smiles, ```{.smiles caption="..."}, ::: smiles
@@ -8589,8 +8591,10 @@ def contains_citations(md_path: Path) -> bool:
     if md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
         return False
     features = markdown_features(md_path)
+    if features is not None and features[0] or fullcite_old_spelling(md_path):      # `[[fullcite:key]]` is a citation to be
+        return True
     if features is not None:
-        return features[0]
+        return False
     text = EMBED_BLOCK_RE.sub("", obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, show=False))
     return bool(re.search(r"(?<![\w@])(?:-?@[-\w:.]+)", text))
 
@@ -13654,6 +13658,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             cmd += document_filter_args(md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options)
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
                 cmd.append(f"--{citation_engine}")
+                cmd += fullcite_pre_args(md_path, metadata_files, pandoc_options, citation_engine)    # `\\fullcite{}`, not citeproc
             if fonts_filter is not None:
                 cmd += ["--lua-filter", str(fonts_filter)]
             if tablewidth_auto:

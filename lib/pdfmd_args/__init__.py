@@ -252,6 +252,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "em), 0 for none, or auto (the default: each engine's own; with `indent: true` none). LaTeX and "
                              "Typst; the HTML engines take it from a style sheet. Also "
                              "`pdfmd-options: {paragraph-spacing: 6pt}`, or --setup")
+    parser.add_argument("--fullcite-list", choices=("rest", "all", "none"), default=None, metavar="WHAT",
+                        help="what becomes of the combined reference list when entries were placed in the text with "
+                             "`[@key]{.fullcite}`: rest (the placed ones leave it; the default), all (it stays whole) or none "
+                             "(no combined list). Also `pdfmd-options: {fullcite-list: rest}`, or --setup")
     parser.add_argument("--family", choices=("helvetica", "times"), default=None,
                         help="font family of the built-in renderer (inkmd)")
     parser.add_argument("--no-autolinks", action="store_true",

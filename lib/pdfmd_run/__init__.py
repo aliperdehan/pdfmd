@@ -251,6 +251,8 @@ def run_main() -> None:
         os.environ[core.CALC_SPACE_ENV] = args.calc_space
     if args.paragraph_spacing is not None:
         core.paragraph_spacing_command_line(args.paragraph_spacing)
+    if args.fullcite_list is not None:
+        core.fullcite_command_line(args.fullcite_list)
     if args.calc_align is not None:
         os.environ[core.CALC_ALIGN_ENV] = args.calc_align
     if args.calc_constants is not None:

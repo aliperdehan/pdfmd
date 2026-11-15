@@ -92,7 +92,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 # change nothing. tests/test_setup_folder.py walks this list against the folder layers.
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
-    "options.csl-fallback", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.css-scope", "options.paragraph-spacing",
+    "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.css-scope", "options.paragraph-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid", "options.shrink", "options.shrink-timeout", "options.odt.engine",
@@ -157,6 +157,7 @@ MARKUP_CHOICES = (
     ("keep", "::: keep, break-inside: avoid, \\begin{samepage}: blocks held on one page in LaTeX, Typst and HTML"),
     ("landscape", "::: landscape, \\begin{landscape}: the blocks on landscape pages in LaTeX, Typst, HTML and Word"),
     ("appendix", "\\appendix, <!-- appendix -->, {.appendix}: the sections after it lettered A, B (LaTeX, Typst; with --number-sections)"),
+    ("fullcite", "[@key]{.fullcite}, [[fullcite:key]], ::: fullcite: the formatted reference of a source where it stands (citeproc)"),
     ("space", "\\vspace{1cm}, \\bigskip, <br><br>, #v(1cm) alone on a line: vertical space in every format"),
 )
 
@@ -263,6 +264,12 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.citation-engine", "Citation engine",
                (("citeproc", "Pandoc's citeproc (the default)"), ("natbib", "natbib / BibTeX"),
                 ("biblatex", "biblatex / biber")), "citeproc", "", "Citations"),
+        choice("options.fullcite-list", "The combined reference list when entries were placed with `[@key]{.fullcite}`",
+               (("rest", "the placed entries leave it (the list goes when none is left)"), ("all", "it stays whole"),
+                ("none", "no combined list")), "rest",
+               "`[@key]{.fullcite}`, `[[fullcite:key]]` and `::: fullcite` print the formatted reference where they stand (the markup "
+               "kind `fullcite`). One entry or block says otherwise with `list=keep` / `list=drop`. Per run: --fullcite-list.",
+               "Citations"),
         text("bibliography", "Bibliography file", "A .bib or .json; every document without its own uses it.", "Citations",
              "metadata"),
         text("csl", "Citation style (CSL)", "A .csl file or its name.", "Citations", "metadata"),
