@@ -122,7 +122,7 @@ def folder_split(settings: list["Setting"]) -> tuple[list["Setting"], list["Sett
     return kept, [setting for setting in settings if setting not in kept]
 
 # `auto:` (v3.29.30) says, for a kind, `on`, `off` or `explicit-only`; the two rows above write the last and the first, `no-auto` the list of off
-AUTO_EXPLICIT_CHOICES = ("lua", "preamble", "metadata")
+AUTO_EXPLICIT_CHOICES = ("lua", "preamble", "metadata", "bib")
 AUTO_ROWS = {"options.auto.explicit-only": "explicit", "options.auto.on": "on"}
 AUTO_WORDS = {"on": "on", "true": "on", "yes": "on", "explicit-only": "explicit", "explicit": "explicit", "named": "explicit"}
 
@@ -131,6 +131,7 @@ TRANSLIT = (("greek", "Greek"), ("armenian", "Armenian"), ("georgian", "Georgian
             ("han", "Chinese (needs the translit extra)"), ("other", "any other script"))
 
 AUTO_HELP = {
+    "bib": "find local bibliography files for missing citation keys",
     "reader": "read Markdown without front matter as GitHub-flavoured", "title": "promote a leading `# Title`",
     "margin": "1-inch margins", "mainfont": "a default main font", "monofont": "a default code font", "mathfont": "the math font that goes with the default main font",
     "font": "both font defaults", "tablewidth": "balance wide table columns", "metadata": "metadata.yaml discovery",

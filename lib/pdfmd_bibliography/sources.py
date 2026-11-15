@@ -121,11 +121,26 @@ def native_references(references):
     return cached(done.stdout, ".bib")
 
 
-def merge_sources(sources, metadata_files, arguments):
+def merge_sources(sources, metadata_files, arguments, no_auto=None):
     """Accumulated citation metadata, with at most one warning per clashing key per build."""
     folders = resource_folders(sources, metadata_files)
     winners, clashes, references, bibliographies, files = {}, {}, [], [], set()
     declared = False
+    parsed_files = {}
+
+    def read(path):
+        path = path.resolve()
+        if path not in parsed_files:
+            parsed_files[path] = read_entries(path)
+        return parsed_files[path]
+
+    ordered = layers(sources, metadata_files, arguments)
+    from .discovery import discover
+    if no_auto is None:
+        no_auto = core.effective_no_auto(sources[0], None)
+    automatic = discover(sources, metadata_files, ordered, read, no_auto)
+    if automatic:
+        ordered.append(("automatic bibliography", {"bibliography": automatic}))
 
     def accept(key, label):
         if key not in winners:
@@ -134,7 +149,7 @@ def merge_sources(sources, metadata_files, arguments):
         clashes.setdefault(key, [winners[key]]).append(label)
         return False
 
-    for label, mapping in layers(sources, metadata_files, arguments):
+    for label, mapping in ordered:
         declared |= any(key in mapping for key in ("bibliography", "bibliography+", "references", "references+"))
         # Inside a layer keep Pandoc's existing last-entry-wins rule, including key+ after the plain key.
         for key in ("references+", "references"):
@@ -150,7 +165,7 @@ def merge_sources(sources, metadata_files, arguments):
                 if identity in files:
                     continue
                 files.add(identity)
-                parsed = read_entries(path)
+                parsed = read(path)
                 if parsed is not None:
                     entries, render = parsed
                     kept = {id(item) for citation, item in reversed(entries) if accept(citation, core.display_path(path))}

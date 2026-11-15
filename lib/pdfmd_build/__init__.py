@@ -978,6 +978,7 @@ def set_soffice_limit(md_path: Path, metadata_files: list[Path]) -> None:
 def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quoted, never evaluated: pdfmd.py's Built
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
     core.BUILD["engine"], core.BUILD["failed"], core.BUILD["output"], core.BUILD["sources"], core.BUILD["partial"], core.BUILD["root"] = None, [], None, [], None, None
+    core.BUILD.pop("bibliography-discovery", None)
     core.BUILD.pop("bibliography-warnings", None)
     core.begin_timer()
     core.BUILD["tried"], core.BUILD["chain"], core.BUILD["repaired"] = [], None, []

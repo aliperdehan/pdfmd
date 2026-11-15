@@ -808,6 +808,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "fallback), monofont (JetBrains Mono for code), font (mainfont and "
                              "monofont together), tablewidth (proportional pipe-table column widths), "
                              "standalone (the --to latex/beamer/context --standalone default), "
+                             "bib (local bibliography discovery for missing citation keys), "
                              "metadata/yaml (auto-discovered --metadata-file), preamble/tex "
                              "(auto-included LaTeX preambles), lua (auto-included Lua filters), "
                              "unicode (fonts for text in other scripts, and the main font chosen for the "

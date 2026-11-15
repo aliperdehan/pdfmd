@@ -15,7 +15,6 @@ import isolation_support  # noqa: E402,F401
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-import pdfmd  # noqa: E402
 
 
 class Tree(unittest.TestCase):

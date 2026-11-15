@@ -19,6 +19,26 @@ same commit as the change.
 
 ---
 
+## v3.33.233 — 2026-11-16
+
+Pre-edit state: commit `a3c3282`. **The `bib` auto kind finds local files for missing citation keys** (D60).
+Previously citations without a named source, or absent from the sources already named, stayed unresolved despite matching
+bibliography files nearby. Discovery is on by default and adds every candidate file holding a missing key, below declared
+sources, using the same accumulation and clash warnings for citeproc, natbib and biblatex. One finite candidate scan is
+cached per build, including no matches, and reused across engine retries. A key found nowhere stays missing for Pandoc's
+own warning. Existing code/comment/math/URL masking excludes things that are not citations. `--no-auto bib`, `no-auto: bib`,
+`auto: {bib: off}` and `auto: {bib: explicit-only}` stop discovery while retaining declared sources. The existing setup rows
+expose the kind; `--verbose` names added files and the normal summary lists them. The native citation note is unchanged.
+
+The supplied decision notes omit the original proposal's candidate rules: chosen conservatively, to confirm, are only
+local BibTeX-family files directly in the document/accessory and existing metadata resource folders (including parents and
+symlink targets), with no recursive or network search. Candidate folder order and natural filename order are deterministic;
+all matching files contribute, with the existing last-entry-wins rule within that automatic layer. Tests: new regressions
+checked failing before the change; full pdfmd discovery, partial declared sources, CLI sources, both switches/settings,
+parent and unpacked resources, ambiguity, unmatched keys/strict, natbib/biblatex writers and real PDFs for all three routes;
+a bounded-scan check, setup choices, automatic-state and bibliography/append/fullcite area checks and required checks.
+`pdfmd.py` has the same line count: the implementation is deferred in `pdfmd_bibliography.discovery`.
+
 ## v3.33.232 — 2026-11-16
 
 Pre-edit state: commit `c29516c`. **Bibliography sources now add up across all selected metadata layers** (D61).

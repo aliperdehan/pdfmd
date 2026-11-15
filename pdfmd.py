@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.232"
+PDFMD_VERSION = "3.33.233"
 import argparse
 import atexit
 import contextlib
@@ -1995,7 +1995,7 @@ NO_AUTO_KINDS = frozenset({
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
     "smiles", "draftpictures", "remotecsl", "mathfont", "css", "mathjax", "kit", "kpsewhich",
-    "priority",
+    "priority", "bib",
 })
 NO_AUTO_ALIASES = {
     "font": frozenset({"mainfont", "monofont", "mathfont"}),
@@ -2269,7 +2269,7 @@ def has_embedded_preamble(md_path: Path) -> bool:
 # pdfmd knows whether metadata files are read at all. What the layers give is, as ever, a list of kinds that are off, with
 # `explicit:KIND` entries for the explicit-only ones (`[]`: everything off, `None`: nothing).
 EXPLICIT_PREFIX = "explicit:"
-EXPLICIT_KINDS = frozenset({"lua", "preamble", "tex", "metadata", "yaml", "files"})
+EXPLICIT_KINDS = frozenset({"lua", "preamble", "tex", "metadata", "yaml", "files", "bib"})
 AUTO_STATES = {"on": "on", "true": "on", "yes": "on", "off": "off", "false": "off", "no": "off",
                "explicit-only": "explicit", "explicit": "explicit", "named": "explicit"}
 
@@ -4098,7 +4098,7 @@ def metadata_layers(sources: list[Path], metadata_files: list[Path]) -> list[tup
     return layers
 
 
-def metadata_append_args(sources: Path | list[Path], metadata_files: list[Path], pandoc_options=()) -> list[str]:
+def metadata_append_args(sources: Path | list[Path], metadata_files: list[Path], pandoc_options=(), no_auto=None) -> list[str]:
     """The metadata file with the finished values and ``--lua-filter metadata_append.lua``, only when some key appends; [] otherwise
     (every other build is untouched). Goes before every other filter."""
     files = sources if isinstance(sources, list) else [sources]
@@ -4107,7 +4107,7 @@ def metadata_append_args(sources: Path | list[Path], metadata_files: list[Path],
     append = metadata_append_keys(files[0], metadata_files)
     layers = metadata_layers(files, metadata_files)
     merged = load_package("pdfmd_args").merged_cli_metadata(sys.modules[__name__], layers, append, display_path(files[0]), pandoc_options)
-    merged.update(deferred("pdfmd_bibliography.sources", "merge_sources")(files, metadata_files, pandoc_options))
+    merged.update(deferred("pdfmd_bibliography.sources", "merge_sources")(files, metadata_files, pandoc_options, no_auto))
     if not merged:
         return []
     try:
@@ -4336,7 +4336,7 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     `inputs` are the files whose text is searched for the syntax (the document, or all the files of a joined build), `md_path` the
     document itself (a report's files, for report mode); `cellalign_early` puts the cell filter here (the office route), where the
     others put it after the writer's own. `label` names the document in a message (report mode: `REPORT`); `md_path` by default."""
-    args = metadata_append_args(inputs, metadata_files, pandoc_options)
+    args = metadata_append_args(inputs, metadata_files, pandoc_options, no_auto)
     args += md_macro_args(inputs, metadata_files)
     args += calc_filter_args(inputs, metadata_files)
     args += csv_table_filter_args(inputs, no_auto, csv_filter, metadata_files)

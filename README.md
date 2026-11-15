@@ -3150,7 +3150,7 @@ pdfmd lecture --no-auto margin mainfont  # only these (kinds: reader title margi
                                            #  unicode lookup yaml tex lua ...; `pdfmd --help` lists them)
 ```
 
-**Three states, not two** (v3.29). Each kind is `on`, `off` or, for the three that have a file to name, `explicit-only`: pdfmd looks
+**Three states, not two** (v3.29). Each kind is `on`, `off` or, for the kinds that have a file to name, `explicit-only`: pdfmd looks
 for no `lua` filter, `preamble` or `metadata` file beside the document, but uses the ones the document names (`pdfmd-options:
 {lua-filter: x.lua}`, `preamble:`, `yaml:`, `-y`). `off` is what `--no-auto` always was: it also ignores a file the document names.
 A setting says it with `no-auto: [lua]` (off; `true`: everything off) or `auto: {lua: explicit-only, margin: on}` (an `auto` entry wins
@@ -3410,6 +3410,20 @@ Each clashing key produces one warning naming the winning source and every losin
 `-M references=...` is a string; neither supplies citation entries. BibTeX/BibLaTeX, CSL JSON and CSL YAML sources retain their
 unique entries. Citeproc, `--biblatex` and `--natbib` use the same winners; inline references become a bibliography resource
 for BibTeX/Biber. The built-in renderer still leaves citations as written and reports that citation processing needs Pandoc.
+
+**Finding missing bibliography entries.** The `bib` auto kind is on by default. If cited keys are absent from all the
+sources above, pdfmd searches a finite list of local `.bib`, `.bibtex` and `.biblatex` files once per build, even when
+`bibliography:` or `references:` already supplies some keys. Candidates are files directly in the document's accessory
+folders (its own folder, `metadata/`, and `NAME.unpacked/`) and its existing metadata resource folders, including parent
+metadata and symlink targets. There is no recursive or network search. Every file holding a missing key is added below
+all declared sources; candidates follow folder order and natural filename order, with the last entry winning among those
+automatic sources and the usual clash warnings. Unrelated files are not added. Code, comments, maths, URLs and figure/
+section references do not trigger discovery. A key found nowhere stays unresolved for Pandoc; `--strict` counts Pandoc's
+missing-citation warning. `--verbose` names each added file as `AUTO BIB`; the ordinary summary lists the files found.
+
+Use `--no-auto bib`, `pdfmd-options: {no-auto: bib}` or `auto: {bib: off}` to stop the search; `auto: {bib: explicit-only}`
+also stops discovery. Both retain declared bibliography sources and layer accumulation. The existing `--setup` automatic
+behaviour rows include `bib`. The native tier still leaves citations as written rather than discovering or processing them.
 
 **Adding to a value instead of replacing it** (3.31.40). The layers, lowest first, are: the global `metadata.yaml`
 (`pdfmd --setup`), a kit's defaults, the `.pdfmd/metadata.yaml` of the folders above the document (the farthest first),
