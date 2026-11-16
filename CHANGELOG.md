@@ -19,6 +19,29 @@ same commit as the change.
 
 ---
 
+## v3.33.240 — 2026-11-16
+
+Pre-edit state: commit `f3a0b05`. Phase 2 of the split, wave 2, move 11: the reader selection, Markdown feature scan,
+crossref detection and bare-title preparation move to `lib/pdfmd_reader/__init__.py` with their thirteen constants.
+A pure move: the tool moved 28 statements, made 41 `core.` rewrites, added eleven names to the table and left one
+stand-in, `crossref_filter_args`, for its bare caller in pdfmd.py. Its AST self-check passed, with no refusals. All five
+carried comment blocks describe their constants and move with them. `CROSSREF_LABEL_KINDS` precedes `CROSSREF_RE`;
+`crossref_built_for` keeps `lru_cache`, served by the table so `.cache_clear()` reaches the real function.
+`prepared_title_source` keeps `contextmanager` and passes shared `core` where it passed `sys.modules[__name__]`.
+By hand: packaging in pyproject.toml (two places) and scripts/build_zipapp.py, the version, this entry and SPLIT.md's
+progress heading. No other hand changes. `pdfmd.py`: 12,881 -> 12,380 lines.
+
+Proof: Ruff's F checks pass. The section's tests, every module naming a moved name, the always-run set and
+`test_split_tools`: 15 modules, 297 tests, 277 passed, 1 skipped (prompt_toolkit is installed), 3 failures and 16 errors,
+all nineteen from test_serve's blocked sockets in the sandbox. Tests used scratch TeX cache/config folders. The real
+build-cache listing is unchanged (116 entries; the sandbox prevents writes there). `split_check` with automatic-reader/
+bare-title and percent-title-block HTML extras through the real build: SAME, 32 checks, no BOTH FAILED. The first run
+with shared scratch TeX folders differed only in two extra kpsewhich probe-timeout lines in the attachment log;
+the probes answered directly in 0.1–0.2 s. A rerun with pdfmd's automatic scratch-TeX fallback, without source changes,
+matched. Both runs are retained for review. Start-up has the same 205 modules; interleaved `scripts/pdfmd --version`
+best/median of ten on the passing rerun: 114/121 ms before, 117/123 ms after (first run: 117/127 and 439/447 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.239 — 2026-11-16
 
 Pre-edit state: commit `ba3d84e`. Phase 2 of the split, wave 2, move 10: build results, warning capture, strictness,

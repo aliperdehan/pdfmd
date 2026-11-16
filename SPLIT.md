@@ -274,7 +274,7 @@ Note: `Built`, `_WarningTee`, `warning_capture`, strictness, budgets; one `@time
 
 Tests: `test_build_record`, `test_build_time`, `test_nonmath_dollars`, `test_batch_paths`, `test_setup`, `test_budget`.
 
-#### 11. `pdfmd_reader` (new package): 15 definitions, 13 constants, ~503 lines
+#### 11. `pdfmd_reader` (new package): 15 definitions, 13 constants, ~503 lines; done in 3.33.240
 
 Goes to `lib/pdfmd_reader/__init__.py`.
 
