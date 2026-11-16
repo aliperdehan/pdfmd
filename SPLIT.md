@@ -306,7 +306,7 @@ Note: `document_filter_args` and the per-feature `*_filter_args`; `tests/test_se
 
 Tests: `test_pagebreak`, `test_diagram_timeout`, `test_linebreak`, `test_code_blocks`, `test_images`, `test_slide_notes`, `test_indent`, `test_cover`, `test_md_macro`, `test_lua_missing`, `test_author_meta`, `test_engine_filters`.
 
-#### 13. `pdfmd_flavours.markup` (existing package): 11 definitions, 7 constants, ~242 lines
+#### 13. `pdfmd_flavours.markup` (existing package): 11 definitions, 7 constants, ~242 lines; done in 3.33.242
 
 Goes to `lib/pdfmd_flavours/markup.py`.
 

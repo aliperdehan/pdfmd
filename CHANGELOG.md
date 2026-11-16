@@ -19,6 +19,29 @@ same commit as the change.
 
 ---
 
+## v3.33.242 — 2026-11-16
+
+Pre-edit state: commit `f288d34`. Phase 2 of the split, wave 2, move 13: universal markup and flavour selection move
+to `lib/pdfmd_flavours/markup.py`, with seven constants. A pure move: the tool moved eighteen statements, made 25
+`core.` rewrites, added sixteen names to the table and no stand-ins; its AST self-check passed, with no refusals.
+By hand: the module-level preset-import try/except moves unchanged to the new module, and `FLAVOUR_PRESETS` and
+`FLAVOUR_WORDS` join the table. A guarded import of the existing `pdfmd_flavours` package remains in pdfmd.py to keep
+the start-up module set unchanged, including the ImportError guard. The universal-markup section banner is restored
+to pdfmd.py; the MARKUP_HEADERS comment moves with its constant. The preset package's docstring now locates the lookup
+in the new module. The version, this entry and SPLIT.md's progress heading are updated by hand. No packaging change
+is needed. `pdfmd.py`: 11,693 -> 11,465 lines. 
+
+Proof: Ruff's F checks pass. The section's tests, every test module naming a moved name, the always-run set and
+`test_split_tools`: eighteen modules, 355 tests; after rerunning the two version-consistency checks, 335 passed,
+one skipped (prompt_toolkit is installed), three failures and sixteen errors, all nineteen requiring blocked sockets
+in test_serve. The initial run began before this heading was added and also failed the two changelog-version checks;
+all 22 tests of test_docs_consistency and test_packaging pass on rerun. Tests used scratch TeX config/cache folders.
+The real build-cache listing is unchanged (116 entries; the sandbox also prevents writes there). `split_check` with
+HTML, DOCX and LaTeX extras through flavour selection, visible comments, callouts, highlight and landscape markup:
+SAME, 33 checks, no BOTH FAILED. Start-up has the same 205 modules; alternating scripts/pdfmd --version runs,
+best/median of ten: 140/159 ms before, 135/160 ms after (split_check's own sequential runs: 112/127 and 130/138 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.241 — 2026-11-16
 
 Pre-edit state: commit `19ea6ab`. Phase 2 of the split, wave 2, move 12: document filter arguments and their per-feature
