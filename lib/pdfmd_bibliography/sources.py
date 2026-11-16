@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -102,6 +103,29 @@ def read_entries(path):
         return None
 
 
+def literal(name):
+    """A file name as Pandoc must read it from a metadata file.
+
+    Pandoc parses every YAML string as Markdown, so a Windows path loses its folders (`\\Users` and `\\Temp` are read as raw
+    TeX commands, which gave `C:22wg_n_7.bib`) and smart punctuation rewrites dots and quotes. A backslash before an ASCII
+    punctuation mark is that mark, literally, in Pandoc's Markdown, so every one of them gets one.
+    """
+    return re.sub(r"([!-/:-@\[-`{-~])", r"\\\1", str(name))
+
+
+def written_name(name, path, folders):
+    """What the build hands Pandoc for a bibliography file nothing rewrote.
+
+    The name as the author wrote it when it is the file the start folder holds (as before 3.33.232: natbib and biblatex copy
+    the name into `\\bibliography{}`, and Pandoc 3.1.3 escapes every `_` of a long absolute path there); otherwise the file's
+    absolute path, with forward slashes, which Pandoc, BibTeX and Biber read on every system.
+    """
+    start = Path(str(name)).expanduser()
+    if not start.is_absolute() and (folders[0] / start).is_file() and (folders[0] / start).resolve() == path.resolve():
+        return str(name)
+    return path.resolve().as_posix()
+
+
 def cached(text, suffix):
     target = core.cache_root() / "bibliography" / (hashlib.sha256(text.encode("utf-8")).hexdigest() + suffix)
     if not target.is_file():
@@ -167,12 +191,16 @@ def merge_sources(sources, metadata_files, arguments, no_auto=None):
                     continue
                 files.add(identity)
                 parsed = read(path)
+                rewritten = False
                 if parsed is not None:
                     entries, render = parsed
                     kept = {id(item) for citation, item in reversed(entries) if accept(citation, core.display_path(path))}
                     if len(kept) != len(entries):
-                        path = cached(render(kept), path.suffix)
-                bibliographies.append(str(path.resolve()) if path.is_file() else str(name))
+                        path, rewritten = cached(render(kept), path.suffix), True
+                if not path.is_file():
+                    bibliographies.append(literal(name))
+                else:
+                    bibliographies.append(literal(path.resolve().as_posix() if rewritten else written_name(name, path, folders)))
     seen = core.BUILD.setdefault("bibliography-warnings", set())
     for key, origins in clashes.items():
         message = f"WARN  bibliography key {key}: {origins[0]} wins; ignored in {', '.join(origins[1:])}"
@@ -183,6 +211,6 @@ def merge_sources(sources, metadata_files, arguments, no_auto=None):
         return {}
     method = core.first_pdfmd_option(sources[0], metadata_files, "citation-engine")
     if references and ("--biblatex" in arguments or "--natbib" in arguments or method in ("biblatex", "natbib")):
-        bibliographies.append(str(native_references(references)))
+        bibliographies.append(literal(native_references(references).resolve().as_posix()))
         references = []
     return {"bibliography": bibliographies, "references": references}

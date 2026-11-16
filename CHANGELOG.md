@@ -233,6 +233,8 @@ and the native note; metadata append, bibliography indent, fullcite and the requ
 
 Review fix (same version, not released): the Pandoc call that turns inline references into a `.bib` for BibTeX and Biber names its encoding (UTF-8), as every text-mode call must (`test_probes`: Windows decodes with its code page otherwise).
 
+Review fix (same version, not released): the accumulated bibliography names reached Pandoc through a metadata file, and Pandoc reads every string of one as Markdown, so a Windows path lost its folders (`\Users`, `\Temp` read as raw TeX commands: `File 'C:22wg_n_7.bib' not found in resource path`, about 60 failures on Windows CI) and smart punctuation could rewrite dots and quotes in any path. Every name is now written with a backslash before each ASCII punctuation mark (`pdfmd_bibliography.sources.literal`), and the absolute paths pdfmd makes use forward slashes. A bibliography file the start folder holds keeps its name as written (as before this version) instead of an absolute path: Pandoc 3.1.3 escapes every `_` of the name in natbib's `\bibliography{}` and biblatex's `\addbibresource{}` (Pandoc issue 7414, fixed after 3.1.3), which broke natbib in a temporary folder whose name has an underscore (`test_native_bibliography_markup`, Linux with Pandoc 3.1.3). Tests: a path with backslashes and Markdown marks through Pandoc intact, and the native writers keeping the name beside the document.
+
 ## v3.33.231a — 2026-11-16
 
 Pre-edit state: commit `60c3129`. Docs only, no shipped code, so no `PDFMD_VERSION` bump. **Project-wide metadata is described**:

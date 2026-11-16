@@ -147,6 +147,17 @@ class Layers(Tree):
                 resources = list((self.root / "cache").rglob("*.bib"))
                 self.assertTrue(any("Inline {Book}" in p.read_text(encoding="utf-8") for p in resources))
 
+    def test_a_file_beside_the_document_keeps_its_name_in_the_native_writers(self):
+        """Pandoc 3.1.3 writes the bibliography command with every `_` of a long absolute path escaped (Pandoc issue 7414), which broke
+        natbib in a temporary folder whose name has one; the name as written is what 3.33.231 and earlier gave it."""
+        self.bib("low.bib", "low", "Low Book")
+        self.write("d.md", "---\nbibliography: low.bib\n---\n[@low]\n")
+        for mode, command in (("natbib", r"\bibliography{"), ("biblatex", r"\addbibresource{")):
+            with self.subTest(mode=mode):
+                tex = self.output(self.run_pdfmd("--" + mode, target="tex"), "tex")
+                self.assertIn(command + "low.bib}", tex)
+                self.assertNotIn(str(self.root), tex)
+
     def test_repeated_file_is_not_a_clash(self):
         self.bib("refs.bib", "same", "Single Book")
         self.write("metadata.yaml", "bibliography: refs.bib\n")
@@ -206,6 +217,43 @@ class Layers(Tree):
 
     def test_biblatex_pdf(self):
         self.pdf_build("biblatex")
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class Literal(Tree):
+    """The metadata file pdfmd hands Pandoc is Markdown: a path must come out of it exactly as it went in."""
+
+    PATHS = (r"C:\Users\runneradmin\AppData\Local\Temp\tmp22wg_n_7.bib", "C:/Users/RUNNER~1/Temp/tmp_a_b/refs.bib",
+             "/tmp/my refs/a_b_c.bib", "/tmp/x*y*/it's [1] <a>.bib", "../a...b/c--d.bib")
+
+    def through_pandoc(self, names):
+        sys.path.insert(0, str(ROOT / "lib"))
+        try:
+            from pdfmd_bibliography.sources import literal
+        finally:
+            sys.path.pop(0)
+        import yaml
+        merged = self.root / "merged.yaml"
+        merged.write_text(yaml.safe_dump({"bibliography": [literal(name) for name in names]}, sort_keys=False),
+                          encoding="utf-8")
+        template = self.root / "t.txt"
+        template.write_text("$for(bibliography)$$bibliography$\n$endfor$", encoding="utf-8")
+        done = subprocess.run(["pandoc", "-f", "markdown", "-t", "plain", "--metadata-file", str(merged),
+                               "--template", str(template)], input="x", capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout.splitlines()
+
+    def test_a_path_with_backslashes_or_markdown_marks_reaches_pandoc_intact(self):
+        self.assertEqual(self.through_pandoc(self.PATHS), list(self.PATHS))
+
+    def test_the_escape_is_only_backslashes_before_punctuation(self):
+        sys.path.insert(0, str(ROOT / "lib"))
+        try:
+            from pdfmd_bibliography.sources import literal
+        finally:
+            sys.path.pop(0)
+        self.assertEqual(literal(r"C:\a_b.bib"), r"C\:\\a\_b\.bib")
+        self.assertEqual(literal("plain name 7"), "plain name 7")
 
 
 class Native(Tree):
