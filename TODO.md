@@ -14,6 +14,7 @@ wait for an answer before any code.
 - [ ] 4. Wave 2, then the biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
 - [ ] 5. Waves 3 to 5 (the docstring becomes `docs/reference.md`, `--doc reference`), then the full suite [3fi D29]
 - [ ] 5b. After wave 5: excerpts (source tracking: `[@key#N]` markers, `excerpts.json`, pagecite), pdfmd first, then Colophon's Source pane; spec approved [3fq 3fr 3fs D79 D80 Q74]
+- [ ] 5c. Then the Obsidian flavour and its community plugins (the sections below), before Colophon: plugin support may be wanted before committing fully to it [3ee 3er D85]
 - [ ] 6. Colophon by hand (`--smoke-web`, Cmd-Q with an unsaved tab, `gui.yml` on main), the review's list below in its order, then the GUI decisions and build [D59 D60 D81]
 - [ ] 7. nulabreport last: the full smoke test; a biochem report as `.docx` beside its PDF [D59]
 
@@ -119,8 +120,8 @@ wait for an answer before any code.
 - [ ] Other flavours as `flavour` values, one at a time after Obsidian: MyST, MkDocs/pymdown, CriticMarkup, Logseq/Roam, Quarto extras, MultiMarkdown, Djot [3eo]
 - [ ] British and American spellings of every key, flag and value (colour/color, centre/center, grey/gray, flavour/flavor...): scan, one alias table, a completeness test; docs and help print British, commands British first (`--colour`, `centre`), American accepted as naturally [3ep]
 - [ ] Spans `.caps`, `.wavy`, `.dotted`... in every writer, then the shorthand (`++x++`, `!!x!!`, `??x??`) as opt-in `markup` kinds; CriticMarkup and abbreviations later [3eq]
-- [ ] **decide** A control character in a source (U+0000-U+001F): one note naming the line and skip the engines that cannot read it, instead of three failed engines and Typst after 1.5 min; look at the Typst route's inline-math warnings [3es]
-- [ ] Community plugins: a vault report from `.obsidian/community-plugins.json`, adapters for plain-text plugin formats, rendering through Obsidian for the rest (never headless: the CLI needs the running app); unknown stays as code with one note; **decide** the other tiers [3er]
+- [ ] Control characters in a source (U+0000-U+001F but tab and newlines), in the copy Pandoc reads: vertical tab and form feed become a newline, an ANSI colour sequence goes whole, the rest is dropped; one WARN naming the line and what was done (`--strict`: an error), so the first engine succeeds; the Typst route's inline-math warnings are a bug of their own [3es D85]
+- [ ] Community plugins: a vault report from `.obsidian/community-plugins.json`, adapters for plain-text plugin formats, rendering through Obsidian for the rest (never headless: the CLI needs the running app); unknown stays as code with one note; the other tiers settled when built [3er D85]
 
 ## Other tools' command lines
 
@@ -138,7 +139,7 @@ is low priority. [3di]
 ## Before 4.0
 
 - [ ] Coloured links on by default in LaTeX and Typst, with the other default flips; the `colorlinks` setup row is the opt-in until then [3fl D84]
-- [ ] **decide** `pdfmd.py`'s name once it is under 1,000 lines: a `pdfmd_cli` package (`core.py`, `__main__.py`) with `pdfmd.py` kept as a shim, or `__init__.py` [Q67]
+- [ ] `pdfmd.py`'s name at 4.0: a `pdfmd_cli` package (`core.py`, `__main__.py`) with `pdfmd.py` kept as a shim, looked at again then [Q67 D85]
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]
 - [ ] Windows test session on a second machine: fork + pull requests, the Mac session merges and bumps the version [3dp]
 - [ ] Tool paths per document and on the command line: the `tesseract-path`, `soffice-path` ... keys also as `pdfmd-options` and flags, so one document can pin another version of a tool [3dt]
