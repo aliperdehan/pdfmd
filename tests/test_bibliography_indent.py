@@ -194,7 +194,7 @@ class Builds(unittest.TestCase):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", *extra, "--to", to, "-o", out.name, "--no-stamp",
                                "--no-backup", "--no-auto", "crossref"], cwd=self.root, capture_output=True, text=True,
                               env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_BUILD_LOG": "off", "PDFMD_NO_PROMPT": "1",
-                                   "XDG_CACHE_HOME": str(self.root / "cache")}, stdin=subprocess.DEVNULL)
+                                   "XDG_CACHE_HOME": str(self.root / "cache"), "LOCALAPPDATA": str(self.root / "cache")}, stdin=subprocess.DEVNULL)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         return out
 

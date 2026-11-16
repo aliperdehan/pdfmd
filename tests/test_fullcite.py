@@ -247,7 +247,7 @@ class Builds(unittest.TestCase):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", *extra, "--to", to, "-o", out.name, "--no-stamp",
                                "--no-backup", "--no-auto", "crossref"], cwd=self.root, capture_output=True, text=True,
                               env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_BUILD_LOG": "off", "PDFMD_NO_PROMPT": "1",
-                                   "XDG_CACHE_HOME": str(self.root / "cache")}, stdin=subprocess.DEVNULL)
+                                   "XDG_CACHE_HOME": str(self.root / "cache"), "LOCALAPPDATA": str(self.root / "cache")}, stdin=subprocess.DEVNULL)
         return done, out
 
     def text(self, body: str, to: str = "html", options: str = "", extra: tuple[str, ...] = ()) -> str:
@@ -259,7 +259,7 @@ class Builds(unittest.TestCase):
         (self.root / "d.md").write_text("---\ntitle: T\nbibliography: refs.bib\n---\n\n[@alpha]{.fullcite}\n", encoding="utf-8")
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "html", "-o", "o.html", "--verbose", "--no-stamp",
                                "--no-backup"], cwd=self.root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
-                              env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(self.root / "cache"), "PDFMD_NO_PROMPT": "1"})
+                              env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(self.root / "cache"), "LOCALAPPDATA": str(self.root / "cache"), "PDFMD_NO_PROMPT": "1"})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         command = next(line for line in (done.stdout + done.stderr).splitlines() if "fullcite_mark.lua" in line)
         command = command.replace("\\", "/")                                    # Windows prints the filter paths with backslashes

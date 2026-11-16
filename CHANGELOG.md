@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.237a — 2026-11-16
+
+Pre-edit state: commit `7dfcea1`. Tests only, no shipped code. **Five test modules of 3.33.224-232 point `LOCALAPPDATA` at their scratch cache too** (`test_bibliography_indent`, `test_bibliography_layers`, `test_fullcite`, `test_pandoc_spellings`, `test_top_level_options`): on Windows pdfmd's cache is `%LOCALAPPDATA%`, not `XDG_CACHE_HOME`, so they wrote into the runner's real cache, and `test_natbib_and_biblatex_receive_all_files_and_inline_references` looked for the generated `.bib` in the scratch folder and failed (CI 43789118370, windows-latex: its only failure).
+
 ## v3.33.237 — 2026-11-16
 
 Pre-edit state: commit `180ed82`. Phase 2 of the split, wave 2, move 9: **what is said when a TeX engine attempt failed moves to a
