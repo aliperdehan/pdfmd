@@ -350,7 +350,7 @@ Traps: writes state that stays in pdfmd.py (`core.X = ...`): `_FONT_INDEX`, `_MA
 
 Tests: `test_kit_install`, `test_tessdata`, `test_setup`, `test_unicode`, `test_autolog`.
 
-#### 16. `pdfmd_page` (new package): 15 definitions, 8 constants, ~502 lines
+#### 16. `pdfmd_page` (new package): 15 definitions, 8 constants, ~502 lines; done in 3.33.245
 
 Goes to `lib/pdfmd_page/__init__.py`.
 

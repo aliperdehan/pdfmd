@@ -19,6 +19,25 @@ same commit as the change.
 
 ---
 
+## v3.33.245 — 2026-11-16
+
+Pre-edit state: commit `71f09e3`. Phase 2 of the split, wave 2, move 16: page geometry, margins, paper names and
+monofont detection move to `lib/pdfmd_page/__init__.py` with eight constants. A pure move: the tool moved 23 statements,
+made twenty `core.` rewrites, added eight names to the table and left fix_typst_margin and paper_words as stand-ins
+for their bare callers in pdfmd.py. Its AST self-check passed, with no refusals. All three carried comments describe
+their constants and move with them. By hand: packaging in pyproject.toml (packages and package-dir) and
+scripts/build_zipapp.py, the version, this entry and SPLIT.md's progress heading. No other hand changes. `pdfmd.py`: 11,184 -> 10,686 lines.
+
+Proof: Ruff's F checks pass. The section's tests, every test module naming a moved name, the always-run set and
+`test_split_tools`: twelve modules, 266 tests, 246 passed, one skipped (prompt_toolkit is installed), three failures
+and sixteen errors; all nineteen unsuccessful tests require blocked sockets in test_serve. Tests used scratch TeX
+config/cache folders; the real build-cache listing is unchanged (116 entries; the sandbox prevents writes there).
+`split_check` extras build margin-mapping/front-matter paper settings to LaTeX, geometry/paper aliases and orientation
+to Typst, and the margin mapping to HTML through the real build: SAME, 33 checks, no BOTH FAILED. Start-up has the
+same 205 modules; alternating scripts/pdfmd --version best/median of ten: 125/148 ms before, 121/142 ms after.
+The harness's separate timings were 118/131 and 435/466 ms; the alternating comparison shows no such increase.
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.244 — 2026-11-16
 
 Pre-edit state: commit `78c15c7`. Phase 2 of the split, wave 2, move 15: installer-management helpers move to
