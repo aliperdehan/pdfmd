@@ -115,7 +115,8 @@ def native_references(references):
     import subprocess
 
     done = subprocess.run([core.which("pandoc"), "-f", "csljson", "-t", "biblatex"],
-                          input=json.dumps(references, ensure_ascii=False), capture_output=True, text=True)
+                          input=json.dumps(references, ensure_ascii=False), capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
     if done.returncode:
         raise SystemExit("Cannot prepare inline bibliography references: " + done.stderr)
     return cached(done.stdout, ".bib")

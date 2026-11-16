@@ -57,6 +57,8 @@ that citations stay as written is unchanged. `pdfmd.py` grows by one dispatch ca
 command-line forms, clashes/strict, JSON/YAML, resource/symlink lookup, citeproc/natbib/biblatex writers and real PDFs,
 and the native note; metadata append, bibliography indent, fullcite and the required repository checks.
 
+Review fix (same version, not released): the Pandoc call that turns inline references into a `.bib` for BibTeX and Biber names its encoding (UTF-8), as every text-mode call must (`test_probes`: Windows decodes with its code page otherwise).
+
 ## v3.33.231a — 2026-11-16
 
 Pre-edit state: commit `60c3129`. Docs only, no shipped code, so no `PDFMD_VERSION` bump. **Project-wide metadata is described**:
