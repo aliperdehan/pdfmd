@@ -262,6 +262,7 @@ class Builds(unittest.TestCase):
                               env={**os.environ, "PDFMD_CONFIG": "", "XDG_CACHE_HOME": str(self.root / "cache"), "PDFMD_NO_PROMPT": "1"})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         command = next(line for line in (done.stdout + done.stderr).splitlines() if "fullcite_mark.lua" in line)
+        command = command.replace("\\", "/")                                    # Windows prints the filter paths with backslashes
         self.assertLess(command.index("fullcite_mark.lua"), command.index("--citeproc"))
         self.assertLess(command.index("--citeproc"), command.index("/fullcite.lua"))
         self.assertIn("First Book", (self.root / "o.html").read_text(encoding="utf-8"))

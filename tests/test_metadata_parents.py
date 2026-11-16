@@ -199,7 +199,7 @@ class Builds(Fixture):
         self.assertIn('Parent', text)
         self.assertIn('AUTO', log)
         self.assertIn('YAML', log)
-        self.assertIn('project/metadata/metadata.yaml', log)
+        self.assertIn('project/metadata/metadata.yaml', log.replace('\\', '/'))     # Windows prints backslashes
         for args in (('--no-auto', 'metadata'), ('-y',)):
             with self.subTest(args=args):
                 text, _ = self.build(*args)
@@ -266,7 +266,7 @@ class Builds(Fixture):
         done = subprocess.run([sys.executable, str(ROOT / 'scripts/pdfmd'), str(self.doc), '--show-config'],
                               cwd=self.root, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn('project/metadata/metadata.yaml', done.stdout)
+        self.assertIn('project/metadata/metadata.yaml', done.stdout.replace('\\', '/'))
 
     def test_show_config_honours_explicit_metadata_and_off_switches(self):
         explicit = self.write('explicit.yaml', 'author: Explicit\n')
@@ -275,7 +275,7 @@ class Builds(Fixture):
                 done = subprocess.run([sys.executable, str(ROOT / 'scripts/pdfmd'), str(self.doc), '--show-config', *args],
                                       cwd=self.root, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-                self.assertNotIn('project/metadata/metadata.yaml', done.stdout)
+                self.assertNotIn('project/metadata/metadata.yaml', done.stdout.replace('\\', '/'))
                 self.assertEqual('explicit.yaml' in done.stdout, expected)
 
     def test_parent_automatically_named_preamble_and_filter_use_existing_safety_rules(self):

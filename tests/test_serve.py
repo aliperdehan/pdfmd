@@ -45,6 +45,14 @@ def _kill(pid: int) -> None:
         os.kill(pid, signal.SIGTERM)
 
 
+def answer_status(connection) -> int:
+    """The status of the answer, read to its end: closing a keep-alive connection with the answer unread resets it (Windows
+    raises ConnectionResetError in the server's idle handler, which prints a traceback), so every test reads the body."""
+    response = connection.getresponse()
+    response.read()
+    return response.status
+
+
 def fixtures() -> dict:
     text = (WEB / "fixtures" / "fixtures.js").read_text(encoding="utf-8")
     return json.loads(text.split("window.FIXTURES = ", 1)[1].rstrip().rstrip(";"))
@@ -731,7 +739,7 @@ class Http(Folder):
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)     # a body within the limit still goes through
         connection.request("POST", "/api/file", body=json.dumps({"path": "small.md", "text": "x"}),
                            headers={"Authorization": "Bearer tok-123", "Host": f"127.0.0.1:{port}"})
-        self.assertEqual(connection.getresponse().status, 201)
+        self.assertEqual(answer_status(connection), 201)
         connection.close()
 
     def _serve_with(self, max_body):
@@ -756,7 +764,7 @@ class Http(Folder):
         self.assertFalse((self.root / "new.md").exists(), "nothing was written")
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
         connection.request("GET", "/api/project", headers={"Authorization": "Bearer tok-123"})
-        self.assertEqual(connection.getresponse().status, 200)
+        self.assertEqual(answer_status(connection), 200)
         connection.close()
 
     def test_a_negative_request_limit_is_no_limit_and_a_positive_one_is_the_cap(self):
@@ -793,7 +801,7 @@ class Http(Folder):
                     connection = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=30)
                     connection.request("POST", "/api/file", body=json.dumps({"path": f"n{value}-{len(text)}.md", "text": text}),
                                        headers={"Authorization": "Bearer " + info["token"], "Content-Type": "application/json"})
-                    self.assertEqual(connection.getresponse().status, status, f"limit {value}, {len(text)} characters")
+                    self.assertEqual(answer_status(connection), status, f"limit {value}, {len(text)} characters")
                     connection.close()
             finally:
                 process.terminate()
@@ -980,7 +988,7 @@ class CommandLine(unittest.TestCase):
         self.assertTrue(_alive(pid), "an unwatched server must outlive its starter")
         connection = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=30)
         connection.request("GET", "/api/project", headers={"Authorization": "Bearer " + info["token"]})
-        self.assertEqual(connection.getresponse().status, 200)
+        self.assertEqual(answer_status(connection), 200)
         connection.close()
         _kill(pid)
 
@@ -997,7 +1005,7 @@ class CommandLine(unittest.TestCase):
             for text, status in (("x" * 4000, 413), ("x", 201)):
                 connection = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=30)
                 connection.request("POST", "/api/file", body=json.dumps({"path": f"n{len(text)}.md", "text": text}), headers=headers)
-                self.assertEqual(connection.getresponse().status, status)
+                self.assertEqual(answer_status(connection), status)
                 connection.close()
         finally:
             process.terminate()

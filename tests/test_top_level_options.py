@@ -137,9 +137,13 @@ class Options(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_quarto_cli_handoff_keeps_jupyter_and_editor_metadata(self):
-        tool = self.write("bin/quarto", f"#!{sys.executable}\nimport sys\nfrom pathlib import Path\n"
-                          "text = Path(sys.argv[2]).read_text()\nassert 'engine: jupyter' in text\n"
-                          "assert 'editor: visual' in text\nPath(sys.argv[sys.argv.index('-o')+1]).write_text('Quarto')\n")
+        script = self.write("bin/fake_quarto.py", "import sys\nfrom pathlib import Path\n"
+                            "text = Path(sys.argv[2]).read_text(encoding='utf-8')\nassert 'engine: jupyter' in text\n"
+                            "assert 'editor: visual' in text\nPath(sys.argv[sys.argv.index('-o')+1]).write_text('Quarto')\n")
+        # Windows runs no shebang: the launcher is a command script there (as for a real `quarto.cmd`)
+        tool = script.with_name("quarto.cmd" if os.name == "nt" else "quarto")
+        tool.write_text(f'@"{sys.executable}" "{script}" %*\n' if os.name == "nt"
+                        else f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n', encoding="utf-8")
         tool.chmod(0o755)
         self.env["PATH"] = str(tool.parent) + os.pathsep + self.env.get("PATH", "")
         self.write("d.qmd", "---\nengine: jupyter\neditor: visual\n---\n\nHello.\n")

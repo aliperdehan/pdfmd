@@ -19,6 +19,27 @@ same commit as the change.
 
 ---
 
+## v3.33.234a — 2026-11-16
+
+Pre-edit state: commit `2ce0773`. Tests only, no shipped code: **four tests that passed on macOS and Linux are made to pass on
+Windows** (the `windows-latex` job of run 43772266132; a Windows machine was not at hand, so only CI shows them green).
+-  `test_metadata_parents` (`test_percent_title_parent_author_verbose_and_off_switches`, `test_show_config_names_the_discovered_layers_even_without_global_config`
+   and the `assertNotIn` of `test_show_config_honours_explicit_metadata_and_off_switches`, which would have gone vacuous there):
+   they looked for the text `project/metadata/metadata.yaml`, and Windows prints the path with backslashes; the output is
+   compared with its backslashes read as slashes now. pdfmd's output is unchanged.
+-  `test_top_level_options.test_quarto_cli_handoff_keeps_jupyter_and_editor_metadata`: the fake `quarto` was a Python script with
+   a shebang line, which Windows does not run, so `which("quarto")` found nothing (the build failed in 0.01 s with "Quarto was not
+   found on PATH"). The script is a plain file now, started by a `quarto` shell launcher, or on Windows by a `quarto.cmd`
+   (the pattern of `test_soffice_timeout`).
+-  `test_fullcite.test_html_and_the_filter_order`: the verbose command line holds `\fullcite.lua` on Windows, so
+   `.index("/fullcite.lua")` raised `ValueError`; the line is read with backslashes as slashes first.
+-  `test_serve` (`test_a_request_limit_of_zero_switches_bodies_off_and_reading_still_works` and the tests like it): not a
+   failure but a traceback in the log. The tests closed a keep-alive connection with the answer unread, which resets it
+   (`ConnectionResetError` in the server's idle `readline`, printed by `socketserver`; it happens on macOS as well, reproduced
+   here). They read the answer to its end now (`answer_status`). The 3.33.230 lingering close after a refused body is not the cause.
+
+Proof: the four modules pass on macOS, and `test_serve` prints no traceback any more.
+
 ## v3.33.234 — 2026-11-16
 
 Pre-edit state: commit `8b8ee04`. Phase 2 of the split, wave 2, move 6: **the citation code moves to the new package
