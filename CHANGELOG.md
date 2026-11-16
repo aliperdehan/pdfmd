@@ -19,6 +19,31 @@ same commit as the change.
 
 ---
 
+## v3.33.246 — 2026-11-16
+
+Pre-edit state: commit `bda399c`. Phase 2 of the split, wave 2, move 17: office routing, effective metadata,
+reference documents, label data and LaTeX-loss detection move to `lib/pdfmd_office/route.py` with eight constants.
+A pure move: the tool moved twenty statements, made 48 `core.` rewrites, added twelve names to the table and left
+one stand-in, office_module, for its bare caller in pdfmd.py. Its AST self-check passed, with no refusals.
+office_reference and office_reference_document retain contextmanager; office_pdfmd_command uses core.__file__ so
+its child still runs pdfmd.py; CHEM_COMMANDS precedes MATH_ONLY_LATEX_RE. By hand: the Word/OpenDocument section
+banner is restored to pdfmd.py, while the raw-LaTeX and chemical-command constant comments move with their constants;
+the office package docstring locates the routing decisions in the new module. F401 annotations retain the now-unused
+contextlib, io, json and zipfile imports in pdfmd.py for the unchanged start-up module set and existing module attributes.
+The version, this entry and SPLIT.md's progress heading are updated. No packaging change is needed.
+`pdfmd.py`: 10,686 -> 10,285 lines.
+
+Proof: Ruff's F checks pass. The section's tests, every test module naming a moved name, the always-run set and
+`test_split_tools`: sixteen modules, 406 tests, 383 passed, four skipped, three failures and sixteen errors. All
+nineteen unsuccessful tests require blocked sockets in test_serve. The skips are two LibreOffice sandbox cases,
+the no-prompt-toolkit case, and the real-Calibre PDF case, skipped by the scratch runner because the brief forbids
+Calibre runs; repository tests are unchanged. Tests used scratch TeX config/cache folders. The real build-cache
+listing is unchanged (116 entries; the sandbox prevents writes there). `split_check` with native-Word and TikZ-drawing
+Word builds through the real build, including office_pdfmd_command's fragment-preamble child: SAME, 32 checks,
+no BOTH FAILED. Start-up has the same 205 modules; alternating scripts/pdfmd --version best/median of ten:
+338/349 ms before, 337/351 ms after (the harness's sequential runs: 357/439 and 146/154 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.245 — 2026-11-16
 
 Pre-edit state: commit `71f09e3`. Phase 2 of the split, wave 2, move 16: page geometry, margins, paper names and

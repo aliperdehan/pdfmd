@@ -1,6 +1,6 @@
 """Word and OpenDocument output for pdfmd: page setup, fonts and house styles written into the
 reference document Pandoc builds `.docx`/`.odt` files from, and (in later versions) LaTeX the
-document cannot express natively. No dependencies beyond the standard library; pdfmd.py decides
+document cannot express natively. No dependencies beyond the standard library; pdfmd_office.route decides
 *what* the document asks for (its metadata, `pdfmd-options: {office: ...}`) and hands plain data here.
 """
 

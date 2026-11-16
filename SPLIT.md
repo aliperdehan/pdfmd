@@ -364,7 +364,7 @@ Traps: temporary bindings (2): `fix_typst_margin`, `paper_words`.
 
 Tests: `test_settings_routes`, `test_paper`, `test_setup`.
 
-#### 17. `pdfmd_office.route` (existing package): 12 definitions, 8 constants, ~425 lines
+#### 17. `pdfmd_office.route` (existing package): 12 definitions, 8 constants, ~425 lines; done in 3.33.246
 
 Goes to `lib/pdfmd_office/route.py`.
 
