@@ -1512,28 +1512,12 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.278"
-import argparse  # noqa: F401 -- preserve startup and the public module attribute
-import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
-import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
-import hashlib  # noqa: F401 -- retain start-up modules and the module attribute
-import io  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
+PDFMD_VERSION = "3.33.279"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
-import urllib.parse  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 12)
-import struct  # noqa: F401 -- retain start-up modules and the module attribute
-import zipfile  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
-from collections import namedtuple  # noqa: F401 -- retain start-up modules and the module attribute
-from pathlib import PurePosixPath  # noqa: F401 -- retain start-up modules and the module attribute
-import functools  # noqa: F401 -- retain start-up modules and the module attribute
-from functools import lru_cache  # noqa: F401 -- preserve startup and the public module attribute
-import logging  # noqa: F401 -- retain start-up modules and the module attribute
 import os  # noqa: F401 -- preserve startup and the public module attribute
-import re  # noqa: F401 -- preserve startup and the public module attribute after the fence move
-import shlex  # noqa: F401 -- preserve startup and the public module attribute
 import shutil  # noqa: F401 -- preserve startup and the public module attribute
-import signal  # noqa: F401 -- preserve startup and the public module attribute
 import subprocess
 import sys
 import time  # noqa: F401 -- read as pdfmd.time by tests/test_install_calibre.py
@@ -1542,18 +1526,10 @@ if sys.version_info < (3, 9):
     raise SystemExit(f"pdfmd needs Python 3.9 or newer (this is {sys.version.split()[0]}). "
                      "Install it with `pipx install pdfmd-cli`, "
                      "which picks a suitable Python, or run pdfmd.py with a newer python3.")
-import unicodedata  # noqa: F401 -- retain start-up modules and the module attribute
-import warnings  # noqa: F401 -- retain start-up modules and the module attribute
 import inspect  # noqa: F401 -- read as core.inspect by lib/pdfmd_bridge/odt.py and as pdfmd.inspect by tests
-from contextlib import contextmanager  # noqa: F401 -- retain start-up modules and the module attribute
-from datetime import datetime  # noqa: F401 -- retain start-up modules and the module attribute
-from decimal import Decimal  # noqa: F401 -- retain start-up modules and the module attribute
 from pathlib import Path
 from shutil import which  # noqa: F401 -- retain the patched core lookup and startup
 import tempfile
-from tempfile import NamedTemporaryFile, mkdtemp  # noqa: F401 -- retain module attributes
-from textwrap import dedent  # noqa: F401 -- retain startup and module attribute
-from typing import Callable, Iterator  # noqa: F401 -- retain the Callable module attribute
 
 
 # A checkout keeps the pdfmd_* packages in lib/ beside this file; an installed copy has them in site-packages and a zipapp at

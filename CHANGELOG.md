@@ -19,6 +19,28 @@ same commit as the change.
 
 ---
 
+## v3.33.279 — 2026-11-17
+
+Pre-edit state: commit `74981a2`. Phase 2 wave 5, step 5b: unused standard-library imports leave pdfmd.py.
+Reads and patch targets in tests and core readers in lib retain importlib, json, platform, os, shutil,
+subprocess, sys, time, inspect, Path, which and tempfile; yaml and pypdf also stay. No package import changes.
+All edits are by hand; split_spec and split_move do not apply to wave 5.
+`pdfmd.py`: 3,282 -> 3,258 lines.
+
+Proof: Ruff F and whitespace clean. Sixty-four selected modules (all pdfmd patch modules, the always-run set
+and split tools), 1,176 tests: 1,108 passed, 24 failures, 22 errors and 22 skipped. The 46 limitations are
+nineteen serve socket cases, five image HTTP socket cases, seventeen TeX/font-cache cases, four disabled
+LibreOffice fixtures and one hdiutil disk-image fixture. Seven real Calibre builds were deliberately skipped;
+other skips cover unavailable optional tools, installed prompt_toolkit, platform and opt-in cases. No Calibre ran.
+The real build-cache listing is unchanged (122 entries; sandbox writes blocked), and isolation reported no changes.
+split_check: SAME on 31 checks, no BOTH FAILED. The native extra builds results.md with inkmd through the real
+CLI and build path; the defaults also exercise PDF, report, batch, HTML, DOCX and attachments. Startup has the
+same 205 modules. Interleaved best/median of ten: 138.6/162.8 ms before, 138.1/170.0 ms after; the completed
+harness reports 107/113 and 110/117 ms. The initial comparison was interrupted: double slashes from TMPDIR's
+trailing slash made TeX search recursively. The completed run normalizes scratch paths and uses a scratch copy
+of the existing font cache (read only at its source); no timeout or mask changed. Real configuration, cache and
+data remain untouched. Outside-sandbox checks remain for the reviewer.
+
 ## v3.33.278 — 2026-11-17
 
 Pre-edit state: commit `22fdabf`. Phase 2 of the split, wave 4, move 47: WATCH_INTERVAL moves to
