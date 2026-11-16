@@ -6,6 +6,7 @@ is first loaded (the first binding wins); the pdfmd names the code uses (`GFM_CL
 and `run_probe`, which tests patch, and the rest) are read as `core.X` when it runs. `ascii_filter_args` names the script that
 the Lua filter's helper process runs by `core.__file__` (`pdfmd.py`), not by this module's own file. The package's own parts
 (`pdfmd_flat`, `pdfmd_flat.asciify`) and `pdfmd_lua` are imported inside the functions, as they were.
+ASCII_FORMATS moved here unchanged in v3.33.275; the build and output-name callers use the names table.
 """
 
 from __future__ import annotations
@@ -146,3 +147,7 @@ def ascii_finish(output: Path, scratch: Path, missing: str, md_path: Path) -> st
           f"({shown}) {'was' if count == 1 else 'were'} written as {written}; `pdfmd --install translit` adds the "
           "scripts it can spell, --ascii-missing escape|drop|fail changes this", file=sys.stderr)
     return None
+
+
+ASCII_FORMATS = frozenset({"txt", "gfm", "gfm+raw", "markdown", "commonmark", "commonmark_x", "markdown_strict", "plain",
+                           "rst", "org", "asciidoc"})

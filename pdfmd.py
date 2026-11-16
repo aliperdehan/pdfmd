@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.274"
+PDFMD_VERSION = "3.33.275"
 import argparse  # noqa: F401 -- preserve startup and the public module attribute
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1972,6 +1972,7 @@ names("pdfmd_config", "frontmatter_no_auto no_auto_from_value has_embedded_pream
 names("pdfmd_native", "Chunk MATH_LINE_BREAK math_lines NATIVE_PAPER_POINTS PAPER_NAME_ALIASES")
 names("pdfmd_comments", "fence_after FENCE_RE COMMENT_KINDS")
 names("pdfmd_ansi.cli", "ANSI_LINKS_ENV ANSI_COLOR_ENV ANSI_WIDTH_ENV ANSI_FALLBACK_WIDTH")
+names("pdfmd_flat.build", "ASCII_FORMATS")
 display_path = deferred("pdfmd_log", "display_path")
 installed_engines = deferred("pdfmd_engines", "installed_engines")
 mask_embedded_blocks = deferred("pdfmd_assemble.embed", "mask_embedded_blocks")
@@ -2151,8 +2152,6 @@ GFM_CLI: dict = {"scripts": None, "math": None, "title": None}
 # once as `pdfmd.py --ascii-stdio`), and the written file is mapped once more for what the writer made itself. The default
 # name is `<name>.ascii.txt` (`.ascii.gfm.md`, `.ascii.md`), which `-o` recognises as the target again.
 ASCII_CLI: dict = {"on": False, "missing": None}
-ASCII_FORMATS = frozenset({"txt", "gfm", "gfm+raw", "markdown", "commonmark", "commonmark_x", "markdown_strict", "plain",
-                           "rst", "org", "asciidoc"})
 # split_ascii_target, ascii_missing, ascii_filter_args and ascii_finish: lib/pdfmd_flat/build.py (v3.33.8)
 
 

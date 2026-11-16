@@ -794,7 +794,7 @@ Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and
 
 Tests: none name it; the always-run set.
 
-#### 44. `pdfmd_flat.build` (existing package): 0 definitions, 1 constants, ~2 lines
+#### 44. `pdfmd_flat.build` (done in 3.33.275; existing package): 0 definitions, 1 constants, ~2 lines
 
 Goes to `lib/pdfmd_flat/build.py`.
 
