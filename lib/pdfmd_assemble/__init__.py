@@ -26,7 +26,7 @@ whose build holds the resources, so a nested call for it is a no-op) stays in `p
 writes it as `core._RESOURCE_OWNER` where it had `global _RESOURCE_OWNER`. `write_assembled_markdown` is decorated with `@timed`
 from `pdfmd_base` (since v3.33.210; while `timed` was defined in `pdfmd.py`, below the place where the package loads, a copy here,
 `_timed`, looked `core.timed` up at each call). The comment above `EMBED_KINDS` that `embed_into_text`'s docstring points at stays
-in `pdfmd.py` with `EMBED_KINDS`.
+in `pdfmd.py`; the helpers and constants now live in `pdfmd_assemble.embed` (phase 2, move 35).
 """
 
 from __future__ import annotations

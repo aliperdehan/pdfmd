@@ -19,6 +19,37 @@ same commit as the change.
 
 ---
 
+## v3.33.266 — 2026-11-16
+
+Pre-edit state: commit `a692805`. Phase 2 of the split, wave 4, move 35: embedding options, source markers and
+assembly helpers move to `lib/pdfmd_assemble/embed.py`, with fourteen constants. A pure move. The tool refused
+_EmbedDumper's YAML base, its module-level representer registration and a remaining bare ASSEMBLED_COMMENT_RE
+read. By hand the class and registration are removed before the partial tool move, then inserted unchanged with
+the planned guarded pdfmd_yaml_support import; _EmbedDumper gets an explicit names entry. frontmatter_no_auto
+obtains its local ASSEMBLED_COMMENT_RE through the established sys.modules[__name__] lazy lookup. The partial
+tool moved 31 statements, made eight core rewrites, registered 24 table names and left mask_embedded_blocks as
+a stand-in; AST self-check passed. embedded_lua_filters retains contextmanager; EmbedRequest remains a namedtuple,
+and EMBED_KINDS/EMBED_OPTIONAL precede EMBED_ALL. By hand the nine-line stop-stage banner, twenty-line embedding
+banner, eight-line attached-source banner/location block and ASSEMBLED_COMMENT location comment are restored to
+pdfmd.py; the other carried comments belong with their constants. The assembly docstring locates the helpers;
+version, this entry and SPLIT.md progress are updated. F401 annotations retain namedtuple, PurePosixPath and
+contextmanager for unchanged startup and module attributes.
+No packaging change. `pdfmd.py`: 5,429 -> 5,106 lines.
+
+Proof: Ruff F and whitespace checks pass. The hand-moved dumper class and representer registration have identical
+ASTs to the parent. split_check: SAME on 33 checks, no BOTH FAILED. Extras assemble metadata, a preamble and Lua
+with --embed-metadata all, build the assembled document to HTML with trusted embedded Lua, and assemble Lua
+reference mode, reaching the dumper, markers and contextmanager through real callers. Start-up has the same
+205 modules; interleaved scripts/pdfmd --version best/median of ten: 280.6/428.8 ms before, 291.6/380.5 ms after
+(harness sequential: 280/328 and 174/205 ms).
+Thirteen modules (section tests, every moved-name match, always-run set and test_split_tools), 308 tests:
+283 passed, five skipped (four sandbox LibreOffice cases and prompt_toolkit installed), four failures and sixteen
+errors. Nineteen require blocked sockets in test_serve; the embedding single-file PDF build reports an unwritable
+TeX cache, also a sandbox limit. Scratch TeX folders are set. The real build-cache directory diff is empty
+(121 entries; sandbox writes are blocked). Isolation identifies the same external report build in an existing
+cache folder; no real files were touched. Outside-sandbox socket, LibreOffice, TeX and cache verification remains
+for the reviewer. No Calibre ran.
+
 ## v3.33.265 — 2026-11-16
 
 Pre-edit state: commit `947679b`. Phase 2 of the split, wave 4, move 34: automatic discovery settings and layers

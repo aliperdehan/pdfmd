@@ -650,7 +650,7 @@ Traps: none found by the audit.
 
 Tests: `test_auto_states`, `test_settings_routes`, `test_unicode`, `test_setup`, `test_package_helper`, `test_user_path`, `test_setup_folder`, `test_pyyaml`.
 
-#### 35. `pdfmd_assemble.embed` (existing package): 18 definitions, 14 constants, ~385 lines
+#### 35. `pdfmd_assemble.embed` (existing package): 18 definitions, 14 constants, ~385 lines; done in 3.33.266
 
 Goes to `lib/pdfmd_assemble/embed.py`.
 
