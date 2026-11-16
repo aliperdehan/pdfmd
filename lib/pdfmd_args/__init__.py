@@ -4,7 +4,7 @@
 
 Moved out of `pdfmd.py` unchanged (v3.33.40, SPLIT.md), with `BUILD_LOG_MODES` (`--build-log MODE`) and `STOP_STAGES`
 (`--stop-at STAGE`); the comments that explain the build log and the stages stay in `pdfmd.py`, beside `BUILD_LOG_CLI` and
-`ASSEMBLED_FORMAT`. `core` is the `pdfmd` module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the
+`ASSEMBLED_KEY` (`ASSEMBLED_FORMAT` and `ASSEMBLED_SUFFIX` now live in `pdfmd_output`). `core` is the `pdfmd` module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd names the
 code uses (`ASSEMBLED_SUFFIX`, `BOPEN_HELP`, `BUNDLE_MAX_MB`, `CACHE_LOCATIONS`, `CALC_ALIGNS`, `CALC_ROUNDS`, `CSS_SCOPES`,
 `LUA_MODES`, `METADATA_PRECEDENCES`, `PATH_STYLES`, `PDFMD_VERSION`, `SEED_CALC_MODES`, `STAMP_MODES`, `STAMP_SCOPES`,
 `STAMP_STORES`, `UNCLOSED_WORDS`, `ansi_width_argument`, `calc_digits_value`, `csv_count`, `csv_note_mode`, `install_kind`,

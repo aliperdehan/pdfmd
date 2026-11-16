@@ -396,7 +396,7 @@ Note: `start_calibre_job -> math_pictures_possible` through `core.` (patched).
 
 Tests: `test_calibre_targets`.
 
-#### 19. `pdfmd_output` (new package): 9 definitions, 11 constants, ~210 lines
+#### 19. `pdfmd_output` (new package): 9 definitions, 11 constants, ~210 lines; done in 3.33.248
 
 Goes to `lib/pdfmd_output/__init__.py`.
 

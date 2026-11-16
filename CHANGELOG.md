@@ -19,6 +19,36 @@ same commit as the change.
 
 ---
 
+## v3.33.248 — 2026-11-16
+
+Pre-edit state: commit `b047c74`. Phase 2 of the split, wave 2, move 19: output formats, filename inference,
+numbered copies, batch-open selectors and report-folder selection move to `lib/pdfmd_output/__init__.py` with
+eleven constants. A pure move: the tool moved twenty statements, made seven `core.` rewrites, added sixteen names
+to the table and left format_from_output as a stand-in for its bare caller in pdfmd.py. Its AST self-check passed.
+It first refused ASSEMBLED_FORMAT, still read bare by default_output_format. By hand that function now reads the
+same object into a local ASSEMBLED_FORMAT through sys.modules[__name__].ASSEMBLED_FORMAT, the lazy lookup used in
+moves 10 and 18. ASSEMBLED_FORMAT and ASSEMBLED_SUFFIX precede FORMAT_EXTENSION; PICTURE_ONLY precedes PICTURE_FORMATS,
+CALIBRE_ONLY_FORMATS precedes EXTENSION_FORMAT and REWRITE_NAME precedes numbered_output's default argument.
+The stop-stage and --bopen section comments are restored to pdfmd.py; the other three carried comment blocks move
+with their constants. Packaging is added in pyproject.toml (packages and package-dir) and scripts/build_zipapp.py;
+the args package docstring now locates the assembly constants in pdfmd_output. The version, this entry and SPLIT.md's
+progress heading are updated by hand. No other hand changes.
+`pdfmd.py`: 10,117 -> 9,939 lines.
+
+Proof: Ruff's F checks pass. The section's tests, every test module naming a moved name, the always-run set,
+`test_split_tools` and the feature tests test_rewrite, test_ascii, test_batch_paths, test_report_build and test_config:
+seventeen modules in two batches, 388 tests, 361 passed, eight skipped, three failures and sixteen errors. All nineteen
+unsuccessful tests require blocked sockets in test_serve. Three real-Calibre tests are skipped by the scratch runner
+because the brief forbids Calibre runs; one skip needs prompt_toolkit absent, and four ASCII cases skip because an
+installed library transliterates Chinese. Repository tests are unchanged. Tests used scratch TeX config/cache folders;
+both real build-cache comparisons are unchanged (116 entries; the sandbox prevents writes there). `split_check` extras
+exercise default suffixes and custom numbered copies in consecutive HTML builds, compound GFM inference, assembly
+naming and an HTML report's common folder, plus intended failures for an assembled default-output and invalid --bopen
+syntax (no app is opened): SAME, 37 checks, no BOTH FAILED. The naming, compound and assembly fixtures also passed
+standalone builds before the comparison. Start-up has the same 205 modules; alternating scripts/pdfmd --version
+best/median of ten: 133/156 ms before, 129/146 ms after (the harness's sequential runs: 125/127 and 96/104 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.247 — 2026-11-16
 
 Pre-edit state: commit `3cafe3c`. Phase 2 of the split, wave 2, move 18: ebook filters, bridge target selection,
