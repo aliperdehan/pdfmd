@@ -542,7 +542,7 @@ Note: `tabularray_available` (`lru_cache`, patched) and `TABLAY_NOTED` (patched 
 
 Tests: `test_csv_switch`, `test_celltags`, `test_table_widths`, `test_lua_missing`, `test_native`, `test_csv_table`, `test_setup`, `test_table_captions`, `test_cellalign`.
 
-#### 28. `pdfmd_html` (new package): 18 definitions, 12 constants, ~325 lines
+#### 28. `pdfmd_html` (new package): 18 definitions, 12 constants, ~325 lines; done in 3.33.257
 
 Goes to `lib/pdfmd_html/__init__.py`.
 

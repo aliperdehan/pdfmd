@@ -14,7 +14,7 @@ Moved out of `pdfmd.py` unchanged (v3.33.35, SPLIT.md), with `INSTALL_SPECS`, th
 `install_ocr_tools`, `kits_install_directory`, `mathjax_font_package`, `open_url`, `own_python_folder`, `reset_font_caches`,
 `resolve_calibre`, `run_probe`, `system_install_hint`, `tools_directory`, `typst_version`, `unicode_module`, `use_managed_tools` and
 `which`) are read as `core.X` when it runs. `TYPST_MIN` and `typst_too_old` (v3.33.62) are new here: the oldest Typst pdfmd builds
-with, and the line that says the one found is older. `KATEX_PACKAGE` stays in `pdfmd.py`: it is built from `KATEX_VERSION` when that file is loaded. Tests patch
+with, and the line that says the one found is older. `KATEX_PACKAGE` and `KATEX_VERSION` now live in `pdfmd_html` (v3.33.257); the version precedes the URL built from it. Tests patch
 `download_file`, `github_latest_release`, `github_release_asset`, `install_extra`, `install_tectonic`, `install_typst`,
 `typst_asset_name` and `d2_asset_name` of this package as `pdfmd.X` (and `config_options`, `data_root`, `resolve_calibre`, `run_probe`
 and `which`): every use of them here is `core.X`, so a patch reaches it. `urllib.request` is imported inside the functions that

@@ -19,6 +19,35 @@ same commit as the change.
 
 ---
 
+## v3.33.257 — 2026-11-16
+
+Pre-edit state: commit `040fbdb`. Phase 2 of the split, wave 3, move 28: HTML settings and math runtimes move to
+`lib/pdfmd_html/__init__.py`, with twelve constants. A pure move. The tool moved thirty statements, made 35 core
+rewrites, converted one global declaration, registered 25 table names and left katex_runtime, mathjax_fonts and
+mathjax_runtime as stand-ins; its AST self-check passed, with no refusals. _PANDOC_HELP stays in pdfmd.py, written
+through core; katex_scale keeps lru_cache and its real table binding. Inner calls to rebound patched helpers use
+core; the two MathJax dictionaries remain shared mutable objects, so patch.dict reaches their local reads too.
+KATEX_VERSION precedes the URL built from it. By hand, the six-line KaTeX, nine-line MathJax and eleven-line HTML
+section banners are restored to pdfmd.py; the font-mapping and math-method comments move with their constants.
+The tool preserves ascii_table_transform's quoted annotation but omits Callable: its typing import is added.
+F401 annotations retain Callable and struct in pdfmd.py for unchanged startup and module attributes. Packaging
+is added in pyproject.toml (packages and package-dir) and scripts/build_zipapp.py; the installer docstring now
+locates the KaTeX constants in pdfmd_html. Version, this entry and SPLIT.md progress are updated by hand.
+`pdfmd.py`: 7,698 -> 7,429 lines.
+
+Proof: Ruff F clean. Eighteen modules (section tests, every moved-name match, always-run set and test_split_tools),
+441 tests: 403 passed, nineteen skipped (nine optional MathJax/KaTeX cases, eight real-Calibre cases forbidden by
+the brief, sandbox LibreOffice and prompt_toolkit installed), three failures and sixteen errors, all nineteen
+requiring blocked sockets in test_serve. An initial test run was interrupted before reaching test_calibre.Builds
+when that additional real-Calibre class was noticed; the scratch runner excludes it and the full selection was
+rerun. No Calibre ran and repository tests are unchanged. Both real build-cache directory diffs are empty (118
+entries; sandbox writes are blocked). Isolation identified another session's report record, using pdfmd 3.33.248;
+no real files were touched. Tests use scratch TeX folders. split_check: SAME on 33 checks, no BOTH FAILED. Extras
+build standalone HTML with local CSS, self-contained MathML HTML and a WeasyPrint math PDF, reaching HTML settings,
+math flags and runtime selection through the real build. Start-up has the same 205 modules; interleaved
+scripts/pdfmd --version best/median of ten: 199/243 ms before, 213/248 ms after (harness sequential: 148/179 and
+154/227 ms). Outside-sandbox socket, optional-runtime, LibreOffice and cache verification remains for the reviewer.
+
 ## v3.33.256 — 2026-11-16
 
 Pre-edit state: commit `390d43d`. Phase 2 of the split, wave 3, move 27: table settings and filters move to
