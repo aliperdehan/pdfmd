@@ -232,10 +232,8 @@ class Literal(Tree):
             from pdfmd_bibliography.sources import literal
         finally:
             sys.path.pop(0)
-        import yaml
-        merged = self.root / "merged.yaml"
-        merged.write_text(yaml.safe_dump({"bibliography": [literal(name) for name in names]}, sort_keys=False),
-                          encoding="utf-8")
+        merged = self.root / "merged.yaml"          # JSON is YAML, and CI has no PyYAML (pdfmd writes it with its own copy)
+        merged.write_text(json.dumps({"bibliography": [literal(name) for name in names]}), encoding="utf-8")
         template = self.root / "t.txt"
         template.write_text("$for(bibliography)$$bibliography$\n$endfor$", encoding="utf-8")
         done = subprocess.run(["pandoc", "-f", reader, "-t", "plain", "--metadata-file", str(merged),
