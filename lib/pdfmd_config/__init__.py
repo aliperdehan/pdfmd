@@ -352,7 +352,6 @@ FOLDER_WARNED: set[str] = set()
 FOLDER_DIR = ".pdfmd"
 
 
-FOLDER_METADATA = ".pdfmd/metadata.yaml"
 
 
 MACHINE_KEYS = ("translit", "setup-ui", "disabled")

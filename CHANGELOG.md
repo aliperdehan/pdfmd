@@ -19,6 +19,22 @@ same commit as the change.
 
 ---
 
+## v3.33.282 — 2026-11-17
+
+Pre-edit state: commit `d165e40`. Phase 2 wave 5, step 5d: remove the dead FOLDER_METADATA definition
+from lib/pdfmd_config/__init__.py. Searches across pdfmd.py, lib, tests, scripts and docs find no reader or table entry.
+The only occurrence in the searched source is the definition. All edits are by hand; no runtime behaviour changes.
+`pdfmd.py`: 2,369 -> 2,369 lines (the definition was already in its package).
+
+Proof: Ruff F and whitespace clean. Thirteen selected modules (always-run set, split tools and loading
+checks), 288 tests: 268 passed, three failures, sixteen errors, one skipped. Nineteen blocked serve socket
+cases account for the failures/errors; installed prompt_toolkit is skipped. Cache listing diff empty (122
+entries), no isolation warning. split_check: SAME on 31 checks, no BOTH FAILED. The --show-config extra reads
+real configuration/discovery callers; default builds exercise folder discovery without this unused constant.
+Startup modules identical (205); interleaved best/median of ten 181.3/210.8 ms before, 185.2/212.0 ms after;
+harness 110/114 and 124/138 ms. All caches/config/data use normalized scratch paths, with the scratch font-cache
+copy; no Calibre, no timeout or mask changes. Socket and real-cache proof outside the sandbox remains for the reviewer.
+
 ## v3.33.281 — 2026-11-17
 
 Pre-edit state: commit `9d8d8bd`. Phase 2 wave 5, step 5d: remove the dead PREAMBLE definition
