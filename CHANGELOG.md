@@ -19,6 +19,24 @@ same commit as the change.
 
 ---
 
+## v3.33.280 — 2026-11-17
+
+Pre-edit state: commit `3f84153`. Phase 2 wave 5, step 5c: remove phase-1 pointers and moved-feature
+commentary from the state block. Every state name keeps one description line; worker and API comments remain.
+The MathJax licence paragraph and mdpdf attribution remain intact. The args package docstring no longer points
+at removed comments. All changes are by hand; pdfmd.py's AST is identical before the version bump.
+`pdfmd.py`: 3,258 -> 2,369 lines.
+
+Proof: Ruff F and whitespace clean. Thirteen selected modules (always-run set, split tools and the kit,
+YAML and missing-Lua loading tests), 288 tests: 268 passed, three failures, sixteen errors, one skipped.
+The nineteen failures/errors require blocked serve sockets; the skip is installed prompt_toolkit. The
+missing-Lua end-to-end PDF now passes with the scratch font-cache copy. Real build-cache listing diff empty
+(122 entries); isolation reports no changes. split_check: SAME on 31 checks, no BOTH FAILED; the inkmd native
+extra and all default full-pipeline builds exercise unchanged outputs. Startup module sets identical (205).
+Interleaved best/median of ten: 154.0/198.4 ms before, 182.1/195.0 ms after; harness 101/110 and 117/130 ms.
+Scratch paths are normalized, and TeX and Matplotlib caches remain under scratch. No timeout or mask changes,
+no Calibre runs, no full suite. Socket and real-cache verification outside the sandbox remains for the reviewer.
+
 ## v3.33.279 — 2026-11-17
 
 Pre-edit state: commit `74981a2`. Phase 2 wave 5, step 5b: unused standard-library imports leave pdfmd.py.

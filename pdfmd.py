@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.279"
+PDFMD_VERSION = "3.33.280"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
@@ -1994,342 +1994,14 @@ init_vscode_command = deferred("pdfmd_edit.command", "init_vscode_command")
 part_digests = deferred("pdfmd_edit.command", "part_digests")
 stamp_scope_matches = deferred("pdfmd_edit.command", "stamp_scope_matches")
 
-# DEFAULT_FONT, MONOFONT_STAND_INS, SERIF_STAND_INS and installed_font_families to preferred_font: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
-
-DEFAULT_MARGIN = "1in"
-
-# Cosmetic-only (never affects what pdfmd actually does, only how a path is
-# PRINTED), so a plain module-level flag rather than threading a parameter
-# through every AUTO-announcement/log_cmd call site -- set once from
-# args.full_paths at the top of main(), before any conversion work starts.
-# Added 2026-09-20 (the author): the default full-absolute-path printing that
-# announce_preambles()/log_cmd()/the AUTO YAML and AUTO MD lines used before
-# this is fine from a shallow directory (Downloads) but genuinely hard to
-# read from a deep one (a real example that prompted this: a path under
-# .../Library/CloudStorage/OneDrive-.../Documents/Fall26/CHEM341/guides/M1).
-SHOW_FULL_PATHS = False
-PATH_STYLE = "auto"
-PATH_UP = 2
-# Set from --no-citeproc in main(). A real pdfmd flag rather than a string
-# looked for in the passthrough Pandoc options: Pandoc itself has no
-# --no-citeproc, so leaving it in that list made Pandoc reject the whole
-# command (fixed v3.10.0).
-CITEPROC_DISABLED = False
-
-
-# --strip-comments / --keep-comments (None: the document's pdfmd-options decide).
-STRIP_COMMENTS_CLI: bool | None = None
-
-
-# -- The automatic kinds are three-state (v3.29.30) ---------------------------------------------------------------------
-# Each kind of NO_AUTO_KINDS is `on`, `off` (pdfmd does none of it, and ignores a file the document names for it: what `--no-auto`
-# always meant) or `explicit-only` (it looks for nothing, but uses what the document names: a Lua filter, a preamble, a metadata
-# file; only the kinds that have a file to name). A layer says it with `no-auto:` (a list: off; true: everything off) and/or
-# `auto: {lua: explicit-only, margin: on}` (an `auto` entry wins over `no-auto` in the same layer). The layers, strongest first:
-# the command line (`--no-auto`, which only switches off), the document's `pdfmd-options`, the folders' `.pdfmd/config.yaml` (the
-# nearest first), the global config; the first layer that names a kind decides it (before 3.29.30 the layers were added up and a
-# kind switched off anywhere stayed off). A metadata file's own `no-auto` is still not read: it would have to be read before
-# pdfmd knows whether metadata files are read at all. What the layers give is, as ever, a list of kinds that are off, with
-# `explicit:KIND` entries for the explicit-only ones (`[]`: everything off, `None`: nothing).
-
-CODE_CLI: dict = {}                       # --line-numbers and friends, filled in by main()
-
-
-# CSV_CUTS: lib/pdfmd_tables/command.py (v3.33.24)
-
-# csv_note_argument: lib/pdfmd_args (v3.33.40)
-
-
-# csv_cut_advice: lib/pdfmd_native (v3.33.39)
-
-
-# csv_count_argument: lib/pdfmd_args (v3.33.40)
-
-
-# csv_defaults: lib/pdfmd_tables/command.py (v3.33.24)
-
-
-# table_keep_argument: lib/pdfmd_args (v3.33.40)
-
-
-# table_keep_metadata: lib/pdfmd_tables/command.py (v3.33.24)
-
-
-# spreadsheet_args and csv_table_filter_args: lib/pdfmd_tables/command.py (v3.33.24)
-
-
-# --raw / --no-raw / --raw-for FAMILY=SYNTAXES (filled in by main()); `pdfmd-options.raw` is the document's way.
-RAW_CLI: dict = {"all": False, "off": False, "for": []}
-
-
-PAGEBREAK_CLI: dict = {"kinds": None, "off": False}
-
-
-# Universal markup (v3.29.13, off unless asked, a kind at a time): spellings Markdown dialects share but Pandoc does not know,
-# carried into every writer by pdfmd_lua/markup.lua. `pdfmd-options.markup` (document, metadata files, config: true / all, false,
-# or a list of kinds), `--markup [KIND ...]` (bare: all) and `--no-markup` for a run.
-MARKUP_CLI: dict = {"kinds": None, "off": False}
-
-
-SHOW_COMMENTS_CLI: dict = {"on": None}
-
-
-# The flavour of a Markdown file (v3.32.20, entry 3ee; one setting with `reader:` since v3.32.22): `pdfmd-options.flavour` (also spelt
-# `flavor` or `reader`; document, metadata files, folders, config) or `--flavour`. A preset word (`pdfmd_flavours.PRESETS`: obsidian,
-# pdfmd, pandoc, gfm, commonmark) names a row of reading choices; `auto` (the default) is `obsidian` inside an Obsidian vault, a
-# folder with `.obsidian/` above the document, and `pdfmd` elsewhere. Any other value is a Pandoc reader spec (`markdown`,
-# `gfm+smart`), which is `--from` for that document with the flavour left on `auto`.
-try:
-    import pdfmd_flavours  # noqa: F401 -- preserve the pre-move start-up module set
-except ImportError:
-    pass
-FLAVOUR_CLI: dict = {"name": None}
-UNCLOSED_CLI: dict = {"mode": None}
-
-
-# `vault_app_setting`, `single_newline_mode`, `vault_root`, `embed_settings`, `find_embedded_image`, `embed_source` and
-# `embed_filter_args` (with the embed and newline word lists and the two folder caches) live in `pdfmd_obsidian.vault`
-# (v3.33.12); the stand-ins are in the binding block above.
-
-
-LINEBREAK_CLI: dict = {"kinds": None, "off": False}
-
-
-# An inline calculator (v3.30.6): inline code followed at once by a bare `{=}` is replaced by its value, `2026 - 2006`{=} -> 20,
-# evaluated by pdfmd_lua/calc.lua's own small parser (nothing is run). `C = n / V = {ans:4sf}` inside the span prints the
-# text with the value put in and keeps C; a `::: calc` div does that for its lines without the backticks. The filter goes in only
-# for a document that has such a span or div. The settings live under `pdfmd-options: {calc: {enabled, digits, round, subs, noindent, space, align, constants, export}}` (the
-# document, its metadata files, the config; `calc: off` alone is the short form of `enabled: false`), and on the command line
-# --calc / --no-calc, --calc-digits 4sf, --calc-round away, --calc-subs, --calc-typeset, --calc-noindent, --calc-space, --calc-align, --calc-constants, --calc-export (reaching -j workers as PDFMD_CALC,
-# PDFMD_CALC_DIGITS, PDFMD_CALC_ROUND, PDFMD_CALC_SUBS, PDFMD_CALC_TYPESET, PDFMD_CALC_NOINDENT, PDFMD_CALC_SPACE, PDFMD_CALC_ALIGN, PDFMD_CALC_CONSTANTS, PDFMD_CALC_EXPORT). digits: how many figures a value shows (4sf: four significant figures, 2dp: two decimal places); unset
-# prints as R does. round: how round() settles an exact half, to even (R and Python, the default) or away from zero.
-CALC_DUMP: Path | None = None               # where this build's calc.lua writes its names, when the document exports them (set around one build)
-CALC_SEED: Path | None = None              # the names of the parts before a part built alone (build_calc_seed; set around one build)
-CALC_BELOW: Path | None = None             # the first definitions in the parts after it (3.31.44; the same)
-
-
-# calc_round_argument and calc_digits_argument: lib/pdfmd_args (v3.33.40)
-
-
-# -- Appending to a metadata value (v3.31.40, entry 3du point 20) ---------------------------------------------------------
-# A key written `author+:` adds to the value the layers below hold; `pdfmd-options: {metadata-append: [author]}` makes the
-# document's own `author:` add to it as well. The layers, lowest first: the global metadata file, a kit's defaults, the
-# folders' `.pdfmd/metadata.yaml` (farthest first), the document folder's metadata files, the document's own front matter.
-# Pandoc cannot do it (the front matter beats every metadata file), so pdfmd merges, hands the finished values over under
-# `pdfmd-merged` and pdfmd_lua/metadata_append.lua, run before every other filter, puts them in place.
-
-
-# -- Flat Markdown: --to gfm (v3.26.3) ----------------------------------------------
-# `--to gfm` is plain GitHub-flavoured Markdown, nothing a viewer has to know about Pandoc (see pdfmd_flat and
-# pdfmd_lua/flat.lua); `--to gfm+raw` is Pandoc's own gfm writer. --gfm-scripts / --gfm-math fill GFM_CLI in main();
-# `pdfmd-options.gfm` is the document's way ({scripts: unicode|html|drop|ascii, math: dollars|fenced, title: true}).
-GFM_CLI: dict = {"scripts": None, "math": None, "title": None}
-# _PANDOC_EXTENSIONS, pandoc_extensions, flat_settings, flat_writer and flat_filter_args: lib/pdfmd_flat/build.py (v3.33.8)
-# -- ASCII text: --to ascii (v3.26.8) -----------------------------------------------
-# `--to ascii` (txt) and `--to ascii:FORMAT` (gfm, markdown, commonmark, rst, org, asciidoc ...) build that format with
-# no character above 127 in it: pdfmd_lua/ascii.lua maps the words before the writer sees them (pdfmd_flat/asciify.py, run
-# once as `pdfmd.py --ascii-stdio`), and the written file is mapped once more for what the writer made itself. The default
-# name is `<name>.ascii.txt` (`.ascii.gfm.md`, `.ascii.md`), which `-o` recognises as the target again.
-ASCII_CLI: dict = {"on": False, "missing": None}
-# split_ascii_target, ascii_missing, ascii_filter_args and ascii_finish: lib/pdfmd_flat/build.py (v3.33.8)
-
-
-# -- A styled terminal reader: --to ansi and --view (v3.30.3) ---------------------------------------------------------
-# `--to ansi` writes the document with ANSI styling for a terminal: bold, italic, code (coloured by language), links, lists,
-# quotes, box-drawn tables (a cell may span columns and rows), display math stacked where it has fractions, roots or sums, all
-# wrapped to the terminal's width. pdfmd_ansi/ draws it from Pandoc's JSON AST (`-t json`), so the metadata
-# files, filters, citations, \ce and the other steps of a build apply as they do for any output; with no Pandoc, the
-# built-in parser's tree stands in. `--view` is `-o -` plus a pager (see terminal_view). The width, the colour choice and
-# OSC 8 links reach the builds (which may be child processes) as the environment variables in lib/pdfmd_ansi/cli.py.
-# (the --view reader: its child arguments, stdin and sources, the pager and terminal_view moved to lib/pdfmd_view, v3.33.16)
-# ansi_width_argument, ansi_columns, ansi_colour_on, ansi_math, ansi_document_text, ansi_finish and ansi_without_pandoc: lib/pdfmd_ansi/cli.py (v3.33.6)
-
-
-# tool_note: lib/pdfmd_doctor/__init__.py (v3.33.31)
-
-
-SOFFICE_TIMEOUT_NOW: float | None = None        # what the document being built says (set by convert_one); None: the config's
-
-
-# user_path_hint: lib/pdfmd_doctor/__init__.py (v3.33.31)
-
-
-# user_path_command and setup_actions: lib/pdfmd_setup/command.py (v3.33.21)
-
-
-# -- the native tier ---------------------------------------------------------
-#
-# Added v3.20.0. On a machine with no Pandoc, or with Pandoc but no PDF
-# engine, pdfmd used to stop with an install message. It can now still turn a
-# Markdown file into a PDF with a pure-Python renderer, so a fresh `pip
-# install pdfmd-cli` is useful on its own:
-#
-#   inkmd   vendored in pdfmd_inkmd/ (see its VENDORED.md); stdlib only,
-#           offline, deterministic. No math, no PDF bookmarks, front matter
-#           is not read -- this module turns the title/author into a title
-#           block and the PDF Info dictionary itself.
-#   md2pdf  the PyPI package `pymd2pdf` (ReportLab + mistletoe), installed by
-#           `pip install "pdfmd-cli[math]"` / `pdfmd --install math`. Adds
-#           footnotes, bookmarks and (with matplotlib) offline LaTeX math.
-#
-# Both read GitHub-flavoured Markdown, not Pandoc's. normalise_gfm() therefore
-# treats every input as GFM: it keeps what they can render, converts what it
-# can (page breaks, footnotes) and strips what they cannot (heading/image
-# attributes, fenced divs, raw LaTeX), with one warning per kind of change.
-# Pandoc, filters, preambles, citations, parts and report mode are NOT
-# available here; the output is deliberately plain ("for anything more, use
-# Pandoc and Typst or TeX"). The tier is chosen automatically only when no
-# Pandoc route exists; `-e inkmd` / `-e md2pdf` / `pdf-engine: inkmd` request
-# it explicitly, and a Pandoc build that fails never silently falls back to it.
-# With no Pandoc, and Calibre installed (v3.29.1), Calibre reads the Markdown itself (its Python-Markdown reader: tables,
-# footnotes, fenced code, lists) and prints it: before the rough renderers below, which stay its fallback. It has no math
-# (formulas are text, as in inkmd) and none of Pandoc's syntax; what it cannot honour is reported as for the others.
-
-# NATIVE_SOURCE_SUFFIXES and NATIVE_READERS: lib/pdfmd_native (v3.33.39)
-# INSTALL_SPECS: lib/pdfmd_install/__init__.py (v3.33.35)
-# NATIVE_META_KEYS (with its comment): lib/pdfmd_native (v3.33.39)
-# PANDOC_FEATURES and pandoc_limits: lib/pdfmd_doctor/__init__.py (v3.33.31)
-
-
-# What this run could not render natively, by kind -> count; read by
-# offer_native_upgrade() once the build is done.
-NATIVE_LOST: dict[str, int] = {}
-
-
-# native_note, native_lose and the patterns the native tier rewrites with (HEADING_ATTR_RE to PAPER_SIZES): lib/pdfmd_native (v3.33.39)
-
-
-# the comment on math without a typesetter: lib/pdfmd_native (v3.33.39)
-
-# MATH_GREEK, MATH_SYMBOLS and the other tables of the math converter up to MATH_ESCAPES: lib/pdfmd_native (v3.33.39)
-# SUPERSCRIPTS, SUBSCRIPTS, MARKDOWN_ESCAPE_RE, escape_markup and MathText: lib/pdfmd_native (v3.33.39)
-
-
-# chunks_markup and chunks_width: lib/pdfmd_native (v3.33.39)
-
-
-# NO_BREAK_SPACE, centred_math, inline_math, stacked_math, MATHTEXT_REWRITES (with its comment), mathtext_form and NativeSource: lib/pdfmd_native (v3.33.39)
-
-
-# author_names: lib/pdfmd_native (v3.33.39)
-
-
-# CSV_DIV_LINE_RE, DIV_CLOSE_RE and DIV_ATTRIBUTE_RE: lib/pdfmd_native (v3.33.39)
-
-
-# CSV_ALIGNMENTS, CSV_SEPARATOR_CELL_RE, csv_extension_delimiter and csv_guess_delimiter: lib/pdfmd_native (v3.33.39)
-
-
-# csv_keep to describe_native_changes (the .csv div table, normalise_gfm, the paper, inkmd, md2pdf and Calibre's Markdown reader, convert_native): lib/pdfmd_native (v3.33.39)
-
-
-# folder_size, DEEP_SAMPLE, deep_checks, foreign_commands, doctor_report, completion_options and completion_script: lib/pdfmd_doctor/__init__.py (v3.33.31)
-
-
-# -- The global config file (v3.23.6) ------------------------------------------------
-# ~/.config/pdfmd/config.yaml (`$XDG_CONFIG_HOME`, `%APPDATA%\pdfmd` on Windows; PDFMD_CONFIG names
-# another file, or an empty value none): the user's own defaults, kept where `--clear-cache` and a
-# cleaned ~/.cache cannot take them. Its `options:` block holds `pdfmd-options` defaults that apply
-# to every document, below anything the document or its metadata files say; `translit:` is the
-# romanization packs of the lookup (below --translit and PDFMD_TRANSLIT). The decisions pdfmd itself
-# remembers for the user (filters it trusts, a dismissed offer) live in the same folder.
-
-
-# -- Word / OpenDocument output (pdfmd_office/) -----------------------------------------
-# `-o x.docx`, `--to docx|odt`: Pandoc builds the file from a *reference document* (styles, page
-# setup, headers and footers). pdfmd finds the user's own (a `reference.docx`/`.dotx`, `<name>-reference.*`
-# beside the document or in its metadata/ folder, `office: {reference-doc: ...}`, the config folder, or
-# Pandoc's --reference-doc) and writes the document's page size, margins, fonts, size, language and
-# pdfmd's house look into a copy of it. See pdfmd_office/.
-
-
-# package_places, kpsewhich_locate, read_package_helper and kit_package_folders: lib/pdfmd_kits/locate.py (v3.33.22)
-
-
-# -- Kits: find one (entry 3du, C1) ------------------------------------------------------------------------------------
-# A kit is a folder with a `.kit` file (pdfmd_kits has the format and the search). Search is not selection: nothing here
-# runs for a document that selects no kit, and a document that only says `\usepackage{nulabreport}` is not switched to the
-# kit. The places, in order: a kits/ folder beside the document or above it, the config's `kits:` (a folder that is a kit,
-# or one that holds kits; a mapping {path:, aliases: {MODE: [names]}} adds mode names without editing the kit), a kits/ folder
-# beside the config file, then the folder of `NAME.sty` that kpsewhich finds (the cached answer first: one stat). `--no-auto
-# kit` takes the searching off (the config's `kits:` stays: the user named those), `--no-auto kpsewhich` the TeX tree only.
-
-
-# kit_install_record and kits_report: lib/pdfmd_kits/locate.py (v3.33.22)
-
-
-# -- Kits: choose them (entry 3du, C2) -------------------------------------------------------------------------------------
-# `pdfmd-options: {kit: ...}` in the config (global), the global metadata or a preset (preset), a folder's `.pdfmd/` files
-# (folder; by NAME only), a document's own metadata and front matter (document); `--kit` above them all. pdfmd_kits.selection
-# has the grammar and the stacking. A selected kit supplies, in this order: its defaults as metadata files between the global
-# metadata and the folders' own (so a folder tunes the kit and the document wins), the folder of its package for the helper
-# lookup, its Lua filters, and its folder on Pandoc's resource path. The preamble it writes is C3.
-KIT_CLI: list | None = None                     # --kit, parsed (None: not given; [OFF]: bare --kit / none)
-KIT_STACK_CLI = None                            # --kit-stack, as given
-
-
-# -- Kits: the preamble they write (entry 3du, C3) ----------------------------------------------------------------------
-# The kit's lines are one header file, first of all (after the code-wrapping header); the user's own LaTeX follows. What the kit
-# and the user's text say twice is settled in copies in the cache folder, never in the user's files: pdfmd_kits.preamble has the
-# four outcomes. Ids: KIT-SAME and KIT-MERGE are shown with --verbose, KIT-YIELD is a WARN.
-
-
-# kit_header_insert: lib/pdfmd_kits/locate.py (v3.33.22)
-
-
-# kit_header_settle, kit_cache_tex and kit_header_resolve: lib/pdfmd_kits/locate.py (v3.33.22)
-
-
-# folder_options_in_force: lib/pdfmd_attach (v3.33.37)
-
-
-# kit_carried_files: lib/pdfmd_kits/locate.py (v3.33.22)
-
-
-# office_package_folders: lib/pdfmd_office/build.py (v3.33.27)
-
-
-# office_defaults_sources: lib/pdfmd_office/build.py (v3.33.27)
-
-
-# find_office_profile and find_reference_doc: lib/pdfmd_office/build.py (v3.33.27)
-
-
-# OfficeArguments, office_properties and office_finish: lib/pdfmd_office/build.py (v3.33.27)
-
-
-# run_office_pandoc, build_office_pandoc, describe_fragment, print_office_check and check_docx_command: lib/pdfmd_office/build.py (v3.33.27)
-
-
-# `picture_target`, `picture_build`, `picture_sources`, `picture_page_folder`, `picture_targets`, `picture_one`,
-# `multi_target_command` and `picture_command` (with `PICTURE_OPTIONS` and `TARGET_ONLY_OPTIONS`) live in
-# `pdfmd_crop.targets` (v3.33.11); the stand-ins are in the binding block above.
-
-
-# (the --check discovery and command moved to lib/pdfmd_check/command.py, v3.33.17; `check_command` is a stand-in in the binding block)
-
-
-# office_render_fragments, office_convert_asset and init_reference: lib/pdfmd_office/build.py (v3.33.27)
-
-
-TEX_FOUND_AT: Path | None = None             # the TeX folder use_tex_install() put on PATH, for --doctor and --verbose
-
-
-# TYPST_REPOSITORY, TYPST_TARGETS, typst_asset_name, github_release_asset, download_file, extract_executable and
-# install_typst: lib/pdfmd_install/__init__.py (v3.33.35)
-
-
-# -- KaTeX: math WeasyPrint can print (v3.28.11) ------------------------------------------------------------------------
-# WeasyPrint does not draw MathML. KaTeX, run with node before WeasyPrint, writes each formula as HTML set in its own
-# fonts, which WeasyPrint prints as a browser does (pdfmd_lua/weasyprint.lua runs pdfmd_lua/katex.cjs). `pdfmd --install
-# math:katex` puts this release's files in data_root()/katex/<version> (the npm package, checked against the SHA-256
-# below: the script, the stylesheet, the fonts, mhchem, the licence) and, when there is no node on PATH, node's own
-# release for this machine into pdfmd's tools folder, as for Typst.
-# KATEX_SHA256, KATEX_KEPT, NODE_DIST and NODE_TARGETS: lib/pdfmd_install/__init__.py (v3.33.35)
-
-
-# node_install_hint, node_asset_name, install_node, unpack_katex, katex_works and install_katex: lib/pdfmd_install/__init__.py (v3.33.35)
-
+# --- Finishing the built PDF: bookmarks, running header/footer, linked files ----------------
+# Ideas from mdpdf (MIT, github.com/normanlorrain/mdpdf): a small Markdown-to-PDF tool whose own
+# renderer needs PyMuPDF (AGPL), which pdfmd does not use. The ideas are done here on the finished
+# PDF with pypdf, so they work with every engine: headings become PDF bookmarks (when the engine
+# made none), a "left,middle,right" template prints a running header and footer, and local files
+# the document links to are attached to the PDF with a paperclip in the margin beside the link. All of it is
+# off unless asked for (`--bookmarks`, `--header`, `--footer`, `--attach-links`, `--pdf-title` ...),
+# except under the `mdpdf` command, which asks for bookmarks and attachments like mdpdf does.
 
 # -- MathJax for WeasyPrint (v3.28.46) ---------------------------------------------------------------------------------
 # MathJax 4 typesets the math of a WeasyPrint PDF first, KaTeX takes the formulas it cannot read, and what neither reads
@@ -2343,801 +2015,240 @@ TEX_FOUND_AT: Path | None = None             # the TeX folder use_tex_install() 
 # MATHJAX_REGISTRY, MATHJAX_SOURCE_SHA256, MATHJAX_FONT_SIZES, MATHJAX_BUNDLE_KEPT, MATHJAX_BUNDLE_FOLDERS, MATHJAX_BUNDLE_INPUT and
 # mathjax_package_url: lib/pdfmd_install/__init__.py (v3.33.35)
 
+# Default page margin when no document setting is given.
+DEFAULT_MARGIN = "1in"
 
-# unpack_npm, mathjax_keeps_source, mathjax_keeps_font, install_mathjax_files, mathjax_works, ensure_node and install_mathjax;
-# the installers of D2 and Graphviz, Calibre and Tectonic, with their banner comments: lib/pdfmd_install/__init__.py (v3.33.35)
+# Whether printed paths use their full absolute form.
+SHOW_FULL_PATHS = False
 
+# Requested display style for printed paths.
+PATH_STYLE = "auto"
 
-# install_kind, uninstall_kind, KIT_SOURCES_DEFAULT and kit_install_settings: lib/pdfmd_install/__init__.py (v3.33.35)
+# Parent levels included in printed paths.
+PATH_UP = 2
 
+# Whether --no-citeproc disables citation processing.
+CITEPROC_DISABLED = False
 
-# install_kits: lib/pdfmd_install/__init__.py (v3.33.35)
+# Command-line comment stripping override; None defers to the document.
+STRIP_COMMENTS_CLI: bool | None = None
 
+# --line-numbers and friends, filled in by main()
+CODE_CLI: dict = {}
 
-# install_fonts: lib/pdfmd_install/__init__.py (v3.33.35)
+# Command-line raw block selection and off override.
+RAW_CLI: dict = {"all": False, "off": False, "for": []}
 
+# Command-line page-break kinds and off override.
+PAGEBREAK_CLI: dict = {"kinds": None, "off": False}
 
-# tessdata_environment: lib/pdfmd_routing/__init__.py (v3.33.25)
+# Command-line markup kinds and off override.
+MARKUP_CLI: dict = {"kinds": None, "off": False}
 
+# Command-line visible-comments override.
+SHOW_COMMENTS_CLI: dict = {"on": None}
 
-# install_extra: lib/pdfmd_install/__init__.py (v3.33.35)
+try:
+    import pdfmd_flavours  # noqa: F401 -- preserve the pre-move start-up module set
+except ImportError:
+    pass
 
+# Command-line Markdown flavour override.
+FLAVOUR_CLI: dict = {"name": None}
 
-# setup_hint_state, maybe_hint_setup, flag_topics and flag_names: lib/pdfmd_setup/command.py (v3.33.21)
+# Command-line unclosed-comment handling override.
+UNCLOSED_CLI: dict = {"mode": None}
 
+# Command-line line-break kinds and off override.
+LINEBREAK_CLI: dict = {"kinds": None, "off": False}
 
-# FOLDER_HEADER, FOLDER_METADATA_HEADER and METADATA_HEADER, setup_sources and setup_command: lib/pdfmd_setup/command.py (v3.33.21)
+# where this build's calc.lua writes its names, when the document exports them (set around one build)
+CALC_DUMP: Path | None = None
 
+# the names of the parts before a part built alone (build_calc_seed; set around one build)
+CALC_SEED: Path | None = None
 
-# -- pdfmd --doc (v3.29.26): the documents of this version, offline ----------------------------------------------------
-# The build copies README.md, recipes.md, agents.md and CHANGELOG.md into the pdfmd_docs package (setup.py), so an installed pdfmd
-# has the documents of its own version; in a checkout they are the originals. `pdfmd --doc` lists them, `--doc NAME` shows one
-# (the Markdown when the output is not a terminal or with --print, else a web page it opens), `--doc NAME SECTION` a part of
-# one (a number counts the `##` headings), `--doc search WORD` finds the headings and lines that have the word, `--path` says
-# where the file is.
-# DOCUMENTS, DOC_URL, document_file, document_headings, document_section, search_documents, render_document and doc_command: lib/pdfmd_docs/reader.py (v3.33.9)
+# the first definitions in the parts after it (3.31.44; the same)
+CALC_BELOW: Path | None = None
 
+# Command-line GFM script, math and title settings.
+GFM_CLI: dict = {"scripts": None, "math": None, "title": None}
 
-# is_latex_preamble and top_level_tikzpicture: lib/pdfmd_tex (v3.33.36)
+# Command-line ASCII rendering and missing-picture settings.
+ASCII_CLI: dict = {"on": False, "missing": None}
 
+# what the document being built says (set by convert_one); None: the config's
+SOFFICE_TIMEOUT_NOW: float | None = None
 
-# wrap_latex_header_includes: lib/pdfmd_tex (v3.33.36)
+# Counts of features lost by the native renderer in this run.
+NATIVE_LOST: dict[str, int] = {}
 
+# --kit, parsed (None: not given; [OFF]: bare --kit / none)
+KIT_CLI: list | None = None
 
-# package_latex_keys (with the comment above it) and document_latex_definitions: lib/pdfmd_tex (v3.33.36)
+# --kit-stack, as given
+KIT_STACK_CLI = None
 
+# the TeX folder use_tex_install() put on PATH, for --doctor and --verbose
+TEX_FOUND_AT: Path | None = None
 
-# -- Discovered Lua filters: noticed, not blocked (v3.26.11) -----------------------------------------------------
-
-
-# -- Script-aware font fallback (v3.23.0) ----------------------------------------
-# The main font cannot draw everything a multilingual document says (STIX Two Text
-# has no Kazakh Cyrillic, no Arabic, no Han). pdfmd_unicode finds what is missing
-# by reading the fonts' own character tables, picks an installed font per script,
-# and this turns the result into a preamble plus a Lua filter that sets each run
-# of such text in its font. LaTeX engines that load fonts by name (lualatex,
-# xelatex) only; HTML and Typst do their own per-character fallback, and
-# pdfmd_unicode is optional (the module simply is not there in a lone pdfmd.py).
-# A document that has set up its own scripts (ucharclasses, \newfontfamily, xeCJK,
-# \babelfont, a font fallback variable) keeps its own way: --no-auto unicode
-# switches this off, and `pdfmd-options: {unicode: true}` forces it on regardless.
-# CODE_FONTS_TYPST, CODE_FONTS_HTML, EMOJI_FAMILIES and UNICODE_ENGINES: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
+# Cached system font index for this run.
 _FONT_INDEX = None
 
-
+# Cached managed font index for this run.
 _MANAGED_INDEX = None
 
-
-# font_args: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
-
-
-# unicode_code_text: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
-
-
-# unicode_forced: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
-
-
+# Command-line fallback-font override.
 FALLBACK_CLI: str | None = None
+
+# Command-line missing-glyph handling override.
 MISSING_CLI: str | None = None
 
+# main() clears it for --no-auto lookup
+FUZZY_LOOKUP = True
 
-# managed_fonts_css, check_fonts, describe_code_points and script_fallback: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
-
-
-# latin_candidates, cyrillic_candidates, strip_lookup_suffix, find_wildcard_markdown, lookup_key, lookup_query_keys, LookupAmbiguous,
-# lookup_field_matches, rank_lookup, lookup_fields, priority_enabled, source_markdown and document_priority, with LOOKUP_MIN_PREFIX,
-# LOOKUP_HEAD_BYTES, LOOKUP_TIERS, LOOKUP_FIELD_WORDS and GENERATED_MARKDOWN_ENDINGS: lib/pdfmd_lookup/__init__.py (v3.33.20)
-
-
-# --- Finding a document by something other than its exact file name (v3.21.0) -
-#
-# find_markdown() keeps its exact rules first (an existing path, a wildcard, a
-# case-insensitive stem, the Latin/Cyrillic spellings of it, "Пробный <name>").
-# Only when all of those fail does it fall through to the tiers below, which
-# compare *keys* instead of names, so `animportantdocument` finds
-# "An Important Document.md", `glyukoza` finds a document titled "Глюкоза", and
-# `animp` (announced with a WARN) finds the first of those by its start.
-#
-# A key keeps letters and digits only (case, spaces, `_`, `-`, `.`, `:` and
-# every other separator are gone, and so are accents) and writes Cyrillic in
-# Latin letters. It comes in two strengths: STRICT is a plain transliteration
-# (Latin ş = Cyrillic ш = "sh"), LOOSE also merges letters people swap when they
-# type a name in the other script (c/k/q, i/y/j, v/w, ё/е, ...).
-
-FUZZY_LOOKUP = True        # main() clears it for --no-auto lookup
-
-
-# Romanization packs beyond Cyrillic (see pdfmd_unicode/translit.py): none unless asked for with
-# --translit / PDFMD_TRANSLIT. Cyrillic is built in and on, unless `--translit none` says otherwise.
+# Enabled transliteration packs for document lookup.
 TRANSLIT_PACKS: frozenset[str] = frozenset()
+
+# Whether lookup transliterates Cyrillic names.
 TRANSLIT_CYRILLIC = True
 
+# --no-auto as given (set in main): the command line's layer of priority_enabled()
+NO_AUTO_CLI: list[str] | None = None
 
-# HEADING_FIELD_WORDS: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# --- Which document bare `pdfmd` builds (v3.32.9, entry 3eu) ---------------------------------------------------------------
-#
-# Bare `pdfmd` (and `pdfmd '#section'`) in a folder with several Markdown files used to stop with a list. Now the documents are
-# ranked (pdfmd_ranking has the rules, pure): a document's own `priority:` (a number, or a word such as `draft`, `final`, `never`),
-# the names of its siblings (`report.final.md` over `report.md` over `report_draft.md`) and, for equal tops, the newest file. An
-# exact name (`pdfmd report`) is untouched: it is the override. `--no-auto priority` brings the old list-and-stop back.
-
-NO_AUTO_CLI: list[str] | None = None    # --no-auto as given (set in main): the command line's layer of priority_enabled()
-
-# ranking_inherit_off, read_ranking_file, ranking_of_options, ranking_for_document, ranking_layers, ranking_clashes, bare_ranking,
-# priority_candidates and which_command, with RANKING_FILE and RANKING_DOCUMENT_KEYS: lib/pdfmd_ranking/choice.py (v3.33.19)
-
-
-# serve_main_document, serve_discovered, serve_live_filters, serve_core, serve_command and api_command: lib/pdfmd_serve/commands.py (v3.33.7)
-
-
-# --stamp / pdfmd-options.stamp: appends (or updates) a "BUILD NOTES" HTML
-# comment at/near the end of a document recording what compiled it and when
-# -- a lab-notebook-style provenance note, invisible in the rendered output
-# (every writer pdfmd targets drops a raw HTML comment) but visible to
-# anyone reading the .md source later. Modeled on a convention already kept
-# by hand in real reports (a `<!-- ===... BUILD NOTES ... ===-->` block
-# ending in a "Compiled with X vY, pdfmd vZ" line) -- this automates just
-# that one line, never touching whatever else the block already holds. Off
-# by default. See resolve_stamp_options, build_stamp_line and apply_stamp.
-
-
-# -- How long a build took (v3.31.4) --------------------------------------------------------------------------------
-# A timer starts with every build (BUILD["timer"]); the steps that matter carry @timed(...). The closing line says
-# `OK    report.md > report.pdf  in 3:07  (lualatex)`; --verbose adds a TIME line per step. `build-time: on|off` and
-# `time-format: auto|clock|seconds|words|TEMPLATE` (pdfmd-options, --setup, --build-time / --no-build-time, --time-format);
-# the package pdfmd_buildinfo writes the durations. The command line reaches -j workers as PDFMD_BUILD_TIME / PDFMD_TIME_FORMAT.
+# Command-line build-time display override.
 BUILD_TIME_CLI: bool | None = None
+
+# Command-line build-time formatting override.
 TIME_FORMAT_CLI: str | None = None
 
-
-# begin_timer: lib/pdfmd_buildinfo/build.py (v3.33.23)
-
-
-# resolve_build_time and attach_time: lib/pdfmd_buildinfo/build.py (v3.33.23)
-
-
-# time_breakdown: lib/pdfmd_buildinfo/build.py (v3.33.23)
-
-
-# -- The record of a build (v3.31.5) ---------------------------------------------------------------------------------
-# Every build writes what happened to a plain-text file in the cache (`cache: location`, global or beside the document):
-# the command line, the settings that decided, every command run, everything pdfmd printed (whatever --verbose said), what
-# the engines said, the steps and their times. A failed build prints where it is; `pdfmd --last-build FILE [--failed]` shows
-# it. The newest `build-log-keep` records stay, and the newest failed one whatever its age. `build-log: on|failed|off`,
-# `build-log-keep`, `build-log-max-size` (KB); the command line `--build-log MODE` reaches -j workers as PDFMD_BUILD_LOG.
-# It holds the console text, the CMD lines, the engines' output and the lines that only --verbose prints (v3.31.6: those
-# sites call vprint(), the first step of `emit`; WARN/NOTE/ERROR still print directly, and the console shows them anyway).
+# Command-line build-record mode override.
 BUILD_LOG_CLI: str | None = None
-# BUILD_LOG_MODES: lib/pdfmd_args (v3.33.40)
-# BUILD_LOG_KEEP, BUILD_LOG_KILOBYTES and record_module: lib/pdfmd_buildinfo/build.py (v3.33.23)
 
+# --preset (set in main)
+PRESET_CLI: str | None = None
 
-# _RecordTee, build_log_mode_word, resolve_build_log, build_record_folders and BuildRecorder: lib/pdfmd_buildinfo/build.py (v3.33.23)
+# --global-metadata / --no-global-metadata (set in main)
+GLOBAL_METADATA_CLI: bool | None = None
 
+# --metadata-precedence (set in main)
+METADATA_PRECEDENCE_CLI: str | None = None
 
-# last_build_command: lib/pdfmd_buildinfo/build.py (v3.33.23)
-
-
-# entry_line: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# notes_to_entries and entries_to_notes: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# HISTORY_SHOWN, backup_folders, document_versions, version_text, version_differs, restore_version, history_documents and linked_metadata: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# history_view_command, history_act, history_interactive, init_backups_command and history_command: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# --backup / pdfmd-options.backup: after a successful compile, copy the
-# source into a sibling backup directory. Taken AFTER stamp_after_success on
-# purpose, so the snapshot is exactly the file on disk; recompiling an
-# unedited document then matches the newest snapshot (see backup_unchanged)
-# and writes nothing. Off by default. Added v3.8.0 (2026-09-24); snapshot
-# name formats and recognition of hand-made backups added v3.9.0.
-#
-# BACKUP_FORMATS: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# _STRFTIME_PATTERNS and _COUNTER: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# LEGACY_BACKUP_DIRS and backup_directory: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# backup_template, fill_backup_template and backup_name_regex: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# _plain_backup_patterns: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# backup_snapshots: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# BACKUP_IGNORED_LINE_RE, backup_unchanged, backup_after_success, backup_pdf_pattern, backup_pdf_after_success and backup_summary: lib/pdfmd_history/backups.py (v3.33.28)
-
-
-# --- --extract-tables / --expand-tables (the work is in pdfmd_tables) -------------------------------------------
-
-# tables_command: lib/pdfmd_tables/command.py (v3.33.24)
-
-
-# -- Presets: other global metadata files to choose from (v3.28.19) ------------------------------------------------
-# `presets/NAME.yaml` beside the config file is a global metadata file like `metadata.yaml` (which is the preset
-# `default`): `--preset lab`, `pdfmd-options: {preset: lab}` (or lab.yaml; a path works too) takes it instead,
-# `--preset none` / `--no-global-metadata` / `pdfmd-options: {global-metadata: false}` takes none. The command line
-# wins, then the document's own pdfmd-options, its metadata files', then the config file's `options`.
-PRESET_CLI: str | None = None                  # --preset (set in main)
-GLOBAL_METADATA_CLI: bool | None = None        # --global-metadata / --no-global-metadata (set in main)
-
-
-METADATA_PRECEDENCE_CLI: str | None = None    # --metadata-precedence (set in main)
-
-
-# chapter_order: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# -- Parts (split-file) mode ------------------------------------------------
-# A long article-style document (a lab report) kept as one scaffold file --
-# front matter only, e.g. report.md -- plus a folder of parts beside it
-# (parts/ or sections/), each part a plain Markdown file that starts with its
-# own heading. The feature is OFF unless a `pdfmd-options: {parts: auto}` (or
-# `parts: <folder>`) is set, in the document's own front matter or -- the
-# intended place, so the content files carry no typesetting -- in a linked
-# metadata.yaml. With `auto`, a document is a scaffold only if one of
-# PARTS_DIR_ALIASES exists beside it, so every other document builds exactly
-# as before. A build joins the scaffold and every part in filename order
-# (numeric runs compare as numbers: 2-x before 10-y) into one Pandoc run --
-# the same single invocation -r/--report makes -- so labels, citations and
-# numbering behave as in one file. Paths inside parts stay relative to the
-# scaffold's folder (pandoc_cwd and TEXINPUTS already point there), so
-# splitting a monolith is a pure cut-and-paste.
-# PARTIAL_KEY: lib/pdfmd_assemble (v3.33.38)
-# PARTS_SKIP_DIRS: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# parts_directory: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# collect_parts to select_parts_and_sections: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# The sections of parts that a parts-mode build takes only a piece of (see
-# ScaffoldPlan.cuts), consulted by scaffold_inputs() wherever it runs -- the cache
-# route calls the build again, and this is what lets both see the same cuts.
+# Selected heading cuts for each parts source.
 PART_CUTS: dict[Path, list[Heading]] = {}
 
-
-# ScaffoldPlan, warn_shared_parts_folder: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# plan_scaffold: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# PART_FENCE, wrap_part, wrap_runs: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# scaffold_inputs: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# split_top_level_sections, slug_of and the section code (the banner `Rendering one section of an ordinary document`, ATX_HEADING_RE to scan_headings): lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# ATTRIBUTE_ID_RE to plan_sections: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-# split_into_parts: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-
-# -- HTML output and default-output (v3.19.4) --------------------------------
-# `pdfmd-options: {default-output: html}`: the format a document builds to when
-# the command line names none (no --to, no -o with a recognized extension, no
-# --stop-at, no -p). `pdfmd-options: {html: {...}}` shapes an HTML build:
-#   self-contained: true   one file with everything inlined (--embed-resources
-#                          --standalone; pdfmd's HTML output is otherwise a
-#                          fragment); maths defaults to MathML in fragments too,
-#                          the one kind that needs no network
-#   standalone: true       a full page, resources left linked
-#   math: mathml|mathjax|katex|webtex|plain
-#   css: file.css | [..]   --css, relative to the document
+# Cached Pandoc help text for capability checks.
 _PANDOC_HELP: str | None = None
 
-
+# Cached Pandoc data directory; False means not checked.
 _PANDOC_DATA_DIR: Path | None | bool = False
 
-
-# -- A citation style named by its URL (v3.27.27) -----------------------------------------------------------------
-# `csl: https://.../ieee.csl` needs the network and Pandoc's HTTP support, which a Homebrew Pandoc can lack ("pandoc
-# was compiled without HTTP support"). pdfmd fetches the style itself, once, into its cache (re-fetched after 30 days)
-# and hands Pandoc the file. Without the network it takes the copy it fetched before, however old; else a style of
-# the same file name in Pandoc's own csl/ folder, with a WARN; else `csl-fallback: default` (the default) builds with
-# Pandoc's default style, with a WARN, and `csl-fallback: error` stops. `--no-auto remotecsl` leaves the URL to Pandoc.
-
-
+# Cached Pandoc version tuple.
 _PANDOC_VERSION: tuple[int, ...] | None = None
 
+# --css FILE (repeatable)
+CSS_CLI: list[str] = []
 
-# -- Style sheets (v3.28.41) -------------------------------------------------------------------------------------
-# A style sheet for the writers that read CSS (HTML, EPUB, the HTML engines' PDF: WeasyPrint and the rest, Calibre) is found
-# beside the document as `<name>.css` or `pdfmd.css`, named by `css:` in the front matter or a metadata file (Pandoc's own
-# key), by `pdfmd-options: {css: FILE | [..]}`, or given as `--css FILE`; the later ones come after the earlier ones in the
-# page, as in CSS. With `css-scope: all` (`--css-scope all`) the part of it that means something to the other writers is
-# read as well (`pdfmd_css`): the paper and its margins (`@page`), the body's font, size, line spacing and indent, the colour
-# of links and the font of code become the Pandoc variables LaTeX, Typst and the rest take, below what the document, its
-# metadata and the command line set. `--no-auto css` turns the search for `<name>.css` and `pdfmd.css` off.
-CSS_CLI: list[str] = []                  # --css FILE (repeatable)
-CSS_SCOPE_CLI: str | None = None         # --css-scope
+# --css-scope
+CSS_SCOPE_CLI: str | None = None
 
-
-# `css_scope`, `css_names`, `css_sources`, `css_additions`, `css_heading_latex` and `css_heading_args` (with the `CSS_HEADING_*`
-# and `CSS_COLOURS` tables) live in `pdfmd_css.latex` (v3.33.10); the stand-ins are in the binding block above.
-
-
-# -- Stop-at stages (--stop-at markdown|tex|pdf) -----------------------------
-# The build is a pipeline: the document's parts are joined into ONE Markdown
-# text, Pandoc turns that into a standalone .tex, a LaTeX engine turns the
-# .tex into a PDF. --stop-at ends it early, after the named stage. `tex` is
-# simply `--to latex` (`beamer` with -p); `markdown` is pdfmd's own stage,
-# handled here: the text Pandoc would be given, written out as one file.
-# ASSEMBLED_FORMAT is the internal pseudo target-format that carries it
-# through the same code paths as a real one (output naming, batch, report).
-# STOP_STAGES: lib/pdfmd_args (v3.33.40)
-# ASSEMBLED_COMMENT: lib/pdfmd_assemble (v3.33.38)
-
-
-# mark_assembled: lib/pdfmd_assemble (v3.33.38)
-
-
-# -- Comments: lib/pdfmd_comments (v3.22.0, v3.22.4) ---------------------------
-# Stripping `<!-- -->`, LaTeX `%` and CSL comments, and the strip-comments policy, live in pdfmd_comments.
-# fence_after, FENCE_LINE_RE, FENCE_RE and COMMENT_KINDS live there too (v3.33.273); FENCE_RE also serves
-# the native converter's line scan.
-# --strip-comments-in / --keep-comments-in (kind sets); --strip-comments / --keep-comments is STRIP_COMMENTS_CLI.
+# Comment kinds explicitly stripped by the command line.
 STRIP_KINDS_CLI: frozenset[str] = frozenset()
+
+# Comment kinds explicitly retained by the command line.
 KEEP_KINDS_CLI: frozenset[str] = frozenset()
 
-
-# BIB_LINK_RE, BIB_SUFFIXES, PANDOC_CITE_RE and LATEX_CITE_RE: lib/pdfmd_assemble (v3.33.38)
-
-
-# used_citation_keys, filter_bibliography, assemble_markdown_text and write_assembled_markdown: lib/pdfmd_assemble (v3.33.38)
-
-
-# -- Embedding (--embed-metadata, v3.19.1) -----------------------------------
-# An assembled file normally holds just the text; the metadata YAML, LaTeX
-# preamble and Lua filters pdfmd discovers beside the original stay there.
-# --embed-metadata folds them into the file, so it builds the same without
-# them:
-#   * metadata: the discovered YAML files, merged the way Pandoc merges them
-#     (a later file replaces an earlier one, the document replaces both, per
-#     top-level key), with the document's own front matter, into ONE block;
-#     `pdfmd-options` is merged by pdfmd's own rule instead (the document,
-#     then the files in order; the first to name a key wins, mappings
-#     field by field), and a file's `no-auto`/`parts` are not carried;
-#   * preamble: the preamble file(s) as raw LaTeX at the head of the
-#     document's `header-includes` (a literal block, the one shape
-#     wrap_latex_header_includes and document_header_includes both read);
-#   * lua: each filter as a fenced `{=pdfmd}` raw block at the very bottom
-#     (Pandoc ignores raw blocks of formats it does not know, so even a
-#     reader that never extracts them prints nothing), or, with --lua-mode
-#     ref, as a path in `pdfmd-options.lua-filter`.
-# The kinds embedded are listed in the file's own `pdfmd-options: no-auto`, so
-# the discovery that would find them a second time stays off.
-# FILE_ONLY_OPTION_KEYS (with its comment): lib/pdfmd_assemble (v3.33.38)
-
-
-# -- Folder settings (v3.29.10) -----------------------------------------------------------------------------------------
-# `.pdfmd/config.yaml` in the document's folder or any folder above it: the same `options:` as the global config, for what is
-# under that folder. Nearest first; a layer that says `inherit: false` ends the walk upward; they sit between the document's
-# metadata files and the global config (the author's layer order). Only `options:` is read from a folder: `translit`, `setup-ui`
-# and `disabled` are this machine's and are ignored there, with a WARN. A folder's options cannot name code: the keys that
-# name a Lua filter or a preamble (`lua-filter`, `preamble`) are read from the document's own front matter only, and the
-# engine is chosen from pdfmd's list. A file owned by another user (a shared /tmp) is not read. Paths in a folder's options
-# (`css: house.css`) are relative to the document, as everywhere, not to the folder file.
-# FOLDER_SETTINGS = ".pdfmd/config.yaml": lib/pdfmd_ranking/choice.py (v3.33.19)
-
-
-# EmbedPlan: lib/pdfmd_assemble (v3.33.38)
-
-
-# render_embedded_block: lib/pdfmd_assemble (v3.33.38)
-
-
-# -- The attached source holds its text files, editable (v3.28.39) ------------------------------------------
-# After the text: the .tex files it reads (\input), then the CSV and other data, then what was always at the end (filters,
-# history, bibliography, citation style), each as a `type: file` block with its path from the document's folder. A block
-# can say `also:` (more paths with the same content: two symlinks to one chemicals.tex are one block). The text carries
-# `<!-- pdfmd-at: ... -->` comments that say on which line of this very file each one is: one index after the front matter
-# and one before each block that names a file (`file="x.csv"`, `\input{x}`). They are rewritten whenever the source is
-# written and taken out wherever it is read (strip_location_markers), so a line number never outlives an edit.
-# INLINE_SUFFIXES, INLINE_LIMIT and INLINE_ORDER: lib/pdfmd_attach (v3.33.37)
-
-
-# render_embedded_file: lib/pdfmd_assemble (v3.33.38)
-
-
-# block_places, drop_blocks and drop_duplicate_blocks: lib/pdfmd_attach (v3.33.37)
-
-
-# inline_candidates and inline_blocks: lib/pdfmd_attach (v3.33.37)
-
-
-# safe_relative_path, parse_embedded_blocks, and the trust store (its comment, trust_store_path, trusted_hashes and
-# remember_trusted): lib/pdfmd_assemble (v3.33.38)
-
-
-# split_preamble_parts, unpack_assembled and slim_assembled: lib/pdfmd_assemble (v3.33.38)
-
-
+# Document that owns the currently unpacked embedded resources.
 _RESOURCE_OWNER: Path | None = None
 
-
-# embedded_resources (_RESOURCE_OWNER, the state it keeps, stays here): lib/pdfmd_assemble (v3.33.38)
-
-
-# literal_block: lib/pdfmd_assemble (v3.33.38)
-
-
-# strip_embedded_option_names, relative_filter_path, lua_checks_format, apply_lua_filters and embed_into_text:
-# lib/pdfmd_assemble (v3.33.38)
-
-
+# Command-line output replacement override.
 REWRITE_CLI: bool | None = None
 
+# labels a partial cache build took from the last full build
+LAST_SEEDED = 0
 
-# --bopen SPEC (v3.28.20): which of a batch's finished files are opened. A spec is a comma list of selectors, each with
-# any whole number N from 1: fN the first N, lN the last N, flN the first half and the last half (the first gets the odd
-# one: fl15 = 8 + 7), eN every Nth (the Nth, the 2Nth ...), all (or no spec). The files chosen by any selector open, once
-# each, in the order the batch lists them.
+# --cache-location (set in main)
+CACHE_LOCATION_CLI: str | None = None
 
+# --strict / --no-strict (set in main)
+STRICT_CLI: bool | None = None
 
-# engine_failure_reason, TEX_CAUSES, TEX_PACKAGES and tex_failure_cause: lib/pdfmd_tex (v3.33.36)
-# TEX_PROBE_DOCUMENT, TEX_PROBES, probe_tex_cause, SHOWN_LOCATIONS, LATEX_CONTEXT_RE, source_line_for, latex_error_location and
-# report_engine_failure: lib/pdfmd_tex/failure.py (v3.33.237)
+# -e as given ("" a bare -e), for lib/pdfmd_chain's pinned engine (set in main)
+ENGINE_CLI: str | None = None
 
+# --engine-fallback MODE (lib/pdfmd_chain; set in main)
+ENGINE_FALLBACK_CLI: str | None = None
 
-# Direct .tex compilation (v3.1.0): the comment, its constants and the functions above tex_argument: lib/pdfmd_tex (v3.33.36)
-# tex_argument: lib/pdfmd_tex/failure.py (v3.33.237)
+# --seed-labels (set in main)
+SEED_LABELS_CLI: str | None = None
 
+# labels the last build took from the scan (for the closing NOTE)
+LAST_SCANNED = 0
 
-# latex_engine_command and run_tex_engine: lib/pdfmd_tex (v3.33.36)
+# ... and whether they came from a draft pass
+LAST_EXACT = False
 
+# ... and how many it left out (after a caption it could not count)
+LAST_SKIPPED = 0
 
-LAST_SEEDED = 0   # labels a partial cache build took from the last full build
+# the last build numbered the whole document and kept the part (select.lua)
+LAST_WHOLE = False
 
+# --seed-calc (set in main)
+SEED_CALC_CLI: str | None = None
 
-# cache_root: lib/pdfmd_cache/__init__.py (v3.33.33)
+# --cache-plots (set in main)
+CACHE_PLOTS_CLI: bool | None = None
 
-
-# -- Probes: a version or a capability asked of a program ----------------------------------------------------------------
-
-
-# TEMPORARY_PLACES, folder_is_writable and temporary_place: lib/pdfmd_cache/__init__.py (v3.33.33)
-
-
-# CACHE_LOCATION_NAMES: lib/pdfmd_cache/__init__.py (v3.33.33)
-CACHE_LOCATION_CLI: str | None = None     # --cache-location (set in main)
-
-
-# cache_location and document_cache_root: lib/pdfmd_cache/__init__.py (v3.33.33)
-
-
-# source_fingerprint: lib/pdfmd_cache/__init__.py (v3.33.33)
-
-
-# adopt_moved_cache and cache_directory: lib/pdfmd_cache/__init__.py (v3.33.33)
-
-
-# -- Which engine built the file, and --strict (v3.26.10) --------------------------------------------------------
-# The closing line names the engine that made a PDF (`OK    report.md  (lualatex)`) and, when an earlier one was tried
-# and failed, which (`(typst; lualatex failed)`): a build that quietly fell back used to look the same as one that did
-# not. `--strict` (or `pdfmd-options: {strict: true}`) turns a build that printed any WARN line, or that Pandoc warned
-# about, into a failed file (its output is kept; the exit code is 1), for scripts and CI.
-STRICT_CLI: bool | None = None             # --strict / --no-strict (set in main)
-ENGINE_CLI: str | None = None              # -e as given ("" a bare -e), for lib/pdfmd_chain's pinned engine (set in main)
-ENGINE_FALLBACK_CLI: str | None = None     # --engine-fallback MODE (lib/pdfmd_chain; set in main)
-
-
-# -- Size budgets: --max-asset-mb, --max-output-mb (v3.26.18) -----------------------------------------------------
-# A picture of 30 MB or a PDF that no mail server takes is found out late. With a budget set (the command line, else
-# `pdfmd-options: {max-asset-mb: 5, max-output-mb: 20}`), a build says which image is over it before it starts and
-# which file is over after it, as WARN lines (so --strict fails them); `--check` reports the images (asset-large).
-# The command line reaches -j workers as PDFMD_MAX_ASSET_MB / PDFMD_MAX_OUTPUT_MB, as --strict does.
-
-
-# -- A `$...$` that is not math: the closing `$` is followed by a digit (v3.32.48) ----------------------------------
-# Pandoc reads `$...$` as math only when the closing `$` has no space before it and no digit after it (so that
-# "costs $5 or $10" stays text). `$\geq$3` and `$\pm$10` are therefore text, with the dollars printed (the gfm
-# reader) or the dollars printed and the command run in text mode (Pandoc's Markdown), and nothing says so; in
-# a LaTeX build the text-mode `\geq` then lacks a glyph in the main font. The leftover is found in the AST
-# the reader gave, where a failed `$...$` is plain Str / raw TeX and a real one is Math.
-
-
-# -- The cross-references of a part built alone, counted from the sources (v3.26.0; see pdfmd_labels) --------------
-# `pdfmd-options: {seed-labels: auto|aux|scan|draft|off}` / --seed-labels. A partial build (a part, or a section of an
-# ordinary document) used to know the labels of the rest only from the last full build's .aux (cache on). The scan
-# does not need that build: Pandoc writes the LaTeX of the WHOLE document once more (no images, no engine), pdfmd_labels
-# reads which headings, captions, equations and labels it holds, and LaTeX replays those at the start of the part, so
-# the document's own number style applies. The .aux, when there is one, still comes first.
-SEED_LABELS_CLI: str | None = None         # --seed-labels (set in main)
-LAST_SCANNED = 0                           # labels the last build took from the scan (for the closing NOTE)
-LAST_EXACT = False                         # ... and whether they came from a draft pass
-LAST_SKIPPED = 0                           # ... and how many it left out (after a caption it could not count)
-LAST_WHOLE = False                         # the last build numbered the whole document and kept the part (select.lua)
-
-
-# pdfmd_labels_modes: lib/pdfmd_args (v3.33.40)
-
-
-SEED_CALC_CLI: str | None = None           # --seed-calc (set in main)
-
-
-# -- Plot cache (pdfmd-options: {cache: {plots: true}}, --cache-plots) --------
-# A package's picture macros (nulabreport >= 1.26.0, section 15b, was the first) look each whole
-# picture up by a key; on a hit they include the PDF stored here at the
-# stored size, on a miss they typeset as always and log the call to
-# <jobname>.pdfmdreq. After the build pdfmd renders those logged calls, each in
-# a small standalone job that loads the SAME preamble the document used (cut
-# from the generated .tex) and ships the picture out as a page of exactly its
-# size, ready for the next build. The finished PDF never depends on this having
-# worked: a miss is an ordinary inline plot.
-#
-# What stops it going stale, since a stale plot would be worse than a slow one:
-#   * the directory is keyed by a hash of everything the picture can depend on
-#     apart from its own arguments -- the packages' style files, the
-#     document's whole preamble (fonts, settings, preamble.tex, header-includes),
-#     the engine's version, when TeX Live's packages last changed (its package
-#     database, rewritten by every `tlmgr update`), and this cache's format -- so a
-#     changed package or setting simply lands in a new directory, and the old one
-#     is pruned;
-#   * every entry records the files its standalone job actually read (LaTeX's
-#     own recorder, not a guess at argument names) under the report's folders and
-#     the user's own TeX trees (TEXMFHOME, TEXMFLOCAL: a package's vendored files),
-#     with their SHA-1, and is dropped before the next build if any of them
-#     changed or vanished -- a CSV edit shows up;
-#   * the key includes the picture's arguments and the layout it read (text
-#     height/width, font size), so a different call or a different page
-#     geometry is a different entry.
-# The directories live in the document's own cache folder (v3.27.28; they were
-# shared by every document, and the three newest were kept, so building three
-# other reports threw a report's plots away). What pdfmd itself adds to one build's
-# preamble (a part's label replay, which names a temporary file, and the counter
-# markers) is left out of the preamble the plots are keyed by and drawn with, and the
-# key leaves out the title, which a part does not typeset (plot_key_text), so a part
-# built alone uses the full build's plots instead of a directory of its own. A part
-# whose preamble really differs (Pandoc writes the citation commands only for a part
-# that cites, table packages only for one with tables) keeps a directory of its own,
-# drawn once and reused at its next build: eight are kept per document.
-# PLOT_CTX_TWICE, PLOT_CTX_MARGIN and PLOT_CTX_PLAIN: lib/pdfmd_tex (v3.33.36)
-CACHE_PLOTS_CLI: bool | None = None   # --cache-plots (set in main)
-
-
-# tex_tree_stamp: lib/pdfmd_tex (v3.33.36)
-
-
-# plot_preamble: lib/pdfmd_tex (v3.33.36)
-
-
-# plot_recorded_inputs, render_plot_requests, AUX_CLEAN_SUFFIXES and compile_tex_direct: lib/pdfmd_tex (v3.33.36)
-
-
-# Direct office-document conversion, and the "soffice" PDF-engine fallback
-# (v-next / Phase 2 of the round documented in v3.1.0's own changelog
-# entry): both go through run_soffice_convert(), which shells out to
-# headless LibreOffice with a fresh --env:UserInstallation profile per
-# call -- concurrent/rapid-fire soffice invocations (batch mode's -j)
-# otherwise collide on the shared default profile's lock file and fail
-# with "another instance is already running."
-#
-# .docx/.pptx/.xlsx/.odt/etc. INPUT (convert_office_direct) skips Pandoc
-# entirely, the same reasoning as compile_tex_direct for raw .tex: Pandoc
-# can read .docx/.odt but round-trips them through its own AST first,
-# losing layout Pandoc's writer doesn't reproduce; it can't read .pptx/
-# .xlsx/.ppt/.xls at all, so those never reached a PDF through pdfmd
-# before this. See module docstring ("Input formats") for the "officedirect"
-# --no-auto KIND that opts a .docx/.odt back into the old Pandoc route.
-#
-# "soffice" as a PDF-engine CANDIDATE (convert_via_soffice_bridge) is a
-# different thing: a Markdown (or other Pandoc-readable) SOURCE, tried as
-# the very last resort in an unrestricted fallback chain, after every
-# tex/typst/html engine has failed or is missing. Pandoc has no native
-# "write ODT, then shell out to LibreOffice" --pdf-engine, so this is
-# special-cased in convert_one's own fallback loop rather than built as a
-# real --pdf-engine=soffice command the way every other candidate is.
-
-
-# run_soffice_convert, convert_office_direct and convert_via_soffice_bridge: lib/pdfmd_bridge/__init__.py (v3.33.26)
-
-
-# PANDOC_TABLE_STYLE_RE, CALIBRE_TABLE_CSS, calibre_html_command, calibre_page_options and run_calibre: lib/pdfmd_bridge/__init__.py (v3.33.26)
-
-
-# start_soffice_job: lib/pdfmd_bridge/__init__.py (v3.33.26)
-
-
-# run_calibre_convert, browser_page_css and run_browser_print: lib/pdfmd_bridge/__init__.py (v3.33.26)
-
-
-# -- Source attached to the PDF (v3.22.1) ---------------------------------------
-# `pdfmd-options: {attach-source: true}` (alias `embed-source`), --attach-source:
-# after a successful PDF build, the document's whole source -- the assembled
-# Markdown of --assemble-only with every kind embedded, the same file that
-# builds the same PDF anywhere -- is attached to the PDF as a file attachment
-# (PDF's own /EmbeddedFiles, listed by any viewer), beside a small manifest that
-# records the original layout (file names and where they sat, a part's
-# boundaries and its dropped front matter, the images the text points at).
-# `pdfmd --restore FILE.pdf` writes the layout back. Comments are stripped from
-# the attached copy unless strip-comments says otherwise (they are notes to
-# oneself; a PDF travels). Engine-independent (pypdf, after the build), and
-# nothing is attached unless asked for: the source holds everything the author
-# wrote, comments and drafts included.
-# The manifest's `format`: 1 = the layout of v3.22 to v3.28.37 (files as attachments); 2 = v3.28.38 and later (the chain of
-# folders, text files as blocks of the source with line markers, `eol: crlf`, `..` files). A pdfmd that reads up to 1 refuses a
-# 2 with "upgrade pdfmd" instead of restoring half of it; this one reads both. 3 = v3.31.36: the manifest holds `layers`, the
-# options of the folder settings the build used, restored to `.pdfmd/config.yaml`; a pdfmd that does not know them would
-# restore a report that builds differently. It is written ONLY for a source that has layers: every other manifest stays 2,
-# so a PDF is not refused by an older pdfmd for nothing.
-# ATTACH_FORMAT_PLAIN: lib/pdfmd_attach (v3.33.37)
+# Command-line source attachment override.
 ATTACH_CLI: bool | None = None
-# --bundle [all] / --no-bundle: None (the document decides), "off", "referenced", "all".
+
+# Command-line source bundle mode override.
 BUNDLE_CLI: str | None = None
-# --verbose: --restore and --unpack list every file instead of counting them by folder (v3.28.15)
+
+# Whether this run prints verbose discovery and command output.
 VERBOSE_OUTPUT = False
-# --attach-bibliography used|all (None: the document's pdfmd-options decide).
+
+# Command-line bibliography attachment mode override.
 BIB_ATTACH_CLI: str | None = None
-CSL_ATTACH_CLI: bool | None = None    # --attach-csl / --no-attach-csl
-# --bundle-packages / --no-bundle-packages (None: the document decides).
+
+# --attach-csl / --no-attach-csl
+CSL_ATTACH_CLI: bool | None = None
+
+# Command-line package bundling override.
 BUNDLE_PACKAGES_CLI: bool | None = None
 
-
-# GLOBAL_LAYOUT_PATH (with its comment) and RAW_REFERENCE_RES: lib/pdfmd_attach (v3.33.37)
-# BUNDLE_SKIP_SUFFIXES, PATH_TOKEN_RE, REFERENCE_EXTENSIONS and SCANNED_SUFFIXES, with their comments: lib/pdfmd_attach (v3.33.37)
-
-# attached_bundle_mode: lib/pdfmd_attach (v3.33.37)
-
-
-# layout_path and referenced_images: lib/pdfmd_attach (v3.33.37)
-
-
-# The comment on the user's own TeX tree, PACKAGE_RE, CLASS_RE, TEX_INPUT_RE and PROVIDES_RE: lib/pdfmd_attach (v3.33.37)
-# GRAPHIC_SUFFIXES, BUNDLE_IMAGE_SUFFIXES (with its comment), TEX_SOURCE_SUFFIXES and TEX_TREE_SCAN_LIMIT: lib/pdfmd_attach (v3.33.37)
-
-
-# tex_distribution_roots, GRAPHIC_ARGUMENT_RE, MACRO_VALUE_RE and graphic_names_in to bundle_reach: lib/pdfmd_attach (v3.33.37)
-
-
-# bundle_files, attachment_manifest and attached_source: lib/pdfmd_attach (v3.33.37)
-
-
-# resolve_bibliography_pruning, resolve_csl_attach, add_deflated_attachment, write_pdf_attachments and read_pdf_attachments: lib/pdfmd_attach (v3.33.37)
-
-
-# FONT_KEYS and resolve_bundle_packages: lib/pdfmd_attach (v3.33.37)
-
-
-# attachment_requirements: lib/pdfmd_attach (v3.33.37)
-
-
-# folder_counts: lib/pdfmd_restore/__init__.py (v3.33.29)
-
-
-# csv_block_files, source_attachments and attach_source_after_success: lib/pdfmd_attach (v3.33.37)
-
-
-# -- Markdown that carries its source (v3.26.4) -----------------------------------
-# `--keep-source [packed|readable]`, `pdfmd-options: {keep-source: true|packed|readable}`: a Markdown output (--to gfm,
-# gfm+raw, markdown, commonmark ...) ends with one HTML comment holding the same entries --attach-source puts into a PDF
-# (see pdfmd_flat/keep.py for the encodings and why nothing in the source can close the comment). `pdfmd --restore
-# FILE.md` writes them back into FILE.restored/. A whole build only (not a part or a section), like --attach-source.
+# Command-line source retention mode or path override.
 KEEP_SOURCE_CLI: str | bool | None = None
 
+# set by `-o -` on PDF inputs (v3.30.39)
+PDF_TO_STDOUT_CLI = False
 
-# keep_source_after_success: lib/pdfmd_attach (v3.33.37)
+# filled in by main() from the command line
+POLISH_CLI: dict = {}
 
+# --paper, also used by the native renderers
+PAPER_CLI: str | None = None
 
-# -- The images the PDF itself carries (v3.22.6) --------------------------------
-# A plain attach (no --bundle) does not store the images the text points at, but the PDF
-# holds every one it drew. The manifest records, for each, which picture of the PDF is
-# it, and --restore takes it out again: a JPEG is the very same bytes (every engine
-# embeds the file's own stream), a PNG or other raster comes back as a PNG of the
-# pixels the PDF holds (the picture is the same; the file is not byte-identical, and an
-# alpha channel is kept), an SVG or PDF figure as a one-page PDF of the vector drawing
-# (a restored `fig.svg` is `fig.pdf`, and the restored Markdown points at it). A picture
-# is found by its size and its order in the PDF, a JPEG by its bytes; a figure drawn by
-# something other than an image or a form (TikZ, pgfplots) was never a file.
-# (the PNG helpers, the picture search and extraction and the image-path rewriting moved to lib/pdfmd_pdfimages, v3.33.14)
+# inkmd's own compile options, from the command line
+INKMD_CLI: dict = {}
 
-
-# restored_image_paths: lib/pdfmd_restore/__init__.py (v3.33.29)
-
-
-# -- PDF in, Markdown out (v3.22.7) ---------------------------------------------
-# A PDF given to pdfmd is read, not built: the direction follows the files (a .pdf input,
-# `-o x.md`, `--to md`). If the PDF carries a pdfmd source it is restored (see --restore),
-# the exact thing that was written; otherwise the pages are read by batchocr, which owns
-# all of the PDF-to-Markdown work (text layer or OCR, reading order, headings, tables)
-# and which pdfmd only finds, checks the version of, and hands the PDF and every flag
-# pdfmd does not know itself -- as unknown flags go to Pandoc when a PDF is built.
-# BATCHOCR_REPOSITORY and BATCHOCR_TAG: lib/pdfmd_routing/__init__.py (v3.33.25)
-# BATCHOCR_TEXT_MIN, PDF_READ_FORMATS, batchocr_spec and find_batchocr: lib/pdfmd_routing/__init__.py (v3.33.25)
-
-
-# install_ocr_tools, batchocr_missing_message and pdf_read_target: lib/pdfmd_routing/__init__.py (v3.33.25)
-
-
-# An ebook as input (v3.29.1). Pandoc reads an EPUB but not a MOBI, an AZW3, a KEPUB, a LIT, an LRF ...; Calibre turns those
-# into an EPUB, and Pandoc turns the EPUB into Markdown (with its pictures) in a scratch folder: the document is then built as
-# any Markdown file is, to the PDF (or the format) named, beside the book. (An EPUB goes straight to Pandoc.) The Markdown
-# is the editable form: `pdfmd book.mobi -o book.md` keeps it. DRM-protected books and ebooks that are only pictures
-# (comics, scans: no text for Pandoc to read) are not handled.
-# EBOOK_INPUT_EXTENSIONS and route_ebook_input: lib/pdfmd_routing/__init__.py (v3.33.25)
-
-
-PDF_TO_STDOUT_CLI = False        # set by `-o -` on PDF inputs (v3.30.39)
-
-
-# route_pdf_input, text_to_markdown_mode and route_text_input: lib/pdfmd_routing/__init__.py (v3.33.25)
-
-
-# RESTORE_CHAIN, restore_chain and the rest of the restore code (restore_target_name to layout_from_source): lib/pdfmd_restore/__init__.py (v3.33.29)
-
-
-# --- Finishing the built PDF: bookmarks, running header/footer, linked files ----------------
-# Ideas from mdpdf (MIT, github.com/normanlorrain/mdpdf): a small Markdown-to-PDF tool whose own
-# renderer needs PyMuPDF (AGPL), which pdfmd does not use. The ideas are done here on the finished
-# PDF with pypdf, so they work with every engine: headings become PDF bookmarks (when the engine
-# made none), a "left,middle,right" template prints a running header and footer, and local files
-# the document links to are attached to the PDF with a paperclip in the margin beside the link. All of it is
-# off unless asked for (`--bookmarks`, `--header`, `--footer`, `--attach-links`, `--pdf-title` ...),
-# except under the `mdpdf` command, which asks for bookmarks and attachments like mdpdf does.
-
-POLISH_CLI: dict = {}                       # filled in by main() from the command line
-PAPER_CLI: str | None = None                # --paper, also used by the native renderers
-INKMD_CLI: dict = {}                        # inkmd's own compile options, from the command line
-
-
-# `parse_hf_template`, `fill_hf_field`, `markdown_headings`, `search_form`, `locate_headings`, `outline_entries`, `hf_text`,
-# `hf_overlay`, `local_file_of_link`, `polish_wanted` and `polish_pdf` (with `HF_FIELDS`, `HF_FONT`, `HF_SIZE`, `HF_MARGIN` and
-# `LINKED_FILE_LIMIT`) live in `pdfmd_polish` (v3.33.13); the re-exports are in the binding block above.
-
-
-# (the `mdpdf`, `md2pdf`, `inkmd`, `batchmd` and `pan-tec` command translations moved to lib/pdfmd_compat, v3.33.15; their *_main entry points are re-exported in the binding block)
-
-
-# The hybrid PDF (v3.25.10): lib/pdfmd_hybrid (its explanation is there). These two stay: main() rebinds the first,
-# the attachment readers above read the second.
+# Command-line hybrid PDF override.
 HYBRID_CLI: bool | None = None
 
-
-# build_parser: lib/pdfmd_args (v3.33.40)
-
-
-# What main() keeps in module globals from the command line: every *_CLI name, and these. -j workers are fresh processes
-# (macOS and Windows spawn them, they do not fork), so they get a copy of it (v3.27.3); before that, --line-numbers,
-# --fallback, --raw, --keep-source ... did not reach a document built by a worker. tests/test_jobs.py checks that every
-# `core.NAME = ...` of run_main (lib/pdfmd_run) is covered.
+# Non-CLI state copied to spawned batch workers alongside every *_CLI setting.
 WORKER_GLOBALS = ("SHOW_FULL_PATHS", "PATH_STYLE", "PATH_UP", "CITEPROC_DISABLED", "FUZZY_LOOKUP", "PART_CUTS", "VERBOSE_OUTPUT")
-
 
 def worker_state() -> dict:
     return {name: value for name, value in globals().items()
             if (name.endswith("_CLI") or name in WORKER_GLOBALS) and not callable(value)}
-
 
 def restore_worker_state(state: dict) -> None:
     globals().update(state)
     pdfmd_view.tolerant_streams()
     load_package("pdfmd_log").AUTO_LOG.quiet = True      # the parent prints what a batch found; a worker's summary would repeat per file (v3.28.16)
 
-
-# Whole features switched off (v3.27.8): `disabled: [history, tables]` in config.yaml (pdfmd --setup, d) names topics of
-# pdfmd_help.TOPICS; their options leave --help, completion and the setup screen, and the command line refuses them
-# unless --disabled is given. What a document's own pdfmd-options asks for still applies: a document from someone
-# else builds the same.
+# Whether this run has reported disabled features.
 DISABLED_WARNED = False
 
 
