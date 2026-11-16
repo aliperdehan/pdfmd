@@ -19,6 +19,30 @@ same commit as the change.
 
 ---
 
+## v3.33.249 — 2026-11-16
+
+Pre-edit state: commit `49a4575`. Phase 2 of the split, wave 3, move 20: Lua-filter discovery, the trust store and
+missing-filter fallbacks move to `lib/pdfmd_filters/lua.py`, with PDFMD_LUA_WARNED. A pure move. The reviewer changed
+the target from pdfmd_lua.filters because pdfmd_lua is optional: the discovery and fallback must work without it.
+By hand, SPLIT.md's heading and destination are changed before running the tools, with that reason recorded there;
+no split-tool data names the old target. The tool accepted the new key without refusals, moved thirteen statements,
+made thirteen `core.` rewrites, added five names to the table and left lua_filter_file and pdfmd_lua_missing as
+stand-ins for their bare callers. Its AST self-check passed. By hand, the discovered-filter section banner is restored
+to pdfmd.py; the seven trust-store comments move with lua_known_path. lua_filter_file keeps contextmanager and its
+optional pdfmd_lua import inside the try/except; PDFMD_LUA_WARNED is the same mutable set served by the table.
+The version, this entry and SPLIT.md's progress heading are updated by hand. No packaging change is needed.
+`pdfmd.py`: 9,939 -> 9,748 lines.
+
+Proof: Ruff's F checks pass. The section's tests, every test module naming a moved name, the always-run set and
+test_split_tools: thirteen modules, 259 tests, 239 passed, one skipped (prompt_toolkit is installed), three failures
+and sixteen errors, all nineteen requiring blocked sockets in test_serve. test_lua_missing passes, including the
+real build without pdfmd_lua and its once-only warning. Tests use scratch TeX config/cache folders; the real
+build-cache listing is unchanged (116 entries; the sandbox prevents writes there). split_check's lua-discover
+HTML and lua-known DOCX extras build a document with a discovered local Lua filter and then reuse its saved digest:
+SAME, 32 checks, no BOTH FAILED. Start-up has the same 205 modules; interleaved scripts/pdfmd --version best/median
+of ten: 232/245 ms before, 221/240 ms after (the harness's sequential runs: 145/147 and 184/221 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.248 — 2026-11-16
 
 Pre-edit state: commit `b047c74`. Phase 2 of the split, wave 2, move 19: output formats, filename inference,

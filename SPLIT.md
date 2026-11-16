@@ -414,9 +414,11 @@ Tests: `test_calibre_targets`, `test_bopen`.
 
 ### Wave 3: the middle layer
 
-#### 20. `pdfmd_lua.filters` (existing package): 12 definitions, 1 constants, ~198 lines
+#### 20. `pdfmd_filters.lua` (existing package): 12 definitions, 1 constants, ~198 lines; done in 3.33.249
 
-Goes to `lib/pdfmd_lua/filters.py`.
+Goes to `lib/pdfmd_filters/lua.py`.
+
+The discovery, trust store and missing-filter fallback live outside optional `pdfmd_lua` so builds still work without it.
 
 Definitions: `package_lua_names`, `find_lua_filters`, `lua_known_path`, `lua_folders_path`, `lua_digest`, `known_lua`, `remember_lua`, `trusted_lua_folders`, `check_lua_filters`, `trust_lua`, `pdfmd_lua_missing`, `lua_filter_file`.
 
