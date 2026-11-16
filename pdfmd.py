@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.251"
+PDFMD_VERSION = "3.33.252"
 import argparse
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1895,6 +1895,9 @@ names("pdfmd_unicode.document", "unicode_module managed_index managed_face templ
                                 "fallback_settings mainfont_choice name_candidates has_mainfont has_font_setting "
                                 "has_code_spans UNICODE_UNCOVERED UNICODE_CODE_FONTS missing_glyph_warning "
                                 "missing_glyph_codes retry_font_note")
+names("pdfmd_parts", "PARTS_DIR_ALIASES PARTIAL_METADATA parts_setting REPORT_BUILD split_section_requests "
+                     "scaffold_metadata_files LEADING_FRONT_MATTER_RE strip_part_front_matter print_parts DIV_FENCE_RE "
+                     "print_headings")
 document_font_setting = deferred("pdfmd_unicode.document", "document_font_setting")
 fonts_directory = deferred("pdfmd_unicode.document", "fonts_directory")
 skip_never = deferred("pdfmd_lookup.find", "skip_never")
@@ -6046,6 +6049,7 @@ def metadata_file_yaml(path: Path) -> dict:
     frontmatter_pdfmd_options, since a metadata file's pdfmd-only settings
     are optional sugar, never a hard dependency.
     """
+    LEADING_FRONT_MATTER_RE = sys.modules[__name__].LEADING_FRONT_MATTER_RE
     if yaml is None:
         return {}
     try:
@@ -6686,6 +6690,7 @@ def stamp_build(partial: bool, skip: bool, md_path: Path, *args, **kwargs) -> No
     stamp into the source (it would claim the report was built) -- but its PDF still says what made it (Creator,
     PdfmdVersions, PdfmdBuildDate, and PdfmdPartial naming the parts). `skip`: an intermediate stage (the cache route's
     .tex), which the final stage stamps."""
+    REPORT_BUILD = sys.modules[__name__].REPORT_BUILD
     if skip:
         return
     if REPORT_BUILD.get("files"):
@@ -7409,42 +7414,8 @@ def report_sources(paths: list[Path], exclusions: list[str], exclude_unnumbered:
 # numbering behave as in one file. Paths inside parts stay relative to the
 # scaffold's folder (pandoc_cwd and TEXINPUTS already point there), so
 # splitting a monolith is a pure cut-and-paste.
-PARTS_DIR_ALIASES = ("parts", "sections")
-# Handed to Pandoc on a partial build, so a Lua filter that assumes the whole
-# document (nulabreport's `moved` blocks need the Appendix) can degrade
-# instead of failing: `pdfmd-partial` is true in the document's metadata.
-PARTIAL_METADATA = ["-M", "pdfmd-partial=true"]
 # PARTIAL_KEY: lib/pdfmd_assemble (v3.33.38)
 # PARTS_SKIP_DIRS: lib/pdfmd_parts/__init__.py (v3.33.30)
-PARTS_ON = {"true", "yes", "on", "auto"}
-PARTS_OFF = {"false", "no", "off", "none"}
-
-
-def parts_setting(md_path: Path, metadata_files: list[Path]) -> str | None:
-    """The effective ``pdfmd-options.parts`` value: None (off), "auto", or a
-    folder name. The document's own front matter wins over the metadata
-    files, in find_metadata's order -- same precedence as frontmatter_engine.
-    An assembled file (--stop-at markdown) is never a scaffold: it already
-    holds the parts.
-    """
-    if is_assembled_document(md_path):
-        return None
-    sources = [frontmatter_pdfmd_options(md_path)]
-    for metadata_file in metadata_files_by_priority(metadata_files):
-        options = metadata_file_yaml(metadata_file).get("pdfmd-options")
-        sources.append(options if isinstance(options, dict) else {})
-    sources.append(config_options(md_path))
-    for options in sources:
-        if "parts" not in options:
-            continue
-        value = options["parts"]
-        text = str(value).strip().casefold()
-        if value is False or text in PARTS_OFF:
-            return None
-        if value is True or text in PARTS_ON:
-            return "auto"
-        return str(value).strip()
-    return None
 
 
 # parts_directory: lib/pdfmd_parts/__init__.py (v3.33.30)
@@ -7458,53 +7429,11 @@ def parts_setting(md_path: Path, metadata_files: list[Path]) -> str | None:
 # route calls the build again, and this is what lets both see the same cuts.
 PART_CUTS: dict[Path, list[Heading]] = {}
 
-# A report built through convert_one() (pdfmd_report, v3.32.14): the files it is made of, what is done to each one's title
-# (`chapters`: pdfmd_report.titles.Chapter), and the folder its attached source is named from. Set by the report for the
-# length of the build; scaffold_inputs() reads the chapters, stamp_build() the files, convert_one() the folder.
-REPORT_BUILD: dict = {}
-
 
 # ScaffoldPlan, warn_shared_parts_folder: lib/pdfmd_parts/__init__.py (v3.33.30)
 
 
-def split_section_requests(raw: list[str]) -> list[str]:
-    """`a,b` and `a+b` both mean "a and b" (`pdfmd report#discussion+appendix`)."""
-    return [piece.strip() for item in raw for piece in re.split(r"[,+]", item) if piece.strip()]
-
-
-def scaffold_metadata_files(document: Path, requested: list[str] | None) -> list[Path]:
-    if requested is None:
-        requested = option_names(frontmatter_pdfmd_options(document), "yaml") or None
-    try:
-        found = find_metadata(document.parent.resolve(), requested, document_stem=document.stem, document=document)
-    except (FileNotFoundError, ValueError):
-        return []
-    if found is None or found is AUTO_METADATA_DISABLED:
-        return []
-    return found if isinstance(found, list) else [found]
-
-
 # plan_scaffold: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-LEADING_FRONT_MATTER_RE = re.compile(r"^---[ \t]*\r?\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*\r?(?:\n|$)", re.DOTALL)
-
-
-def strip_part_front_matter(text: str) -> str:
-    """Remove a leading YAML block or ``% title`` block from a part. Pandoc
-    merges every later file's YAML into the document's metadata and the LATER
-    value wins (checked: a part's `title:` replaced the scaffold's), and a
-    `% ...` title block is only recognised at the very start of the first
-    file -- elsewhere it prints as a paragraph. Parts carry no metadata.
-    """
-    stripped = LEADING_FRONT_MATTER_RE.sub("", text, count=1)
-    lines = stripped.split("\n")
-    count = 0
-    while count < len(lines) and lines[count].startswith("%"):
-        count += 1
-        while count < len(lines) and lines[count].startswith((" ", "\t")) and lines[count].strip():
-            count += 1
-    return "\n".join(lines[count:]) if count else stripped
 
 
 # PART_FENCE, wrap_part, wrap_runs: lib/pdfmd_parts/__init__.py (v3.33.30)
@@ -7623,43 +7552,10 @@ def ascii_table_transform(md_path: Path, metadata_files: list[Path], parts: list
     return transform
 
 
-def print_parts(plan: ScaffoldPlan) -> None:
-    print(f"SCAFFOLD  {display_path(plan.scaffold)}")
-    for part in plan.parts:
-        text = part.read_text(encoding="utf-8-sig")
-        body = strip_part_front_matter(text)
-        heading = next((line.strip() for line in body.splitlines() if re.match(r"#{1,6}\s", line)), "")
-        mark = "*" if plan.selected is not None and part in plan.selected else " "
-        print(f"  {mark} {str(part.relative_to(plan.directory)):<36} {len(text.splitlines()):>5} lines  {heading}")
-        depth = 0
-        for inner in scan_items(body.split("\n"))[1:]:
-            depth = inner.level or depth
-            ids = " ".join(f"{{#{identifier}}}" for identifier in inner.ids)
-            if inner.level:
-                print(f"      {'  ' * (inner.level - 1)}{'#' * inner.level} {inner.text}{'  ' + ids if ids else ''}")
-            else:
-                print(f"      {'  ' * depth}{ids}  [{inner.text}]")
-
 # split_top_level_sections, slug_of and the section code (the banner `Rendering one section of an ordinary document`, ATX_HEADING_RE to scan_headings): lib/pdfmd_parts/__init__.py (v3.33.30)
 
 
-DIV_FENCE_RE = re.compile(r" {0,3}(:{3,})(.*)$")
 # ATTRIBUTE_ID_RE to plan_sections: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-def print_headings(source: Path, cli_no_auto: list[str] | None, requested_metadata: list[str] | None) -> None:
-    """--list-parts for a document that is not in parts mode: what `#` can name."""
-    _, lines, _ = section_source(source, cli_no_auto, requested_metadata)
-    print(f"DOCUMENT  {display_path(source)}")
-    depth = 0
-    for item in scan_items(lines):
-        depth = item.level or depth
-        ids = " ".join(f"{{#{identifier}}}" for identifier in item.ids)
-        if item.level:
-            print(f"  {'  ' * (item.level - 1)}{'#' * item.level} {item.text}{'  ' + ids if ids else ''}"
-                  f"  (lines {item.line + 1}-{item.end})")
-        else:
-            print(f"  {'  ' * depth}{ids}  [{item.text}]  (lines {item.line + 1}-{item.end})")
 
 
 # split_into_parts: lib/pdfmd_parts/__init__.py (v3.33.30)
@@ -8816,6 +8712,7 @@ def drop_calc_export(md_path: Path, sources: list[Path], metadata_files: list[Pa
     """The file `calc: {export: FILE}` writes is an output: it does not go with the source (v3.30.22), though its name stands in the
     front matter and the file is there. It stays when it is also read: it is the constants file, or the body of the document
     names it (a `.csv` div reading last time's results)."""
+    LEADING_FRONT_MATTER_RE = sys.modules[__name__].LEADING_FRONT_MATTER_RE
     target = calc_export_file(md_path, metadata_files)
     if target is None:
         return
@@ -8868,6 +8765,7 @@ def comments_note(manifest: dict) -> str:
 
 
 def front_matter_dict(text: str) -> dict:
+    LEADING_FRONT_MATTER_RE = sys.modules[__name__].LEADING_FRONT_MATTER_RE
     front = LEADING_FRONT_MATTER_RE.match(text)
     if not front or yaml is None:
         return {}

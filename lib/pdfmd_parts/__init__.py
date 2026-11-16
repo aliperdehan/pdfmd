@@ -9,7 +9,8 @@ pdfmd names the code uses (`CYRILLIC_STRICT`, `DIV_FENCE_RE`, `FUZZY_LOOKUP`, `L
 `PARTS_DIR_ALIASES`, `PART_CUTS`, `REPORT_BUILD`, `announce_lookup`, `auto_disabled`, `chapter_value`, `display_path`,
 `effective_no_auto`, `fence_after`, `natural_key`, `parts_setting`, `promote_bare_title`, `scaffold_metadata_files` and
 `strip_part_front_matter`) are read as `core.X` when it runs. `FUZZY_LOOKUP` is rebound with `global`, so it stays in `pdfmd.py`.
-`DIV_FENCE_RE` is bound twice there with different patterns; the code reads the one in force at run time (the later binding).
+The document settings, metadata stripping and listing helpers, with their seven constants, now live here too (v3.33.252);
+`DIV_FENCE_RE` is the final pattern from pdfmd.py.
 """
 
 from __future__ import annotations
@@ -880,3 +881,124 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
         return 0
     print("FAIL   the parts do NOT read back as the original; do not use this split", file=sys.stderr)
     return 1
+
+
+PARTS_DIR_ALIASES = ("parts", "sections")
+
+
+# Handed to Pandoc on a partial build, so a Lua filter that assumes the whole
+# document (nulabreport's `moved` blocks need the Appendix) can degrade
+# instead of failing: `pdfmd-partial` is true in the document's metadata.
+PARTIAL_METADATA = ["-M", "pdfmd-partial=true"]
+
+
+PARTS_ON = {"true", "yes", "on", "auto"}
+
+
+PARTS_OFF = {"false", "no", "off", "none"}
+
+
+def parts_setting(md_path: Path, metadata_files: list[Path]) -> str | None:
+    """The effective ``pdfmd-options.parts`` value: None (off), "auto", or a
+    folder name. The document's own front matter wins over the metadata
+    files, in find_metadata's order -- same precedence as frontmatter_engine.
+    An assembled file (--stop-at markdown) is never a scaffold: it already
+    holds the parts.
+    """
+    if core.is_assembled_document(md_path):
+        return None
+    sources = [core.frontmatter_pdfmd_options(md_path)]
+    for metadata_file in core.metadata_files_by_priority(metadata_files):
+        options = core.metadata_file_yaml(metadata_file).get("pdfmd-options")
+        sources.append(options if isinstance(options, dict) else {})
+    sources.append(core.config_options(md_path))
+    for options in sources:
+        if "parts" not in options:
+            continue
+        value = options["parts"]
+        text = str(value).strip().casefold()
+        if value is False or text in PARTS_OFF:
+            return None
+        if value is True or text in PARTS_ON:
+            return "auto"
+        return str(value).strip()
+    return None
+
+
+# A report built through convert_one() (pdfmd_report, v3.32.14): the files it is made of, what is done to each one's title
+# (`chapters`: pdfmd_report.titles.Chapter), and the folder its attached source is named from. Set by the report for the
+# length of the build; scaffold_inputs() reads the chapters, stamp_build() the files, convert_one() the folder.
+REPORT_BUILD: dict = {}
+
+
+def split_section_requests(raw: list[str]) -> list[str]:
+    """`a,b` and `a+b` both mean "a and b" (`pdfmd report#discussion+appendix`)."""
+    return [piece.strip() for item in raw for piece in re.split(r"[,+]", item) if piece.strip()]
+
+
+def scaffold_metadata_files(document: Path, requested: list[str] | None) -> list[Path]:
+    if requested is None:
+        requested = core.option_names(core.frontmatter_pdfmd_options(document), "yaml") or None
+    try:
+        found = core.find_metadata(document.parent.resolve(), requested, document_stem=document.stem, document=document)
+    except (FileNotFoundError, ValueError):
+        return []
+    if found is None or found is core.AUTO_METADATA_DISABLED:
+        return []
+    return found if isinstance(found, list) else [found]
+
+
+LEADING_FRONT_MATTER_RE = re.compile(r"^---[ \t]*\r?\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*\r?(?:\n|$)", re.DOTALL)
+
+
+def strip_part_front_matter(text: str) -> str:
+    """Remove a leading YAML block or ``% title`` block from a part. Pandoc
+    merges every later file's YAML into the document's metadata and the LATER
+    value wins (checked: a part's `title:` replaced the scaffold's), and a
+    `% ...` title block is only recognised at the very start of the first
+    file -- elsewhere it prints as a paragraph. Parts carry no metadata.
+    """
+    stripped = LEADING_FRONT_MATTER_RE.sub("", text, count=1)
+    lines = stripped.split("\n")
+    count = 0
+    while count < len(lines) and lines[count].startswith("%"):
+        count += 1
+        while count < len(lines) and lines[count].startswith((" ", "\t")) and lines[count].strip():
+            count += 1
+    return "\n".join(lines[count:]) if count else stripped
+
+
+def print_parts(plan: core.ScaffoldPlan) -> None:
+    print(f"SCAFFOLD  {core.display_path(plan.scaffold)}")
+    for part in plan.parts:
+        text = part.read_text(encoding="utf-8-sig")
+        body = strip_part_front_matter(text)
+        heading = next((line.strip() for line in body.splitlines() if re.match(r"#{1,6}\s", line)), "")
+        mark = "*" if plan.selected is not None and part in plan.selected else " "
+        print(f"  {mark} {str(part.relative_to(plan.directory)):<36} {len(text.splitlines()):>5} lines  {heading}")
+        depth = 0
+        for inner in core.scan_items(body.split("\n"))[1:]:
+            depth = inner.level or depth
+            ids = " ".join(f"{{#{identifier}}}" for identifier in inner.ids)
+            if inner.level:
+                print(f"      {'  ' * (inner.level - 1)}{'#' * inner.level} {inner.text}{'  ' + ids if ids else ''}")
+            else:
+                print(f"      {'  ' * depth}{ids}  [{inner.text}]")
+
+
+DIV_FENCE_RE = re.compile(r" {0,3}(:{3,})(.*)$")
+
+
+def print_headings(source: Path, cli_no_auto: list[str] | None, requested_metadata: list[str] | None) -> None:
+    """--list-parts for a document that is not in parts mode: what `#` can name."""
+    _, lines, _ = core.section_source(source, cli_no_auto, requested_metadata)
+    print(f"DOCUMENT  {core.display_path(source)}")
+    depth = 0
+    for item in core.scan_items(lines):
+        depth = item.level or depth
+        ids = " ".join(f"{{#{identifier}}}" for identifier in item.ids)
+        if item.level:
+            print(f"  {'  ' * (item.level - 1)}{'#' * item.level} {item.text}{'  ' + ids if ids else ''}"
+                  f"  (lines {item.line + 1}-{item.end})")
+        else:
+            print(f"  {'  ' * depth}{ids}  [{item.text}]  (lines {item.line + 1}-{item.end})")

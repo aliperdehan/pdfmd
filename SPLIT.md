@@ -464,7 +464,7 @@ Note: `font_index`, `managed_index` and `reset_font_caches` write `_FONT_INDEX` 
 
 Tests: `test_unicode`, `test_font_retry_note`, `test_settings_routes`, `test_install_python`, `test_mathfont`, `test_rawcode`.
 
-#### 23. `pdfmd_parts` (existing package): 6 definitions, 7 constants, ~140 lines
+#### 23. `pdfmd_parts` (existing package; done in 3.33.252): 6 definitions, 7 constants, ~140 lines
 
 Goes to `lib/pdfmd_parts/__init__.py` (appended).
 

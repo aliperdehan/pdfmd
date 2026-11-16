@@ -19,6 +19,30 @@ same commit as the change.
 
 ---
 
+## v3.33.252 — 2026-11-16
+
+Pre-edit state: commit `93a1249`. Phase 2 of the split, wave 3, move 23: parts settings, section requests,
+metadata stripping and listings move into `lib/pdfmd_parts/__init__.py`, with seven constants. A pure move.
+The tool first refused LEADING_FRONT_MATTER_RE and REPORT_BUILD, read bare by remaining core code. By hand,
+metadata_file_yaml, drop_calc_export and front_matter_dict obtain the former through sys.modules[__name__], and
+stamp_build obtains the latter the same way, as in moves 10, 18 and 19. The tool then moved thirteen statements,
+made fifteen core rewrites and registered eleven table names with no stand-ins; its AST self-check passed. The
+fifteen-line parts section banner and two location comments are restored to pdfmd.py; the partial-metadata and
+report-build comments move with their constants. REPORT_BUILD remains its shared mutable dictionary, and the
+final DIV_FENCE_RE pattern is preserved. The parts docstring locates the appended helpers and constants. Version,
+this entry and SPLIT.md progress are updated by hand. No packaging change. `pdfmd.py`: 9,229 -> 9,127 lines.
+
+Proof: Ruff F clean. Twelve modules (section tests, every moved-name match, always-run set and test_split_tools),
+303 tests: 283 passed, one skipped (prompt_toolkit installed), three failures and sixteen errors, all nineteen
+requiring blocked sockets in test_serve. Section-label/reference builds pass. The real build-cache directory diff
+is empty (116 entries; sandbox writes are blocked); isolation again identified another session's report build
+records in an existing folder, using pdfmd 3.33.248. No real files were touched. split_check: SAME on 34 checks,
+no BOTH FAILED. Extras build a full scaffold and mixed part/inner-section selection to HTML, list scaffold parts,
+and list ordinary-document headings; the default report build also reaches the shared REPORT_BUILD. The partial
+fixture passed standalone first. Start-up has the same 205 modules; interleaved scripts/pdfmd --version best/median
+of ten: 135/142 ms before, 132/149 ms after (harness sequential: 138/161 and 172/181 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.251 — 2026-11-16
 
 Pre-edit state: commit `122f6d5`. Phase 2 of the split, wave 3, move 22: document fonts and Unicode helpers move
