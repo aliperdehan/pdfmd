@@ -19,6 +19,47 @@ same commit as the change.
 
 ---
 
+## v3.33.271 — 2026-11-16
+
+Pre-edit state: commit `49195f1`. Phase 2 of the split, wave 4, move 40: global and folder configuration,
+front-matter readers and option cascading move into lib/pdfmd_config/__init__.py with nine constants.
+A pure move. The tool moved 43 statements, made 44 core rewrites and registered 37 names, without
+stand-ins or refusals; AST self-check passed. load_config and folder_walk retain lru_cache and are
+served as real objects for cache_clear callers. config_root/config_path and config_options calls
+remain through core, including option_sources. By hand, the two load_config reads in config_options
+and config_report use core as the trap list requires (current tests do not patch it in a form the
+tool detects). The seven-line global-config and nine-line folder-settings banners/location blocks
+are restored in their original order among the remaining comments; the package docstring locates
+the new hub. F401 annotations retain os and lru_cache for unchanged startup and module attributes.
+Version, this entry and SPLIT.md progress are updated by hand. No packaging change: move 34
+registered the parent package. No optional submodule or YAML import is added to its initialization.
+`pdfmd.py`: 3,822 -> 3,333 lines.
+
+Proof: Ruff F and whitespace clean. 45 modules (section tests, every moved-name match,
+always-run set and test_split_tools), 887 tests: 856 passed, 6 failures,
+17 errors, 8 skipped; limitations are listed below. Real build-cache listing diff contains one verified external build folder
+(121 entries before); sandbox blocks real-cache writes. split_check: SAME: 33 checks (help, logs, outputs);
+no BOTH FAILED. Extras use a scratch document below two .pdfmd/config.yaml layers and an inherited
+metadata layer: --show-config, HTML export and assemble-only with all metadata embedded. These
+reach config_report, cached folder discovery, option_sources, comment policy and front-matter
+readers through their real CLI/build callers. An initial harness run was interrupted before
+comparison to correct an extra from the setup alias --config to --show-config. The final two
+core.load_config reads also pass a focused rerun: 43 tests in test_config, test_folder_settings,
+test_named_files and test_pyyaml. The test process reported an isolation error for a new real TeX
+header, but the concurrent external guide build's completed record (pdfmd 3.33.264) names that
+exact file; tests/examples contain no matching preamble reference or content, and it names no
+scratch input. The real-cache listing gained that same external build folder; the raw diff and
+record evidence are retained. No real files were changed by this task. Nineteen serve cases need
+blocked sockets. Four TeX-dependent cases fail on the unwritable TeX cache (three engine-fallback
+cases and one title/abstract/TOC spacing case); the missing-PDF error is traced to its suppressed
+initial build with the same explicit cause. Eight skips: four unavailable KaTeX runtime cases,
+three unavailable MathJax runtime cases and installed prompt_toolkit. The main test process
+also identifies the guide record and exact header as an external build, not counted.
+Checks used scratch TeX and Matplotlib settings. All 22 post-entry docs/packaging checks pass.
+Start-up module sets identical (205); scripts/pdfmd --version interleaved best/median
+of ten: 334.4/534.5 ms before, 330.5/468.5 ms after.
+Outside-sandbox verification of the listed limitations remains for the reviewer.
+
 ## v3.33.270 — 2026-11-16
 
 Pre-edit state: commit `6f79d41`. Phase 2 of the split, wave 4, move 39: path display, automatic-discovery

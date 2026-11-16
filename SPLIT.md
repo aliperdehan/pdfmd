@@ -730,7 +730,7 @@ Note: `AUTO_LOG = AutoLog()` travels with the class; `restore_worker_state` then
 
 Tests: `test_ebook_input`, `test_path_display`, `test_backup_summary`, `test_display_path`, `test_mathfont`, `test_autolog`.
 
-#### 40. `pdfmd_config` (new package): 34 definitions, 9 constants, ~540 lines
+#### 40. `pdfmd_config` (new package): 34 definitions, 9 constants, ~540 lines; done in 3.33.271
 
 Goes to `lib/pdfmd_config/__init__.py`.
 
