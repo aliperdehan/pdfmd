@@ -3,8 +3,9 @@
 `resolve_hybrid`, `odf_source_for`, `attach_hybrid` and `hybrid_after_success` are moved out of `pdfmd.py` unchanged
 (v3.33.4, SPLIT.md), with `HYBRID_FAMILY` and `HYBRID_DESCRIPTION`. `core` is the `pdfmd` module, bound by `pdfmd.py` when it
 loads (the first binding wins); the package reads `core.HYBRID_CLI` (rebound by `main()`), `core.HYBRID_MIME` (also read by
-the attachment readers in `pdfmd.py`), `core.pypdf` (a lazy loader there, so it is never imported at the top here) and the
+the attachment readers in `pdfmd_restore`), `core.pypdf` (a lazy loader there, so it is never imported at the top here) and the
 other helpers named `core.X` when it runs.
+HYBRID_MIME moved here unchanged in v3.33.276; external readers reach the same dictionary through the names table.
 """
 
 from __future__ import annotations
@@ -120,3 +121,7 @@ def hybrid_after_success(path: Path, pdf_path: Path, metadata_files: list[Path],
     except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
         print(f"WARN  hybrid: could not attach the OpenDocument copy to {core.display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
+
+
+HYBRID_MIME = {"odt": "application/vnd.oasis.opendocument.text", "odp": "application/vnd.oasis.opendocument.presentation",
+               "ods": "application/vnd.oasis.opendocument.spreadsheet"}

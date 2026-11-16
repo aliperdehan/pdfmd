@@ -19,6 +19,34 @@ same commit as the change.
 
 ---
 
+## v3.33.276 — 2026-11-17
+
+Pre-edit state: commit `733f411`. Phase 2 of the split, wave 4, move 45: HYBRID_MIME moves to
+lib/pdfmd_hybrid/__init__.py. A pure move. The tool moved one statement, made no core rewrites and registered its
+name, without stand-ins, refusals or carried comments; AST self-check passed. The same dictionary serves all
+external readers through core. By hand, the hybrid package docstring locates the constant and its restore readers;
+version, this entry and SPLIT.md progress are updated. An F401 annotation retains re for unchanged startup and
+module attributes: the redirected Ruff logs for moves 42-44 were not read and their retained-import error was
+missed. Their proof prose is corrected here; this move records the clean rerun. No packaging change.
+
+`pdfmd.py`: 3,285 -> 3,284 lines.
+
+Proof: Ruff F and whitespace clean. 16 modules (section tests, every moved-name match,
+always-run set, test_split_tools and feature callers), 322 tests: 296 passed, 5 failures,
+16 errors and 5 skipped. Real build-cache listing diff empty (122 entries; sandbox
+blocks real-cache writes). split_check: SAME: 33 checks (help, logs, outputs); no BOTH FAILED.
+Nineteen failures/errors require blocked sockets in test_serve; the single-file embedding and missing-Lua
+PDF builds fail with the explicit unwritable TeX-cache cause. Four real-LibreOffice cases and installed
+prompt_toolkit account for the skips. Kit and YAML loading rules pass. Extras build a hybrid PDF through inkmd
+and Pandoc's ODT writer (soffice-timeout: 0), check its source and restore it, reaching both MIME readers.
+Independent inspection of both PDFs finds Original.odt (7,558 bytes), the expected OpenDocument text subtype,
+a valid ODT mimetype and byte-identical restored files. A standalone hybrid build also passes; no LibreOffice
+or Calibre ran. The harness sequential start-up best/median is 123/127 before and 114/117 ms after.
+Start-up module sets identical (205); scripts/pdfmd --version interleaved best/median
+of ten: 117.0/129.9 ms before, 117.4/128.8 ms after.
+TeX and Matplotlib settings point to scratch. No real configuration or cache files were changed;
+outside-sandbox verification of the listed limitations remains for the reviewer.
+
 ## v3.33.275 — 2026-11-17
 
 Pre-edit state: commit `60d3cc9`. Phase 2 of the split, wave 4, move 44: ASCII_FORMATS moves to
@@ -29,7 +57,7 @@ No packaging change.
 
 `pdfmd.py`: 3,286 -> 3,285 lines.
 
-Proof: Ruff F and whitespace clean. 15 modules (section tests, every moved-name match,
+Proof: Ruff F401 on retained re (corrected in v3.33.276); whitespace clean. 15 modules (section tests, every moved-name match,
 always-run set, test_split_tools and feature callers), 353 tests: 327 passed, 5 failures,
 16 errors and 5 skipped. Real build-cache listing diff empty (122 entries; sandbox
 blocks real-cache writes). split_check: SAME: 33 checks (help, logs, outputs); no BOTH FAILED.
@@ -57,7 +85,7 @@ No packaging change.
 
 `pdfmd.py`: 3,287 -> 3,286 lines.
 
-Proof: Ruff F and whitespace clean. 14 modules (section tests, every moved-name match,
+Proof: Ruff F401 on retained re (corrected in v3.33.276); whitespace clean. 14 modules (section tests, every moved-name match,
 always-run set, test_split_tools and feature callers), 353 tests: 332 passed, 4 failures,
 16 errors and 1 skipped. Real build-cache listing diff empty (122 entries; sandbox
 blocks real-cache writes). split_check: SAME: 32 checks (help, logs, outputs); no BOTH FAILED.
@@ -83,7 +111,7 @@ count is corrected from 121 to the recorded 122; both original diffs remain empt
 
 `pdfmd.py`: 3,304 -> 3,287 lines.
 
-Proof: Ruff F and whitespace clean. 15 modules (section tests, every moved-name match,
+Proof: Ruff F401 on retained re (corrected in v3.33.276); whitespace clean. 15 modules (section tests, every moved-name match,
 always-run set, test_split_tools and feature callers), 383 tests: 363 passed, 3 failures,
 16 errors and 1 skipped. Real build-cache listing diff empty (122 entries; sandbox
 blocks real-cache writes). split_check: SAME: 33 checks (help, logs, outputs); no BOTH FAILED.

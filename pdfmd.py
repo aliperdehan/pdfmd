@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.275"
+PDFMD_VERSION = "3.33.276"
 import argparse  # noqa: F401 -- preserve startup and the public module attribute
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1530,7 +1530,7 @@ import functools  # noqa: F401 -- retain start-up modules and the module attribu
 from functools import lru_cache  # noqa: F401 -- preserve startup and the public module attribute
 import logging  # noqa: F401 -- retain start-up modules and the module attribute
 import os  # noqa: F401 -- preserve startup and the public module attribute
-import re
+import re  # noqa: F401 -- preserve startup and the public module attribute after the fence move
 import shlex  # noqa: F401 -- preserve startup and the public module attribute
 import shutil  # noqa: F401 -- preserve startup and the public module attribute
 import signal  # noqa: F401 -- preserve startup and the public module attribute
@@ -1973,6 +1973,7 @@ names("pdfmd_native", "Chunk MATH_LINE_BREAK math_lines NATIVE_PAPER_POINTS PAPE
 names("pdfmd_comments", "fence_after FENCE_RE COMMENT_KINDS")
 names("pdfmd_ansi.cli", "ANSI_LINKS_ENV ANSI_COLOR_ENV ANSI_WIDTH_ENV ANSI_FALLBACK_WIDTH")
 names("pdfmd_flat.build", "ASCII_FORMATS")
+names("pdfmd_hybrid", "HYBRID_MIME")
 display_path = deferred("pdfmd_log", "display_path")
 installed_engines = deferred("pdfmd_engines", "installed_engines")
 mask_embedded_blocks = deferred("pdfmd_assemble.embed", "mask_embedded_blocks")
@@ -3133,8 +3134,6 @@ INKMD_CLI: dict = {}                        # inkmd's own compile options, from 
 # The hybrid PDF (v3.25.10): lib/pdfmd_hybrid (its explanation is there). These two stay: main() rebinds the first,
 # the attachment readers above read the second.
 HYBRID_CLI: bool | None = None
-HYBRID_MIME = {"odt": "application/vnd.oasis.opendocument.text", "odp": "application/vnd.oasis.opendocument.presentation",
-               "ods": "application/vnd.oasis.opendocument.spreadsheet"}
 
 
 # build_parser: lib/pdfmd_args (v3.33.40)

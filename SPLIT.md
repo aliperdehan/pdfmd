@@ -810,7 +810,7 @@ Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and
 
 Tests: none name it; the always-run set.
 
-#### 45. `pdfmd_hybrid` (existing package): 0 definitions, 1 constants, ~2 lines
+#### 45. `pdfmd_hybrid` (done in 3.33.276; existing package): 0 definitions, 1 constants, ~2 lines
 
 Goes to `lib/pdfmd_hybrid/__init__.py` (appended).
 
