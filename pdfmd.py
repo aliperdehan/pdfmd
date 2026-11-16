@@ -1512,8 +1512,8 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.267"
-import argparse
+PDFMD_VERSION = "3.33.268"
+import argparse  # noqa: F401 -- preserve startup and the public module attribute
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import hashlib  # noqa: F401 -- retain start-up modules and the module attribute
@@ -1950,6 +1950,10 @@ names("pdfmd_assemble.embed", "strip_embedded_preamble ASSEMBLED_KEY ASSEMBLED_C
 names("pdfmd_engines", "PDF_ENGINES ENGINE_ALIASES BROWSER_ENGINES LATEX_ENGINES PREAMBLE_FILENAMES "
                        "TEX_STANDALONE_FORMATS ENGINE_FAMILY ENGINE_GROUPS automatic_engines select_engines "
                        "resolve_engines dependency_report frontmatter_engine")
+names("pdfmd_engines.native", "INSTALL_KINDS INSTALL_SIZES PANDOC_MIN warn_old_pandoc PANDOC_MISSING inkmd_vendored "
+                              "md2pdf_available matplotlib_available inkmd_emoji_font is_native_engine native_available "
+                              "available_native_engines native_request native_possible native_run_note "
+                              "system_install_hint pandoc_install_hint offer_native_upgrade")
 installed_engines = deferred("pdfmd_engines", "installed_engines")
 mask_embedded_blocks = deferred("pdfmd_assemble.embed", "mask_embedded_blocks")
 is_global_metadata = deferred("pdfmd_metadata", "is_global_metadata")
@@ -2560,140 +2564,16 @@ def engine_executable(engine: str) -> str | None:
 # With no Pandoc, and Calibre installed (v3.29.1), Calibre reads the Markdown itself (its Python-Markdown reader: tables,
 # footnotes, fenced code, lists) and prints it: before the rough renderers below, which stay its fallback. It has no math
 # (formulas are text, as in inkmd) and none of Pandoc's syntax; what it cannot honour is reported as for the others.
-NATIVE_ENGINES = ("calibre", "md2pdf", "inkmd")
-NATIVE_ALIASES = {"ink": "inkmd", "reportlab": "md2pdf", "pymd2pdf": "md2pdf", "ebook-convert": "calibre"}
+
 # NATIVE_SOURCE_SUFFIXES and NATIVE_READERS: lib/pdfmd_native (v3.33.39)
 # INSTALL_SPECS: lib/pdfmd_install/__init__.py (v3.33.35)
-# Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "core", "cortex", "math", "diagram", "calibre", "emoji", "batchocr", "fonts", "translit", "ocr", "tui", "kit")
-INSTALL_SIZES = {"kit": "the repository you name", "tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
-                 "typst": "about 15 MB download", "full": "about 50 MB download",
-                 "diagram": "about 20 MB: D2 17 MB, Graphviz 2 MB",
-                 "calibre": "190 to 360 MB download", "core": "Pandoc 35 MB and Tectonic 10 to 22 MB download",
-                 "cortex": "Pandoc 35 MB and Tectonic 10 to 22 MB download",
-                 "batchocr": "about 40 MB with PyMuPDF"}
 # NATIVE_META_KEYS (with its comment): lib/pdfmd_native (v3.33.39)
-# The oldest Pandoc pdfmd is tested with: 3.1.3, which is what the claude.ai sandbox has (the suite runs against it). An
-# older one may still work; the first compile with it says so once. What an older-than-latest one does without:
-PANDOC_MIN = (3, 1, 3)
 # PANDOC_FEATURES and pandoc_limits: lib/pdfmd_doctor/__init__.py (v3.33.31)
 
 
-def warn_old_pandoc() -> None:
-    """The first compile with a Pandoc older than PANDOC_MIN says so, once for that version on this machine."""
-    version = pandoc_version()
-    if version == (0,) or version >= PANDOC_MIN:
-        return
-    shown = ".".join(map(str, version))
-    path = config_root() / f"notice-pandoc-{shown}"
-    if os.environ.get("PDFMD_NO_PROMPT") or path.exists():
-        return
-    print(f"WARN  Pandoc {shown} is older than {'.'.join(map(str, PANDOC_MIN))}, the oldest pdfmd is tested with; "
-          "it may work, and a newer one (`pdfmd --install pandoc`) is the first thing to try if something looks wrong. "
-          "This is said once.", file=sys.stderr)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("shown\n", encoding="utf-8")
-    except OSError:
-        pass
-
-
-PANDOC_MISSING = ("Pandoc was not found on PATH. Install it with `pdfmd --install pandoc` (no admin rights; "
-                  "`pdfmd --install full` adds Typst for PDF output), or -- macOS: `brew install pandoc`; "
-                  "Debian/Ubuntu: `sudo apt install pandoc`; others: https://pandoc.org/installing.html "
-                  "-- then run `pdfmd --check-dependencies`.")
 # What this run could not render natively, by kind -> count; read by
 # offer_native_upgrade() once the build is done.
 NATIVE_LOST: dict[str, int] = {}
-
-
-def inkmd_vendored() -> bool:
-    """Whether the vendored inkmd (pdfmd_inkmd/) ships next to this file."""
-    return importlib.util.find_spec("pdfmd_inkmd") is not None
-
-
-def md2pdf_available() -> bool:
-    """pymd2pdf (not the unrelated WeasyPrint-based `md2pdf`) is installed."""
-    import importlib.metadata  # here, not at the top: only this needs it (start-up time, v3.32.55)
-    if sys.version_info < (3, 11):
-        return False
-    try:
-        importlib.metadata.version("pymd2pdf")
-    except importlib.metadata.PackageNotFoundError:
-        return False
-    return True
-
-
-def matplotlib_available() -> bool:
-    return importlib.util.find_spec("matplotlib") is not None
-
-
-def inkmd_emoji_font() -> Path | None:
-    """The colour-emoji font: pdfmd's own (`pdfmd --install emoji`), else that of a
-    separately installed `inkmd` (the [emoji] extra)."""
-    own = fonts_directory() / "emoji" / "NotoColorEmoji.ttf"
-    if own.is_file():
-        return own
-    try:
-        spec = importlib.util.find_spec("inkmd")
-    except (ImportError, ValueError):
-        return None
-    if spec is None or not spec.origin:
-        return None
-    font = Path(spec.origin).parent / "assets" / "emoji" / "NotoColorEmoji.ttf"
-    return font if font.is_file() else None
-
-
-def is_native_engine(engine: str) -> bool:
-    """Whether ``engine`` is one of the Pandoc-less renderers in this run: Calibre's own name is one only with no Pandoc (with
-    Pandoc, `-e calibre` is the HTML route)."""
-    return engine in NATIVE_ENGINES and (engine != "calibre" or not which("pandoc"))
-
-
-def native_available(engine: str) -> bool:
-    if engine == "calibre":
-        return not which("pandoc") and resolve_calibre() is not None      # with Pandoc, -e calibre is the HTML route
-    return inkmd_vendored() if engine == "inkmd" else md2pdf_available()
-
-
-def available_native_engines() -> list[str]:
-    return [engine for engine in NATIVE_ENGINES if native_available(engine)]
-
-
-def native_request(requested: str, presentation: bool, label: str) -> list[str] | None:
-    """The native engine(s) a -e/--engine or `pdf-engine` value names, or None
-    if it names something else. Raises if the named renderer is not installed."""
-    name = requested.casefold()
-    if name == "native":
-        engines = available_native_engines()
-    else:
-        name = NATIVE_ALIASES.get(name, name)
-        if name not in NATIVE_ENGINES or (name == "calibre" and which("pandoc")):
-            return None
-        engines = [name] if native_available(name) else []
-        if not engines:
-            hint = ("needs Python 3.11 or newer" if name == "md2pdf" and sys.version_info < (3, 11)
-                    else "Calibre's ebook-convert was not found" if name == "calibre"
-                    else 'install it with `pdfmd --install math` (or pip install "pdfmd-cli[math]")')
-            raise SystemExit(f"{label} requested {name}, which is not available: {hint}.")
-    if presentation:
-        raise SystemExit(f"{label} requested a native renderer, which cannot make Beamer slides "
-                         "(-p/--presentation): Pandoc's Beamer writer and a LaTeX engine are required.")
-    if not engines:
-        raise SystemExit(f"{label} requested the native renderers, but none is available.")
-    return engines
-
-
-def native_possible(args: argparse.Namespace) -> bool:
-    """Whether this invocation could be served without Pandoc: a plain
-    Markdown-to-PDF run, none of the modes that are Pandoc all the way down."""
-    if (args.presentation or args.report or args.split or args.clear_cache or args.list_parts
-            or args.unpack or args.slim or args.assemble_only or args.stop_at or args.watch
-            or args.embed_metadata is not None):
-        return False
-    chosen = args.to.casefold() if args.to else (
-        format_from_output(args.out) if args.out and not args.batch else None)
-    return chosen in (None, "pdf", "ansi")           # ansi: the built-in parser draws it (v3.30.3)
 
 
 # native_note, native_lose and the patterns the native tier rewrites with (HEADING_ATTR_RE to PAPER_SIZES): lib/pdfmd_native (v3.33.39)
@@ -2773,32 +2653,6 @@ def split_front_matter(text: str) -> tuple[dict, str]:
 
 
 # csv_keep to describe_native_changes (the .csv div table, normalise_gfm, the paper, inkmd, md2pdf and Calibre's Markdown reader, convert_native): lib/pdfmd_native (v3.33.39)
-
-
-def native_run_note(engines: list[str]) -> None:
-    """Printed once when the native tier was chosen automatically."""
-    reason = "Pandoc was not found" if not which("pandoc") else "no PDF engine was found"
-    what = ("Calibre's Markdown reader (no math, none of Pandoc's syntax)" if engines and engines[0] == "calibre"
-            else "the built-in renderer")
-    print(f"NOTE  {reason}: building with {what} ({' / '.join(engines)}). "
-          "The output is plain -- no LaTeX, preambles, filters or citation processing. "
-          "Pandoc plus Typst or TeX gives the full result: `pdfmd --install full`, or "
-          "`pdfmd --check-dependencies`.")
-
-
-def system_install_hint() -> str:
-    """How to install Pandoc and Typst with the system's own package manager."""
-    if sys.platform == "darwin":
-        return "brew install pandoc typst"
-    if sys.platform == "win32":
-        return "winget install JohnMacFarlane.Pandoc Typst.Typst"
-    return ("sudo apt install pandoc (or your package manager), plus Typst from "
-            "https://github.com/typst/typst/releases")
-
-
-def pandoc_install_hint() -> str:
-    """How to get Pandoc and Typst: pdfmd's own installer first, then the system way."""
-    return f"`pdfmd --install full` (no admin rights needed), or {system_install_hint()}"
 
 
 def data_root() -> Path:
@@ -3207,54 +3061,6 @@ def fence_after(fence: str, line: str) -> str:
     if not fence:
         return "" if run[0] == "`" and "`" in rest else run
     return "" if run[0] == fence[0] and len(run) >= len(fence) and not rest.strip() else fence
-
-
-def native_prompt_state() -> Path:
-    path = config_root() / "native-prompt-dismissed"
-    migrate_state(cache_root() / "native-prompt-dismissed", path)
-    return path
-
-
-def offer_native_upgrade() -> None:
-    """After an automatic native build that lost something, offer the upgrades.
-
-    Interactive terminals only (never in CI, a pipe, or with PDFMD_NO_PROMPT
-    set), and never again once the user has chosen to continue as is.
-    """
-    if (not NATIVE_LOST or os.environ.get("PDFMD_NO_PROMPT") or not sys.stdin.isatty()
-            or not sys.stdout.isatty() or native_prompt_state().exists()):
-        return
-    lost = ", ".join(f"{kind} ({count})" for kind, count in sorted(NATIVE_LOST.items()))
-    options: list[tuple[str, str]] = []
-    if "math" in NATIVE_LOST and sys.version_info >= (3, 11) \
-            and not (md2pdf_available() and matplotlib_available()):
-        options.append(("math", f"install md2pdf with math now ({INSTALL_SIZES['math']})"))
-    if "emoji" in NATIVE_LOST and inkmd_emoji_font() is None:
-        options.append(("emoji", f"install the colour emoji font ({INSTALL_SIZES['emoji']})"))
-    if not (which("pandoc") and installed_engines()):
-        options.append(("full", f"install Pandoc and Typst now ({INSTALL_SIZES['full']}, into pdfmd's own "
-                                "folders, no admin rights) for the full-quality route"))
-    options.append(("never", "continue as is and don't ask again"))
-    print(f"\nThe native renderer could not render: {lost}.")
-    for number, (_, label) in enumerate(options, 1):
-        print(f"  {number}) {label}")
-    try:
-        answer = input("Choose [Enter = continue this time]: ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        return
-    if not answer.isdigit() or not 1 <= int(answer) <= len(options):
-        return
-    choice = options[int(answer) - 1][0]
-    if choice in INSTALL_KINDS:
-        if install_extra(choice):
-            print("Installed. Run pdfmd again to use it.")
-    else:
-        try:
-            native_prompt_state().parent.mkdir(parents=True, exist_ok=True)
-            native_prompt_state().write_text("dismissed\n", encoding="utf-8")
-        except OSError:
-            pass
 
 
 # is_latex_preamble and top_level_tikzpicture: lib/pdfmd_tex (v3.33.36)

@@ -90,11 +90,11 @@ PDF renderer used when there is no Pandoc or PDF engine). Never edit it by
 hand: change `scripts/vendor_inkmd.py` and re-run it
 (`python3 scripts/vendor_inkmd.py --version X.Y.Z`; `--check` reports drift),
 then `PDFMD_GOLDEN=1 python3 -m unittest discover -s tests` and read what
-changed in inkmd's output. The native tier's code is in `lib/pdfmd_native/`
-(`normalise_gfm()`, the math-as-text converter, `convert_native()`); what decides
-whether it runs (`native_possible()`, `NATIVE_ENGINES`, `native_run_note()`), the
-lost-features prompt (`NATIVE_LOST`) and `math_lines()`, which `lib/pdfmd_ansi`
-reads too, stay in `pdfmd.py`. md2pdf (`pymd2pdf`) is an optional dependency, not vendored.
+changed in inkmd's output. The native tier's rendering code is in `lib/pdfmd_native/`
+(`normalise_gfm()`, the math-as-text converter, `convert_native()`). Its selection helpers
+(`native_possible()`, `NATIVE_ENGINES`, `native_run_note()`) and lost-features prompt live in
+`lib/pdfmd_engines/native.py`. `NATIVE_LOST` stays in `pdfmd.py` as state; `math_lines()`,
+which `lib/pdfmd_ansi` reads too, stays there. md2pdf (`pymd2pdf`) is an optional dependency, not vendored.
 `python3 -m unittest discover -s tests` runs everything; the end-to-end tests run
 `pdfmd` with an empty PATH, which is how to test "no Pandoc" without removing it.
 The serial run takes an hour or more: `python3 scripts/test_parallel.py [-j N] [--failed-only] [PATTERN ...]` runs the test modules

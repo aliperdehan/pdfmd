@@ -19,6 +19,37 @@ same commit as the change.
 
 ---
 
+## v3.33.268 — 2026-11-16
+
+Pre-edit state: commit `5d1c03e`. Phase 2 of the split, wave 4, move 37: native-engine selection, availability,
+install hints and upgrade prompting move to lib/pdfmd_engines/native.py with six constants. A pure move.
+The tool moved 21 statements, made 23 core rewrites and registered eighteen names, without stand-ins
+or refusals; its AST self-check passed. Calls to patched inkmd_vendored, md2pdf_available and
+matplotlib_available remain through core; native_request remains patchable through the table.
+By hand, the 27-line native-tier banner and three location comments are restored to pdfmd.py; the
+constant-specific comments stay in the module. An F401 annotation retains argparse for unchanged
+startup and module attributes. CLAUDE.md locates the moved selection and prompt helpers while keeping
+NATIVE_LOST and math_lines in core. Version, this entry and SPLIT.md progress are updated by hand.
+No packaging change.
+`pdfmd.py`: 4,740 -> 4,546 lines.
+
+Proof: Ruff F and whitespace clean. 17 modules (section tests, every moved-name match,
+always-run set and test_split_tools), 366 tests: 342 passed, 4 failures,
+16 errors, 4 skipped; limitations are listed below. Real build-cache listing diff empty
+(121 entries); sandbox blocks real-cache writes. split_check: SAME: 33 checks (help, logs, outputs);
+no BOTH FAILED. Extras build results.md with inkmd, export lecture.md using its ink alias, and
+run --check-dependencies, reaching native selection, availability and installation hints through
+real CLI callers. Nineteen test_serve cases require blocked sockets. The disk-image install test
+fails before installation at hdiutil create (Device not configured); isolated reruns of this test
+on both the working tree and parent reproduce it. This is a sandbox disk-image limit, not a code
+change. Skips: Linux archive route, absent pymd2pdf, opt-in golden output and installed prompt_toolkit.
+Isolation identified an external guide build inside an existing real-cache folder (not a test input);
+the real-cache directory listing is unchanged.
+Checks use scratch TeX and Matplotlib folders; no real configuration or cache files were changed.
+Start-up module sets identical (205); scripts/pdfmd --version interleaved best/median
+of ten: 253.6/344.7 ms before, 210.8/303.1 ms after.
+Outside-sandbox verification of the listed limitations remains for the reviewer.
+
 ## v3.33.267 — 2026-11-16
 
 Pre-edit state: commit `f6729e5`. Phase 2 of the split, wave 4, move 36: engine lists, selection,
