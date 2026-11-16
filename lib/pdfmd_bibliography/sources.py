@@ -108,9 +108,11 @@ def literal(name):
 
     Pandoc parses every YAML string as Markdown, so a Windows path loses its folders (`\\Users` and `\\Temp` are read as raw
     TeX commands, which gave `C:22wg_n_7.bib`) and smart punctuation rewrites dots and quotes. A backslash before an ASCII
-    punctuation mark is that mark, literally, in Pandoc's Markdown, so every one of them gets one.
+    punctuation mark is that mark, literally, in Pandoc's Markdown, so every one of them gets one, except `/` and `:`: they
+    mean nothing inside a path, and Pandoc's plain `commonmark` reader keeps `\\/` and `\\:` as written (a CommonMark document
+    would then name a file that does not exist).
     """
-    return re.sub(r"([!-/:-@\[-`{-~])", r"\\\1", str(name))
+    return re.sub(r"([!-.;-@\[-`{-~])", r"\\\1", str(name))
 
 
 def written_name(name, path, folders):

@@ -226,7 +226,7 @@ class Literal(Tree):
     PATHS = (r"C:\Users\runneradmin\AppData\Local\Temp\tmp22wg_n_7.bib", "C:/Users/RUNNER~1/Temp/tmp_a_b/refs.bib",
              "/tmp/my refs/a_b_c.bib", "/tmp/x*y*/it's [1] <a>.bib", "../a...b/c--d.bib")
 
-    def through_pandoc(self, names):
+    def through_pandoc(self, names, reader="markdown"):
         sys.path.insert(0, str(ROOT / "lib"))
         try:
             from pdfmd_bibliography.sources import literal
@@ -238,13 +238,21 @@ class Literal(Tree):
                           encoding="utf-8")
         template = self.root / "t.txt"
         template.write_text("$for(bibliography)$$bibliography$\n$endfor$", encoding="utf-8")
-        done = subprocess.run(["pandoc", "-f", "markdown", "-t", "plain", "--metadata-file", str(merged),
+        done = subprocess.run(["pandoc", "-f", reader, "-t", "plain", "--metadata-file", str(merged),
                                "--template", str(template)], input="x", capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(done.returncode, 0, done.stderr)
         return done.stdout.splitlines()
 
     def test_a_path_with_backslashes_or_markdown_marks_reaches_pandoc_intact(self):
-        self.assertEqual(self.through_pandoc(self.PATHS), list(self.PATHS))
+        for reader in ("markdown", "gfm", "commonmark_x"):
+            with self.subTest(reader=reader):
+                self.assertEqual(self.through_pandoc(self.PATHS, reader), list(self.PATHS))
+
+    def test_plain_commonmark_reads_the_folders_and_drive_too(self):
+        """Pandoc's plain `commonmark` reader keeps `\\/` and `\\:` as written, so they are not escaped (it also keeps `\\'`
+        and `\\~`, which Pandoc's Markdown needs: a path with those is the one case it reads wrong)."""
+        paths = [path for path in self.PATHS if "'" not in path and "~" not in path]
+        self.assertEqual(self.through_pandoc(paths, "commonmark"), paths)
 
     def test_the_escape_is_only_backslashes_before_punctuation(self):
         sys.path.insert(0, str(ROOT / "lib"))
@@ -252,7 +260,8 @@ class Literal(Tree):
             from pdfmd_bibliography.sources import literal
         finally:
             sys.path.pop(0)
-        self.assertEqual(literal(r"C:\a_b.bib"), r"C\:\\a\_b\.bib")
+        self.assertEqual(literal(r"C:\a_b.bib"), r"C:\\a\_b\.bib")
+        self.assertEqual(literal("/x/y:z"), "/x/y:z")
         self.assertEqual(literal("plain name 7"), "plain name 7")
 
 
