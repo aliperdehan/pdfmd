@@ -1852,7 +1852,7 @@ pdfmd --api POST /api/render '{"path": "report.md", "text": "# Hi"}'   # Pandoc'
 Every answer carries `"api": 1` (an addition keeps the number), and an error is `{"api": 1, "error": ..., "code": ...}` with an HTTP-like
 status. A save sends the `mtime` it read and gets **409** when the file changed on disk meanwhile, so an editor and a build never overwrite
 each other; it keeps the file's line endings (CRLF or LF) and byte-order mark. The live view's render runs the same filters a build does on pdfmd's own syntax (CSV tables, calc, callouts, page breaks and
-the rest: one list in `pdfmd.py`, `document_filter_args`, used by every writer and by this), so a `::: {.csv file=...}` block is a table there
+the rest: one list in `lib/pdfmd_filters/__init__.py`, `document_filter_args`, used by every writer and by this), so a `::: {.csv file=...}` block is a table there
 as in a build. A document's own references (images, includes, CSV, raw-LaTeX inputs, fetches and cache folders) stay inside the project,
 excluding its private `.git` folder; paths through `..`, absolute paths and symlinks are checked against that boundary. pdfmd's
 generated assets and filter helpers may use the cache, filter and temporary folders named by pdfmd itself.

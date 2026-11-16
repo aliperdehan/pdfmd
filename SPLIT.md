@@ -290,7 +290,7 @@ Note: `crossref_built_for` is `lru_cache`d with a `.cache_clear()` caller in tes
 
 Tests: `test_typst_input`, `test_markdown_features`, `test_compat`, `test_obsidian`, `test_setup`, `test_newline`, `test_reader`.
 
-#### 12. `pdfmd_filters` (new package): 29 definitions, 19 constants, ~701 lines
+#### 12. `pdfmd_filters` (new package): 29 definitions, 19 constants, ~701 lines; done in 3.33.241
 
 Goes to `lib/pdfmd_filters/__init__.py`.
 

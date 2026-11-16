@@ -19,6 +19,34 @@ same commit as the change.
 
 ---
 
+## v3.33.241 — 2026-11-16
+
+Pre-edit state: commit `19ea6ab`. Phase 2 of the split, wave 2, move 12: document filter arguments and their per-feature
+helpers move to `lib/pdfmd_filters/__init__.py`, with nineteen constants. A pure move: the tool moved 48 statements,
+made 92 `core.` rewrites, added thirty names to the table and left one stand-in, `resolve_raw`, for its bare callers in
+pdfmd.py. Its AST self-check passed, with no refusals. The seven carried comment blocks describe the constants and
+move with them; existing section banners stay in pdfmd.py. `_INDENT_WORD` precedes `INDENT_DIV_RE`, and mutable
+`SVG_WARNED` is served as its original object through the table. `test_serve`'s source scan already reads lib/ and finds
+the moved `document_filter_args`; no test change is needed. By hand: packaging in pyproject.toml (two places) and
+scripts/build_zipapp.py, the version, this entry and SPLIT.md's progress heading; an F401 annotation retains the now-unused
+`urllib.parse` import in pdfmd.py so its start-up module set stays unchanged; README now locates `document_filter_args`
+in its new module. No other hand changes.
+`pdfmd.py`: 12,380 -> 11,693 lines.
+
+Proof: Ruff's F checks pass. The section's tests, every module naming a moved name, the always-run set and
+`test_split_tools`: 22 modules, 432 tests, 403 passed, 5 skipped, 3 failures and 21 errors. All twenty-four unsuccessful
+tests need blocked sockets: nineteen in test_serve and five local HTTP fixtures in test_images. The skips are four
+optional WeasyPrint/KaTeX cases and the no-prompt-toolkit case. Tests used scratch TeX cache/config folders; the real
+build-cache listing is unchanged (116 entries; the sandbox prevents writes there). `split_check` with HTML and DOCX
+cover/pagebreak/linebreak/indent/md-macro/code builds, plus a diagram-disabled HTML build through raw_filter_args:
+SAME, 33 checks, no BOTH FAILED. The first attempt's diagram extra incorrectly used a CLI flag for the pdfmd-options
+key `diagram-timeout`: both sides rejected it in Pandoc. The scratch document was corrected to set the key to zero,
+validated through scripts/pdfmd, then the full comparison rerun without source changes. The failed extra also exposed
+that raw-map filenames hash the absolute runner path, different in the two trees; that harness limitation was not changed.
+Both attempts are retained for review. Start-up has the same 205 modules; interleaved `scripts/pdfmd --version`
+best/median of ten on the passing run: 163/177 ms before, 199/289 ms after (first attempt: 187/226 and 227/342 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.240 — 2026-11-16
 
 Pre-edit state: commit `f3a0b05`. Phase 2 of the split, wave 2, move 11: the reader selection, Markdown feature scan,
