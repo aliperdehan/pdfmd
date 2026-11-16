@@ -258,7 +258,7 @@ Traps: none found by the audit.
 
 Tests: `test_tex_cause`, `test_latex_errors`, `test_tex_repair`, `test_labels`.
 
-#### 10. `pdfmd_build.results` (new package): 18 definitions, 6 constants, ~295 lines
+#### 10. `pdfmd_build.results` (new package): 18 definitions, 6 constants, ~295 lines; done in 3.33.239
 
 Goes to `lib/pdfmd_build/results.py`.
 

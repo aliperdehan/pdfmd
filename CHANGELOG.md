@@ -19,6 +19,29 @@ same commit as the change.
 
 ---
 
+## v3.33.239 — 2026-11-16
+
+Pre-edit state: commit `ba3d84e`. Phase 2 of the split, wave 2, move 10: build results, warning capture, strictness,
+budgets and the nonmath-dollar checks move to `lib/pdfmd_build/results.py`, with their six constants. A pure move.
+The tool moved 24 statements, made 31 `core.` rewrites, imported `timed` from `pdfmd_base` on its own line, and added
+sixteen names to the table, with no stand-ins. Its AST self-check passed. It first refused `Built`, a class still read
+bare by `finish_convert_job`: by hand that function now resolves its local `Built` through `sys.modules[__name__].Built`,
+so the names table supplies the same class lazily, including when pdfmd runs as a script. No import at start. The
+nonmath-dollar section banner was restored to pdfmd.py by hand; the two constant-specific comments moved. No calls
+inside the move need the patched `record_engine`; callers still read pdfmd's name. `warning_capture` keeps its
+`contextmanager` decorator, `check_output_budget` its `timed` decorator. The version and this progress heading were
+updated by hand. No new package or packaging entry is needed. `pdfmd.py`: 13,155 -> 12,881 lines.
+
+Proof: Ruff's F checks pass. The section's tests, every test module naming a moved name, the always-run set and
+`test_split_tools`: 19 modules, 422 tests, 398 passed, 4 skipped, 4 failures and 16 errors. Nineteen unsuccessful
+server tests are the sandbox's blocked sockets; the remaining failure expects empty stderr but the sandbox prints
+the read-only TeX-user-tree note (`test_ranking_generated`), and passes alone with scratch `TEXMFVAR` and
+`TEXMFCONFIG`. The skips are LibreOffice (sandbox), optional md2pdf, opt-in goldens and the no-prompt-toolkit case.
+The real build-cache listing is unchanged (116 entries; the sandbox also prevents writes there). `split_check` with
+HTML output-budget and strict nonmath-dollar extras, both through the real build: SAME, 32 checks, no BOTH FAILED.
+Start-up has the same 205 modules; interleaved `scripts/pdfmd --version` best/median of ten: 121/135 ms before,
+144/159 ms after. Outside-sandbox server and cache verification remains for the reviewer.
+
 ## v3.33.238 — 2026-11-16
 
 Pre-edit state: commit `9d72b2d`. **`--bibliography-indent LENGTH` is back, and Pandoc's own `--bibliography FILE` still reaches
