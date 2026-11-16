@@ -1,7 +1,7 @@
 """Universal markup's LaTeX header when LaTeX of somebody else's comes before it (v3.33.67): a kit's package, a `preamble.tex`
 or another header file of the user's, an own template or a class other than the standard ones.
 
-pdfmd's markup header (`MARKUP_HEADERS` in `pdfmd.py`) loads pdflscape for `landscape` and lua-ul or soul for `highlight`.
+pdfmd's markup header (`MARKUP_HEADERS` in `pdfmd_flavours.markup`) loads pdflscape for `landscape` and lua-ul or soul for `highlight`.
 lscape defines its environment with `\\def`, so a `landscape` environment a kit had defined (nulabreport's: a wider sheet,
 logo and footer upright) was replaced without a word by pdflscape's turned portrait page; and lua-ul with `[soul]` stopped
 LuaLaTeX when soul or a bare lua-ul was loaded first (`\\textul already defined`, an option clash). After such LaTeX the

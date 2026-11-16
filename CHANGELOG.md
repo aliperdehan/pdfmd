@@ -19,6 +19,29 @@ same commit as the change.
 
 ---
 
+## v3.33.243 — 2026-11-16
+
+Pre-edit state: commit `d2073e5`. Phase 2 of the split, wave 2, move 14: plot-cache helpers move to
+`lib/pdfmd_tex/plots.py` with seven constants. A pure move: the tool moved fifteen statements, made ten `core.`
+rewrites, added nine names to the table and no stand-ins; its AST self-check passed, with no refusals.
+By hand: the plot-cache section banner and the earlier PLOT_CTX location comment are restored to pdfmd.py; the
+cache-protocol comment moves with CACHE_HANDSHAKE. The TeX package docstring points at the new protocol location;
+its markup module docstring also corrects the MARKUP_HEADERS location missed in move 13. `user_tex_trees` keeps lru_cache, and its table entry serves the
+real cached function so tests can clear it. The version, this entry and SPLIT.md's progress heading are updated.
+No packaging change is needed. `pdfmd.py`: 11,465 -> 11,295 lines.
+
+Proof: Ruff's F checks pass. The section's tests, every test module naming a moved name, the always-run set and
+`test_split_tools`: thirteen modules, 260 tests, 239 passed, two skipped (Windows drive letters and the
+no-prompt-toolkit case), three failures and sixteen errors; all nineteen unsuccessful tests require blocked sockets
+in test_serve. Tests used scratch TeX config/cache folders; the real build-cache listing is unchanged (116 entries;
+the sandbox also prevents writes there). A standalone validation of the scratch style initially failed because its
+newcommand conflicted with pdfmd's injected cache-directory macro; the fixture was changed to providecommand before
+either comparison reached that extra. No source fix was needed. `split_check` with a LuaLaTeX --cache-plots build
+and a participating scratch style, through picture_cache_styles, cache_aliases, user_tex_trees, plot_cache_directory,
+pruning, validation and request reading: SAME, 31 checks, no BOTH FAILED. Start-up has the same 205 modules;
+alternating scripts/pdfmd --version best/median of ten: 114/128 ms before, 112/130 ms after (split_check's own runs:
+107/116 and 94/104 ms). Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.242 — 2026-11-16
 
 Pre-edit state: commit `f288d34`. Phase 2 of the split, wave 2, move 13: universal markup and flavour selection move

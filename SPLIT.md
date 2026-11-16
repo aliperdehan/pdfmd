@@ -322,7 +322,7 @@ Note: The module-level `try: from pdfmd_flavours import PRESETS as FLAVOUR_PRESE
 
 Tests: `test_markup_callouts`, `test_obsidian`, `test_show_comments`, `test_markup_highlight`, `test_markup_guarded`, `test_newline`, `test_embeds`.
 
-#### 14. `pdfmd_tex.plots` (existing package): 8 definitions, 7 constants, ~217 lines
+#### 14. `pdfmd_tex.plots` (existing package): 8 definitions, 7 constants, ~217 lines; done in 3.33.243
 
 Goes to `lib/pdfmd_tex/plots.py`.
 

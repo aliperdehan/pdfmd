@@ -14,7 +14,7 @@ universal markup's header.
 
 Moved out of `pdfmd.py` unchanged (v3.33.36, SPLIT.md), with `TEX_CAUSES`, `TEX_PACKAGES`, `MAX_TEX_DIRECT_PASSES`,
 `TEX_RERUN_TRIGGERS`, `TEX_LOG_WRAP_WIDTH`, `AUX_CLEAN_SUFFIXES` and `PLOT_CTX_TWICE`, `PLOT_CTX_MARGIN` and `PLOT_CTX_PLAIN` (the
-protocol they belong to is described in `pdfmd.py`, above `CACHE_HANDSHAKE`, which stays). `core` is the `pdfmd` module, bound by
+protocol they belong to is described in `pdfmd_tex.plots`, above `CACHE_HANDSHAKE`). `core` is the `pdfmd` module, bound by
 `pdfmd.py` when it loads (the first binding wins); the pdfmd names the code uses (`ENGINE_FAMILY`, `LATEX_ENGINES`,
 `TECTONIC_SEARCH_ENV`, `frontmatter_value`, `log_cmd`, `office_packages`, `package_helper`, `chain_engine_failed` (since v3.33.71), `record_engine`,
 `report_engine_failure`, `run_probe`, `sha1_file`, `tex_argument`, `vprint` and `which`) are read as `core.X` when it runs;
