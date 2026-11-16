@@ -1512,11 +1512,11 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.260"
+PDFMD_VERSION = "3.33.261"
 import argparse
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
-import hashlib
+import hashlib  # noqa: F401 -- retain start-up modules and the module attribute
 import io  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1547,7 +1547,7 @@ import warnings  # noqa: F401 -- retain start-up modules and the module attribut
 import inspect  # noqa: F401 -- read as core.inspect by lib/pdfmd_bridge/odt.py and as pdfmd.inspect by tests
 from contextlib import contextmanager
 from datetime import datetime  # noqa: F401 -- retain start-up modules and the module attribute
-from decimal import Decimal
+from decimal import Decimal  # noqa: F401 -- retain start-up modules and the module attribute
 from pathlib import Path
 from shutil import which
 import tempfile
@@ -1929,6 +1929,13 @@ names("pdfmd_tex.inputs", "EMBEDDED_RESOURCE_DIRS resource_path_option kit_searc
 names("pdfmd_kitset", "installed_package_folder configured_kits kit_locations find_kit kit_cache KIT_METADATA ACTIVE_KITS "
                       "set_kit_cli KIT_HEADER_PREFIX kit_preamble_kits kit_writes_preamble header_argument_positions "
                       "kit_explicit_sources kit_embedded_preambles package_helper office_packages")
+names("pdfmd_metadata", "AUTO_METADATA_DISABLED METADATA_APPEND_KEY metadata_plus_key metadata_append_keys "
+                        "merge_metadata_layers metadata_append_args calc_filter_args global_metadata_file PRESET_OFF "
+                        "PRESET_DEFAULT presets_report METADATA_PRECEDENCES metadata_precedence pandoc_metadata_order "
+                        "find_metadata find_local_metadata chapter_value has_chapter_field report_sources")
+is_global_metadata = deferred("pdfmd_metadata", "is_global_metadata")
+metadata_files_by_priority = deferred("pdfmd_metadata", "metadata_files_by_priority")
+preset_name = deferred("pdfmd_metadata", "preset_name")
 active_kits = deferred("pdfmd_kitset", "active_kits")
 kit_metadata_files = deferred("pdfmd_kitset", "kit_metadata_files")
 document_header_includes = deferred("pdfmd_tex.inputs", "document_header_includes")
@@ -1968,7 +1975,6 @@ stamp_scope_matches = deferred("pdfmd_edit.command", "stamp_scope_matches")
 # DEFAULT_FONT, MONOFONT_STAND_INS, SERIF_STAND_INS and installed_font_families to preferred_font: lib/pdfmd_unicode/fonts_choice.py (v3.33.34)
 
 DEFAULT_MARGIN = "1in"
-AUTO_METADATA_DISABLED = object()
 
 # Cosmetic-only (never affects what pdfmd actually does, only how a path is
 # PRINTED), so a plain module-level flag rather than threading a parameter
@@ -2714,151 +2720,6 @@ def calc_digits_mode(md_path: Path, metadata_files: list[Path]) -> str | None:
 # folders' `.pdfmd/metadata.yaml` (farthest first), the document folder's metadata files, the document's own front matter.
 # Pandoc cannot do it (the front matter beats every metadata file), so pdfmd merges, hands the finished values over under
 # `pdfmd-merged` and pdfmd_lua/metadata_append.lua, run before every other filter, puts them in place.
-METADATA_APPEND_KEY = "metadata-append"
-METADATA_APPEND_BLOCKED = ("header-includes", "pdfmd-options")          # lifted into header files by pdfmd itself
-
-
-def metadata_plus_key(key) -> bool:
-    return isinstance(key, str) and len(key) > 1 and key.endswith("+")
-
-
-def metadata_append_keys(md_path: Path | None, metadata_files: list[Path]) -> set[str]:
-    """The keys whose document value appends (`pdfmd-options.metadata-append`: a name or a list of names); empty: replace."""
-    value = first_pdfmd_option(md_path, list(metadata_files), METADATA_APPEND_KEY) if md_path is not None else None
-    if value is None or value is False:
-        return set()
-    where = display_path(md_path)
-    if not isinstance(value, (str, list, tuple)):
-        raise SystemExit(f"{where}: pdfmd-options.{METADATA_APPEND_KEY} must be a key name or a list of them, not {value!r}")
-    keys = {part.strip() for item in ([value] if isinstance(value, str) else value) for part in str(item).split(",") if part.strip()}
-    for key in sorted(keys & set(METADATA_APPEND_BLOCKED)):
-        raise SystemExit(f"{where}: pdfmd-options.{METADATA_APPEND_KEY} cannot name `{key}` (pdfmd lifts it into header files itself)")
-    return keys
-
-
-def metadata_joined(key: str, below, value, where: str) -> list:
-    """What ``key`` holds after ``value`` is appended to ``below``: a list (a single value counts as a one-item list)."""
-    for part in (below, value):
-        if isinstance(part, dict):
-            raise SystemExit(f"{where}: `{key}` holds a mapping, which cannot be appended to (only a value or a list can)")
-    return [*([] if below is None else below if isinstance(below, list) else [below]),
-            *([] if value is None else value if isinstance(value, list) else [value])]
-
-
-def merge_metadata_layers(layers: list[tuple[dict, bool]], append_keys: set[str], where: str) -> dict:
-    """The final value of every key an append touched, from ``layers`` (lowest first; the flag says the layer is the document's).
-    In one layer `key:` is taken first and `key+:` appended after it. {} when nothing appends."""
-    held: dict = {}
-    touched: list[str] = []
-    for mapping, is_document in layers:
-        for key, value in mapping.items():
-            if metadata_plus_key(key):
-                continue
-            if is_document and key in append_keys and key in held:
-                held[key] = metadata_joined(key, held[key], value, where)
-                touched.append(key)
-            else:
-                held[key] = value
-        for key, value in mapping.items():
-            if not metadata_plus_key(key):
-                continue
-            base = key[:-1]
-            if base in METADATA_APPEND_BLOCKED:
-                raise SystemExit(f"{where}: `{key}` is not supported (pdfmd lifts `{base}` into header files itself)")
-            held[base] = metadata_joined(base, held.get(base), value, where)
-            touched.append(base)
-    return {key: held[key] for key in dict.fromkeys(touched)}
-
-
-def metadata_layers(sources: list[Path], metadata_files: list[Path]) -> list[tuple[dict, bool]]:
-    """The metadata a build reads, as layers, lowest first (see the comment above): the files in the order Pandoc gets them, then
-    the front matter of each source."""
-    layers: list[tuple[dict, bool]] = []
-    for path in pandoc_metadata_order(list(metadata_files)):
-        data = metadata_file_yaml(path)
-        data.pop("pdfmd-options", None)
-        layers.append((data, False))
-    for source in sources:
-        layers.append((front_matter_dict(read_text_best_effort(source)), True))
-    return layers
-
-
-def metadata_append_args(sources: Path | list[Path], metadata_files: list[Path], pandoc_options=(), no_auto=None) -> list[str]:
-    """The metadata file with the finished values and ``--lua-filter metadata_append.lua``, only when some key appends; [] otherwise
-    (every other build is untouched). Goes before every other filter."""
-    files = sources if isinstance(sources, list) else [sources]
-    if not files or yaml is None:
-        return []
-    append = metadata_append_keys(files[0], metadata_files)
-    layers = metadata_layers(files, metadata_files)
-    merged = load_package("pdfmd_args").merged_cli_metadata(sys.modules[__name__], layers, append, display_path(files[0]), pandoc_options)
-    merged.update(deferred("pdfmd_bibliography.sources", "merge_sources")(files, metadata_files, pandoc_options, no_auto))
-    if not merged:
-        return []
-    try:
-        import pdfmd_lua
-    except ImportError:
-        pdfmd_lua_missing()
-        return []
-    shipped = pdfmd_lua.path("metadata_append")
-    if shipped is None:
-        return []
-    text = yaml.safe_dump({"pdfmd-merged": merged}, allow_unicode=True, sort_keys=False, width=1_000_000)
-    target = cache_root() / "metadata" / f"{hashlib.sha1(text.encode('utf-8')).hexdigest()[:16]}.yaml"
-    try:
-        if not target.is_file():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(text, encoding="utf-8")
-    except OSError:
-        return []
-    return ["--metadata-file", str(target), "--lua-filter", str(shipped)]
-
-
-def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
-    """``--lua-filter calc.lua`` when a source has a `{=}` span or a `::: calc` div and `calc` is not off."""
-    files = sources if isinstance(sources, list) else [sources]
-    if not any(CALC_SPAN_RE.search(EMBED_BLOCK_RE.sub("", read_text_best_effort(file))) for file in files):
-        return []
-    if calc_is_off(files[0], metadata_files):
-        return []
-    try:
-        import pdfmd_lua
-    except ImportError:
-        pdfmd_lua_missing()
-        return []
-    shipped = pdfmd_lua.path("calc")
-    if shipped is None:
-        return []
-    arguments = ["-M", "pdfmd-calc-round=" + calc_round_mode(files[0], metadata_files)]
-    digits = calc_digits_mode(files[0], metadata_files)
-    if digits:
-        arguments += ["-M", "pdfmd-calc-digits=" + digits]
-    if calc_subs_on(files[0], metadata_files):
-        arguments += ["-M", "pdfmd-calc-subs=true"]
-    typeset = calc_typeset_mode(files[0], metadata_files)
-    if typeset != "off":
-        arguments += ["-M", "pdfmd-calc-typeset=" + typeset]
-        for style, pieces in calc_typeset_styles(files[0], metadata_files).items():
-            if pieces:
-                arguments += ["-M", f"pdfmd-calc-typeset-{style}=" + ",".join(pieces)]
-    noindent = calc_noindent_mode(files[0], metadata_files)
-    if noindent != "off":
-        arguments += ["-M", "pdfmd-calc-noindent=" + ("true" if noindent == "all" else noindent)]
-    space = calc_space(files[0], metadata_files)
-    if space:
-        arguments += ["-M", "pdfmd-calc-space=" + space]
-    if calc_align(files[0], metadata_files) == "center":
-        arguments += ["-M", "pdfmd-calc-align=center"]
-    constants = calc_constants_file(files[0], metadata_files)
-    if constants is not None:
-        arguments += ["-M", "pdfmd-calc-constants=" + "\n".join(calc_constants_statements(constants))]
-    if CALC_SEED is not None and not BUILD.get("scanning"):
-        arguments += ["-M", "pdfmd-calc-seed=" + str(CALC_SEED)]
-    if CALC_BELOW is not None and not BUILD.get("scanning"):
-        arguments += ["-M", "pdfmd-calc-below=" + str(CALC_BELOW)]
-    if CALC_DUMP is not None and not BUILD.get("scanning"):
-        arguments += ["-V", "pdfmd-calc-dump=" + str(CALC_DUMP)]
-    return arguments + ["--lua-filter", str(shipped)]
 
 
 # -- Flat Markdown: --to gfm (v3.26.3) ----------------------------------------------
@@ -4703,52 +4564,6 @@ def failure_text(error: BaseException) -> str:
 # tables_command: lib/pdfmd_tables/command.py (v3.33.24)
 
 
-def yaml_order(path: Path, fallback: int = 0) -> tuple[bool, Decimal | int]:
-    match = re.search(r"^\s*yamlorder\s*:\s*(-?(?:\d+(?:\.\d*)?|\.\d+))\s*$",
-                      path.read_text(encoding="utf-8-sig"), re.IGNORECASE | re.MULTILINE)
-    if not match:
-        return (False, fallback)
-    return (True, Decimal(match.group(1)))
-
-
-def order_metadata(paths: list[Path]) -> list[Path]:
-    """Apply yamlorder where present while preserving explicit order otherwise."""
-    if any(yaml_order(path)[0] for path in paths):
-        return [path for _, path in sorted(
-            enumerate(paths), key=lambda item: (
-                yaml_order(item[1], item[0])[1], item[0]))]
-    return paths
-
-
-def resolve_yaml(directory: Path, value: str) -> Path:
-    path = Path(value)
-    candidates = [path]
-    if not path.is_absolute():
-        accessory = directory / ACCESSORY_DIRNAME
-        candidates.append(Path.cwd() / path)
-        candidates.append(directory / path)
-        candidates.append(accessory / path)
-        if not path.suffix:
-            candidates.extend((Path.cwd() / path.with_suffix(".yaml"),
-                               directory / path.with_suffix(".yaml"),
-                               accessory / path.with_suffix(".yaml")))
-    for candidate in candidates:
-        if candidate.is_file():
-            # Absolute: Pandoc runs inside the first metadata file's own
-            # folder (pandoc_cwd), where a path relative to ours (`-y
-            # cfg/x.yaml`) would no longer lead anywhere.
-            return Path(os.path.abspath(candidate))
-    raise FileNotFoundError(f"Metadata file not found: {value}")
-
-
-def global_metadata_file() -> Path | None:
-    """`metadata.yaml` beside the config file (`pdfmd --setup` writes it): metadata every document gets, below
-    anything its own folder's metadata says. None when absent or the config is switched off."""
-    config = config_path()
-    candidate = None if config is None else config.with_name("metadata.yaml")
-    return candidate if candidate is not None and candidate.is_file() else None
-
-
 # -- Presets: other global metadata files to choose from (v3.28.19) ------------------------------------------------
 # `presets/NAME.yaml` beside the config file is a global metadata file like `metadata.yaml` (which is the preset
 # `default`): `--preset lab`, `pdfmd-options: {preset: lab}` (or lab.yaml; a path works too) takes it instead,
@@ -4756,284 +4571,12 @@ def global_metadata_file() -> Path | None:
 # wins, then the document's own pdfmd-options, its metadata files', then the config file's `options`.
 PRESET_CLI: str | None = None                  # --preset (set in main)
 GLOBAL_METADATA_CLI: bool | None = None        # --global-metadata / --no-global-metadata (set in main)
-PRESET_OFF = ("none", "off", "false", "no")
-PRESET_DEFAULT = ("default", "on", "true", "yes")
-
-
-def presets_dir() -> Path | None:
-    config = config_path()
-    return None if config is None else config.with_name("presets")
-
-
-def list_presets() -> list[Path]:
-    folder = presets_dir()
-    return sorted((item for item in folder.glob("*.y*ml") if item.suffix in (".yaml", ".yml")),
-                  key=lambda item: item.name.casefold()) if folder is not None and folder.is_dir() else []
-
-
-def preset_name(path: Path) -> str:
-    return "default" if path.parent != presets_dir() else path.stem
-
-
-def is_global_metadata(path) -> bool:
-    """Whether ``path`` is pdfmd's global metadata (`metadata.yaml` beside the config file) or one of its presets."""
-    config = config_path()
-    if config is None or path is None:
-        return False
-    folder = Path(os.path.abspath(config.parent))
-    where = Path(os.path.abspath(path))
-    return ((where.parent == folder and where.name == "metadata.yaml")
-            or (where.parent == folder / "presets" and where.suffix in (".yaml", ".yml")))
-
-
-def preset_file(value: str, base: Path | None = None) -> Path | None:
-    """The file a preset value names: `default`, a name in presets/ (with or without .yaml), or a path (relative to
-    ``base``, the document's folder, else to the working folder). Stops with the names there are for one that is none."""
-    name = str(value).strip()
-    if name.casefold() in PRESET_DEFAULT:
-        return global_metadata_file()
-    folder = presets_dir()
-    if folder is not None and not re.search(r"[/\\]", name) and not name.startswith("~"):
-        for candidate in (name, f"{name}.yaml", f"{name}.yml"):
-            if (folder / candidate).is_file():
-                return folder / candidate
-    else:
-        path = Path(name).expanduser()
-        for candidate in ([path] if path.is_absolute() else [(base or Path.cwd()) / path, Path.cwd() / path]):
-            if candidate.is_file():
-                return Path(os.path.abspath(candidate))
-    known = ", ".join(preset_name(item) for item in list_presets()) or "none yet"
-    raise SystemExit(f"unknown preset {name!r} (the presets/ folder beside the config file has: {known}; "
-                     "`none` takes no global metadata; pdfmd --presets lists them)")
-
-
-def presets_report(path: Path | None = None) -> bool:
-    """`--presets [DOCUMENT]`: the global metadata files there are, and which one a build here would use."""
-    config = config_path()
-    if config is None:
-        print("The config file is switched off (PDFMD_CONFIG is empty): there is no global metadata.")
-        return False
-    default = global_metadata_file()
-    rows = [("default", default, "metadata.yaml" if default else "metadata.yaml (not there yet: pdfmd --setup writes it)")]
-    rows += [(preset_name(item), item, f"presets/{item.name}") for item in list_presets()]
-    document = Path(path) if path is not None and Path(path).is_file() else None
-    try:
-        local = find_local_metadata((document.parent if document else Path.cwd()).resolve(), None,
-                                    document_stem=document.stem if document else None)
-        local = [] if local is AUTO_METADATA_DISABLED or local is None else (local if isinstance(local, list) else [local])
-        used = chosen_global_metadata(document, local)
-    except (SystemExit, FileNotFoundError, ValueError) as error:
-        print(f"WARN  {error}", file=sys.stderr)
-        used = None
-    for name, file, where in rows:
-        keys = [("options" if key == "pdfmd-options" else key) for key in metadata_file_yaml(file)] if file else []
-        shown = ", ".join(keys[:6]) + (f" +{len(keys) - 6}" if len(keys) > 6 else "")
-        print(f"{'*' if used is not None and file is not None and file == used else ' '} {name:<14} {where}"
-              + (f"  ({shown})" if shown else ""))
-    print("  (* is the one a build here would use; none marked: no global metadata)" if used is None
-          else "  (* is the one a build here would use)")
-    return True
-
-
-def chosen_global_metadata(document: Path | None, local_files: list[Path]) -> Path | None:
-    """The global metadata file this document gets: None when it gets none. See the section above for the order."""
-    def decide(preset, enabled):
-        if enabled is False or (preset is not None and str(preset).strip().casefold() in PRESET_OFF):
-            return False
-        if preset is not None and str(preset).strip() and str(preset).strip().casefold() not in PRESET_DEFAULT:
-            return preset_file(preset, document.parent if document is not None else None)
-        return True if (preset is not None or enabled is not None) else None
-    chosen = decide(PRESET_CLI, GLOBAL_METADATA_CLI)
-    if chosen is None:
-        try:
-            if document is not None:
-                preset = first_pdfmd_option(document, local_files, "preset")
-                enabled = first_pdfmd_option(document, local_files, "global-metadata")
-            else:
-                preset, enabled = config_options().get("preset"), config_options().get("global-metadata")
-        except (OSError, UnicodeDecodeError):            # a document that is not there (yet): the config alone decides
-            preset, enabled = config_options().get("preset"), config_options().get("global-metadata")
-        if isinstance(enabled, str):
-            enabled = False if enabled.strip().casefold() in PRESET_OFF else True if enabled.strip().casefold() in PRESET_DEFAULT else None
-        chosen = decide(preset, enabled if isinstance(enabled, bool) else None)
-    if chosen is False:
-        return None
-    return chosen if isinstance(chosen, Path) else global_metadata_file()
 
 
 METADATA_PRECEDENCE_CLI: str | None = None    # --metadata-precedence (set in main)
-METADATA_PRECEDENCES = ("later", "first")
-
-
-def metadata_precedence() -> str:
-    """Which of two metadata files wins a key both set (v3.27.22): `later` (the default, as Pandoc takes them) or
-    `first`. From --metadata-precedence, else the config's `options.metadata-precedence` (pdfmd --setup). Not from a
-    document or a metadata file: it decides how those are layered."""
-    value = METADATA_PRECEDENCE_CLI
-    if value is None:
-        value = config_options().get("metadata-precedence")
-    if value is None:
-        return "later"
-    mode = str(value).strip().casefold()
-    if mode not in METADATA_PRECEDENCES:
-        raise SystemExit(f"unknown metadata-precedence value {value!r}. Valid: {', '.join(METADATA_PRECEDENCES)}")
-    return mode
-
-
-def pandoc_metadata_order(metadata_files: list[Path]) -> list[Path]:
-    """The metadata files in the order Pandoc gets them: the global metadata file first. Pandoc prefers a later
-    --metadata-file, and the global file is the lowest in priority (v3.27.17; it came last and so beat the
-    folder's own metadata.yaml). With `--metadata-precedence first` the others go in reverse, so that the first wins
-    in Pandoc too (v3.27.22). The list itself keeps the global file last (Pandoc runs in the folder of its first
-    entry); what pdfmd reads out of the files itself follows this order too (metadata_files_by_priority)."""
-    KIT_METADATA = sys.modules[__name__].KIT_METADATA
-    extra = next((path for path in metadata_files if is_global_metadata(path)), None)
-    supplied = [path for path in metadata_files if path != extra and path in KIT_METADATA]            # a kit's defaults, in its order
-    folders = [path for path in metadata_files if path != extra and path not in KIT_METADATA and is_folder_metadata(path)]       # nearest first
-    parents, local = deferred("pdfmd_metadata", "parent_metadata_order")(metadata_files, extra)
-    if len(local) > 1 and metadata_precedence() == "first":
-        local.reverse()
-    return [*([extra] if extra is not None else []), *supplied, *reversed(folders), *parents, *local]
-
-
-def metadata_files_by_priority(metadata_files) -> list[Path]:
-    """The metadata files, the one that wins first, for what pdfmd reads out of them itself (`pdfmd-options`, `margin`,
-    the engine): the later file, as Pandoc takes it, then the earlier, the global metadata file (pdfmd --setup) last.
-    Until v3.27.22 the first file won for pdfmd's keys while the later won for Pandoc's (a document-named YAML overrode
-    metadata.yaml's margins but not its pdfmd-options)."""
-    return list(reversed(pandoc_metadata_order(list(metadata_files))))
-
-
-def find_metadata(directory: Path, requested: list[str] | None, report: bool = False,
-                  document_class: str | None = None,
-                  document_stem: str | None = None, document: Path | None = None,
-                  discover: bool = True, kits: bool = True) -> Path | list[Path] | object | None:
-    """Choose metadata files (see find_local_metadata), with the folders' and the global metadata file last when the files were
-    found automatically (not named with -y). The global one is the lowest in priority: pandoc_metadata_order gives it to Pandoc
-    first. ``discover=False`` (explicit-only) looks for no file beside the document but keeps the folders' and the global ones.
-    The defaults of the kits chosen for the document (``kits``; entry 3du) come between the global file and the folders'."""
-    found = find_local_metadata(directory, requested, report, document_class, document_stem) if discover else None
-    extra, folders = None, []
-    if requested is None and found is not AUTO_METADATA_DISABLED:
-        extra = chosen_global_metadata(document, [found] if isinstance(found, Path) else list(found or []))
-        folders = folder_metadata_files(str(directory.resolve()))          # the folders' own, between the files and the global
-        found = deferred("pdfmd_metadata", "with_metadata_parents")(found, directory, document, report, document_class, document_stem, discover, folders, extra)
-    supplied: list[Path] = []
-    if kits and document is not None and found is not AUTO_METADATA_DISABLED:
-        here = [*(found if isinstance(found, list) else [found] if found is not None else []), *folders,
-                *([extra] if extra is not None else [])]
-        supplied = kit_metadata_files(active_kits(document, here))
-    if (extra is None and not folders and not supplied) or found is AUTO_METADATA_DISABLED:
-        return found
-    listed = [*(found if isinstance(found, list) else [found] if found is not None else []), *folders, *supplied,
-              *([extra] if extra is not None else [])]
-    return listed[0] if len(listed) == 1 else listed
-
-
-def find_local_metadata(directory: Path, requested: list[str] | None, report: bool = False,
-                        document_class: str | None = None,
-                        document_stem: str | None = None, search_dirs: list[Path] | None = None) -> Path | list[Path] | object | None:
-    """Choose metadata files, supporting explicit stacks and automatic discovery."""
-    if requested == []:
-        return AUTO_METADATA_DISABLED
-    if search_dirs is None and requested is None and document_stem:
-        unpacked = directory / f"{document_stem}{UNPACKED_SUFFIX}"
-        unpacked_yaml = (sorted([*unpacked.glob("*.yaml"), *unpacked.glob("*.yml")],
-                                key=lambda item: natural_key(item.name)) if unpacked.is_dir() else [])
-        if unpacked_yaml:
-            # The folder --unpack made for this document holds ITS metadata,
-            # in the order it was merged in: nothing else is guessed at.
-            return order_metadata(unpacked_yaml)
-    search_dirs = accessory_directories(directory, document_stem) if search_dirs is None else search_dirs
-    if requested is not None:
-        if requested == ["all"]:
-            candidates = [item for folder in search_dirs
-                          for item in sorted(folder.glob("*.yaml")) + sorted(folder.glob("*.yml"))
-                          if item.name.lower() != "defaults.yaml" and not is_package_helper_yaml(item)
-                          and yaml_autoinclude(item)]
-            return order_metadata(candidates)
-        return order_metadata([resolve_yaml(directory, value) for value in requested])
-    candidates = [item for folder in search_dirs
-                  for item in sorted(folder.glob("*.yaml")) + sorted(folder.glob("*.yml"))
-                  if item.name.lower() != "defaults.yaml" and not is_package_helper_yaml(item)
-                          and yaml_autoinclude(item)]
-    metadata = next((item for item in candidates if item.name.lower() == "metadata.yaml"), None)
-    document_metadata = ([item for item in candidates
-                          if document_stem and item.stem.casefold() == document_stem.casefold()]
-                         if document_stem else [])
-    if document_metadata:
-        # metadata.yaml is the shared base; document-named YAML overrides it.
-        selected = ([metadata] if metadata and metadata not in document_metadata else []) + document_metadata
-        return order_metadata(selected)
-    if report:
-        preferred = next((item for item in candidates if item.name.lower() == "report.yaml"), None)
-        preferred = preferred or next((item for item in candidates if item.name.lower() == "book.yaml"), None)
-        if preferred:
-            return order_metadata(([metadata] if metadata else []) + [preferred])
-    if metadata:
-        return metadata
-    if document_class:
-        matching = [item for item in candidates if item.stem.casefold() == document_class.casefold()]
-        if len(matching) == 1:
-            return matching[0]
-    if len(candidates) == 1:
-        return candidates[0]
-    if len(candidates) > 1:
-        names = ", ".join(item.name for item in candidates)
-        raise ValueError(f"Multiple YAML files found in {directory}: {names}; use -y FILE or bare -y")
-    return None
-
-
-def chapter_value(md_path: Path):
-    """Read the scalar chapter value from a Markdown YAML header."""
-    text = md_path.read_text(encoding="utf-8-sig")
-    front_matter = re.match(r"^---\s*\n(.*?)\n(?:---|\.\.\.)\s*(?:\n|$)", text, re.DOTALL)
-    if not front_matter:
-        return None
-    match = re.search(r"^chapter\s*:\s*(.*?)\s*$", front_matter.group(1), re.MULTILINE)
-    if not match:
-        return None
-    value = match.group(1).strip().strip("'\"")
-    return None if value.casefold() in {"", "null", "none", "exclude", "excluded"} else value
-
-
-def has_chapter_field(md_path: Path) -> bool:
-    return bool(re.search(r"^chapter\s*:", md_path.read_text(encoding="utf-8-sig"), re.MULTILINE))
 
 
 # chapter_order: lib/pdfmd_parts/__init__.py (v3.33.30)
-
-
-def excluded_by_cli(md_path: Path, exclusions: list[str]) -> bool:
-    candidates = {md_path.name.casefold(), md_path.stem.casefold(), str(md_path).casefold()}
-    for exclusion in exclusions:
-        value = Path(exclusion)
-        names = {value.name.casefold(), value.stem.casefold(), str(value).casefold()}
-        if candidates & names:
-            return True
-    return False
-
-
-def report_sources(paths: list[Path], exclusions: list[str], exclude_unnumbered: bool = False,
-                   recursive: bool = False, include_never: bool = False) -> tuple[list[Path], list[Path]]:
-    # .resolve() for the same reason as find_markdown(): a relative directory
-    # plus a file in a subdirectory would otherwise make Pandoc's cwd and its
-    # source-file arguments both relative, and doubling up into a bad path.
-    files = []
-    for path in paths:
-        if path.is_dir():
-            files.extend(skip_never([file.resolve() for file in
-                                     (path.rglob("*.md") if recursive else path.glob("*.md"))], include_never))
-        elif path.is_file() and path.suffix.lower() == ".md":
-            files.append(path.resolve())
-    all_files = sorted(set(files))
-    excluded = [file for file in all_files if chapter_value(file) is None and has_chapter_field(file)]
-    excluded += [file for file in all_files if excluded_by_cli(file, exclusions) and file not in excluded]
-    if exclude_unnumbered:
-        excluded += [file for file in all_files
-                     if file not in excluded and not has_chapter_field(file)]
-    included = [file for file in all_files if file not in excluded]
-    return sorted(included, key=chapter_order), excluded
 
 
 # -- Parts (split-file) mode ------------------------------------------------

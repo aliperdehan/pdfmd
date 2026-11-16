@@ -604,7 +604,7 @@ Note: `set_kit_cli` writes `KIT_CLI` and `KIT_STACK_CLI`; `find_kit` and `packag
 
 Tests: `test_kits`, `test_kit_texinputs`, `test_kit_carry`, `test_attach_layers`, `test_package_helper`, `test_setup`.
 
-#### 32. `pdfmd_metadata` (new package): 27 definitions, 6 constants, ~475 lines
+#### 32. `pdfmd_metadata` (existing package): 27 definitions, 6 constants, ~475 lines; done in 3.33.261
 
 Goes to `lib/pdfmd_metadata/__init__.py`.
 

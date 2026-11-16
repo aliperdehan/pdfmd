@@ -19,6 +19,32 @@ same commit as the change.
 
 ---
 
+## v3.33.261 — 2026-11-16
+
+Pre-edit state: commit `990d39c`. Phase 2 of the split, wave 3, move 32: metadata discovery, layering, appending,
+presets and calc-filter arguments move into `lib/pdfmd_metadata/__init__.py`, with six constants. A pure move,
+appended to the existing parent-metadata package. The tool moved 33 statements, made 69 core rewrites, registered
+nineteen table names and left is_global_metadata, metadata_files_by_priority and preset_name as stand-ins; AST
+self-check passed, with no refusals. metadata_append_args passes core for its former sys.modules[__name__];
+pandoc_metadata_order's lazy KIT_METADATA lookup becomes core.KIT_METADATA. AUTO_METADATA_DISABLED is the same
+shared sentinel. By hand the six-line appending section banner is restored to pdfmd.py; the metadata docstring
+locates its appended helpers, and SPLIT.md acknowledges the existing package. F401 annotations retain hashlib
+and Decimal for unchanged startup and module attributes. Version, this entry and SPLIT.md progress are updated.
+No packaging change. `pdfmd.py`: 6,361 -> 5,904 lines.
+
+Proof: Ruff F clean. Sixteen modules (section tests, every moved-name match, always-run set and test_split_tools),
+419 tests: 399 passed, one skipped (prompt_toolkit installed), three failures and sixteen errors, all nineteen
+requiring blocked sockets in test_serve. Tests use scratch TeX folders. The real build-cache directory diff is
+empty (118 entries; sandbox writes are blocked). split_check: SAME on 33 checks, no BOTH FAILED. Extras build
+automatically discovered local/parent metadata and an absolute preset to HTML, an explicit stack with first-file
+precedence to LaTeX, and embedded metadata in assembled source; the document also reaches calc_filter_args.
+A standalone fixture initially had two auto-discovered YAML files and was correctly rejected as ambiguous;
+the second layer was moved outside discovery for the explicit-stack extra, before the comparison. A scratch
+banner-restoration script stopped on a nonexistent anchor; the actual anchor was used before proofs began.
+Start-up has the same 205 modules; interleaved scripts/pdfmd --version best/median of ten: 145/170 ms before,
+145/172 ms after (harness sequential: 127/141 and 122/124 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.260 — 2026-11-16
 
 Pre-edit state: commit `05bdc37`. Phase 2 of the split, wave 3, move 31: active kits and package-helper discovery
