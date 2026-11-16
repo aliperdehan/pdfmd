@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.254"
+PDFMD_VERSION = "3.33.255"
 import argparse
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1906,6 +1906,10 @@ names("pdfmd_stamp", "STAMP_MODES STAMP_SCOPES STAMP_STORES DEFAULT_STAMP_OPTION
 names("pdfmd_history.record", "history_module note_entry compile_entry history_file record_history DEFAULT_BACKUP_OPTIONS "
                               "DEFAULT_BACKUP_DIR backup_notice backup_target backup_sort_key resolve_backup_options "
                               "backup_before_edit")
+names("pdfmd_attach.options", "ATTACH_FORMAT ATTACH_MANIFEST ATTACH_SOURCE BUNDLE_MAX_MB EXTRA_PREFIX RESTORED_SUFFIX "
+                              "BUNDLE_SKIP_DIRS IMAGE_REF_RE resolve_attach resolve_bundle extra_key relative_posix "
+                              "GRAPHIC_RE drop_calc_export add_calc_constants comments_note requirement_lines "
+                              "MARKDOWN_TARGETS resolve_keep_source")
 is_package_helper_yaml = deferred("pdfmd_stamp", "is_package_helper_yaml")
 yaml_autoinclude = deferred("pdfmd_stamp", "yaml_autoinclude")
 document_font_setting = deferred("pdfmd_unicode.document", "document_font_setting")
@@ -7833,15 +7837,10 @@ def typst_version() -> tuple[int, ...]:
 # options of the folder settings the build used, restored to `.pdfmd/config.yaml`; a pdfmd that does not know them would
 # restore a report that builds differently. It is written ONLY for a source that has layers: every other manifest stays 2,
 # so a PDF is not refused by an older pdfmd for nothing.
-ATTACH_FORMAT = 3
 # ATTACH_FORMAT_PLAIN: lib/pdfmd_attach (v3.33.37)
-ATTACH_MANIFEST = "pdfmd-manifest.json"
-ATTACH_SOURCE = "pdfmd-source.md"
-ATTACH_KEYS = ("attach-source", "embed-source")
 ATTACH_CLI: bool | None = None
 # --bundle [all] / --no-bundle: None (the document decides), "off", "referenced", "all".
 BUNDLE_CLI: str | None = None
-BUNDLE_MAX_MB = 100
 # --verbose: --restore and --unpack list every file instead of counting them by folder (v3.28.15)
 VERBOSE_OUTPUT = False
 # --attach-bibliography used|all (None: the document's pdfmd-options decide).
@@ -7849,24 +7848,6 @@ BIB_ATTACH_CLI: str | None = None
 CSL_ATTACH_CLI: bool | None = None    # --attach-csl / --no-attach-csl
 # --bundle-packages / --no-bundle-packages (None: the document decides).
 BUNDLE_PACKAGES_CLI: bool | None = None
-EXTRA_PREFIX = "files/"
-RESTORED_SUFFIX = ".restored"
-# GLOBAL_LAYOUT_PATH (with its comment) and RAW_REFERENCE_RES: lib/pdfmd_attach (v3.33.37)
-BUNDLE_SKIP_DIRS = frozenset({".git", "node_modules", "__pycache__", "venv", "env"})
-# BUNDLE_SKIP_SUFFIXES, PATH_TOKEN_RE, REFERENCE_EXTENSIONS and SCANNED_SUFFIXES, with their comments: lib/pdfmd_attach (v3.33.37)
-IMAGE_REF_RE = re.compile(
-    r"!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)|<img\b[^>]*?\bsrc=[\"']([^\"']+)[\"']",
-    re.IGNORECASE)
-
-
-def resolve_attach(md_path: Path, metadata_files: list[Path]) -> bool:
-    """Whether the PDF built from ``md_path`` carries its source: the command
-    line, else `pdfmd-options.attach-source` (or `embed-source`)."""
-    if resolve_bundle(md_path, metadata_files):
-        return ATTACH_CLI is not False           # a bundle is a source plus files; --no-attach-source still wins
-    if ATTACH_CLI is not None:
-        return ATTACH_CLI
-    return bool(option_flag(first_pdfmd_option(md_path, metadata_files, *ATTACH_KEYS)))
 
 
 def option_flag_number(value) -> float | None:
@@ -7876,94 +7857,23 @@ def option_flag_number(value) -> float | None:
         return None
 
 
-def resolve_bundle(md_path: Path, metadata_files: list[Path]) -> str | None:
-    """``None`` (no bundle), "sources" (the files the text reads: LaTeX inputs and data, never images),
-    "referenced" (those and the images) or "all" (everything in the document's folder worth keeping):
-    the command line, else `pdfmd-options.bundle` (sources / true / all / false)."""
-    if BUNDLE_CLI is not None:
-        return None if BUNDLE_CLI == "off" else BUNDLE_CLI
-    value = first_pdfmd_option(md_path, metadata_files, "bundle")
-    word = str(value).strip().casefold()
-    if word in ("all", "sources", "referenced"):
-        return word
-    if word == "source":
-        return "sources"
-    return "referenced" if option_flag(value) else None
-
+# GLOBAL_LAYOUT_PATH (with its comment) and RAW_REFERENCE_RES: lib/pdfmd_attach (v3.33.37)
+# BUNDLE_SKIP_SUFFIXES, PATH_TOKEN_RE, REFERENCE_EXTENSIONS and SCANNED_SUFFIXES, with their comments: lib/pdfmd_attach (v3.33.37)
 
 # attached_bundle_mode: lib/pdfmd_attach (v3.33.37)
-
-
-def extra_key(path: str) -> str:
-    """The attachment name of a stored file: `../schemes/x.tex` is `files/__up__/schemes/x.tex` (a viewer that saves an
-    attachment by its name must not climb out of its folder)."""
-    return EXTRA_PREFIX + "/".join("__up__" if part == ".." else part for part in path.split("/"))
-
-
-def relative_posix(base: Path, path: Path) -> str:
-    # not resolve(): a symlinked metadata file is recorded where it sits, not where it points
-    return Path(os.path.relpath(os.path.abspath(path), os.path.abspath(base))).as_posix()
 
 
 # layout_path and referenced_images: lib/pdfmd_attach (v3.33.37)
 
 
 # The comment on the user's own TeX tree, PACKAGE_RE, CLASS_RE, TEX_INPUT_RE and PROVIDES_RE: lib/pdfmd_attach (v3.33.37)
-GRAPHIC_RE = re.compile(r"\\includegraphics\*?\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}")
 # GRAPHIC_SUFFIXES, BUNDLE_IMAGE_SUFFIXES (with its comment), TEX_SOURCE_SUFFIXES and TEX_TREE_SCAN_LIMIT: lib/pdfmd_attach (v3.33.37)
 
 
 # tex_distribution_roots, GRAPHIC_ARGUMENT_RE, MACRO_VALUE_RE and graphic_names_in to bundle_reach: lib/pdfmd_attach (v3.33.37)
 
 
-def drop_calc_export(md_path: Path, sources: list[Path], metadata_files: list[Path], found: list[Path], outside: list) -> None:
-    """The file `calc: {export: FILE}` writes is an output: it does not go with the source (v3.30.22), though its name stands in the
-    front matter and the file is there. It stays when it is also read: it is the constants file, or the body of the document
-    names it (a `.csv` div reading last time's results)."""
-    LEADING_FRONT_MATTER_RE = sys.modules[__name__].LEADING_FRONT_MATTER_RE
-    target = calc_export_file(md_path, metadata_files)
-    if target is None:
-        return
-    target = Path(os.path.abspath(target))
-    try:
-        constants = calc_constants_file(md_path, metadata_files)
-    except SystemExit:
-        constants = None
-    if constants is not None and Path(os.path.abspath(constants)) == target:
-        return
-    for source in sources:
-        if target.name in LEADING_FRONT_MATTER_RE.sub("", read_text_best_effort(source), count=1):
-            return
-    found[:] = [item for item in found if Path(os.path.abspath(item)) != target]
-    outside[:] = [item for item in outside if Path(os.path.abspath(str(item))) != target]
-
-
-def add_calc_constants(md_path: Path, metadata_files: list[Path], base: Path, represented: set[Path],
-                       found: list[Path], outside: list[str]) -> None:
-    """The calculator's constants file (`calc: {constants: FILE}`) goes with the source like the history file (v3.30.12): a name
-    in a metadata file is no path the text mentions, so the scan for referenced files would not find it."""
-    try:
-        constants = calc_constants_file(md_path, metadata_files)
-    except SystemExit:
-        return
-    if constants is None:
-        return
-    constants = Path(os.path.abspath(constants))
-    if constants in found or constants in represented:
-        return
-    (found if constants.is_relative_to(base) else outside).append(constants if constants.is_relative_to(base) else str(constants))
-
-
 # bundle_files, attachment_manifest and attached_source: lib/pdfmd_attach (v3.33.37)
-
-
-def comments_note(manifest: dict) -> str:
-    """'comments stripped (markdown, preamble)' / 'comments kept' from a manifest
-    (format 1 once held a plain true/false: all of the Markdown's)."""
-    stripped = manifest.get("comments_stripped")
-    if isinstance(stripped, list):
-        return f"comments stripped from {', '.join(stripped)}" if stripped else "comments kept"
-    return "comments stripped" if stripped else "comments kept"
 
 
 # resolve_bibliography_pruning, resolve_csl_attach, add_deflated_attachment, write_pdf_attachments and read_pdf_attachments: lib/pdfmd_attach (v3.33.37)
@@ -7987,38 +7897,6 @@ def front_matter_dict(text: str) -> dict:
 # attachment_requirements: lib/pdfmd_attach (v3.33.37)
 
 
-def requirement_lines(manifest: dict) -> list[str]:
-    """What a rebuild needs that the PDF does not carry, one line a kind (packages, graphics), then the fonts
-    and (--verbose) what made the PDF."""
-    needs = manifest.get("requirements") or {}
-    lines = []
-    missing: dict[str, list[str]] = {}
-    for item in needs.get("tex") or []:
-        if not item.get("stored"):
-            version = f" ({item['version']})" if item.get("version") else ""
-            missing.setdefault(item["kind"], []).append(f"{item['name']}{version}")
-    for kind, names in missing.items():
-        lines.append(f"NEEDS     {kind}{'s' if len(names) != 1 else ''} {', '.join(names)}: from the author's own TeX "
-                     "tree, not stored (install it, or build with bundle-packages)")
-    for kit in manifest.get("kits") or []:
-        lines.append(f"KIT       {kit['name']}" + (f" {kit['version']}" if kit.get("version") else "")
-                     + (f" (mode {kit['mode']})" if kit.get("mode") else "")
-                     + (f": its {len(kit['carried'])} parts are stored" if kit.get("carried") else "")
-                     + "; what it wrote is in the source (`kit: none` says so), so a rebuild needs no kit")
-    layers = (manifest.get("layers") or {}).get("options")
-    if layers:
-        lines.append(f"FOLDER    settings the build used: {', '.join(str(key) for key in layers)}"
-                     f"; written to {FOLDER_DIR}/config.yaml of the restored folder")
-    if needs.get("fonts"):
-        lines.append(f"NEEDS     fonts: {', '.join(needs['fonts'])}")
-    made = [f"pdfmd {needs['pdfmd']}" if needs.get("pdfmd") else "", f"pandoc {needs['pandoc']}" if needs.get("pandoc") else "",
-            needs.get("producer") or "", needs.get("texlive") or "", needs.get("platform") or "",
-            needs.get("created") or ""]
-    if any(made):
-        lines.append(f"MADE WITH {', '.join(item for item in made if item)}")
-    return lines
-
-
 # folder_counts: lib/pdfmd_restore/__init__.py (v3.33.29)
 
 
@@ -8031,20 +7909,6 @@ def requirement_lines(manifest: dict) -> list[str]:
 # (see pdfmd_flat/keep.py for the encodings and why nothing in the source can close the comment). `pdfmd --restore
 # FILE.md` writes them back into FILE.restored/. A whole build only (not a part or a section), like --attach-source.
 KEEP_SOURCE_CLI: str | bool | None = None
-MARKDOWN_TARGETS = frozenset({"gfm", "gfm+raw", "markdown", "commonmark", "commonmark_x", "markdown_strict"})
-
-
-def resolve_keep_source(md_path: Path, metadata_files: list[Path]) -> str | None:
-    """"packed", "readable" or None: the command line, else `pdfmd-options.keep-source`."""
-    value = KEEP_SOURCE_CLI if KEEP_SOURCE_CLI is not None else first_pdfmd_option(md_path, metadata_files, "keep-source")
-    if value in (None, False) or str(value).strip().casefold() in ("", "false", "no", "off", "0"):
-        return None
-    name = str(value).strip().casefold()
-    if value is True or name in ("true", "yes", "on", "1"):
-        return "packed"
-    if name not in ("packed", "readable"):
-        raise SystemExit(f"keep-source {value!r}: choose packed (the default), readable, or false")
-    return name
 
 
 # keep_source_after_success: lib/pdfmd_attach (v3.33.37)

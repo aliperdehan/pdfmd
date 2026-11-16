@@ -8,6 +8,8 @@ text points at: `referenced_images`), the user's own TeX tree a rebuild needs (`
 attachments themselves (`write_pdf_attachments`, `read_pdf_attachments`, `add_deflated_attachment`). `held_comments_note` (v3.33.48)
 names the kinds of source whose comments were stripped that the attached text holds.
 
+Attachment settings and shared helpers now live in `pdfmd_attach.options` (v3.33.255).
+
 Moved out of `pdfmd.py` unchanged (v3.33.37, SPLIT.md), with the constants only this code reads (`ATTACH_FORMAT_PLAIN`,
 `GLOBAL_LAYOUT_PATH`, `RAW_REFERENCE_RES`, `BUNDLE_SKIP_SUFFIXES`, `PATH_TOKEN_RE`, `REFERENCE_EXTENSIONS`, `SCANNED_SUFFIXES`,
 `PACKAGE_RE`, `CLASS_RE`, `TEX_INPUT_RE`, `PROVIDES_RE`, `GRAPHIC_SUFFIXES`, `BUNDLE_IMAGE_SUFFIXES`, `TEX_SOURCE_SUFFIXES`,

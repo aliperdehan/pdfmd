@@ -19,6 +19,26 @@ same commit as the change.
 
 ---
 
+## v3.33.255 — 2026-11-16
+
+Pre-edit state: commit `a88805c`. Phase 2 of the split, wave 3, move 26: attachment settings and helpers move to
+`lib/pdfmd_attach/options.py`, with eleven constants. A pure move. The tool moved twenty statements, made nineteen
+core rewrites and registered nineteen table names without stand-ins or refusals; its AST self-check passed.
+By hand, the nineteen-line attachment banner and four phase-1 location comments are restored to pdfmd.py;
+the attachment package docstring locates its new settings module. drop_calc_export's existing lazy lookup becomes
+core.LEADING_FRONT_MATTER_RE. All CLI state stays in pdfmd.py. Version, this entry and SPLIT.md progress are updated
+by hand. No packaging change. `pdfmd.py`: 8,335 -> 8,199 lines.
+
+Proof: Ruff F clean. Eighteen modules (section tests, every moved-name match, always-run set and test_split_tools),
+482 tests: 462 passed, one skipped (prompt_toolkit installed), three failures and sixteen errors, all nineteen
+requiring blocked sockets in test_serve. The real build-cache directory diff is empty (118 entries; sandbox writes
+are blocked). Tests use scratch TeX config/cache folders. split_check: SAME on 34 checks, no BOTH FAILED. Extras
+build packed and readable Markdown source, assemble calculator constants while excluding the export file, and
+restore the default attachment PDF, reaching attachment settings, assembly helpers and requirement reporting
+through their real callers. Start-up has the same 205 modules; interleaved scripts/pdfmd --version best/median
+of ten: 178/236 ms before, 202/225 ms after (harness sequential: 141/188 and 240/288 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.254 — 2026-11-16
 
 Pre-edit state: commit `258bcdb`. Phase 2 of the split, wave 3, move 25: history recording and backup options

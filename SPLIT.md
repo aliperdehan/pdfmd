@@ -510,7 +510,7 @@ Note: `backup_before_edit -> resolve_backup_options` through `core.`; the alias 
 
 Tests: `test_history`, `test_setup`, `test_backup_pdfs`, `test_backup_keep`.
 
-#### 26. `pdfmd_attach.options` (existing package): 9 definitions, 11 constants, ~183 lines
+#### 26. `pdfmd_attach.options` (existing package): 9 definitions, 11 constants, ~183 lines; done in 3.33.255
 
 Goes to `lib/pdfmd_attach/options.py`.
 
