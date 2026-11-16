@@ -762,7 +762,7 @@ Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and
 
 Tests: `test_native`.
 
-#### 42. `pdfmd_comments` (existing package): 1 definitions, 3 constants, ~39 lines
+#### 42. `pdfmd_comments` (done in 3.33.273; existing package): 1 definitions, 3 constants, ~39 lines
 
 Goes to `lib/pdfmd_comments/__init__.py` (appended).
 

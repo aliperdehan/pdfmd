@@ -2,7 +2,9 @@
 preamble, `<!-- -->` in a CSL style, and which kinds of source lose them (v3.22.4).
 
 Moved out of `pdfmd.py` unchanged (v3.33.0, SPLIT.md). `core` is the `pdfmd` module, bound by `pdfmd.py` when it loads
-(the first binding wins); the code reads `core.FENCE_RE`, `core.COMMENT_KINDS` and `core.option_flag` when it runs."""
+(the first binding wins); the code reads `core.FENCE_RE`, `core.COMMENT_KINDS` and `core.option_flag` when it runs.
+`fence_after`, the two fence patterns and `COMMENT_KINDS` moved here in v3.33.273; other packages reach them through
+the names table."""
 
 from __future__ import annotations
 
@@ -308,3 +310,25 @@ def strip_xml_comments(text: str) -> str:
     """``text`` (a CSL style) without its `<!-- -->` comments, the lines holding only one included."""
     text = re.sub(r"^[ \t]*<!--.*?-->[ \t]*\r?\n", "", text, flags=re.DOTALL | re.MULTILINE)
     return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+
+
+FENCE_LINE_RE = re.compile(r"\s*(`{3,}|~{3,})(.*)$")
+
+
+def fence_after(fence: str, line: str) -> str:
+    """The code fence that is open after `line` (its run of backticks or tildes, "" for none), given `fence` open before it. As
+    in CommonMark: a backtick fence does not open on a line whose text after the run holds a backtick (``` ```` ```{=calc} ```` line``
+    is a paragraph), and a fence closes only on a run of the same character, at least as long, with nothing after it."""
+    found = FENCE_LINE_RE.match(line)
+    if not found:
+        return fence
+    run, rest = found.groups()
+    if not fence:
+        return "" if run[0] == "`" and "`" in rest else run
+    return "" if run[0] == fence[0] and len(run) >= len(fence) and not rest.strip() else fence
+
+
+FENCE_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<rest>.*)$")
+
+
+COMMENT_KINDS = ("markdown", "preamble", "bibliography", "csl", "metadata")

@@ -19,6 +19,32 @@ same commit as the change.
 
 ---
 
+## v3.33.273 — 2026-11-17
+
+Pre-edit state: commit `cfac827`. Phase 2 of the split, wave 4, move 42: fence_after, two fence patterns and
+COMMENT_KINDS move to lib/pdfmd_comments/__init__.py. A pure move. The tool moved four statements, made no core
+rewrites and registered three names, without stand-ins or refusals; AST self-check passed. By hand, the four-line
+comments section banner is restored to pdfmd.py and its location prose is updated; the comments package docstring
+locates the moved names. Version, this entry and SPLIT.md progress are updated. The preceding entry's cache-list
+count is corrected from 121 to the recorded 122; both original diffs remain empty. No packaging change.
+
+`pdfmd.py`: 3,304 -> 3,287 lines.
+
+Proof: Ruff F and whitespace clean. 15 modules (section tests, every moved-name match,
+always-run set, test_split_tools and feature callers), 383 tests: 363 passed, 3 failures,
+16 errors and 1 skipped. Real build-cache listing diff empty (122 entries; sandbox
+blocks real-cache writes). split_check: SAME: 33 checks (help, logs, outputs); no BOTH FAILED.
+All nineteen failures/errors require blocked sockets in test_serve; the skip is installed prompt_toolkit.
+Extras assemble comment-stripped fenced Markdown, render it through inkmd and select a heading to HTML,
+reaching COMMENT_KINDS, FENCE_RE and fence_after through real assembly, native and parts callers. The first
+harness run was interrupted before comparison to correct the extra from --parts to --section; the corrected
+section invocation passes standalone. The harness sequential start-up best/median is 99/109 before and
+106/115 ms after.
+Start-up module sets identical (205); scripts/pdfmd --version interleaved best/median
+of ten: 99.4/108.6 ms before, 95.9/109.9 ms after.
+TeX and Matplotlib settings point to scratch. No real configuration or cache files were changed;
+outside-sandbox verification of the listed limitations remains for the reviewer.
+
 ## v3.33.272 — 2026-11-17
 
 Pre-edit state: commit `33354dc`. Phase 2 of the split, wave 4, move 41: math_lines, _millimetres and five
@@ -32,7 +58,7 @@ SPLIT.md's older D7 note. No packaging change. `pdfmd.py`: 3,333 -> 3,304 lines.
 Proof: Ruff F and whitespace clean. Twelve modules (section tests, every moved-name match, the always-run set,
 test_split_tools and the shared ANSI caller), 366 tests: 344 passed, three failures, sixteen errors and three
 skipped. All nineteen failures/errors require blocked sockets in test_serve; skips are absent pymd2pdf,
-opt-in native goldens and installed prompt_toolkit. Both real build-cache listing diffs are empty (121 entries;
+opt-in native goldens and installed prompt_toolkit. Both real build-cache listing diffs are empty (122 entries;
 sandbox blocks real-cache writes). split_check: SAME on 32 checks, no BOTH FAILED. Extras render a B6 document
 with inline and aligned display math through inkmd and ANSI, reaching the moved paper tables and math_lines
 through their real renderers. Both trees report the same external kpsewhich probe timeout; no rerun is needed.

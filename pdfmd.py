@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.272"
+PDFMD_VERSION = "3.33.273"
 import argparse  # noqa: F401 -- preserve startup and the public module attribute
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1970,6 +1970,7 @@ names("pdfmd_config", "frontmatter_no_auto no_auto_from_value has_embedded_pream
                       "is_folder_metadata is_setup_layer folder_layers option_sources first_pdfmd_option "
                       "resolve_strip_comments merge_option_dicts option_flag_number front_matter_dict")
 names("pdfmd_native", "Chunk MATH_LINE_BREAK math_lines NATIVE_PAPER_POINTS PAPER_NAME_ALIASES")
+names("pdfmd_comments", "fence_after FENCE_RE COMMENT_KINDS")
 display_path = deferred("pdfmd_log", "display_path")
 installed_engines = deferred("pdfmd_engines", "installed_engines")
 mask_embedded_blocks = deferred("pdfmd_assemble.embed", "mask_embedded_blocks")
@@ -2400,22 +2401,6 @@ TEX_FOUND_AT: Path | None = None             # the TeX folder use_tex_install() 
 # DOCUMENTS, DOC_URL, document_file, document_headings, document_section, search_documents, render_document and doc_command: lib/pdfmd_docs/reader.py (v3.33.9)
 
 
-FENCE_LINE_RE = re.compile(r"\s*(`{3,}|~{3,})(.*)$")
-
-
-def fence_after(fence: str, line: str) -> str:
-    """The code fence that is open after `line` (its run of backticks or tildes, "" for none), given `fence` open before it. As
-    in CommonMark: a backtick fence does not open on a line whose text after the run holds a backtick (``` ```` ```{=calc} ```` line``
-    is a paragraph), and a fence closes only on a run of the same character, at least as long, with nothing after it."""
-    found = FENCE_LINE_RE.match(line)
-    if not found:
-        return fence
-    run, rest = found.groups()
-    if not fence:
-        return "" if run[0] == "`" and "`" in rest else run
-    return "" if run[0] == fence[0] and len(run) >= len(fence) and not rest.strip() else fence
-
-
 # is_latex_preamble and top_level_tikzpicture: lib/pdfmd_tex (v3.33.36)
 
 
@@ -2732,11 +2717,9 @@ CSS_SCOPES = ("html", "all")
 
 
 # -- Comments: lib/pdfmd_comments (v3.22.0, v3.22.4) ---------------------------
-# Stripping `<!-- -->`, LaTeX `%` and CSL comments, and the strip-comments policy, live in pdfmd_comments. It reads
-# the three names below as core.X. FENCE_RE (a code fence: its run of backticks or tildes, and the rest) also serves
+# Stripping `<!-- -->`, LaTeX `%` and CSL comments, and the strip-comments policy, live in pdfmd_comments.
+# fence_after, FENCE_LINE_RE, FENCE_RE and COMMENT_KINDS live there too (v3.33.273); FENCE_RE also serves
 # the native converter's line scan.
-FENCE_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<rest>.*)$")
-COMMENT_KINDS = ("markdown", "preamble", "bibliography", "csl", "metadata")
 # --strip-comments-in / --keep-comments-in (kind sets); --strip-comments / --keep-comments is STRIP_COMMENTS_CLI.
 STRIP_KINDS_CLI: frozenset[str] = frozenset()
 KEEP_KINDS_CLI: frozenset[str] = frozenset()
