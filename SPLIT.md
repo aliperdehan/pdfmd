@@ -698,7 +698,7 @@ Note: Four patched names, four inner calls through `core.`. Wants the strongest 
 
 Tests: `test_native`, `test_calibre_markdown`, `test_install_diagram`, `test_compat`, `test_pdf_input`, `test_install_calibre`, `test_install_core_tex`.
 
-#### 38. `pdfmd_engines.tools` (new package): 25 definitions, 7 constants, ~428 lines
+#### 38. `pdfmd_engines.tools` (new package): 25 definitions, 7 constants, ~428 lines; done in 3.33.269
 
 Goes to `lib/pdfmd_engines/tools.py`.
 
@@ -708,7 +708,7 @@ Constants that move with it: `FOUND_TOOLS`, `WINDOWS_INSTALL_ROOTS`, `TOOLS_FOUN
 
 Facts: 29 of its names are read from outside it (the table); 11 pdfmd names read through `core`; read by lib/ already: pdfmd_assemble, pdfmd_attach, pdfmd_bridge, pdfmd_buildinfo, pdfmd_doctor, pdfmd_flat, pdfmd_hybrid, pdfmd_install, pdfmd_kits, pdfmd_lua, pdfmd_native, pdfmd_report, pdfmd_routing, pdfmd_setup, pdfmd_tables, pdfmd_tex.
 
-Traps: decorators: `engine_version_line` @lru_cache; needs at import time, from outside: `BROWSER_ENGINES`, `LATEX_ENGINES`, `PDF_ENGINES`; writes state that stays in pdfmd.py (`core.X = ...`): `TEX_FOUND_AT`, `_PANDOC_DATA_DIR`, `_PANDOC_VERSION`; patched by tests: `TOOLS_FOUND`, `TOOL_WARNED`, `resolve_soffice`, `resolve_calibre`, `engine_executable`, `pandoc_user_data_dir`, `pandoc_version`, `PROBE_TIMEOUT`, `run_probe`, `typst_version`; calls to patched names inside the move (through `core.`): `engine_executable->resolve_calibre`, `engine_executable->resolve_soffice`, `engine_version_line->engine_executable`, `engine_version_line->run_probe`, `kpsewhich_path->run_probe`, `locate_tool->TOOL_WARNED`, `pandoc_user_data_dir->run_probe`, `pandoc_version->run_probe`, `run_probe->PROBE_TIMEOUT`, `tool_folders_off_path->TOOLS_FOUND`, `use_found_tools->TOOLS_FOUND`; `.cache_clear()` callers exist for: `engine_version_line`.
+Traps: decorators: `engine_version_line` @lru_cache; engine-list import-time dependencies were removed by the reviewed move-36 adjustment; writes state that stays in pdfmd.py (`core.X = ...`): `TEX_FOUND_AT`, `_PANDOC_DATA_DIR`, `_PANDOC_VERSION`; patched by tests: `TOOLS_FOUND`, `TOOL_WARNED`, `resolve_soffice`, `resolve_calibre`, `engine_executable`, `pandoc_user_data_dir`, `pandoc_version`, `PROBE_TIMEOUT`, `run_probe`, `typst_version`; calls to patched names inside the move (through `core.`): `engine_executable->resolve_calibre`, `engine_executable->resolve_soffice`, `engine_version_line->engine_executable`, `engine_version_line->run_probe`, `kpsewhich_path->run_probe`, `locate_tool->TOOL_WARNED`, `pandoc_user_data_dir->run_probe`, `pandoc_version->run_probe`, `run_probe->PROBE_TIMEOUT`, `tool_folders_off_path->TOOLS_FOUND`, `use_found_tools->TOOLS_FOUND`; `.cache_clear()` callers exist for: `engine_version_line`.
 
 Note: Ten patched names, among them the constants `PROBE_TIMEOUT` and `TOOL_WARNED` (`patch.object`: read as `core.X`) and `TOOLS_FOUND` (`patch.dict`: either way). Writes `TEX_FOUND_AT`, `_PANDOC_DATA_DIR`, `_PANDOC_VERSION`. Wants the strongest model.
 

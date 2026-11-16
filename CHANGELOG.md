@@ -19,6 +19,42 @@ same commit as the change.
 
 ---
 
+## v3.33.269 — 2026-11-16
+
+Pre-edit state: commit `1076029`. Phase 2 of the split, wave 4, move 38: tool discovery, office resolution,
+TeX and managed-tool paths and bounded probes move to lib/pdfmd_engines/tools.py with seven constants.
+A pure move. The tool moved 32 statements, made 36 core rewrites and converted three global
+declarations, registered 29 names and left no stand-ins; no refusals, AST self-check passed.
+TEX_FOUND_AT, _PANDOC_DATA_DIR and _PANDOC_VERSION stay in pdfmd.py and are written through core.
+Patched TOOL_WARNED, PROBE_TIMEOUT, resolvers and probes are read through core; TOOLS_FOUND keeps
+its shared mutable object. engine_version_line retains lru_cache and is served as its real object
+for cache_clear callers. run_probe's quoted annotation stays text, as the tool verified nothing
+evaluates it. engine_executable's move-36 lazy lookup becomes core.BROWSER_ENGINES.
+By hand, the probe banner is restored; FOUND_TOOLS's four comments and the probe setting's four
+explanation lines belong to the moved constants. F401 annotations retain platform and signal for
+unchanged startup and module attributes. Version, this entry and SPLIT.md progress are updated
+by hand; the trap list reflects the removed import-time dependency. No packaging change or eager engine-list import is needed after the move-36 adjustment.
+`pdfmd.py`: 4,546 -> 4,161 lines.
+
+Proof: Ruff F and whitespace clean. 31 modules (section tests, every moved-name match,
+always-run set and test_split_tools), 651 tests: 606 passed, 7 failures,
+21 errors, 17 skipped; limitations are listed below. Real build-cache listing diff empty
+(121 entries); sandbox blocks real-cache writes. split_check: SAME: 33 checks (help, logs, outputs);
+no BOTH FAILED. Extras run --check-dependencies, export results.md to standalone LaTeX and build
+lecture.md with inkmd: real CLI/build callers reach tool resolution, Pandoc capabilities and managed
+paths; default PDF/report builds reach engine-version probes. Startup set remains unchanged.
+Nineteen serve and five image-HTTP cases require blocked sockets. TeX image and embedding builds
+report the sandbox's unwritable TeX cache. The Kindle stand-in test leaves MathML because LuaTeX
+cannot draw its formula; verbose pipeline diagnostics on both parent and working trees confirm
+"no writeable cache path". The macOS installer fixture fails at hdiutil create (Device not
+configured), as independently confirmed against the parent in move 37. Real Calibre builds are
+skipped as required (seven); six LibreOffice cases, the Linux archive route, absent pymd2pdf,
+opt-in goldens and installed prompt_toolkit account for the other skips. Scratch TeX and
+Matplotlib settings were used. No real configuration or cache files were changed.
+Start-up module sets identical (205); scripts/pdfmd --version interleaved best/median
+of ten: 263.0/305.0 ms before, 229.9/292.5 ms after.
+Outside-sandbox verification of the listed limitations remains for the reviewer.
+
 ## v3.33.268 — 2026-11-16
 
 Pre-edit state: commit `5d1c03e`. Phase 2 of the split, wave 4, move 37: native-engine selection, availability,
