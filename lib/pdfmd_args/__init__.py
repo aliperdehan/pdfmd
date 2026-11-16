@@ -13,14 +13,57 @@ code uses (`ASSEMBLED_SUFFIX`, `BOPEN_HELP`, `BUNDLE_MAX_MB`, `CACHE_LOCATIONS`,
 `pdfmd_ansi.cli`) are the same function objects the options had before, so argparse's "invalid ... value" messages name them as
 before. `pdfmd_help` and `pdfmd_labels` are imported inside the functions, as they were. `pdfmd.py` re-exports `build_parser`
 (`main`, `lib/pdfmd_compat`, `lib/pdfmd_setup` and the tests call it).
+
+`PASS_THROUGH` (DECISION 82): a Pandoc long option that is a unique start of a longer pdfmd option (`--bibliography` of
+`--bibliography-indent`) would be taken by argparse's abbreviation for the pdfmd one. Each is registered as an exact option of
+its own, which beats an abbreviation, and `Parser.parse_known_args` puts its tokens back among the Pandoc options where they
+stood, so everything that reads them (the start-folder paths, the command-line bibliography layer) sees what it saw before.
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from pdfmd_base import core
+
+
+PASS_THROUGH = ("--bibliography",)      # Pandoc's options that are a unique start of a pdfmd one (tests/test_bibliography_indent.py)
+
+
+class PassThrough(argparse.Action):
+    """A Pandoc option pdfmd only names; its tokens go back to Pandoc (`Parser.parse_known_args`), nothing is kept here."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        pass
+
+
+def with_pass_through(arguments: list[str], extras: list[str]) -> list[str]:
+    """`extras` (what argparse left unknown, in order) with each `PASS_THROUGH` option and its value back where it stood in
+    `arguments`. After `--` every word is a path, as argparse reads it."""
+    out, rest, index = [], 0, 0
+    while index < len(arguments) and arguments[index] != "--":
+        token = arguments[index]
+        if token.split("=", 1)[0] in PASS_THROUGH:
+            step = 1 if "=" in token else 2
+            out += arguments[index:index + step]
+            index += step
+            continue
+        if rest < len(extras) and token == extras[rest]:
+            out.append(token)
+            rest += 1
+        index += 1
+    return out + extras[rest:]
+
+
+class Parser(argparse.ArgumentParser):
+    """pdfmd's parser: the unknown options it returns (Pandoc's) include the `PASS_THROUGH` ones it registers."""
+
+    def parse_known_args(self, args=None, namespace=None):
+        arguments = sys.argv[1:] if args is None else list(args)
+        named, extras = super().parse_known_args(arguments, namespace)
+        return named, with_pass_through(arguments, extras)
 
 
 def csv_note_argument(value: str) -> str:
@@ -74,7 +117,7 @@ def build_parser() -> argparse.ArgumentParser:
         from pdfmd_help import TieredHelp           # without pdfmd_help argparse keeps its one long page (since 3.33.0 not a shipped case)
     except ImportError:
         TieredHelp = None
-    parser = argparse.ArgumentParser(description="Convert Markdown (and other Pandoc-readable) files to PDF or another format with Pandoc.",
+    parser = Parser(description="Convert Markdown (and other Pandoc-readable) files to PDF or another format with Pandoc.",
                                      add_help=TieredHelp is None)
     if TieredHelp is not None:
         parser.add_argument("-h", "--help", action=TieredHelp)
@@ -252,6 +295,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "em), 0 for none, or auto (the default: each engine's own; with `indent: true` none). LaTeX and "
                              "Typst; the HTML engines take it from a style sheet. Also "
                              "`pdfmd-options: {paragraph-spacing: 6pt}`, or --setup")
+    parser.add_argument("--bibliography-indent", metavar="LENGTH", default=None,
+                        help="how far the lines of a reference after its first are set in, in the reference list and in the entries "
+                             "`[@key]{.fullcite}` places: a length (0.5in, 1.5em; pt mm cm in em), 0 for none, or auto (the "
+                             "default: each writer's own list, Pandoc's 1.5em for Typst). Also "
+                             "`pdfmd-options: {bibliography-indent: 0.5in}`, or --setup")
+    parser.add_argument("--bibliography", action=PassThrough, dest="pandoc_bibliography", metavar="FILE", default=argparse.SUPPRESS,
+                        help="Pandoc's own option, passed to it as written (both `--bibliography FILE` and `--bibliography=FILE`); "
+                             "pdfmd names it so that it is never read as a shortened --bibliography-indent")
     parser.add_argument("--fullcite-list", choices=("rest", "all", "none"), default=None, metavar="WHAT",
                         help="what becomes of the combined reference list when entries were placed in the text with "
                              "`[@key]{.fullcite}`: rest (the placed ones leave it; the default), all (it stays whole) or none "

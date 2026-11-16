@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import re
 import shutil
@@ -59,6 +61,24 @@ class Values(unittest.TestCase):
                 self.package.setting(document, [])
             self.assertIn("pdfmd-options.bibliography-indent must be a length", str(caught.exception))
 
+    def test_the_command_line_wins(self):
+        with tempfile.TemporaryDirectory() as folder:
+            document = Path(folder) / "d.md"
+            document.write_text("---\npdfmd-options:\n  bibliography-indent: 0.5in\n---\n\nx\n", encoding="utf-8")
+            old = os.environ.pop(self.package.ENV, None)
+            try:
+                os.environ[self.package.ENV] = "2cm"
+                self.assertEqual(self.package.setting(document, []), "2cm")
+                os.environ[self.package.ENV] = "auto"
+                self.assertIsNone(self.package.setting(document, []))                 # auto on the command line beats the file
+                with self.assertRaises(SystemExit) as caught:
+                    self.package.command_line_value("wide")
+                self.assertIn("--bibliography-indent must be a length", str(caught.exception))
+            finally:
+                os.environ.pop(self.package.ENV, None)
+                if old is not None:
+                    os.environ[self.package.ENV] = old
+
     def test_the_filter_goes_in_when_set_and_for_typst(self):
         with tempfile.TemporaryDirectory() as folder:
             document = Path(folder) / "d.md"
@@ -100,18 +120,34 @@ class OfficeStyles(unittest.TestCase):
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")
 class NoAbbreviation(unittest.TestCase):
-    def test_no_pandoc_option_is_taken_for_an_abbreviation_of_a_pdfmd_one(self):
-        """argparse reads `--bibliography` as an abbreviation of a longer pdfmd option (`--bibliography-indent` was one) and the build
-        stops, where the option is Pandoc's, left to it through parse_known_args. None of Pandoc's long options may be one."""
+    def test_a_pandoc_option_that_starts_a_pdfmd_one_is_a_pass_through(self):
+        """argparse would read `--bibliography` as an abbreviation of a longer pdfmd option (`--bibliography-indent`) and the build
+        would stop, where the option is Pandoc's. Every Pandoc long option that is a unique start of a pdfmd one is registered as a
+        pass-through (an exact option beats an abbreviation; DECISION 82)."""
+        from pdfmd_args import PASS_THROUGH, PassThrough
         help_text = subprocess.run([PANDOC, "--help"], capture_output=True, text=True, encoding="utf-8").stdout
         pandoc_options = set(re.findall(r"(?<![\w-])(--[a-z][a-z0-9-]*)", help_text))
         self.assertGreater(len(pandoc_options), 50)
-        ours = {option for option in pdfmd.build_parser()._option_string_actions if option.startswith("--")}
+        actions = pdfmd.build_parser()._option_string_actions
+        ours = {option for option, action in actions.items() if option.startswith("--") and not isinstance(action, PassThrough)}
         # exactly one longer option: argparse takes it (two or more it calls ambiguous, which pdfmd already meets for
         # `--ascii` and `--metadata`, and has handled since before this check)
-        swallowed = {option: matches for option in sorted(pandoc_options - ours)
-                     if len(matches := [name for name in ours if name.startswith(option)]) == 1}
-        self.assertEqual(swallowed, {})
+        swallowed = {option for option in pandoc_options - ours
+                     if len([name for name in ours if name.startswith(option)]) == 1}
+        self.assertEqual(swallowed, set(PASS_THROUGH))
+        for option in PASS_THROUGH:
+            self.assertIsInstance(actions[option], PassThrough)
+
+    def test_the_tokens_reach_pandoc_where_they_stood(self):
+        arguments = ["d.md", "--bibliography", "a.bib", "--bibliography-indent", "2cm", "-M", "bibliography=c.bib",
+                     "--bibliography=b.bib", "--wrap=none", "--", "--bibliography"]
+        named, pandoc = pdfmd.build_parser().parse_known_args(arguments)
+        self.assertEqual(named.bibliography_indent, "2cm")
+        self.assertFalse(hasattr(named, "pandoc_bibliography"))
+        self.assertEqual(pandoc, ["--bibliography", "a.bib", "-M", "bibliography=c.bib", "--bibliography=b.bib", "--wrap=none",
+                                  "--", "--bibliography"])
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            pdfmd.build_parser().parse_known_args(["--bib", "a.bib"])           # two options start so: ambiguous
 
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")
@@ -186,9 +222,10 @@ class Builds(unittest.TestCase):
         self.root = Path(self.temporary.name).resolve()
         (self.root / "refs.bib").write_text(BIB, encoding="utf-8")
 
-    def build(self, to: str, options: str = "", body: str = BODY, extra: tuple[str, ...] = ()) -> Path:
+    def build(self, to: str, options: str = "", body: str = BODY, extra: tuple[str, ...] = (), bibliography: str = "refs.bib") -> Path:
         front = f"pdfmd-options: {{{options}}}\n" if options else ""
-        (self.root / "d.md").write_text(f"---\ntitle: T\nbibliography: refs.bib\n{front}---\n\n{body}", encoding="utf-8")
+        named = f"bibliography: {bibliography}\n" if bibliography else ""
+        (self.root / "d.md").write_text(f"---\ntitle: T\n{named}{front}---\n\n{body}", encoding="utf-8")
         out = self.root / f"out.{to}"
         out.unlink(missing_ok=True)
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", *extra, "--to", to, "-o", out.name, "--no-stamp",
@@ -205,6 +242,13 @@ class Builds(unittest.TestCase):
         self.assertIn("#set par(hanging-indent: 1.5em)", self.text("typ"))
         self.assertNotIn("hanging-indent: 1.5em", self.text("typ", "bibliography-indent: 0").replace("#set terms(hanging-indent: 1.5em)", ""))
         self.assertIn("#set par(hanging-indent: 0.5in)", self.text("typ", "bibliography-indent: 0.5in"))
+        self.assertIn("#set par(hanging-indent: 2cm)", self.text("typ", extra=("--bibliography-indent", "2cm")))
+
+    def test_pandocs_bibliography_option_and_the_indent_flag_together(self):
+        for given in (("--bibliography", "refs.bib"), ("--bibliography=refs.bib",)):
+            text = self.text("typ", extra=(*given, "--bibliography-indent", "2cm"), bibliography="")
+            self.assertIn("#set par(hanging-indent: 2cm)", text, given)
+            self.assertIn("(Alpha 1984; Beta 1990)", text, given)                # the file reached Pandoc: the keys resolved
 
     def test_the_other_writers_keep_their_own_unless_it_is_set(self):
         self.assertNotIn("text-indent: -", self.text("html"))                 # the style sheet's

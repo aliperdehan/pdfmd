@@ -19,6 +19,30 @@ same commit as the change.
 
 ---
 
+## v3.33.238 — 2026-11-16
+
+Pre-edit state: commit `9d72b2d`. **`--bibliography-indent LENGTH` is back, and Pandoc's own `--bibliography FILE` still reaches
+Pandoc** (DECISION 82, the author's answer to the question 3.33.229 left). 3.33.229 had removed the flag because argparse's
+abbreviation took Pandoc's `--bibliography`, which pdfmd leaves to Pandoc, for a shortened `--bibliography-indent` (the build
+stopped with "must be a length"). Now pdfmd registers `--bibliography` as an option of its own: an exact option always beats an
+abbreviation. It is a pass-through (`lib/pdfmd_args`: `PASS_THROUGH`, the `PassThrough` action, the `Parser` class): pdfmd keeps
+nothing of it, and `Parser.parse_known_args` puts its tokens back among the Pandoc options exactly where they stood, in both
+forms (`--bibliography X`, `--bibliography=X`). So the start-folder paths (3.33.217) and the command-line bibliography layer
+(3.33.232) see what they saw before 3.33.228, and the order of `--bibliography` and `-M bibliography=...` is kept. After `--`
+nothing is taken (argparse reads the words as paths). Abbreviations of pdfmd's own options stay as they were; one side effect:
+`--bib` alone is now ambiguous (it starts both options) and argparse stops with "ambiguous option" instead of passing it on.
+`--bibliography-indent` wins over the files, `PDFMD_BIBLIOGRAPHY_INDENT` reaches `-j` workers (as in 3.33.228); the `--setup` row's
+text names it again; both options are in the "output" topic of `--help`; `--bibliography` has an `Omitted` entry (Pandoc's option,
+no setting). README: the paragraph of `bibliography-indent` says so.
+
+The guard test of 3.33.229 now asks the opposite: every long option of `pandoc --help` that is a unique start of a pdfmd option is
+registered as a pass-through (today `--bibliography` alone).
+
+Tests: `tests/test_bibliography_indent.py` (18, 3 new and 2 changed: the guard, the tokens back in place with both forms and `--`,
+`--bib` ambiguous, the command line beating the files, a Typst build with `--bibliography refs.bib` or `--bibliography=refs.bib` and
+`--bibliography-indent 2cm` together); the five new or changed ones fail on the pre-edit code. pdfmd.py stays at 13,155 lines (one
+`names(...)` line changed).
+
 ## v3.33.237a — 2026-11-16
 
 Pre-edit state: commit `7dfcea1`. Tests only, no shipped code. **Five test modules of 3.33.224-232 point `LOCALAPPDATA` at their scratch cache too** (`test_bibliography_indent`, `test_bibliography_layers`, `test_fullcite`, `test_pandoc_spellings`, `test_top_level_options`): on Windows pdfmd's cache is `%LOCALAPPDATA%`, not `XDG_CACHE_HOME`, so they wrote into the runner's real cache, and `test_natbib_and_biblatex_receive_all_files_and_inline_references` looked for the generated `.bib` in the scratch folder and failed (CI 43789118370, windows-latex: its only failure).

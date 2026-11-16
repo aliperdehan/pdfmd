@@ -231,7 +231,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "How far the lines of a reference after its first are set in, in the reference list and in the entries `fullcite` places: "
              "a length (0.5in, 1.5em; units pt, mm, cm, in, em), 0 for none, or auto. Only a style that asks for a hanging indent has "
              "one. Empty: each writer's own (LaTeX 1.5em, HTML 2em, Word 0.5in) and, for Typst, whose writer had none, 1.5em; a "
-             "value is applied the same in every writer.", "Every document (global metadata)"),
+             "value is applied the same in every writer. Per run: --bibliography-indent.", "Every document (global metadata)"),
         choice("colorlinks", "Coloured links", on_off, "", "Metadata accepts colourlinks or Pandoc's colorlinks.", "Every document (global metadata)", "metadata"),
         choice("toc", "Table of contents", on_off, "", "", "Every document (global metadata)", "metadata"),
         choice("options.global-metadata", "Use the global metadata above", on_off, "",

@@ -32,7 +32,6 @@ wait for an answer before any code.
 - [ ] **decide** a way to run a named Lua filter before `--citeproc` (`lua-filter-before:` or a `pre:` list) [3fp]
 - [ ] **decide** Source `<!-- comments -->` reach HTML and EPUB output verbatim: drop them by default there, a `--check` code, or both [3ft]
 - [ ] **decide** The `bib` auto kind's candidates: only BibTeX-family files directly in the document's, accessory and metadata folders (built so in 3.33.233), or wider [D60]
-- [ ] **decide** A command-line flag for `bibliography-indent`: any `--bibliography...` name swallows Pandoc's `--bibliography` (argparse abbreviation) [Q75]
 - [ ] `test_colophon_watcher_match` is timing-dependent (a real `--watch` and a 10 s wait): a readiness signal instead [3fx]
 
 ## Features, agreed
