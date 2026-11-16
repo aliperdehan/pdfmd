@@ -572,7 +572,7 @@ Traps: patched by tests: `batchocr_version`, `system_package_manager`; calls to 
 
 Tests: `test_install_ocr`.
 
-#### 30. `pdfmd_tex.inputs` (existing package): 25 definitions, 6 constants, ~632 lines
+#### 30. `pdfmd_tex.inputs` (existing package): 25 definitions, 6 constants, ~632 lines; done in 3.33.259
 
 Goes to `lib/pdfmd_tex/inputs.py`.
 

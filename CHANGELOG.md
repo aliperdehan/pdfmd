@@ -19,6 +19,26 @@ same commit as the change.
 
 ---
 
+## v3.33.259 — 2026-11-16
+
+Pre-edit state: commit `c49d6f1`. Phase 2 of the split, wave 3, move 30: TeX input paths, preambles and header
+includes move to `lib/pdfmd_tex/inputs.py`, with six constants. A pure move. The tool moved 31 statements, made
+45 core rewrites, registered eighteen table names and left four function stand-ins; no refusals, AST self-check
+passed. Both carried comment blocks belong with their constants. Both contextmanagers retain their decorators;
+frontmatter_pdfmd_options reads the former sys.modules[__name__] lookup through core. Shared resource directories
+remain the same mutable list. By hand: the TeX package docstring locates inputs; version, this entry and SPLIT.md
+progress. F401 annotations retain NamedTemporaryFile and dedent in pdfmd.py for unchanged module attributes and
+startup. No packaging change. `pdfmd.py`: 7,372 -> 6,760 lines.
+
+Proof: Ruff F clean. Eighteen modules (section tests, every moved-name match, always-run set and test_split_tools),
+349 tests: 329 passed, one skipped (prompt_toolkit installed), three failures and sixteen errors, all nineteen
+requiring blocked sockets in test_serve. Tests use scratch TeX folders. The real build-cache directory diff is
+empty (118 entries; sandbox writes are blocked). split_check: SAME on 33 checks, no BOTH FAILED. Extras build
+header-includes plus a discovered preamble and code to LaTeX, DOCX and LuaLaTeX PDF through the real build, exercising
+input preparation, header preservation, metadata conversion and TeX/resource paths. Start-up has the same 205
+modules; interleaved scripts/pdfmd --version best/median of ten: 141/173 ms before, 148/179 ms after (harness
+sequential: 109/120 and 119/129 ms). Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.258 — 2026-11-16
 
 Pre-edit state: commit `6d7d29e`. Phase 2 of the split, wave 3, move 29: OCR version and package-manager helpers
