@@ -19,6 +19,29 @@ same commit as the change.
 
 ---
 
+## v3.33.265 — 2026-11-16
+
+Pre-edit state: commit `947679b`. Phase 2 of the split, wave 4, move 34: automatic discovery settings and layers
+move to `lib/pdfmd_config/auto.py`, with nine constants. A pure move. The tool first refused the absent parent
+package; by hand a light pdfmd_config/__init__.py is created, as the brief specifies, without submodule imports.
+The tool then moved nineteen statements, made nine core rewrites and registered eleven table names, without
+stand-ins; AST self-check passed. By hand the ten-line automatic-kinds section banner is restored to pdfmd.py;
+the other three carried comments belong to their constants. Packaging is added in pyproject.toml (packages and
+package-dir) and scripts/build_zipapp.py. Version, this entry and SPLIT.md progress are updated.
+`pdfmd.py`: 5,655 -> 5,429 lines.
+
+Proof: Ruff F and whitespace checks pass. split_check: SAME on 32 checks, no BOTH FAILED. The resumed comparison
+resolves the previous run's sole difference, an extra ten-second kpsewhich xcolor.sty probe timeout; no timeout or
+mask changed. Extras build front-matter auto states with accessory metadata to HTML and CLI no-auto overrides to
+LaTeX, through real discovery and build callers. Start-up has the same 205 modules; interleaved scripts/pdfmd
+--version best/median of ten: 180.6/215.1 ms before, 175.8/215.4 ms after (harness sequential: 184/268 and 128/147 ms).
+Nineteen modules (section tests, every moved-name match, always-run set and test_split_tools), 437 tests:
+416 passed, two skipped (prompt_toolkit installed and Windows registry), three failures and sixteen errors, all
+nineteen requiring blocked sockets in test_serve. Tests use scratch TeX folders. The real build-cache directory
+diff is empty (121 entries; sandbox writes are blocked). Isolation identified another session's report build in
+an existing cache folder; its source is outside the tests. No real files were touched. Outside-sandbox socket
+and cache verification remains for the reviewer.
+
 ## v3.33.264 — 2026-11-16
 
 Pre-edit state: commit `ff9195c`. Pandoc 3.1.3 receives every accumulated bibliography source, but its LaTeX

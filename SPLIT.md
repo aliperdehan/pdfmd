@@ -636,7 +636,7 @@ Tests: `test_calc`, `test_setup`.
 
 ### Wave 4: the hubs and the last constants
 
-#### 34. `pdfmd_config.auto` (new package): 10 definitions, 9 constants, ~240 lines
+#### 34. `pdfmd_config.auto` (new package): 10 definitions, 9 constants, ~240 lines; done in 3.33.265
 
 Goes to `lib/pdfmd_config/auto.py`.
 
