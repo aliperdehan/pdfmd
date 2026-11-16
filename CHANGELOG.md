@@ -19,6 +19,22 @@ same commit as the change.
 
 ---
 
+## v3.33.263 — 2026-11-16
+
+Pre-edit state: commit `8341a26`. With Pandoc 3.1.3, Typst's native `citations` writer extension emits
+`#cite("a", "b")` even after citeproc has resolved the citation; Typst rejects those calls and the PDF build fails.
+`pdfmd_filters.typst_filter_args` now selects `typst-citations` when the command requests `--citeproc`, so the
+writer uses citeproc's formatted text. Without citeproc the native citation route is unchanged. No version
+threshold or new setting is needed: Pandoc 3.13's complete pdfmd Typst fragment is byte-identical before and
+after the change. The original bibliography-option/indent assertion is retained, and an extracted-PDF regression
+checks the resolved citations and a reference entry through the full Typst pipeline.
+
+Proof: the original assertion fails before the fix with 3.1.3, and a full pre-fix Typst PDF build fails on the
+native citation call. The bibliography-indent module and `test_split`, `test_packaging`, `test_docs_consistency`,
+`test_setup`, `test_isolation` pass with both Pandoc 3.1.3 and 3.13, including the new PDF text check. Ruff F checks
+pass. `pdfmd.py`: 9,939 -> 9,939 lines (version only). Tests and builds use scratch configuration, cache, data and
+TeX cache folders; no network or real cache writes are required.
+
 ## v3.33.262 — 2026-11-16
 
 Pre-edit state: commit `d3478ff`. Phase 2 of the split, wave 3, move 33: calculator settings, constants input and

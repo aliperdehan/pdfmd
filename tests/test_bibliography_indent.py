@@ -250,6 +250,14 @@ class Builds(unittest.TestCase):
             self.assertIn("#set par(hanging-indent: 2cm)", text, given)
             self.assertIn("(Alpha 1984; Beta 1990)", text, given)                # the file reached Pandoc: the keys resolved
 
+    @unittest.skipUnless(shutil.which("typst") and shutil.which("pdftotext"), "needs Typst and pdftotext")
+    def test_citeproc_citations_and_the_indent_build_a_typst_pdf(self):
+        pdf = self.build("pdf", bibliography="", extra=("--bibliography", "refs.bib", "--bibliography-indent", "2cm",
+                                                       "--engine", "typst", "--engine-fallback", "missing"))
+        text = subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True, text=True, check=True).stdout
+        self.assertIn("(Alpha 1984; Beta 1990)", text)
+        self.assertIn("Second Book", text)
+
     def test_the_other_writers_keep_their_own_unless_it_is_set(self):
         self.assertNotIn("text-indent: -", self.text("html"))                 # the style sheet's
         self.assertNotIn("cslhangindent}{", self.text("tex").split("\\begin{document}")[-1])
