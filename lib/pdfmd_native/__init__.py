@@ -1564,6 +1564,3 @@ NATIVE_PAPER_POINTS = {
 
 
 PAPER_NAME_ALIASES = {"us-letter": "letter", "usletter": "letter", "us-legal": "legal", "uslegal": "legal"}
-
-
-PAGE_WIDTHS = {name: points[0] for name, points in NATIVE_PAPER_POINTS.items()}

@@ -19,6 +19,24 @@ same commit as the change.
 
 ---
 
+## v3.33.283 — 2026-11-17
+
+Pre-edit state: commit `1c002f5`. Phase 2 wave 5, step 5d: remove the dead PAGE_WIDTHS definition
+from lib/pdfmd_native/__init__.py. Searches across pdfmd.py, lib, tests, scripts and docs find no reader or table entry.
+The only occurrence in the searched source is the definition. All edits are by hand; the now-trailing blank lines at EOF are removed with the definition for a clean whitespace check.
+No runtime behaviour changes.
+`pdfmd.py`: 2,369 -> 2,369 lines (the definition was already in its package).
+
+Proof: Ruff F and whitespace clean. Fourteen selected modules (always-run set, split tools, loading and
+native-renderer tests), 355 tests: 333 passed, three failures, sixteen errors, three skipped. Nineteen blocked
+serve socket cases account for the failures/errors; skips are installed prompt_toolkit, absent pymd2pdf and
+opt-in golden output. Cache listing diff empty (122 entries), no isolation warning. split_check: SAME on 31
+checks, no BOTH FAILED. The inkmd extra reaches the native renderer through the real CLI; defaults exercise
+PDF, report, batch and other format outputs. Startup modules identical (205); interleaved best/median of ten
+183.8/208.3 ms before, 175.0/213.4 ms after; harness 109/114 and 115/120 ms. Normalized scratch paths and a
+scratch font-cache copy keep real folders unchanged; no Calibre, no timeout or mask changes. Outside-sandbox
+socket and real-cache proof remains for the reviewer.
+
 ## v3.33.282 — 2026-11-17
 
 Pre-edit state: commit `d165e40`. Phase 2 wave 5, step 5d: remove the dead FOLDER_METADATA definition
