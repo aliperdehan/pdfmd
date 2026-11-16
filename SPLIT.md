@@ -618,7 +618,7 @@ Traps: refers to pdfmd.py itself: `metadata_append_args` (__name__); temporary b
 
 Tests: `test_setup`, `test_setup_folder`, `test_metadata_append`, `test_calc`, `test_lua_missing`, `test_presets`.
 
-#### 33. `pdfmd_calc` (new package): 15 definitions, 20 constants, ~264 lines
+#### 33. `pdfmd_calc` (new package): 15 definitions, 20 constants, ~264 lines; done in 3.33.262
 
 Goes to `lib/pdfmd_calc/__init__.py`.
 

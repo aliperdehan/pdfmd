@@ -19,6 +19,27 @@ same commit as the change.
 
 ---
 
+## v3.33.262 — 2026-11-16
+
+Pre-edit state: commit `d3478ff`. Phase 2 of the split, wave 3, move 33: calculator settings, constants input and
+exported names move to `lib/pdfmd_calc/__init__.py`, with twenty constants. A pure move. The tool moved 35
+statements, made twenty core rewrites and registered 29 table names, with no stand-ins or refusals; AST self-check
+passed. CALC_BELOW, CALC_DUMP and CALC_SEED stay as state in pdfmd.py. The csv import remains local to
+calc_constants_statements, and atomic writes and optional settings read through core. By hand the eight-line
+calculator section comment is restored above the state in pdfmd.py; the new package docstring locates the helpers.
+Packaging is added in pyproject.toml (packages and package-dir) and scripts/build_zipapp.py. Version, this entry
+and SPLIT.md progress are updated. `pdfmd.py`: 5,904 -> 5,655 lines.
+
+Proof: Ruff F clean. Eleven modules (section tests, every moved-name match, always-run set and test_split_tools),
+349 tests: 329 passed, one skipped (prompt_toolkit installed), three failures and sixteen errors, all nineteen
+requiring blocked sockets in test_serve. Tests use scratch TeX folders. The real build-cache directory diff is
+empty (118 entries; sandbox writes are blocked). split_check: SAME on 33 checks, no BOTH FAILED. Extras build
+CLI calc settings with constants and CSV export to HTML, document settings to LaTeX, and calc-off HTML, exercising
+argument validation, environment propagation, settings, constants parsing and the export writer through real builds.
+Standalone validation exports four names; its CSV matches the comparison build's CSV in scratch. Start-up has the
+same 205 modules; interleaved scripts/pdfmd --version best/median of ten: 129/188 ms before, 144/195 ms after
+(harness sequential: 145/170 and 117/129 ms). Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.261 — 2026-11-16
 
 Pre-edit state: commit `990d39c`. Phase 2 of the split, wave 3, move 32: metadata discovery, layering, appending,
