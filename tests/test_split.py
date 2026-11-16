@@ -139,6 +139,35 @@ class Deferred(unittest.TestCase):
 
 
 class Start(unittest.TestCase):
+    def test_phase_one_reexports_load_on_first_read_and_keep_the_real_objects(self):
+        code = textwrap.dedent("""\
+            import importlib
+            import sys
+            from unittest import mock
+            import pdfmd
+            exports = {
+                'pdfmd_comments': 'CommentPolicy',
+                'pdfmd_watch': 'pinned_watch_argv',
+                'pdfmd_compat': 'batchmd_main',
+                'pdfmd_parts': 'Heading',
+                'pdfmd_args': 'build_parser',
+                'pdfmd_fullcite': 'fullcite_pre_args',
+                'pdfmd_office.build': 'OfficeArguments',
+            }
+            assert not any(module in sys.modules for module in exports)
+            for module, name in exports.items():
+                assert name not in vars(pdfmd), name
+                real = getattr(pdfmd, name)
+                assert real is getattr(importlib.import_module(module), name), name
+                assert vars(pdfmd)[name] is real
+                with mock.patch.object(pdfmd, name, 'patched'):
+                    assert getattr(pdfmd, name) == 'patched'
+                assert getattr(pdfmd, name) is real
+        """)
+        done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True,
+                              encoding="utf-8", env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
     def test_chain_and_paragraph_load_only_on_first_use(self):
         code = textwrap.dedent("""\
             import sys
@@ -389,7 +418,18 @@ class SafetyNet(unittest.TestCase):
     def test_the_scan_finds_the_core_reads(self):
         # 495 distinct names at 3.33.74 and more with every move; far fewer means the scan lost track, not that lib/ changed
         self.assertGreater(len(self.uses), 400)
-        self.assertGreater(len(stand_ins(self.tree)), 50)
+        # Wave 5 keeps only aliases whose public and package attribute names differ.
+        self.assertEqual(set(stand_ins(self.tree)), {
+            ("paragraph_spacing_latex_args", "pdfmd_paragraph", "latex_args"),
+            ("paragraph_spacing_typst_args", "pdfmd_paragraph", "typst_args"),
+            ("paragraph_spacing_command_line", "pdfmd_paragraph", "apply_cli"),
+            ("chain_plan_build", "pdfmd_chain", "plan_build"),
+            ("chain_stopped", "pdfmd_chain", "stopped"),
+            ("chain_engine_failed", "pdfmd_chain", "engine_failed"),
+            ("remove_cache_paths", "pdfmd_cache.manage", "remove_all"),
+            ("cache_size_note", "pdfmd_cache.manage", "size_note"),
+            ("typst_template_args", "pdfmd_lua.typst", "template_args"),
+        })
 
     def test_every_core_name_in_lib_is_something_pdfmd_has(self):
         self.assertEqual(self.unbound, [], "core.X where no `core` is in scope")

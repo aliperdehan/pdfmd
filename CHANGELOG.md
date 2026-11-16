@@ -19,6 +19,52 @@ same commit as the change.
 
 ---
 
+## v3.33.285 — 2026-11-17
+
+Pre-edit state: commit `9e96e50`. Phase 2 wave 5, step 5a: phase 1's function and constant re-exports
+become names() table entries, loaded on first read and kept as their package's real objects. In all,
+379 bindings become names() lines: 229 from 21 from-imports, 144 matching-name stand-ins (including both generated fullcite bindings),
+and six DEFERRED_NAMES.update registrations. Existing table lines are combined by module without duplicate names.
+The nine differing-name stand-ins stay unchanged as the reviewer selected, with one comment explaining why;
+no package aliases or changes to names(). Six plain module imports stay: pdfmd_view, pdfmd_routing, pdfmd_bridge,
+pdfmd_cache, pdfmd_install and pdfmd_native. They expose modules themselves, which the attribute table does not
+serve; pdfmd_view also has live bare callers. The always-loaded pdfmd_base helpers and YAML support remain startup
+infrastructure. main's bare run_main() becomes sys.modules[__name__].run_main(), preserving the established lazy
+lookup and patches. All edits are by hand; split_spec and split_move do not apply to wave 5. No package code or
+packaging changes. SPLIT.md records completion and the retained cases. The safety-net test checks the exact nine
+aliases instead of requiring more than fifty stand-ins; a subprocess test verifies first-read loading, real classes
+and functions, cached identity and patch restoration for former eager re-exports and stand-ins. PART_CUTS keeps
+its postponed Heading annotation unchanged; a targeted F821 comment records that Heading is now served lazily.
+`pdfmd.py`: 904 -> 783 lines.
+
+Startup modules shrink from 205 to 182, with no additions. The former re-exports loaded pdfmd_args,
+pdfmd_assemble (and pdfmd_assemble.paths), pdfmd_attach, pdfmd_comments, pdfmd_compat, pdfmd_doctor, pdfmd_hybrid,
+pdfmd_lookup, pdfmd_parts, pdfmd_pdfimages, pdfmd_polish, pdfmd_restore, pdfmd_templates, pdfmd_tex and pdfmd_watch.
+pdfmd_parts imported decimal (which loaded _decimal and numbers); polish, lookup and parts imported unicodedata;
+polish, PDF images and attachments imported urllib.parse (which loaded urllib and ipaddress). These leave too.
+
+Proof: Ruff F and whitespace clean. The table audit preserves all 601 existing entries plus exactly the 379
+converted bindings; all thirteen core definitions have identical ASTs except main's exact lazy dispatch lookup.
+split_check: SAME on 34 checks, no BOTH FAILED or noise rerun. Extras build results.md with inkmd, print the bundled
+reference, run --check-dependencies and export results.md to ASCII, reaching native, documentation, tool-reporting
+and flat-output re-exports through real CLI/build callers. Default builds also cover PDF, report, batch, HTML,
+DOCX, assembly and attachments. Interleaved scripts/pdfmd --version best/median of ten: 194.7/206.4 ms before,
+182.7/197.3 ms after; the sequential harness reports 168/174 and 169/197 ms under concurrent test load.
+
+114 selected modules (every converted-name test match, the always-run set, split tools and loading checks):
+2,179 cases after the split-tools rerun, 2,124 passed, twelve failures, sixteen errors and 27 skipped. Nineteen
+serve cases need blocked sockets; four read-only-home builds reset the scratch TeX settings and explicitly report
+an unwritable TeX cache; four LibreOffice fixtures are disabled by sandbox isolation; the disk-image fixture fails
+at hdiutil create (Device not configured), identically on the unchanged parent archive. No other failures remain.
+Skips: seven real Calibre builds by instruction, six LibreOffice cases, nine unavailable KaTeX/MathJax cases,
+Linux/Windows cases, absent pymd2pdf, opt-in goldens and installed prompt_toolkit. All four loading-test modules pass.
+The initial scratch runner tests.py shadowed the tests namespace in one split-tools case; renaming it resolves
+that harness error, and all 27 split-tools tests pass on rerun. No repository change was needed for it.
+The earlier focused split run also passed all 23 cases. Real build-cache listing diff empty (122 entries), including
+the tools rerun, and no isolation warning. Scratch paths are normalized; the TeX font cache is a scratch copy.
+No timeout or mask changes, Calibre runs or full suite. Socket and real-cache proof outside the sandbox remains
+for the reviewer; the real-cache diff here cannot prove write isolation because sandbox writes are blocked.
+
 ## v3.33.284 — 2026-11-17
 
 Pre-edit state: commit `9670f8e`. Phase 2 wave 5, step 5e: the full module reference becomes
