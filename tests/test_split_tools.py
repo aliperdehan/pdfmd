@@ -148,6 +148,7 @@ PROBE_TEST = textwrap.dedent("""\
 class StateGuard(unittest.TestCase):
     def test_moved_last_writer_still_protects_state(self):
         from tests import test_split
+        sources = test_split.lib_sources()
         tree = ast.parse((ROOT / "pdfmd.py").read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Global):
@@ -158,7 +159,7 @@ class StateGuard(unittest.TestCase):
                             "def moved():\n    global SOFFICE_TIMEOUT_NOW\n    SOFFICE_TIMEOUT_NOW = 0\n")
             guard = test_split.SafetyNet("test_no_code_in_lib_binds_a_bare_state_name")
             guard.tree = tree
-            with unittest.mock.patch.object(test_split, "lib_sources", return_value=[path]), \
+            with unittest.mock.patch.object(test_split, "lib_sources", return_value=[*sources, path]), \
                  unittest.mock.patch.object(test_split, "ROOT", Path(folder)):
                 with self.assertRaisesRegex(AssertionError, "SOFFICE_TIMEOUT_NOW"):
                     guard.test_no_code_in_lib_binds_a_bare_state_name()

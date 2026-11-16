@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.33.249a — 2026-11-16
+
+Pre-edit state: commit `2a82d1c`. Tests only: StateGuard retains the real lib sources before adding its invalid
+writer fixture, so moved core state writers still contribute to the protected state set. The reviewer chose this
+repair over lowering the state-count assertion; the bare SOFFICE_TIMEOUT_NOW binding must still raise the expected
+assertion. With move 21 temporarily applied, the old fixture failed at 59 state names; the repaired fixture and the
+real bare-state safety check both pass. The real lib sources have no bare protected-state bindings, so none reaches
+path.relative_to(ROOT) while ROOT is patched to the fixture folder. The temporary move was removed before this
+commit. All 49 test_split_tools and test_split tests pass; Ruff F checks pass. The real build-cache diff is empty. No shipped code or version change.
+
 ## v3.33.249 — 2026-11-16
 
 Pre-edit state: commit `49a4575`. Phase 2 of the split, wave 3, move 20: Lua-filter discovery, the trust store and
