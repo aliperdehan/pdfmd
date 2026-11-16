@@ -19,6 +19,31 @@ same commit as the change.
 
 ---
 
+## v3.33.256 — 2026-11-16
+
+Pre-edit state: commit `390d43d`. Phase 2 of the split, wave 3, move 27: table settings and filters move to
+`lib/pdfmd_tables/settings.py`, with twenty-one constants. A pure move. The tool moved 43 statements, made 29 core
+rewrites, registered 23 table names and left cell_tags_text, repair_ascii_text and table_ascii_mode as stand-ins;
+its AST self-check passed, with no refusals. csv_table_filter and table_width_filter keep contextmanager;
+tabularray_available keeps lru_cache and a real table binding. Calls to patched tabularray_available and the
+mutable TABLAY_NOTED go through core. By hand, the CSV_CUTS location comment is restored to pdfmd.py; the other ten
+carried comment blocks describe their constants and move with them. An F401 annotation retains functools for
+unchanged startup and module attributes. The table package docstring locates its settings module; version, this
+entry and SPLIT.md progress are updated by hand. No packaging change. `pdfmd.py`: 8,199 -> 7,698 lines.
+
+Proof: Ruff F clean. Eighteen modules (section tests, every moved-name match, always-run set and test_split_tools),
+478 tests, after rerunning the four version-sensitive modules: 456 passed, three skipped (optional md2pdf, opt-in
+goldens and prompt_toolkit installed), three failures and sixteen errors, all nineteen requiring blocked sockets
+in test_serve. A scratch comment-restoration script stopped before the version/docs updates; the test runner had
+already imported the previous version and five version-consistency checks failed. After completing those updates,
+all 33 tests in packaging, docs consistency, compatibility and launcher pass on rerun. Tests use scratch TeX folders.
+Both real build-cache directory diffs are empty (118 entries; sandbox writes are blocked). Isolation identified a
+changed record in an existing folder as another session's report build using pdfmd 3.33.248; no real files were touched.
+split_check: SAME on 33 checks, no BOTH FAILED. Extras build capped CSV tables and alignment defaults to HTML and
+LaTeX, plus ASCII repair to DOCX, through the real build's filter and reader callers. Start-up has the same 205
+modules; interleaved scripts/pdfmd --version best/median of ten: 302/430 ms before, 295/431 ms after (harness
+sequential: 256/288 and 372/412 ms). Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.255 — 2026-11-16
 
 Pre-edit state: commit `a88805c`. Phase 2 of the split, wave 3, move 26: attachment settings and helpers move to

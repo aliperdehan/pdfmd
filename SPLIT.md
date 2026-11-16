@@ -526,7 +526,7 @@ Note: Its `*_CLI` settings stay.
 
 Tests: `test_attach`, `test_attach_format`, `test_check_source`, `test_edit_pdf`, `test_attach_layers`, `test_kit_carry`, `test_batch_paths`, `test_docs_consistency`, `test_calc`, `test_setup`.
 
-#### 27. `pdfmd_tables.settings` (existing package): 22 definitions, 21 constants, ~529 lines
+#### 27. `pdfmd_tables.settings` (existing package): 22 definitions, 21 constants, ~529 lines; done in 3.33.256
 
 Goes to `lib/pdfmd_tables/settings.py`.
 
