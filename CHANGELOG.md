@@ -19,6 +19,30 @@ same commit as the change.
 
 ---
 
+## v3.33.277 — 2026-11-17
+
+Pre-edit state: commit `b8da068`. Phase 2 of the split, wave 4, move 46: CSS_SCOPES moves to lib/pdfmd_css/latex.py.
+A pure move. The tool moved one statement, made no core rewrites and registered its name, without stand-ins,
+refusals or carried comments; AST self-check passed. All external readers already use core. By hand, the module
+docstring locates the constant; version, this entry and SPLIT.md progress are updated. No packaging change.
+The single table line replaces the single constant line, so pdfmd.py's line count is unchanged.
+
+`pdfmd.py`: 3,284 -> 3,284 lines.
+
+Proof: Ruff F and whitespace clean. 15 modules (section tests, every moved-name match,
+always-run set, test_split_tools and feature callers), 320 tests: 299 passed, 4 failures,
+16 errors and 1 skipped. Real build-cache listing diff empty (122 entries; sandbox
+blocks real-cache writes). split_check: SAME: 32 checks (help, logs, outputs); no BOTH FAILED.
+Nineteen failures/errors require blocked sockets in test_serve; the missing-Lua PDF build fails with the
+explicit unwritable TeX-cache cause. The skip is installed prompt_toolkit. Kit and YAML loading rules pass.
+Extras export CSS with scope all to LaTeX (including heading styles) and scope html to HTML, reaching the tuple
+through real argument parsing and css_scope callers. The harness sequential start-up best/median is 126/130
+before and 101/109 ms after.
+Start-up module sets identical (205); scripts/pdfmd --version interleaved best/median
+of ten: 113.0/129.8 ms before, 118.0/136.8 ms after.
+TeX and Matplotlib settings point to scratch. No real configuration or cache files were changed;
+outside-sandbox verification of the listed limitations remains for the reviewer.
+
 ## v3.33.276 — 2026-11-17
 
 Pre-edit state: commit `733f411`. Phase 2 of the split, wave 4, move 45: HYBRID_MIME moves to

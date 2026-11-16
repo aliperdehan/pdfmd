@@ -5,6 +5,7 @@ Moved out of `pdfmd.py` unchanged (v3.33.10, SPLIT.md), with `CSS_COLOURS`, `CSS
 `CSS_HEADING_OWN_RE`. `core` is the `pdfmd` module, bound when the module is first loaded (the first binding wins); the pdfmd
 names the code uses (`CSS_CLI`, `CSS_SCOPES`, `CSS_SCOPE_CLI` (rebound by `main()`), `cache_root`, which tests patch, and the
 rest) are read as `core.X` when it runs. The package's own reader (`import pdfmd_css`) is imported inside the functions, as it was.
+CSS_SCOPES moved here unchanged in v3.33.277; argument parsing and scope validation use the names table.
 """
 
 from __future__ import annotations
@@ -239,3 +240,6 @@ def css_heading_args(sources: Path | list[Path], metadata_files: list[Path], var
         return []
     note("CSS", f"{names}: the headings take the style sheet's colour, size and font (titlesec)")
     return ["--include-in-header", str(path)]
+
+
+CSS_SCOPES = ("html", "all")

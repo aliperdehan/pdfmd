@@ -826,7 +826,7 @@ Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and
 
 Tests: none name it; the always-run set.
 
-#### 46. `pdfmd_css.latex` (existing package): 0 definitions, 1 constants, ~1 lines
+#### 46. `pdfmd_css.latex` (done in 3.33.277; existing package): 0 definitions, 1 constants, ~1 lines
 
 Goes to `lib/pdfmd_css/latex.py`.
 

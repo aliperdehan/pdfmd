@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.276"
+PDFMD_VERSION = "3.33.277"
 import argparse  # noqa: F401 -- preserve startup and the public module attribute
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1974,6 +1974,7 @@ names("pdfmd_comments", "fence_after FENCE_RE COMMENT_KINDS")
 names("pdfmd_ansi.cli", "ANSI_LINKS_ENV ANSI_COLOR_ENV ANSI_WIDTH_ENV ANSI_FALLBACK_WIDTH")
 names("pdfmd_flat.build", "ASCII_FORMATS")
 names("pdfmd_hybrid", "HYBRID_MIME")
+names("pdfmd_css.latex", "CSS_SCOPES")
 display_path = deferred("pdfmd_log", "display_path")
 installed_engines = deferred("pdfmd_engines", "installed_engines")
 mask_embedded_blocks = deferred("pdfmd_assemble.embed", "mask_embedded_blocks")
@@ -2693,7 +2694,6 @@ _PANDOC_VERSION: tuple[int, ...] | None = None
 # metadata and the command line set. `--no-auto css` turns the search for `<name>.css` and `pdfmd.css` off.
 CSS_CLI: list[str] = []                  # --css FILE (repeatable)
 CSS_SCOPE_CLI: str | None = None         # --css-scope
-CSS_SCOPES = ("html", "all")
 
 
 # `css_scope`, `css_names`, `css_sources`, `css_additions`, `css_heading_latex` and `css_heading_args` (with the `CSS_HEADING_*`
