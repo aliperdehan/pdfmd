@@ -3,6 +3,8 @@
 Tesseract's languages), an ebook is turned into Markdown through Calibre and Pandoc (`route_ebook_input`), and a text file is read as
 Markdown (`route_text_input`, `text_to_markdown_mode`).
 
+OCR version and system package-manager helpers are appended here in v3.33.258.
+
 Moved out of `pdfmd.py` unchanged (v3.33.25, SPLIT.md), with `BATCHOCR_REPOSITORY`, `BATCHOCR_TAG`, `BATCHOCR_TEXT_MIN`,
 `EBOOK_INPUT_EXTENSIONS` and `PDF_READ_FORMATS`. `core` is the `pdfmd` module, bound by `pdfmd.py` when it loads (the first binding
 wins); the pdfmd names the code uses (`ATTACH_MANIFEST`, `BATCHOCR_MIN`, `DISPLAY_ALIAS`, `EXTENSION_FORMAT`, `FORMAT_EXTENSION`,
@@ -353,3 +355,66 @@ def route_text_input(args, extra: list[str]) -> int | None:
     print("NOTE  the Markdown is kept beside the text file: " + ", ".join(path.name for path in produced), file=sys.stderr)
     args.path = produced
     return None
+
+
+BATCHOCR_MIN = (1, 2, 4)
+
+
+def batchocr_version(command: list[str]) -> tuple[int, ...] | None:
+    try:
+        text = subprocess.run([*command, "--version"], capture_output=True, encoding="utf-8", errors="replace", timeout=60).stdout
+        return tuple(int(part) for part in re.search(r"(\d+(?:\.\d+)+)", text).group(1).split("."))
+    except (OSError, subprocess.SubprocessError, AttributeError, ValueError):
+        return None
+
+
+# What batchocr needs from the system for scanned pages: Tesseract (OCR) and Poppler (pdftotext,
+# pdftoppm). They are programs with their own licences and per-platform builds, so pdfmd never
+# bundles them; it asks the system's package manager (`pdfmd --install batchocr`).
+# manager -> (install command, {tool: packages}, how to add OCR languages)
+OCR_PACKAGE_MANAGERS = {
+    "brew": (["brew", "install"], {"tesseract": ["tesseract"], "poppler": ["poppler"]},
+             "brew install tesseract-lang"),
+    "apt-get": (["apt-get", "install", "-y"], {"tesseract": ["tesseract-ocr"], "poppler": ["poppler-utils"]},
+                "apt-get install tesseract-ocr-rus  (tesseract-ocr-LANGUAGE)"),
+    "dnf": (["dnf", "install", "-y"], {"tesseract": ["tesseract"], "poppler": ["poppler-utils"]},
+            "dnf install tesseract-langpack-rus  (tesseract-langpack-LANGUAGE)"),
+    "pacman": (["pacman", "-S", "--needed", "--noconfirm"],
+               {"tesseract": ["tesseract", "tesseract-data-eng"], "poppler": ["poppler"]},
+               "pacman -S tesseract-data-rus  (tesseract-data-LANGUAGE)"),
+    "zypper": (["zypper", "install", "-y"], {"tesseract": ["tesseract-ocr"], "poppler": ["poppler-tools"]},
+               "zypper install tesseract-ocr-traineddata-russian"),
+    "apk": (["apk", "add"], {"tesseract": ["tesseract-ocr"], "poppler": ["poppler-utils"]},
+            "apk add tesseract-ocr-data-rus  (tesseract-ocr-data-LANGUAGE)"),
+    "scoop": (["scoop", "install"], {"tesseract": ["tesseract"], "poppler": ["poppler"]},
+              "scoop install tesseract-languages"),
+    "choco": (["choco", "install", "-y"], {"tesseract": ["tesseract"], "poppler": ["poppler"]},
+              "download LANGUAGE.traineddata from github.com/tesseract-ocr/tessdata_fast into Tesseract's tessdata folder"),
+    "winget": (["winget", "install", "-e", "--id"], {"tesseract": ["UB-Mannheim.TesseractOCR"], "poppler": []},
+               "the installer offers languages; Poppler is not in winget (use scoop or choco)"),
+}
+
+
+def system_package_manager() -> str | None:
+    """The first package manager of OCR_PACKAGE_MANAGERS this system has."""
+    order = {"darwin": ("brew",), "win32": ("scoop", "choco", "winget")}.get(
+        sys.platform, ("apt-get", "dnf", "pacman", "zypper", "apk", "brew"))
+    return next((name for name in order if core.which(name)), None)
+
+
+def ocr_install_command(manager: str, tools: tuple[str, ...] = ("tesseract", "poppler")) -> list[str]:
+    """The command that installs `tools` with `manager` (sudo in front where the system wants it)."""
+    command, packages, _ = OCR_PACKAGE_MANAGERS[manager]
+    names = [name for tool in tools for name in packages[tool]]
+    needs_root = (manager in ("apt-get", "dnf", "pacman", "zypper", "apk") and hasattr(os, "geteuid")
+                  and os.geteuid() != 0 and core.which("sudo"))
+    return (["sudo"] if needs_root else []) + command + names
+
+
+def tesseract_install_hint() -> str:
+    manager = core.system_package_manager()
+    if manager:
+        return shlex.join(ocr_install_command(manager))
+    return {"darwin": "brew install tesseract poppler",
+            "win32": "scoop install tesseract poppler (or choco install tesseract poppler)"}.get(
+        sys.platform, "sudo apt install tesseract-ocr poppler-utils (or your package manager's equivalents)")

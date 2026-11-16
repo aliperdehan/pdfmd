@@ -558,7 +558,7 @@ Note: The most patched move: eight patched names, nine inner calls through `core
 
 Tests: `test_mathjax`, `test_engine_filters`, `test_katex_scale`, `test_html_math`, `test_setup`, `test_calibre_targets`, `test_office_latex`, `test_config`.
 
-#### 29. `pdfmd_routing` (existing package): 4 definitions, 2 constants, ~91 lines
+#### 29. `pdfmd_routing` (existing package): 4 definitions, 2 constants, ~91 lines; done in 3.33.258
 
 Goes to `lib/pdfmd_routing/__init__.py` (appended).
 

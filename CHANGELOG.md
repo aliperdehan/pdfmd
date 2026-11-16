@@ -19,6 +19,28 @@ same commit as the change.
 
 ---
 
+## v3.33.258 — 2026-11-16
+
+Pre-edit state: commit `6d7d29e`. Phase 2 of the split, wave 3, move 29: OCR version and package-manager helpers
+move into `lib/pdfmd_routing/__init__.py`, with two constants. A pure move. The tool first refused BATCHOCR_MIN,
+read bare in dependency_report. By hand that caller now obtains its local BATCHOCR_MIN through
+sys.modules[__name__], the established lazy-table lookup. The tool then moved six statements, made three core
+rewrites, registered four table names and left batchocr_version and tesseract_install_hint as stand-ins; its AST
+self-check passed. tesseract_install_hint reads the patched system_package_manager through core; existing routing
+callers already read patched batchocr_version through core. By hand, the eight-line PDF-input banner/location
+block is restored to pdfmd.py; the four package-manager comments move with the table. The routing docstring
+locates the appended helpers; version, this entry and SPLIT.md progress are updated by hand. No packaging change.
+`pdfmd.py`: 7,429 -> 7,372 lines.
+
+Proof: Ruff F clean. Twelve modules (section tests, every moved-name match, always-run set and test_split_tools),
+249 tests: 229 passed, one skipped (prompt_toolkit installed), three failures and sixteen errors, all nineteen
+requiring blocked sockets in test_serve. Tests use scratch TeX folders. The real build-cache directory diff is
+empty (118 entries; sandbox writes are blocked). split_check: SAME on 32 checks, no BOTH FAILED. Extras run the
+real dependency report and intentionally reject an old scratch batchocr version through PDF input with --extract,
+reaching the moved version parser, minimum, hint and package-manager lookup. No install or Calibre run. Start-up
+has the same 205 modules; interleaved scripts/pdfmd --version best/median of ten: 336/371 ms before, 326/359 ms
+after (harness sequential: 211/273 and 161/172 ms). Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.257 — 2026-11-16
 
 Pre-edit state: commit `040fbdb`. Phase 2 of the split, wave 3, move 28: HTML settings and math runtimes move to

@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.257"
+PDFMD_VERSION = "3.33.258"
 import argparse
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1920,6 +1920,9 @@ names("pdfmd_html", "KATEX_VERSION KATEX_PACKAGE katex_folder MATHJAX_VERSION MA
                     "katex_scale weasyprint_math_args ascii_table_transform HTML_TARGETS DEFAULT_OUTPUT_ALIASES "
                     "HTML_MATH_METHODS HTML_MATH_OPTIONS pandoc_has_option html_math_args cascaded_option "
                     "default_output_format html_settings html_pandoc_args")
+names("pdfmd_routing", "BATCHOCR_MIN OCR_PACKAGE_MANAGERS system_package_manager ocr_install_command")
+batchocr_version = deferred("pdfmd_routing", "batchocr_version")
+tesseract_install_hint = deferred("pdfmd_routing", "tesseract_install_hint")
 katex_runtime = deferred("pdfmd_html", "katex_runtime")
 mathjax_fonts = deferred("pdfmd_html", "mathjax_fonts")
 mathjax_runtime = deferred("pdfmd_html", "mathjax_runtime")
@@ -3774,6 +3777,7 @@ def dependency_report() -> bool:
     for row in load_package("pdfmd_shrink").check_rows():
         print(row)
     print("Reading PDFs (PDF to Markdown, through batchocr):")
+    BATCHOCR_MIN = sys.modules[__name__].BATCHOCR_MIN
     reader = find_batchocr()
     reader_version = batchocr_version(reader) if reader else None
     print(f"{'OK  ' if reader_version and reader_version >= BATCHOCR_MIN else 'MISS'}  batchocr"
@@ -7168,68 +7172,7 @@ KEEP_SOURCE_CLI: str | bool | None = None
 # and which pdfmd only finds, checks the version of, and hands the PDF and every flag
 # pdfmd does not know itself -- as unknown flags go to Pandoc when a PDF is built.
 # BATCHOCR_REPOSITORY and BATCHOCR_TAG: lib/pdfmd_routing/__init__.py (v3.33.25)
-BATCHOCR_MIN = (1, 2, 4)
 # BATCHOCR_TEXT_MIN, PDF_READ_FORMATS, batchocr_spec and find_batchocr: lib/pdfmd_routing/__init__.py (v3.33.25)
-
-
-def batchocr_version(command: list[str]) -> tuple[int, ...] | None:
-    try:
-        text = subprocess.run([*command, "--version"], capture_output=True, encoding="utf-8", errors="replace", timeout=60).stdout
-        return tuple(int(part) for part in re.search(r"(\d+(?:\.\d+)+)", text).group(1).split("."))
-    except (OSError, subprocess.SubprocessError, AttributeError, ValueError):
-        return None
-
-
-# What batchocr needs from the system for scanned pages: Tesseract (OCR) and Poppler (pdftotext,
-# pdftoppm). They are programs with their own licences and per-platform builds, so pdfmd never
-# bundles them; it asks the system's package manager (`pdfmd --install batchocr`).
-# manager -> (install command, {tool: packages}, how to add OCR languages)
-OCR_PACKAGE_MANAGERS = {
-    "brew": (["brew", "install"], {"tesseract": ["tesseract"], "poppler": ["poppler"]},
-             "brew install tesseract-lang"),
-    "apt-get": (["apt-get", "install", "-y"], {"tesseract": ["tesseract-ocr"], "poppler": ["poppler-utils"]},
-                "apt-get install tesseract-ocr-rus  (tesseract-ocr-LANGUAGE)"),
-    "dnf": (["dnf", "install", "-y"], {"tesseract": ["tesseract"], "poppler": ["poppler-utils"]},
-            "dnf install tesseract-langpack-rus  (tesseract-langpack-LANGUAGE)"),
-    "pacman": (["pacman", "-S", "--needed", "--noconfirm"],
-               {"tesseract": ["tesseract", "tesseract-data-eng"], "poppler": ["poppler"]},
-               "pacman -S tesseract-data-rus  (tesseract-data-LANGUAGE)"),
-    "zypper": (["zypper", "install", "-y"], {"tesseract": ["tesseract-ocr"], "poppler": ["poppler-tools"]},
-               "zypper install tesseract-ocr-traineddata-russian"),
-    "apk": (["apk", "add"], {"tesseract": ["tesseract-ocr"], "poppler": ["poppler-utils"]},
-            "apk add tesseract-ocr-data-rus  (tesseract-ocr-data-LANGUAGE)"),
-    "scoop": (["scoop", "install"], {"tesseract": ["tesseract"], "poppler": ["poppler"]},
-              "scoop install tesseract-languages"),
-    "choco": (["choco", "install", "-y"], {"tesseract": ["tesseract"], "poppler": ["poppler"]},
-              "download LANGUAGE.traineddata from github.com/tesseract-ocr/tessdata_fast into Tesseract's tessdata folder"),
-    "winget": (["winget", "install", "-e", "--id"], {"tesseract": ["UB-Mannheim.TesseractOCR"], "poppler": []},
-               "the installer offers languages; Poppler is not in winget (use scoop or choco)"),
-}
-
-
-def system_package_manager() -> str | None:
-    """The first package manager of OCR_PACKAGE_MANAGERS this system has."""
-    order = {"darwin": ("brew",), "win32": ("scoop", "choco", "winget")}.get(
-        sys.platform, ("apt-get", "dnf", "pacman", "zypper", "apk", "brew"))
-    return next((name for name in order if which(name)), None)
-
-
-def ocr_install_command(manager: str, tools: tuple[str, ...] = ("tesseract", "poppler")) -> list[str]:
-    """The command that installs `tools` with `manager` (sudo in front where the system wants it)."""
-    command, packages, _ = OCR_PACKAGE_MANAGERS[manager]
-    names = [name for tool in tools for name in packages[tool]]
-    needs_root = (manager in ("apt-get", "dnf", "pacman", "zypper", "apk") and hasattr(os, "geteuid")
-                  and os.geteuid() != 0 and which("sudo"))
-    return (["sudo"] if needs_root else []) + command + names
-
-
-def tesseract_install_hint() -> str:
-    manager = system_package_manager()
-    if manager:
-        return shlex.join(ocr_install_command(manager))
-    return {"darwin": "brew install tesseract poppler",
-            "win32": "scoop install tesseract poppler (or choco install tesseract poppler)"}.get(
-        sys.platform, "sudo apt install tesseract-ocr poppler-utils (or your package manager's equivalents)")
 
 
 # install_ocr_tools, batchocr_missing_message and pdf_read_target: lib/pdfmd_routing/__init__.py (v3.33.25)
