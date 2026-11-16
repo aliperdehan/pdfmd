@@ -19,6 +19,32 @@ same commit as the change.
 
 ---
 
+## v3.33.253 — 2026-11-16
+
+Pre-edit state: commit `4631618`. Phase 2 of the split, wave 3, move 24: build stamps, BUILD NOTES and PDF
+provenance move to `lib/pdfmd_stamp/__init__.py`, with nine constants. A pure move. The tool moved 33 statements, made 37 core rewrites,
+registered 22 table names and left is_package_helper_yaml and yaml_autoinclude as stand-ins, with no refusals;
+its AST self-check passed. By hand, the nine-line stamp section banner is restored to pdfmd.py; the six PDF key
+comments move with their constants. As the plan specifies, logging and warnings are imported inside
+stamp_pdf_metadata_posthoc; F401 annotations retain the original core imports for unchanged startup and module
+attributes. stamp_build retains timed (imported from pdfmd_base on its own line), pdf_metadata_header_file retains
+contextmanager, and both calls to patched stamp_summary go through core. stamp_build's lazy REPORT_BUILD lookup
+from move 23 becomes core.REPORT_BUILD. Packaging is added in pyproject.toml (packages and package-dir) and
+scripts/build_zipapp.py. Version, this entry and SPLIT.md progress are updated by hand. `pdfmd.py`: 9,127 -> 8,551 lines.
+
+Proof: Ruff F clean. Eighteen modules (section tests, every moved-name match, always-run set and test_split_tools),
+345 tests: 325 passed, one skipped (prompt_toolkit installed), three failures and sixteen errors, all nineteen
+requiring blocked sockets in test_serve. PDF provenance, partial history, PDF rewrite and atomic-write tests pass.
+The real build-cache directory diff is empty (116 entries; sandbox writes are blocked). Isolation identified an
+external report record and the Lua trust file changing: the record names the other session's report, pdfmd 3.33.248;
+the trust file contains that report project's filters and no task fixture paths. No real files were touched.
+split_check: SAME on 33 checks, no BOTH FAILED. Extras stamp a PDF to source notes and history, stamp the same
+scratch source again in history mode to HTML, and record a partial section build's history to HTML, exercising
+stamp_build and PDF postprocessing through their real build callers. All mutating inputs are the harness's separate
+scratch copies. Start-up has the same 205 modules; interleaved scripts/pdfmd --version best/median of ten:
+194/267 ms before, 191/249 ms after (harness sequential: 103/126 and 126/192 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.252 — 2026-11-16
 
 Pre-edit state: commit `93a1249`. Phase 2 of the split, wave 3, move 23: parts settings, section requests,

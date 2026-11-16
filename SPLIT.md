@@ -478,7 +478,7 @@ Traps: temporary bindings (2): `LEADING_FRONT_MATTER_RE`, `REPORT_BUILD`.
 
 Tests: `test_config`, `test_sections`.
 
-#### 24. `pdfmd_stamp` (new package): 24 definitions, 9 constants, ~596 lines
+#### 24. `pdfmd_stamp` (new package; done in 3.33.253): 24 definitions, 9 constants, ~596 lines
 
 Goes to `lib/pdfmd_stamp/__init__.py`.
 
