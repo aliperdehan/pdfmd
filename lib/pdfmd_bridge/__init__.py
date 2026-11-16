@@ -13,7 +13,7 @@ module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd na
 `run_soffice`, `select_filter_args`, `table_keep_metadata`, `vprint` and `which`) are read as `core.X` when it runs.
 `CITEPROC_DISABLED` is rebound by `main`, so it stays in `pdfmd.py`; `core.html_math_args`, `core.pandoc_version`,
 `core.resolve_calibre`, `core.resolve_soffice` and `core.which` are patched by tests as `pdfmd.X`, and `pdfmd.run_calibre_convert`
-(re-exported here) is patched too, through `finish_convert_job`, which stays. `pdfmd_direct` is imported inside `run_browser_print`,
+(re-exported here) is patched too, through `finish_convert_job`, now in `pdfmd_bridge.goals`. `pdfmd_direct` is imported inside `run_browser_print`,
 so neither it nor `pdfmd_office` loads at start. The three functions that `pdfmd.py` decorated with `@timed` are decorated with
 `@timed` from `pdfmd_base` (since v3.33.210; while `timed` was defined in `pdfmd.py`, below the place where the package loads, a
 copy here, `_timed`, looked `core.timed` up at each call).

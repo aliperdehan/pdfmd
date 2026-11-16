@@ -380,7 +380,7 @@ Note: `__file__` becomes `core.__file__`.
 
 Tests: `test_setup`, `test_office_latex`, `test_paper`, `test_office`, `test_settings_routes`, `test_build_time`, `test_chem`.
 
-#### 18. `pdfmd_bridge.goals` (existing package): 8 definitions, 10 constants, ~208 lines
+#### 18. `pdfmd_bridge.goals` (existing package): 8 definitions, 10 constants, ~208 lines; done in 3.33.247
 
 Goes to `lib/pdfmd_bridge/goals.py`.
 

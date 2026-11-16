@@ -19,6 +19,35 @@ same commit as the change.
 
 ---
 
+## v3.33.247 — 2026-11-16
+
+Pre-edit state: commit `3cafe3c`. Phase 2 of the split, wave 2, move 18: ebook filters, bridge target selection,
+Calibre job preparation and conversion completion move to `lib/pdfmd_bridge/goals.py` with ten constants. A pure
+move: the tool moved eighteen statements, made sixteen `core.` rewrites, added seventeen names to the table and
+no stand-ins; its AST self-check passed. It first refused OFFICE_INPUT_EXTENSIONS, still read bare in pdfmd.py's
+front-matter reader. By hand that read now uses sys.modules[__name__].OFFICE_INPUT_EXTENSIONS, the lazy table lookup
+used for Built in move 10. The direct-office section comment is restored to pdfmd.py; the other five carried
+comment blocks describe their constants and move with them. start_calibre_job reads the patched math_pictures_possible
+through core; EBOOK_MATH remains the same mutable dictionary served by the table. finish_convert_job's existing
+module lookup of Built becomes core.Built. The bridge package docstring locates finish_convert_job in the new
+module; an F401 annotation retains the now-unused atexit import for the unchanged start-up set and module attribute.
+The version, this entry and SPLIT.md's progress heading are updated by hand. No packaging change is needed.
+`pdfmd.py`: 10,285 -> 10,117 lines.
+
+Proof: Ruff's F checks pass. The section's tests, every test module naming a moved name, the always-run set and
+`test_split_tools`: eleven modules, 279 tests, 256 passed, four skipped, three failures and sixteen errors; all
+nineteen unsuccessful tests require blocked sockets in test_serve. Three real-Calibre tests are skipped by the
+scratch runner because the brief forbids Calibre runs; the other skip needs prompt_toolkit absent. Repository tests
+are unchanged. Tests used scratch TeX config/cache folders; the real build-cache listing is unchanged (116 entries;
+the sandbox prevents writes there). `split_check` extras run text-math TXT, picture-math AZW3 and MathML EPUB jobs
+through the real build and a scratch converter stand-in, reaching job preparation, ebook filters and completion:
+SAME, 33 checks, no BOTH FAILED. The first comparison's three extras all failed because the shell expanded an
+already-reassigned TMPDIR into the converter path twice; standalone builds verified the stand-in after correcting
+the environment, and the full comparison was rerun without source changes. Its text extra was also corrected from
+MOBI (a picture target) to TXT. Both attempts are retained for review. Start-up has the same 205 modules; alternating
+scripts/pdfmd --version best/median of ten: 200/244 ms before, 189/238 ms after (the passing harness's sequential
+runs: 90/98 and 95/102 ms). Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.246 — 2026-11-16
 
 Pre-edit state: commit `bda399c`. Phase 2 of the split, wave 2, move 17: office routing, effective metadata,
