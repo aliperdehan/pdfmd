@@ -778,7 +778,7 @@ Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and
 
 Tests: `test_attach`.
 
-#### 43. `pdfmd_ansi.cli` (existing package): 0 definitions, 4 constants, ~12 lines
+#### 43. `pdfmd_ansi.cli` (done in 3.33.274; existing package): 0 definitions, 4 constants, ~12 lines
 
 Goes to `lib/pdfmd_ansi/cli.py`.
 

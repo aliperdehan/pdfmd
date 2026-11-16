@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.273"
+PDFMD_VERSION = "3.33.274"
 import argparse  # noqa: F401 -- preserve startup and the public module attribute
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1971,6 +1971,7 @@ names("pdfmd_config", "frontmatter_no_auto no_auto_from_value has_embedded_pream
                       "resolve_strip_comments merge_option_dicts option_flag_number front_matter_dict")
 names("pdfmd_native", "Chunk MATH_LINE_BREAK math_lines NATIVE_PAPER_POINTS PAPER_NAME_ALIASES")
 names("pdfmd_comments", "fence_after FENCE_RE COMMENT_KINDS")
+names("pdfmd_ansi.cli", "ANSI_LINKS_ENV ANSI_COLOR_ENV ANSI_WIDTH_ENV ANSI_FALLBACK_WIDTH")
 display_path = deferred("pdfmd_log", "display_path")
 installed_engines = deferred("pdfmd_engines", "installed_engines")
 mask_embedded_blocks = deferred("pdfmd_assemble.embed", "mask_embedded_blocks")
@@ -2161,9 +2162,7 @@ ASCII_FORMATS = frozenset({"txt", "gfm", "gfm+raw", "markdown", "commonmark", "c
 # wrapped to the terminal's width. pdfmd_ansi/ draws it from Pandoc's JSON AST (`-t json`), so the metadata
 # files, filters, citations, \ce and the other steps of a build apply as they do for any output; with no Pandoc, the
 # built-in parser's tree stands in. `--view` is `-o -` plus a pager (see terminal_view). The width, the colour choice and
-# OSC 8 links reach the builds (which may be child processes) as the environment variables below.
-ANSI_WIDTH_ENV, ANSI_COLOR_ENV, ANSI_LINKS_ENV = "PDFMD_ANSI_WIDTH", "PDFMD_ANSI_COLOR", "PDFMD_ANSI_LINKS"
-ANSI_FALLBACK_WIDTH = 120                                  # no terminal and no --width
+# OSC 8 links reach the builds (which may be child processes) as the environment variables in lib/pdfmd_ansi/cli.py.
 # (the --view reader: its child arguments, stdin and sources, the pager and terminal_view moved to lib/pdfmd_view, v3.33.16)
 # ansi_width_argument, ansi_columns, ansi_colour_on, ansi_math, ansi_document_text, ansi_finish and ansi_without_pandoc: lib/pdfmd_ansi/cli.py (v3.33.6)
 

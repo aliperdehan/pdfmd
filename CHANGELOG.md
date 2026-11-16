@@ -19,6 +19,32 @@ same commit as the change.
 
 ---
 
+## v3.33.274 — 2026-11-17
+
+Pre-edit state: commit `f6c9156`. Phase 2 of the split, wave 4, move 43: the three ANSI environment names and
+fallback width move to lib/pdfmd_ansi/cli.py. A pure move. The tool moved two statements, made no core rewrites
+and registered all four names, without stand-ins or refusals; AST self-check passed. The shared tuple assignment
+is unchanged. By hand, the seven-line terminal-reader banner is restored to pdfmd.py and its location prose is
+updated; the CLI module docstring locates its constants. Version, this entry and SPLIT.md progress are updated.
+No packaging change.
+
+`pdfmd.py`: 3,287 -> 3,286 lines.
+
+Proof: Ruff F and whitespace clean. 14 modules (section tests, every moved-name match,
+always-run set, test_split_tools and feature callers), 353 tests: 332 passed, 4 failures,
+16 errors and 1 skipped. Real build-cache listing diff empty (122 entries; sandbox
+blocks real-cache writes). split_check: SAME: 32 checks (help, logs, outputs); no BOTH FAILED.
+Nineteen failures/errors require blocked sockets in test_serve. The missing-Lua end-to-end build emits the
+expected warning but fails with the explicit unwritable TeX-cache cause; it is the twentieth sandbox limit,
+not a loading failure. test_kits and test_pyyaml pass, including their loading rules. The skip is installed
+prompt_toolkit. Extras render ANSI with explicit width/colour and view without a pager at the fallback width,
+reaching all four constants through real run, view and renderer callers. The harness sequential start-up
+best/median is 120/139 before and 100/105 ms after.
+Start-up module sets identical (205); scripts/pdfmd --version interleaved best/median
+of ten: 117.1/131.8 ms before, 117.8/129.7 ms after.
+TeX and Matplotlib settings point to scratch. No real configuration or cache files were changed;
+outside-sandbox verification of the listed limitations remains for the reviewer.
+
 ## v3.33.273 — 2026-11-17
 
 Pre-edit state: commit `cfac827`. Phase 2 of the split, wave 4, move 42: fence_after, two fence patterns and

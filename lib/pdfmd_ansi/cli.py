@@ -4,7 +4,7 @@ into styled text.
 
 Moved out of `pdfmd.py` unchanged (v3.33.6, SPLIT.md). `core` is the `pdfmd` module, bound when the module is first loaded (the
 first binding wins); the pdfmd names the code uses, `ANSI_*_ENV`, `ANSI_FALLBACK_WIDTH` and `inkmd_vendored` (patched by tests)
-among them, are read as `core.X` when it runs.
+among them, are read as `core.X` when it runs. The four ANSI environment/width constants moved here in v3.33.274.
 """
 
 from __future__ import annotations
@@ -107,3 +107,9 @@ def ansi_without_pandoc(md_path: Path, output: Path) -> "tuple[bool, str]":
           "or footnotes)", file=sys.stderr)
     core.write_text_lf(output, text)
     return True, ""
+
+
+ANSI_WIDTH_ENV, ANSI_COLOR_ENV, ANSI_LINKS_ENV = "PDFMD_ANSI_WIDTH", "PDFMD_ANSI_COLOR", "PDFMD_ANSI_LINKS"
+
+
+ANSI_FALLBACK_WIDTH = 120                                  # no terminal and no --width
