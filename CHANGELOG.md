@@ -19,6 +19,48 @@ same commit as the change.
 
 ---
 
+## v3.33.235 — 2026-11-16
+
+Pre-edit state: commit `bb3b5b2`. Phase 2 of the split, wave 2, move 7: **the label-seeding code moves to a new module
+`lib/pdfmd_labels/seed.py`** of the existing package, which `pdfmd.py` does not load at start: `package_draft_skips`,
+`draft_skip_text`, `draft_skip_problem`, `label_without_page`, `seed_labels_file`, `part_key`, `safe_stem`,
+`seed_labels_mode`, `seed_calc_mode`, `parts_range_text`, `build_calc_seed`, `calc_marked_inputs`, `label_scan_wanted`,
+`select_wanted`, `build_label_scan`, the class `LabelScan` and the constants `PARTS_MARKER_DEFS`, `DRAFT_FLAGS`,
+`DRAFT_SKIP_COMMANDS`, `DRAFT_SKIP_SPANS`, `DRAFT_SKIP_PICTURES`, `PART_COUNTER_RE`, `SEED_LABEL_RE`, `REF_USE_RE` and
+`SEED_CALC_MODES`, text and docstrings unchanged. `scripts/split_move.py pdfmd_labels.seed` moved the 25 statements,
+from several stretches of `pdfmd.py`, with 46 `core.NAME` rewrites and no `global` line to change: the module reads the
+`LAST_*` and `SEED_*_CLI` state, `BUILD` and the helpers as `core.X` when it runs (tests assign `core.SEED_CALC_CLI`
+and patch `BUILD` on `pdfmd`, which the moved code still sees). `timed`, which the two `@timed` functions
+(`build_calc_seed`, `build_label_scan`) need when the module loads, is imported from `pdfmd_base` on a line of its own;
+the quoted annotation `'LabelScan | None'` of `build_label_scan` stays as text (nothing in the checkout evaluates
+annotations). The two comment blocks it carried, the eight lines above `PARTS_MARKER_DEFS` and the seven above
+`DRAFT_SKIP_COMMANDS`, belong to those constants. In `pdfmd.py` it added, after the table's last line,
+`names("pdfmd_labels.seed", "PARTS_MARKER_DEFS DRAFT_SKIP_COMMANDS DRAFT_SKIP_SPANS package_draft_skips draft_skip_text
+label_without_page seed_labels_file part_key seed_labels_mode SEED_CALC_MODES seed_calc_mode parts_range_text
+build_calc_seed calc_marked_inputs label_scan_wanted select_wanted build_label_scan")` (lib/pdfmd_build reads the
+scan, the calc seed, the parts markers and `part_key`; lib/pdfmd_args `SEED_CALC_MODES`; the tests the mode readers, the
+draft skips and `label_without_page`) and the stand-in `safe_stem = deferred("pdfmd_labels.seed", "safe_stem")`, which the
+one bare call left in `pdfmd.py` needs (lib/pdfmd_build and lib/pdfmd_buildinfo read it as `core.safe_stem`, which
+reaches the stand-in). By hand:
+-  `import time` stays in `pdfmd.py` with a `# noqa: F401` (only the moved `build_label_scan` read it there, but
+   `tests/test_install_calibre.py` patches `pdfmd.time.sleep`), the way `inspect` stays.
+-  `lib/pdfmd_labels/__init__.py`'s docstring says what the new `seed.py` is.
+-  SPLIT.md marks the move done.
+
+What is different: nothing a user sees; a build that seeds a part's labels or counts a calc document's names
+(`--seed-labels`, `--seed-calc`, a part or section built alone, `parts:` documents) loads the module, and so does every
+build that reads one of the table's names (lib/pdfmd_build asks `part_key` and `safe_stem` on the way).
+
+`pdfmd.py`: 13,854 -> 13,424 lines. Start-up: the same 205 modules after `import pdfmd` with `--version`, and no
+`pdfmd_labels` module among them; `scripts/pdfmd --version` (split_check, best / median of ten) 90 / 90 ms before,
+90 / 91 ms after. Proof: `ruff --select F` clean; 577 tests of 19 modules (the move's `test_package_helper`,
+`test_labels`, `test_setup`, `test_calc`, the always-run set with `test_split_tools`, and `test_partial_provenance`,
+`test_sections`, `test_plot_cache`, `test_cache_location`, `test_cache_manage`, `test_attach`), the real cache's builds
+folder unchanged around them; `split_check` with eight extra builds, SAME in 38 checks: a parts document built as a part
+with the default seed mode, `scan`, `draft` (a part with a TikZ picture in another part, so the draft skips run), `off`
+and as a whole, a calc document built as `report@60` (the calc seed), the same with `--seed-calc off`, and a section
+`doc#Discussion` of a calc document.
+
 ## v3.33.234a — 2026-11-16
 
 Pre-edit state: commit `2ce0773`. Tests only, no shipped code: **four tests that passed on macOS and Linux are made to pass on

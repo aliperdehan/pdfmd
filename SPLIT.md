@@ -214,7 +214,7 @@ Note: `remote_csl -> fetch_csl` through `core.` (patched). The `urllib` imports 
 
 Tests: `test_remote_csl`, `test_setup`.
 
-#### 7. `pdfmd_labels.seed` (existing package): 16 definitions, 9 constants, ~440 lines
+#### 7. `pdfmd_labels.seed` (existing package): 16 definitions, 9 constants, ~440 lines; done in 3.33.235 (as the tool wrote it: seventeen names in the table, one stand-in, `safe_stem`, which `pdfmd.py` still calls at line ~6045; 46 `core.` rewrites; `timed` imported from `pdfmd_base`; the quoted annotation `'LabelScan | None'` kept as text; `pdfmd.py` keeps `import time`, which `tests/test_install_calibre.py` reads as `pdfmd.time`)
 
 Goes to `lib/pdfmd_labels/seed.py`.
 

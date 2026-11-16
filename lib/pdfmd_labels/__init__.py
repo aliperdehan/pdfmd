@@ -12,6 +12,7 @@ a section, figure or equation outside it used to print ``??``. Three sources can
 
 ``auto`` (the default) is aux, then scan for what the aux does not know. ``off`` leaves every reference to ``??``.
 ``scan.py`` reads, ``replay.py`` is the TeX that replays; neither needs Pandoc or LaTeX to be imported.
+``seed.py`` is what a build runs around them: the mode, the draft pass, the seed file (it reads pdfmd as `core`).
 """
 
 from __future__ import annotations
