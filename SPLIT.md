@@ -230,7 +230,7 @@ Note: Two `@timed`. Reads the `LAST_*` and `SEED_*_CLI` state as `core.X`.
 
 Tests: `test_package_helper`, `test_labels`, `test_setup`, `test_calc`.
 
-#### 8. `pdfmd_cache.settings` (existing package): 8 definitions, 5 constants, ~166 lines
+#### 8. `pdfmd_cache.settings` (existing package): 8 definitions, 5 constants, ~166 lines; done in 3.33.236 (as the tool wrote it: eleven names in the table, no stand-ins, 22 `core.` rewrites; the two comment blocks it carried belong to `CACHE_DEFAULTS` and `NOTED_PLACES`; `pdfmd.py` reads none of the moved names bare any more)
 
 Goes to `lib/pdfmd_cache/settings.py`.
 

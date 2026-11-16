@@ -9,6 +9,8 @@ module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd na
 `metadata_files_by_priority` and `write_cache_manifest`) are read as `core.X` when it runs, so `CACHE_LOCATION_CLI`, which `main`
 rebinds, is always the current one. `cache_root` is patched by tests as `pdfmd.cache_root`, so `document_cache_root` and
 `cache_directory` call it as `core.cache_root()`; `core.config_options` is patched by tests as well.
+`settings.py` is what a build asks about these places: the cache settings (`cache_settings`), the cache folder's mark and manifest, the
+Pandoc working folder and the places a read-only home redirects (it reads pdfmd as `core`).
 """
 
 from __future__ import annotations

@@ -19,6 +19,52 @@ same commit as the change.
 
 ---
 
+## v3.33.236 — 2026-11-16
+
+Pre-edit state: commit `0bca077`. Phase 2 of the split, wave 2, move 8: **the cache settings and the writable-places code move to a
+new module `lib/pdfmd_cache/settings.py`** of the existing package, which `pdfmd.py` does not load at start: `note_place_once`,
+`tex_user_tree_writable`, `provide_writable_places`, `metadata_cwd`, `pandoc_working_directory`, `prepare_cache_root`,
+`write_cache_manifest`, `cache_settings` and the constants `CACHE_DEFAULTS`, `NOTED_PLACES`, `CACHE_LOCATIONS`, `CACHE_MANIFEST`
+and `LOCAL_CACHE_DIRNAME`, text and docstrings unchanged. `scripts/split_move.py pdfmd_cache.settings` moved the 13 statements
+with 22 `core.NAME` rewrites and no `global` line to change: the module reads `cache_root`, `folder_is_writable`,
+`temporary_place`, `which`, `display_path`, `config_options`, `KIT_METADATA`, `source_fingerprint`, `CACHE_PLOTS_CLI`, `deferred`
+and the metadata helpers as `core.X` when it runs, so what the tests patch on `pdfmd` (`which` around
+`provide_writable_places()` in `tests/test_tex_repair.py`, `cache_root`, `config_options`, `display_path`, `KIT_METADATA`)
+reaches it, and the TeX self-repair call (`deferred("pdfmd_tex.repair", "unwritable_cache")`, 3.33.221) is `core.deferred(...)`.
+`NOTED_PLACES` is changed in place (`.add`, and the tests' `.clear()`), never rebound, so the table's object is the module's.
+The two comment blocks the tool carried, the fourteen lines above `CACHE_DEFAULTS` (the cache route) and the five above
+`NOTED_PLACES` (a home that cannot be written), belong to those constants; `LAST_SEEDED` and `CACHE_LOCATION_CLI` stay in
+`pdfmd.py` (state `main` rebinds), with the pointer comments to the code that already moved. In `pdfmd.py` it added, after the
+table's last line, `names("pdfmd_cache.settings", "CACHE_DEFAULTS NOTED_PLACES provide_writable_places metadata_cwd
+pandoc_working_directory CACHE_LOCATIONS CACHE_MANIFEST LOCAL_CACHE_DIRNAME prepare_cache_root write_cache_manifest
+cache_settings")` (eleven names, no stand-ins: nothing left in `pdfmd.py` reads one bare; lib/pdfmd_build, pdfmd_bridge,
+pdfmd_cite, pdfmd_labels, pdfmd_bibliography and pdfmd_run read `metadata_cwd`, `pandoc_working_directory`,
+`prepare_cache_root`, `write_cache_manifest`, `cache_settings` and `provide_writable_places` as `core.X`; lib/pdfmd_cache,
+pdfmd_args and pdfmd_buildinfo the constants). `note_place_once` and `tex_user_tree_writable` are read only inside the module.
+By hand:
+-  `lib/pdfmd_cache/__init__.py`'s docstring says what the new `settings.py` is.
+-  SPLIT.md marks the move done.
+
+What is different: nothing a user sees; every build loads the module (the build asks `metadata_cwd`, `pandoc_working_directory`
+and `cache_settings`, and `run_main` calls `provide_writable_places` at the start).
+
+`pdfmd.py`: 13,424 -> 13,280 lines. Start-up: the same set of modules after `import pdfmd` with `--version`, with no
+`pdfmd_cache.settings` among them; `scripts/pdfmd --version` (split_check, best / median of ten) 90 / 91 ms before, 90 / 90 ms after (the last of four runs; 89 to 92 ms in all). Proof:
+`ruff --select F` clean; 363 tests of 17 modules (the move's `test_readonly_home`, `test_cache_location`,
+`test_setup`, `test_cache_manage`, `test_config`, the feature's own `test_tex_repair`, `test_metadata_parents` and
+`test_cli_paths`, the always-run set with `test_split_tools`), one skipped, the real cache's builds folder and the real
+config folder unchanged around them (the two changelog tests failed until this entry existed and passed after it);
+`split_check` with seven extra builds, SAME in 37 checks: a document whose `metadata/` folder holds the metadata file (the
+working folder is the metadata folder: `metadata_cwd`), the same with `--cache` (`cache_settings` from the metadata file's
+`pdfmd-options`, `prepare_cache_root`, `write_cache_manifest`), `-y FILE` named after the document, `--cache
+--cache-location document` and `--cache-location global` (`CACHE_LOCATIONS`, `LOCAL_CACHE_DIRNAME`, `CACHE_MANIFEST`),
+`--no-cache`, and a document in a read-only folder (`pandoc_working_directory` with its NOTE); then once more with
+`TEXMFCACHE` set to a place under a regular file, so that `provide_writable_places` ran the TeX self-repair (`unwritable_cache`)
+and `core.which`, with four of those builds: SAME in 34 checks. (A first run of the same extras differed only in the
+engine-fallback line, `doc.pdf does not exist yet` against `was made by lualatex`: the extras' own output files stayed in a
+folder both trees share, so the second tree saw the first one's; the extras were rerun with their output in the scratch
+folder.)
+
 ## v3.33.235 — 2026-11-16
 
 Pre-edit state: commit `bb3b5b2`. Phase 2 of the split, wave 2, move 7: **the label-seeding code moves to a new module
