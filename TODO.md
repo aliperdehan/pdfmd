@@ -14,7 +14,7 @@ wait for an answer before any code.
 - [ ] 4. Wave 2, then the biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
 - [ ] 5. Waves 3 to 5 (the docstring becomes `docs/reference.md`, `--doc reference`), then the full suite [3fi D29]
 - [ ] 5b. After wave 5: excerpts (source tracking: `[@key#N]` markers, `excerpts.json`, pagecite), pdfmd first, then Colophon's Source pane; spec approved [3fq 3fr 3fs D79 D80 Q74]
-- [ ] 6. Colophon by hand (`--smoke-web`, Cmd-Q with an unsaved tab, `gui.yml` on main), then the GUI decisions and build [D59 D60]
+- [ ] 6. Colophon by hand (`--smoke-web`, Cmd-Q with an unsaved tab, `gui.yml` on main), the review's list below in its order, then the GUI decisions and build [D59 D60 D81]
 - [ ] 7. nulabreport last: the full smoke test; a biochem report as `.docx` beside its PDF [D59]
 
 ## Decide first
@@ -157,6 +157,22 @@ is low priority. [3di]
 - [ ] The pre-4.0 pass (code review, edge cases, documentation) reads pdfmd as an agent would, not only as a human: exit codes, output size, non-TTY, name guessing, untrusted documents; then tested with the author's local models on real tasks [3ff, 3dg]
 - [ ] 4.0
 
+## Colophon after the review of 2026-11-16, agreed, in this order [3fu 3fw D81]
+
+- [ ] The editor takes its own autosave (and a file that is only touched) for another program's change: a false "changed by another program" sheet while typing; compare the disk with what the document last read or wrote; a self-test that types across an autosave [3fu B1, 3fw H4]
+- [ ] `--smoke-prefs` hangs on its own "Invalid setting" alert since 0.3.20; the self-tests' output line-buffered; `gui.yml` has never run [3fu B12]
+- [ ] Silent file damage: a UTF-8 BOM dropped at the first save; a save through a symlink to a file fails; a CRLF pair split by the caret (a lone CR written); two spaces becoming ". ", after a look in a window [3fw H1 H2 H3 L2]
+- [ ] The installed app is 0.3.0, the source 0.3.24: install after every gui batch, or the About box says when the app is older than the checkout [3fu B2]
+- [ ] Typing parity with CotEditor: a line-height setting (1.3, the same for every line), wrapped lines indented, tab width and spaces for Tab, Return keeps the indent, Shift Left/Right, Go to Line, font size keys; then the status bar (selection counts, words, graphemes); a TextKit 2 spike first [3fu B, 3fw D]
+- [ ] Find and Replace with regular expressions (Find All, Replace All) [3fu B]
+- [ ] A Help menu (its search field finds every command), a View menu per window kind, the missing Mac staples [3fu C]
+- [ ] Robustness: self-tests never write the real settings; the mode switch closes the editor only once the studio is up; pdfmd discovery behind marker lines; a `pdfmd --serve` that died is noticed and started again [3fu B3-B6]
+- [ ] PDF viewer: Back and Forward after a link, page-layout commands, Print [3fu C]
+- [ ] Web studio: no second menu row in the Mac window, the toolbar's wrap, one icon set, a title block; a tab whose file changed gets Keep Mine / Load from Disk; outside changes seen without a focus change [3fu C, B14]
+- [ ] `pdfmd --serve`: the cookie named after the port (two projects in one browser overwrite each other's token); the token checked before a body is read; a file with any CRLF becomes all-CRLF at a save [3fu B9]
+- [ ] The rest: the preview pane's width on a small screen, the preview cache never cleaned, repeated line numbers with a stray CR, Save As forcing an extension, a second window exactly over the first, the scroll place after a reload [3fu, 3fw]
+- [ ] Colophon beside CotEditor on a real screen: the same file in both windows at one size, a picture of each state (and the PDF window beside Skim); with it the checks that need a window (the studio's line-number gutter, the Settings tabs, the status bar in dark mode) [3fu G, 3fw, 3fh]
+
 ## Investigate first, no commitment
 
 - [ ] Engine speed: XeLaTeX built a document ~4.7x faster than LuaLaTeX in an outside review; measure warm (font cache), then decide whether pdfmd prefers a faster engine that built a comparable document before [3fk]
@@ -181,8 +197,6 @@ is low priority. [3di]
 - [ ] Colophon: a syntax chooser button like CotEditor's, reading CotEditor's syntax files and the JSON table [3fh, 3do]
 - [ ] Colophon: two full-screen plain-text windows side by side; check what happens when the left one minimises (CotEditor has a bug there) [3fh]
 - [ ] Colophon plain-text mode: the status bar stays white while the window is dark [3fh]
-- [ ] Colophon vs CotEditor, side by side: measure the window and add what is missing [3fh]
-- [ ] Research: what the ~20k CotEditor commits are made of (fixes vs localisation vs bots), as a list of editor edge cases [3fh]
 - [ ] reveal.js route, pptx slides, Quarto's slide formats [3bu, 3bv]
 - [ ] docx output and raw LaTeX multicols: nulabreport 1.29.1 writes tables between a raw `\begin{multicols}` and `\end{multicols}` as plain `tabular`; check what the docx (office) path does with those raw fences and the tables inside, since it parses raw LaTeX too
 - [ ] Features that may leave pdfmd for their own repositories (rebuilding a docx source from a PDF, `html2qmd`) [3dg, 3bn]
