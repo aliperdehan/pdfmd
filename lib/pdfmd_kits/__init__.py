@@ -2,8 +2,8 @@
 
 A kit is a folder that holds a `.kit` file. `kitfile` reads and checks that file (the format, version 1);
 `discovery` finds a kit by name (a path, a few folders, the TeX tree) and remembers where it was. Both are
-pure: they import nothing from pdfmd, so a test or a future tool can use them alone. pdfmd.py wires them to
-the config, the layers and the build.
+pure: they import nothing from pdfmd, so a test or a future tool can use them alone. The deferred package pdfmd_kitset wires them to
+the config, the layers and the build, and holds package-helper discovery.
 """
 
 from .discovery import Found, Location, find, list_kits, normalise, Cache

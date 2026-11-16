@@ -8,8 +8,8 @@ Moved out of `pdfmd.py` unchanged (v3.33.22, SPLIT.md). `core` is the `pdfmd` mo
 `kit_cache`, `kit_explicit_sources`, `kit_locations`, `kit_preamble_kits`, `kit_writes_preamble`, `read_text_best_effort`, `run_probe`,
 `which` and `yaml`, pdfmd's own optional import) are read as `core.X` when it runs. `VERBOSE_OUTPUT` is rebound by `main`, so it stays in
 `pdfmd.py`; `core.cache_root`, `core.run_probe`, `core.which` and `core.VERBOSE_OUTPUT` are patched by tests as `pdfmd.X`.
-`kit_package_folders`, which tests patch as `pdfmd.kit_package_folders`, is called only from `package_helper`, which stays in
-`pdfmd.py` and reaches it through the stand-in there.
+`kit_package_folders`, which tests patch as `pdfmd.kit_package_folders`, is called only from `package_helper` in
+`pdfmd_kitset`, which reads it through `core`.
 """
 
 from __future__ import annotations

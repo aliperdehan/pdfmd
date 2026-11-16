@@ -588,9 +588,9 @@ Note: TEXINPUTS, the resource path, preambles, header includes.
 
 Tests: `test_kit_texinputs`, `test_header_includes`, `test_standalone_source`, `test_named_files`, `test_header_filters`, `test_texpackages`, `test_auto_states`.
 
-#### 31. `pdfmd_kits.active` (existing package): 21 definitions, 5 constants, ~438 lines
+#### 31. `pdfmd_kitset` (new package): 21 definitions, 5 constants, ~438 lines; done in 3.33.260
 
-Goes to `lib/pdfmd_kits/active.py`.
+Goes to `lib/pdfmd_kitset/__init__.py`. The reviewer chose a separate package because importing any pdfmd_kits submodule loads the kit code; builds that select no kit must not load it, so kit-code imports stay inside the functions that need them.
 
 Definitions: `installed_package_folder`, `configured_kits`, `kit_locations`, `kit_path_like`, `find_kit`, `kit_cache`, `set_kit_cli`, `kit_layer_selections`, `active_kits`, `_active_kits`, `kit_overlay`, `kit_metadata_files`, `kit_preamble_kits`, `kit_writes_preamble`, `header_argument_positions`, `kit_explicit_sources`, `kit_embedded_preambles`, `package_helper`, `header_includes_texts`, `office_packages`, `ActiveKit`.
 

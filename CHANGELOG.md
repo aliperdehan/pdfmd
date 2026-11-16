@@ -19,6 +19,32 @@ same commit as the change.
 
 ---
 
+## v3.33.260 — 2026-11-16
+
+Pre-edit state: commit `05bdc37`. Phase 2 of the split, wave 3, move 31: active kits and package-helper discovery
+move to `lib/pdfmd_kitset/__init__.py`, with five constants. A pure move. The reviewer changed the target from
+pdfmd_kits.active: importing its parent loads kit code even in a build that selects no kit. By hand the move section
+records the new target and reason before the tools run; all kit-code imports remain inside their original functions.
+The tool first refused KIT_METADATA, read bare in pandoc_metadata_order. By hand that caller obtains its local
+KIT_METADATA through sys.modules[__name__], the established lazy-table lookup. The tool then moved 26 statements,
+made 66 core rewrites, converted one global declaration, registered sixteen table names and left active_kits and
+kit_metadata_files as stand-ins; AST self-check passed. KIT_CLI and KIT_STACK_CLI stay in pdfmd.py, written through
+core; calls to patched installed_package_folder use core; office_packages has its real table binding. Mutable kit
+dictionaries remain shared. By hand both carried section banners (seven/four lines) are restored to pdfmd.py;
+package and locate docstrings locate the helpers. Packaging is added in pyproject.toml (packages and package-dir)
+and scripts/build_zipapp.py. Version, this entry and SPLIT.md progress are updated.
+`pdfmd.py`: 6,760 -> 6,361 lines.
+
+Proof: Ruff F clean. Eighteen modules (section tests, every moved-name match, kit-preamble coverage, always-run set
+and test_split_tools), 363 tests: 343 passed, one skipped (prompt_toolkit installed), three failures and sixteen
+errors, all nineteen requiring blocked sockets in test_serve. Full test_kits passes, including the no-kit loading
+assertion that rejected the old target. Tests use scratch TeX folders. The real build-cache directory diff is empty
+(118 entries; sandbox writes are blocked). split_check: SAME on 33 checks, no BOTH FAILED. Extras build kit-selected
+LaTeX, DOCX and assembled source, exercising selection, metadata, package headers, Word support and carried preambles
+through real builds. Start-up has the same 205 modules; interleaved scripts/pdfmd --version best/median of ten:
+141/167 ms before, 141/164 ms after (harness sequential: 110/116 and 123/142 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.259 — 2026-11-16
 
 Pre-edit state: commit `c49d6f1`. Phase 2 of the split, wave 3, move 30: TeX input paths, preambles and header
