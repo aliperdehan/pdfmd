@@ -9,8 +9,7 @@ module is imported; `pdfmd.py` re-exports them). `core` is the `pdfmd` module, b
 wins); the pdfmd names the code uses (`CYRILLIC_LOOSE`, `CYRILLIC_STRICT`, `LATIN_EXTRA`, `NO_AUTO_CLI`, `TRANSLIT_CYRILLIC`,
 `TRANSLIT_PACKS`, `auto_disabled`, `config_options`, `display_path`, `folder_auto_safe`, `folder_layers`, `is_assembled_document`,
 `resolve_auto`, `unicode_module` and `yaml`, pdfmd's own optional import) are read as `core.X` when it runs, so the state that
-`set_translit` and `main` rebind (`TRANSLIT_*`, `NO_AUTO_CLI`) is always the current one. `CYRILLIC_LOOSE` stays in `pdfmd.py`: it is built from
-`CYRILLIC_STRICT` when that file is loaded. `core.config_options` is patched by tests as `pdfmd.config_options`.
+`set_translit` (now in `pdfmd_lookup.find`) and `main` rebind (`TRANSLIT_*`, `NO_AUTO_CLI`) is always the current one. `CYRILLIC_LOOSE` and `CYRILLIC_STRICT` now live in `pdfmd_lookup.find`, with the document-finding helpers. `core.config_options` is patched by tests as `pdfmd.config_options`.
 """
 
 from __future__ import annotations

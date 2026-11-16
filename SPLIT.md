@@ -432,7 +432,7 @@ Note: Discovery and the trust store.
 
 Tests: `test_package_helper`, `test_lua_trust`, `test_lua_missing`.
 
-#### 21. `pdfmd_lookup.find` (existing package): 7 definitions, 5 constants, ~189 lines
+#### 21. `pdfmd_lookup.find` (existing package; done in 3.33.250): 7 definitions, 5 constants, ~189 lines
 
 Goes to `lib/pdfmd_lookup/find.py`.
 

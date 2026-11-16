@@ -2,7 +2,7 @@
 
 pdfmd finds a document by a name typed in Latin letters (`glyukoza` finds "Глюкоза.md") by
 comparing keys: both sides are reduced to plain letters, and a name in a script pdfmd can
-romanize is spelt in Latin first. Cyrillic is built into pdfmd.py itself and always on; the packs
+romanize is spelt in Latin first. Cyrillic is built into pdfmd_lookup.find and always on; the packs
 here are the others, off unless asked for (`--translit greek,hangul`, or PDFMD_TRANSLIT), one
 per script so nobody pays for tables they will not use:
 

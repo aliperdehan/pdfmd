@@ -19,6 +19,28 @@ same commit as the change.
 
 ---
 
+## v3.33.250 — 2026-11-16
+
+Pre-edit state: commit `7bb4fa2`. Phase 2 of the split, wave 3, move 21: document lookup moves to
+`lib/pdfmd_lookup/find.py`, with five constants. A pure move. The tool first refused announce_lookup's LOOKUP_FIELD_WORDS default.
+By hand that definition is removed before a partial section is moved, then appended AST-identically with a direct
+import of its default from pdfmd_lookup. Its name is explicitly registered alongside the tool's seven table names;
+skip_never remains a stand-in. The partial tool moved eleven statements, made 23 core rewrites and converted one
+global declaration; its AST self-check passed. Its announce_lookup note is resolved by the appended local definition.
+All three carried comments belong to the Cyrillic and Latin constants. TRANSLIT_PACKS and TRANSLIT_CYRILLIC remain
+pdfmd state written through core; core.lookup_key.cache_clear() reaches the real phase-1 function. By hand: lookup
+and transliteration docstrings locate the moved code; an F401 annotation retains unicodedata for unchanged startup
+and module attributes; version, this entry and SPLIT.md progress. No packaging change. `pdfmd.py`: 9,748 -> 9,571 lines.
+
+Proof: Ruff F clean. Fourteen modules (section tests, every moved-name match, always-run set, test_split_tools and
+bare-ranking coverage), 344 tests: 324 passed, one skipped (prompt_toolkit installed), three failures and sixteen
+errors, all nineteen requiring blocked sockets in test_serve. The real build-cache diff is empty (116 entries;
+the sandbox prevents writes). split_check: SAME on 34 checks, no BOTH FAILED. Extras exercise stem lookup to HTML,
+wildcard lookup to DOCX, Cyrillic transliteration to HTML, and fuzzy section lookup to HTML through announce_lookup's
+real caller. Start-up has the same 205 modules; interleaved scripts/pdfmd --version best/median of ten:
+227/289 ms before, 222/283 ms after (harness sequential: 133/147 and 100/106 ms). Outside-sandbox socket and cache
+verification remains for the reviewer.
+
 ## v3.33.249a — 2026-11-16
 
 Pre-edit state: commit `2a82d1c`. Tests only: StateGuard retains the real lib sources before adding its invalid
