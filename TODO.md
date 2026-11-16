@@ -19,23 +19,19 @@ wait for an answer before any code.
 
 ## Decide first
 
-- [ ] **decide** Coloured links by default in LaTeX and Typst (the author prefers it; a default flip is a major change by the changelog's rule): at 4.0 with the other default flips, or a revised rule; the opt-in is the `colorlinks` setup row [3fl]
-- [ ] **decide** Multi-path builds (`pdfmd *`, `-b a.md dir/`, 3.33.140): revise the guesses that skip non-inputs, earlier outputs and same-output clashes (e.g. a record of what pdfmd wrote, instead of guessing) [3fi D33]
-- [ ] **decide** Parts-scaffold search above the document: keep probing every *.md (b, built 3.33.168) or only conventional/named parts folders (a) [3fi D39]
-- [ ] **decide** `table-keep` in pdfmd itself, for any document, not only through a filter [3cf]
-- [ ] **decide** images in `--view` through the kitty graphics protocol (Ghostty, kitty, WezTerm), also display math; the pager conflict is open [3dm]
-- [ ] **decide** a Pandoc memory cap: a `pdfmd-options` key and `--setup` row passing `+RTS -M<n> -RTS`; default off or on, and the value [3en]
 - [ ] **decide** Text shorthands such as `+/-` -> ±, beside the `--`/`---` dashes: which set, the default, never inside code; postponed while the author weighs the list [D44]
 - [ ] **later** PlantUML as a diagram language next to mermaid, d2 and dot: not now (author, 2026-11-02: no second Java for it); pick up if asked [3en]
 - [ ] Build record: LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
-- [ ] **decide** a length for the document-level `indent:` (`indent: 0.5in`), not only on the `{indent=...}` div [3fp]
-- [ ] **decide** a way to run a named Lua filter before `--citeproc` (`lua-filter-before:` or a `pre:` list) [3fp]
-- [ ] **decide** Source `<!-- comments -->` reach HTML and EPUB output verbatim: drop them by default there, a `--check` code, or both [3ft]
-- [ ] **decide** The `bib` auto kind's candidates: only BibTeX-family files directly in the document's, accessory and metadata folders (built so in 3.33.233), or wider [D60]
 - [ ] `test_colophon_watcher_match` is timing-dependent (a real `--watch` and a 10 s wait): a readiness signal instead [3fx]
 
 ## Features, agreed
 
+- [ ] Multi-path builds (3.33.140): replace the guesses (non-inputs, earlier outputs, same-output clashes) with a record of what pdfmd wrote, with the build record [3fi D33 3dn D84]
+- [ ] Images and display math in `--view` through the kitty graphics protocol, after the queue: first a spike of Unicode placeholders in Ghostty (they survive the pager), else no pager when images are drawn [3dm D84]
+- [ ] A Pandoc memory cap: a `pdfmd-options` key and `--setup` row passing `+RTS -M<n> -RTS`, default off [3en D84]
+- [ ] Document-level `indent:` takes a length (`indent: 0.5in`) in LaTeX, Typst, Word and HTML; `true` stays 1.5em [3fp D84]
+- [ ] `lua-filter-before-citeproc:`, a layered list of filters run before `--citeproc`; built with excerpts (5b) [3fp D84]
+- [ ] `strip-comments` also drops `<!-- -->` from the build's own text; README: `%%` private, unclosed `%%` kept as text, `<!-- -->` reaches HTML/EPUB [3ft D84]
 - [ ] Logo: a README header (a `<picture>` with absolute raw URLs, light and dark wordmark) and the social preview uploaded in the repository settings, before the next push [3ew]
 - [ ] BUG, silent wrong numbers: parts built together that are not next to each other (`report#20+40`) read what the parts between them define as defined above both (calc names); fix with a slot per gap or hidden gap blocks, first a WARN [3eg]
 - [ ] `\md{...}`: nulabreport's macros taking `\md{}`; native tier; text-level pre-passes (table-ascii, includes, embed blocks) inside the macro, unchecked [3dc]
@@ -141,6 +137,7 @@ is low priority. [3di]
 
 ## Before 4.0
 
+- [ ] Coloured links on by default in LaTeX and Typst, with the other default flips; the `colorlinks` setup row is the opt-in until then [3fl D84]
 - [ ] **decide** `pdfmd.py`'s name once it is under 1,000 lines: a `pdfmd_cli` package (`core.py`, `__main__.py`) with `pdfmd.py` kept as a shim, or `__init__.py` [Q67]
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]
 - [ ] Windows test session on a second machine: fork + pull requests, the Mac session merges and bumps the version [3dp]
