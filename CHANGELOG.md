@@ -19,6 +19,33 @@ same commit as the change.
 
 ---
 
+## v3.33.278 — 2026-11-17
+
+Pre-edit state: commit `22fdabf`. Phase 2 of the split, wave 4, move 47: WATCH_INTERVAL moves to
+lib/pdfmd_watch/__init__.py. A pure move. The tool moved one statement, made no core rewrites and registered its
+name, without stand-ins, refusals or carried comments; AST self-check passed. All external readers already use
+core. By hand, the watch package docstring locates the constant and its edit callers; version, this entry and
+SPLIT.md progress are updated. No packaging change. The single registration replaces the single constant line;
+the tool also removes two blank lines from pdfmd.py.
+
+`pdfmd.py`: 3,284 -> 3,282 lines.
+
+Proof: Ruff F and whitespace clean. 15 modules (section tests, every moved-name match,
+always-run set, test_split_tools and feature callers), 298 tests: 277 passed, 4 failures,
+16 errors and 1 skipped. Real build-cache listing diff empty (122 entries; sandbox
+blocks real-cache writes). split_check: SAME: 31 checks (help, logs, outputs); no BOTH FAILED.
+Nineteen failures/errors require blocked sockets in test_serve; the missing-Lua PDF build fails with the
+explicit unwritable TeX-cache cause. The skip is installed prompt_toolkit. Kit and YAML loading rules pass.
+The extra edits the default attached-source PDF with the no-op command python3 -c pass: edit_pdf_command's
+real polling loop reads the moved interval before returning without a change, and opens no application.
+All PDF-editing tests and the real watch test (metadata deletion rebuilds; output edits do not) pass.
+The harness sequential start-up best/median is 121/131 before and 114/125 ms after. No full suite was run:
+the brief assigns the wave-end run to the reviewer.
+Start-up module sets identical (205); scripts/pdfmd --version interleaved best/median
+of ten: 113.0/129.5 ms before, 109.1/128.0 ms after.
+TeX and Matplotlib settings point to scratch. No real configuration or cache files were changed;
+outside-sandbox verification of the listed limitations remains for the reviewer.
+
 ## v3.33.277 — 2026-11-17
 
 Pre-edit state: commit `b8da068`. Phase 2 of the split, wave 4, move 46: CSS_SCOPES moves to lib/pdfmd_css/latex.py.

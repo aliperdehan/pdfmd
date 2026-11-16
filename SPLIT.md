@@ -842,7 +842,7 @@ Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and
 
 Tests: none name it; the always-run set.
 
-#### 47. `pdfmd_watch` (existing package): 0 definitions, 1 constants, ~6 lines
+#### 47. `pdfmd_watch` (done in 3.33.278; existing package): 0 definitions, 1 constants, ~6 lines
 
 Goes to `lib/pdfmd_watch/__init__.py` (appended).
 

@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.277"
+PDFMD_VERSION = "3.33.278"
 import argparse  # noqa: F401 -- preserve startup and the public module attribute
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1975,6 +1975,7 @@ names("pdfmd_ansi.cli", "ANSI_LINKS_ENV ANSI_COLOR_ENV ANSI_WIDTH_ENV ANSI_FALLB
 names("pdfmd_flat.build", "ASCII_FORMATS")
 names("pdfmd_hybrid", "HYBRID_MIME")
 names("pdfmd_css.latex", "CSS_SCOPES")
+names("pdfmd_watch", "WATCH_INTERVAL")
 display_path = deferred("pdfmd_log", "display_path")
 installed_engines = deferred("pdfmd_engines", "installed_engines")
 mask_embedded_blocks = deferred("pdfmd_assemble.embed", "mask_embedded_blocks")
@@ -3137,9 +3138,6 @@ HYBRID_CLI: bool | None = None
 
 
 # build_parser: lib/pdfmd_args (v3.33.40)
-
-
-WATCH_INTERVAL = 1.0
 
 
 # What main() keeps in module globals from the command line: every *_CLI name, and these. -j workers are fresh processes

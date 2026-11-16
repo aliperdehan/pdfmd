@@ -4,6 +4,7 @@
 is the `pdfmd` module, bound by `pdfmd.py` when it loads (the first binding wins); the package reads `core.WATCH_INTERVAL`,
 `core.PARTS_DIR_ALIASES` and `core.accessory_directories` when it runs. `run_watch` re-runs the script `core.__file__`
 (`pdfmd.py`), not this package's `__file__`.
+WATCH_INTERVAL moved here unchanged in v3.33.278; the names table also serves the edit command's polling loops.
 """
 
 from __future__ import annotations
@@ -99,3 +100,6 @@ def run_watch(source: Path, argv: list[str], args, default_target, scaffold_plan
             print(f"WATCH  change detected, recompiling {source}...")
     except KeyboardInterrupt:
         print("\nWATCH  stopped")
+
+
+WATCH_INTERVAL = 1.0
