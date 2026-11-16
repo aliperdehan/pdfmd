@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.233"
+PDFMD_VERSION = "3.33.234"
 import argparse
 import atexit
 import contextlib
@@ -1551,7 +1551,7 @@ from decimal import Decimal
 from pathlib import Path
 from shutil import which
 import tempfile
-from tempfile import NamedTemporaryFile, mkdtemp, mkstemp
+from tempfile import NamedTemporaryFile, mkdtemp
 from textwrap import dedent
 from typing import Callable, Iterator
 
@@ -1844,6 +1844,8 @@ names("pdfmd_bibliography", "bibliography_indent_args")
 names("pdfmd_direct.route", "direct_route convert_direct convert_qmd")
 names("pdfmd_build", "PREFERRED_FONT DEFAULT_MONOFONT DEFAULT_VARS WEASYPRINT_CSS_NOISE run_engine_command "
                      "_convert_one_core finish_build set_soffice_limit convert_one make_embed_plan")
+names("pdfmd_cite", "CITATION_ENGINES frontmatter_citation_engine CA_BUNDLES open_url document_csl fetch_csl remote_csl "
+                    "csl_args parse_bibliography convert_via_native_bibliography")
 _convert_one = deferred("pdfmd_build", "_convert_one")
 run_main = deferred("pdfmd_run", "run_main")
 edit_command = deferred("pdfmd_edit.command", "edit_command")
@@ -9166,52 +9168,6 @@ def frontmatter_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | 
     return words(value) if value is not None else None
 
 
-# pdfmd-options.citation-engine: "citeproc" (the default -- a document only
-# needs this key at all to opt into something else), "natbib", or
-# "biblatex". Routes a LaTeX-family PDF target's (or --to latex/beamer/
-# context's) bibliography through Pandoc's own --natbib/--biblatex flags
-# (native biber/bibtex, handled by the engine's own bibliography tooling)
-# instead of --citeproc (which renders citations into the LaTeX Pandoc
-# generates directly, using a CSL style, and never touches biber/bibtex at
-# all). Meaningless for a non-LaTeX target (HTML/typst/docx/office) --
-# silently ignored there, same as e.g. LaTeX-only geometry/monofont
-# defaults already are. See convert_via_native_bibliography()'s own
-# docstring for the real complication this runs into for a PDF target
-# specifically: confirmed empirically that Pandoc's own PDF-making
-# pipeline, when it calls a LaTeX engine directly via --pdf-engine=, never
-# actually runs bibtex/biber itself (only --pdf-engine=latexmk does, since
-# latexmk manages that on its own) -- lualatex/xelatex/pdflatex all leave
-# citations undefined with a bare --natbib/--biblatex. Routed around by
-# generating a complete standalone .tex via Pandoc first (same as the
-# TEX_STANDALONE_FORMATS branch already does for --to latex), then handing
-# it to compile_tex_direct()'s own engine+bibtex/biber rerun loop instead
-# of letting Pandoc invoke the engine itself.
-CITATION_ENGINES = frozenset({"citeproc", "natbib", "biblatex"})
-
-
-def frontmatter_citation_engine(md_path: Path, metadata_files: list[Path] = ()) -> str | None:
-    """Read pdfmd-options.citation-engine -- see the module comment above.
-
-    Document's own front matter wins over a linked metadata file's,
-    checked in the same metadata_files order as frontmatter_engine(), same
-    precedence rule. No legacy bare-top-level spelling to support here
-    (unlike pdf-engine/engine) -- this is a brand new key with no existing
-    documents written against an older spelling.
-    """
-    options = frontmatter_pdfmd_options(md_path)
-    value = options.get("citation-engine")
-    if value is not None:
-        return str(value).casefold()
-    for metadata_file in metadata_files_by_priority(metadata_files):
-        data = metadata_file_yaml(metadata_file)
-        options = data.get("pdfmd-options")
-        value = options.get("citation-engine") if isinstance(options, dict) else None
-        if value is not None:
-            return str(value).casefold()
-    value = config_options(md_path).get("citation-engine")
-    return str(value).casefold() if value is not None else None
-
-
 def option_names(options: dict, kind: str) -> list[str]:
     """File names a ``pdfmd-options`` block gives for ``kind`` -- ``yaml``
     (metadata files), ``preamble`` or ``lua-filter`` -- written flat or
@@ -10937,134 +10893,6 @@ def pandoc_user_data_dir() -> Path | None:
 # the same file name in Pandoc's own csl/ folder, with a WARN; else `csl-fallback: default` (the default) builds with
 # Pandoc's default style, with a WARN, and `csl-fallback: error` stops. `--no-auto remotecsl` leaves the URL to Pandoc.
 
-CSL_FALLBACKS = ("default", "error")
-CSL_FETCH_DAYS = 30
-CA_BUNDLES = ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt")
-
-
-def open_url(request, timeout: float):
-    """urllib's urlopen, and once more with the system's CA bundle (else certifi's) when this Python has no certificates
-    of its own: a python.org Python on macOS has none until its "Install Certificates" step runs, and every https fetch
-    failed with CERTIFICATE_VERIFY_FAILED (v3.27.27; found fetching a csl: style)."""
-    import ssl, urllib.error, urllib.request  # here, not at the top: only this needs it (start-up time, v3.32.55)
-    try:
-        return urllib.request.urlopen(request, timeout=timeout)
-    except urllib.error.URLError as error:
-        if not isinstance(getattr(error, "reason", None), ssl.SSLCertVerificationError):
-            raise
-        cafile = next((path for path in CA_BUNDLES if os.path.isfile(path)), None)
-        if cafile is None:
-            try:
-                import certifi
-                cafile = certifi.where()
-            except ImportError:
-                raise error from None
-        return urllib.request.urlopen(request, timeout=timeout, context=ssl.create_default_context(cafile=cafile))
-
-
-def document_csl(sources: list[Path], metadata_files: list[Path]) -> str | None:
-    """The `csl:` Pandoc takes from the files: the last source's front matter, else the winning metadata file's."""
-    for source in reversed(sources):
-        value = front_matter_dict(read_text_best_effort(Path(source))).get("csl")
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    for path in metadata_files_by_priority(metadata_files):
-        value = metadata_file_yaml(path).get("csl")
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
-def csl_fallback(md_path: Path, metadata_files: list[Path]) -> str:
-    """`pdfmd-options.csl-fallback`: default (Pandoc's default style, with a WARN) or error."""
-    value = first_pdfmd_option(md_path, metadata_files, "csl-fallback")
-    mode = str(value).strip().casefold() if value is not None else "default"
-    if mode not in CSL_FALLBACKS:
-        raise SystemExit(f"{md_path}: unknown csl-fallback value {value!r}. Valid: {', '.join(CSL_FALLBACKS)}")
-    return mode
-
-
-def fetch_csl(url: str) -> tuple[str | None, str]:
-    """(the style's text, "") or (None, why)."""
-    import urllib.error, urllib.request  # here, not at the top: only this needs it (start-up time, v3.32.55)
-    try:
-        request = urllib.request.Request(url, headers={"User-Agent": f"pdfmd/{PDFMD_VERSION}"})
-        with open_url(request, 20) as response:
-            data = response.read(2 * 1024 * 1024 + 1)
-    except urllib.error.HTTPError as error:
-        error.close()
-        return None, f"{error.code} {error.reason}"
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
-        return None, str(getattr(error, "reason", error)) or type(error).__name__
-    text = data.decode("utf-8", errors="replace")
-    if "<style" not in text[:4000]:
-        return None, "what it sent is not a CSL style"
-    return text, ""
-
-
-def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | None:
-    """The local file for a `csl:` URL (see above); None leaves the URL to Pandoc."""
-    name = Path(urllib.parse.urlparse(url).path).name or "style.csl"
-    name = name if name.lower().endswith(".csl") else name + ".csl"
-    folder = cache_root() / "csl"
-    cached = folder / f"{hashlib.sha1(url.encode('utf-8')).hexdigest()[:12]}-{name}"
-    if cached.is_file() and time.time() - cached.stat().st_mtime < CSL_FETCH_DAYS * 86400:
-        return cached
-    text, why = fetch_csl(url)
-    if text is not None:
-        folder.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(cached, text)
-        print(f"AUTO CSL   {url} -> {display_path(cached)}")
-        return cached
-    if cached.is_file():
-        when = time.strftime("%Y-%m-%d", time.localtime(cached.stat().st_mtime))
-        print(f"NOTE  {display_path(md_path)}: {url} could not be fetched ({why}); using the copy fetched on {when}")
-        return cached
-    data_dir = pandoc_user_data_dir()
-    own = next((place / name for place in ((data_dir / "csl", data_dir) if data_dir else ()) if (place / name).is_file()),
-               None)
-    if own is not None:
-        print(f"WARN  {display_path(md_path)}: {url} could not be fetched ({why}); using Pandoc's own "
-              f"{display_path(own)} instead", file=sys.stderr)
-        return own
-    if csl_fallback(md_path, metadata_files) == "error":
-        raise SystemExit(f"{display_path(md_path)}: the citation style {url} could not be fetched ({why}), and Pandoc's "
-                         f"csl/ folder has no {name} (pdfmd-options: {{csl-fallback: error}})")
-    default = folder / "pandoc-default.csl"
-    if not default.is_file():
-        try:
-            done = subprocess.run(["pandoc", "--print-default-data-file", "default.csl"], capture_output=True,
-                                  encoding="utf-8", errors="replace", timeout=60)
-        except (OSError, subprocess.SubprocessError):
-            done = None
-        if done is None or done.returncode != 0 or "<style" not in done.stdout:
-            return None
-        folder.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(default, done.stdout)
-    print(f"WARN  {display_path(md_path)}: {url} could not be fetched ({why}) and Pandoc's csl/ folder has no {name}; "
-          "the citations use Pandoc's default style (Chicago author-date). pdfmd-options: {csl-fallback: error} stops "
-          "instead", file=sys.stderr)
-    return default
-
-
-def csl_args(sources: list[Path], metadata_files: list[Path], pandoc_options: list[str],
-             no_auto: list[str] | None) -> list[str]:
-    """`--csl FILE` for a `csl:` URL in the front matter or a metadata file (see remote_csl); nothing for a local style,
-    one the command line names (--csl, -M csl=...), or `--no-auto remotecsl`."""
-    if auto_disabled(no_auto, "remotecsl"):
-        return []
-    for index, option in enumerate(pandoc_options):
-        following = pandoc_options[index + 1] if index + 1 < len(pandoc_options) else ""
-        if (option == "--csl" or option.startswith("--csl=")
-                or (option in ("-M", "--metadata") and following.startswith(("csl=", "csl:")))
-                or option.startswith(("-Mcsl=", "-Mcsl:", "--metadata=csl=", "--metadata=csl:"))):
-            return []
-    value = document_csl([Path(source) for source in sources], metadata_files)
-    if not value or not value.lower().startswith(("http://", "https://")):
-        return []
-    local = remote_csl(value, Path(sources[0]), metadata_files)
-    return ["--csl", str(local)] if local is not None else []
-
 
 _PANDOC_VERSION: tuple[int, ...] | None = None
 
@@ -11211,51 +11039,7 @@ STRIP_KINDS_CLI: frozenset[str] = frozenset()
 KEEP_KINDS_CLI: frozenset[str] = frozenset()
 
 
-BIB_ENTRY_START_RE = re.compile(r"^[ \t]*@[ \t]*([A-Za-z]+)[ \t]*([{(])", re.MULTILINE)
 # BIB_LINK_RE, BIB_SUFFIXES, PANDOC_CITE_RE and LATEX_CITE_RE: lib/pdfmd_assemble (v3.33.38)
-
-
-def bib_entry_end(text: str, opener_index: int) -> int | None:
-    """The index just past the entry whose opening `{` or `(` is at ``opener_index``, or None."""
-    opener = text[opener_index]
-    closer = "}" if opener == "{" else ")"
-    depth = 0
-    position = opener_index
-    while position < len(text):
-        char = text[position]
-        if char == "\\":
-            position += 2
-            continue
-        if char == opener:
-            depth += 1
-        elif char == closer:
-            depth -= 1
-            if depth == 0:
-                return position + 1
-        position += 1
-    return None
-
-
-def parse_bibliography(text: str) -> tuple[list[dict], str]:
-    """The entries of a BibTeX/BibLaTeX file -- {kind, key, text, gap} with ``gap`` the
-    text between the previous entry and this one -- and the text after the last."""
-    items: list[dict] = []
-    position = previous = 0
-    while True:
-        match = BIB_ENTRY_START_RE.search(text, position)
-        if match is None:
-            break
-        end = bib_entry_end(text, match.end() - 1)
-        if end is None:
-            position = match.end()
-            continue
-        kind = match.group(1).lower()
-        key = (text[match.end():end - 1].split(",", 1)[0].strip() if kind not in ("string", "preamble", "comment")
-               else None)
-        start = text.index("@", match.start())
-        items.append({"kind": kind, "key": key, "text": text[start:end], "gap": text[previous:start]})
-        previous = position = end
-    return items, text[previous:]
 
 
 # used_citation_keys, filter_bibliography, assemble_markdown_text and write_assembled_markdown: lib/pdfmd_assemble (v3.33.38)
@@ -13540,155 +13324,6 @@ def finish_convert_job(job: dict, results: list, verbose: bool) -> list:
 
 
 # run_calibre_convert, browser_page_css and run_browser_print: lib/pdfmd_bridge/__init__.py (v3.33.26)
-
-
-def convert_via_native_bibliography(md_path: Path, output: Path, effective_from: str | None,
-                                    metadata_files: list[Path], variables: list[str],
-                                    pandoc_options: list[str], lua_filters: list[Path],
-                                    preamble_files: list[Path], title_source: Path,
-                                    pdf_meta_snippet_text: str | None, citation_engine: str,
-                                    presentation: bool, slide_level: int | None, shift_heading: bool,
-                                    font: str, document_font: bool, mainfont_auto: bool,
-                                    geometry_needed: bool, monofont_needed: bool,
-                                    tablewidth_auto: bool, width_filter: Path, csv_filter: Path,
-                                    no_auto: list[str] | None, engines: list[str], keep_aux: bool,
-                                    verbose: bool, debug: bool) -> tuple[bool, str]:
-    """Route a PDF compile's bibliography through Pandoc's own --natbib/
-    --biblatex instead of --citeproc, for pdfmd-options.citation-engine.
-
-    Not as simple as adding --natbib/--biblatex next to the usual
-    --pdf-engine=<engine> pandoc invocation: confirmed empirically (a real
-    document, `pandoc ... --pdf-engine=lualatex --natbib`) that Pandoc's
-    own PDF-making pipeline never runs bibtex/biber at all when it invokes
-    a LaTeX engine directly this way -- citations come out undefined
-    ("Citing ? here.") regardless of engine, EXCEPT --pdf-engine=latexmk,
-    since latexmk is the one engine in the chain that manages bibtex/biber
-    itself. Rather than restrict this feature to latexmk only, this
-    generates a complete standalone .tex via Pandoc first (mirroring
-    convert_one's own TEX_STANDALONE_FORMATS branch, just always writing
-    to a scratch file instead of the real --to latex output) and hands it
-    to compile_tex_direct() -- which already runs exactly the
-    rerun-until-stable + automatic bibtex/biber loop this needs, for
-    ANY of lualatex/xelatex/pdflatex/latexmk/tectonic, not just latexmk.
-    No missing-glyph mainfont retry here, for the same reason
-    TEX_STANDALONE_FORMATS doesn't have one either: that needs an actual
-    compile's output to react to, and by the time compile_tex_direct runs,
-    this function itself is done inspecting anything Pandoc produced.
-    """
-    # The intermediate .tex has to live NEXT TO md_path, not in an unrelated
-    # scratch directory: compile_tex_direct() (and, before that, bibtex/
-    # biber) run with cwd=tex_path.parent, so a relative `\bibliography{}`/
-    # `\addbibresource{}` -- or any raw \input/\includegraphics -- only
-    # resolves if that's the document's own real directory. Caught directly:
-    # a first version of this using a throwaway mkdtemp() scratch directory
-    # compiled without error but left the citation completely unresolved
-    # ("Citing ? here.") because bibtex/biber could never find refs.bib
-    # relative to a /tmp path that had nothing to do with the source
-    # document -- same class of bug as the openout_any one in v3.1.0,
-    # just from the opposite direction (wrong directory, not wrong
-    # security policy).
-    #
-    # NOT dot-prefixed, unlike prepared_latex_inputs()'s own temp files:
-    # this one gets compiled directly as a LaTeX jobname (by
-    # compile_tex_direct), and a leading dot breaks that outright --
-    # confirmed with a standalone repro (`lualatex .hidden.tex`): LaTeX
-    # derives its jobname from the input filename up to the FIRST period,
-    # which is empty for a dotfile, so it silently ignores
-    # -output-directory and tries to write ITS OWN .log next to the
-    # source instead, tripping the exact same openout_any=p wall a second,
-    # unrelated way. prepared_latex_inputs()'s temp files never hit this
-    # because they're only ever Pandoc INPUT (--metadata-file/a title
-    # source) -- Pandoc has no concept of "jobname" to derive.
-    def note(kind: str, detail: str) -> None:
-        vprint(verbose, f"AUTO {kind}  {detail}")
-
-    nativebib_font = mainfont_choice([md_path], metadata_files, variables, font or None, document_font,
-                                     mainfont_auto, no_auto, note)
-    fd, tex_path_str = mkstemp(suffix=".tex", prefix=f"{md_path.stem}-pdfmd-nativebib-",
-                               dir=md_path.parent)
-    os.close(fd)
-    tex_path = Path(tex_path_str)
-    try:
-        with prepared_latex_inputs([title_source, *pandoc_metadata_order(metadata_files)], True) as prepared, \
-                document_header_file(md_path, bool(preamble_files) or has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text),
-                                         metadata_files, no_auto) as header_file, \
-                pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file, \
-                script_fallback([md_path], metadata_files, variables, preamble_files, nativebib_font, None,
-                                no_auto, note) as (fonts_header, fonts_filter):
-            source, *prepared_metadata = prepared
-            cmd = ["pandoc", str(source), "-o", str(tex_path), "-t", "beamer" if presentation else "latex",
-                  "--standalone"]
-            if effective_from:
-                cmd += ["-f", effective_from]
-            for metadata in prepared_metadata:
-                cmd += ["--metadata-file", str(metadata)]
-            pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, md_path.parent))
-            cmd += resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
-            if presentation and slide_level is not None:
-                cmd += ["--slide-level=" + str(slide_level)]
-            first_font = nativebib_font
-            if first_font:
-                cmd += font_args("mainfont", first_font)
-                cmd += mathfont_args(first_font, md_path, metadata_files, variables, font or None, no_auto, None, note)
-            else:
-                cmd += document_font_args([md_path], metadata_files, variables)
-            if geometry_needed:
-                cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
-            if monofont_needed:
-                cmd += font_args("monofont", default_monofont())
-            for variable in paper_variables(md_path, metadata_files, variables, None, paper_kind("tex", no_auto))[0]:
-                cmd += ["-V", variable]
-            if shift_heading:
-                cmd += ["--shift-heading-level-by=-1"]
-            cmd += pandoc_options
-            cmd += paragraph_spacing_latex_args(md_path, metadata_files)
-            if preamble_files:
-                for preamble_file in preamble_files:
-                    cmd += ["--include-in-header", str(preamble_file)]
-            if pdf_meta_file is not None:
-                cmd += ["--include-in-header", str(pdf_meta_file)]
-            if fonts_header is not None:
-                cmd += ["--include-in-header", str(fonts_header)]
-            # Last, so a document's own header-includes can override anything
-            # the shared preamble/pdf-meta files above defined (Pandoc would
-            # otherwise drop it entirely; see document_header_file). Added
-            # whenever header_file exists, not only when preamble_files is
-            # non-empty -- pdf_meta_file alone is enough to trigger the drop
-            # this guards against (see document_header_includes()'s own
-            # docstring for the 2026-09-20 fix this is part of).
-            if header_file is not None:
-                cmd += ["--include-in-header", str(header_file)]
-            cmd += document_filter_args(md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options)
-            if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
-                cmd.append(f"--{citation_engine}")
-                cmd += fullcite_pre_args(md_path, metadata_files, pandoc_options, citation_engine)    # `\\fullcite{}`, not citeproc
-            if fonts_filter is not None:
-                cmd += ["--lua-filter", str(fonts_filter)]
-            if tablewidth_auto:
-                cmd += width_filter_args(width_filter)
-            cmd += cellalign_args(md_path, metadata_files)
-            cmd += tblr_header_args(md_path, metadata_files)
-            cmd += code_filter_args(no_auto, [md_path, title_source], metadata_files) + image_filter_args(no_auto, [md_path, title_source])
-            hoist_code_header(cmd)
-            cmd += markup_header_args(md_path, metadata_files, cmd)
-            keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
-            for lua_filter in lua_filters:
-                cmd += ["--lua-filter", str(lua_filter)]
-            cmd = headers_as_metadata(cmd)
-            log_cmd(cmd, pandoc_cwd, verbose)
-            result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
-        if result.returncode != 0 or not tex_path.exists():
-            return False, result.stderr.strip() or "pandoc failed to produce an intermediate .tex"
-        where = f"kept at {tex_path} (--keep-aux)" if keep_aux else "discarded after compiling"
-        vprint(verbose, f"AUTO CITATIONENGINE  {md_path}: routing bibliography through --{citation_engine} "
-               f"instead of --citeproc; intermediate .tex {where}")
-        return compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug)
-    finally:
-        # Under --keep-aux, leave the intermediate .tex for inspection too --
-        # it's the one artifact from THIS function (compile_tex_direct's own
-        # --keep-aux already leaves the resulting .aux/.log/.out beside it).
-        if not keep_aux:
-            tex_path.unlink(missing_ok=True)
 
 
 # -- Source attached to the PDF (v3.22.1) ---------------------------------------

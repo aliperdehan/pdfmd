@@ -19,6 +19,67 @@ same commit as the change.
 
 ---
 
+## v3.33.234 — 2026-11-16
+
+Pre-edit state: commit `8b8ee04`. Phase 2 of the split, wave 2, move 6: **the citation code moves to the new package
+`lib/pdfmd_cite`**, which `pdfmd.py` does not load at start: `frontmatter_citation_engine`, `open_url`, `document_csl`,
+`csl_fallback`, `fetch_csl`, `remote_csl`, `csl_args`, `bib_entry_end`, `parse_bibliography`,
+`convert_via_native_bibliography` and the constants `CITATION_ENGINES`, `CSL_FALLBACKS`, `CSL_FETCH_DAYS`, `CA_BUNDLES` and
+`BIB_ENTRY_START_RE`, text and docstrings unchanged. `scripts/split_move.py pdfmd_cite` moved the 15 statements, from
+five stretches of `pdfmd.py`, with 56 `core.NAME` rewrites and no `global` line to change (the move writes no state);
+`convert_via_native_bibliography` now reads `core.fullcite_pre_args` (the stand-in of 3.33.228) and `core.DEFAULT_MARGIN`,
+and `remote_csl` calls `core.fetch_csl`, which `tests/test_remote_csl` patches on `pdfmd`. The one comment block it carried,
+the twenty lines above `CITATION_ENGINES` on `citation-engine`, belongs to that constant. The tool wrote the module with
+`hashlib`, `os`, `re`, `subprocess`, `sys`, `time`, `urllib.parse`, `Path` and `mkstemp`; the `ssl`, `urllib.error` and
+`urllib.request` imports stay inside `open_url` and `fetch_csl`, as they were, so no start loads them (`urllib.parse`
+is imported by `pdfmd.py` already). In `pdfmd.py` it added, after the table's last line,
+`names("pdfmd_cite", "CITATION_ENGINES frontmatter_citation_engine CA_BUNDLES open_url document_csl fetch_csl remote_csl
+csl_args parse_bibliography convert_via_native_bibliography")`: lib/pdfmd_build reads the engines, the front-matter reader,
+`document_csl`, `csl_args` and `convert_via_native_bibliography`, lib/pdfmd_install `open_url`, lib/pdfmd_assemble,
+lib/pdfmd_check and lib/pdfmd_bibliography `parse_bibliography`, lib/pdfmd_bridge and lib/pdfmd_report `csl_args`, and the
+tests `fetch_csl`, `remote_csl`, `CA_BUNDLES`, `csl_args`, `document_csl` and `frontmatter_citation_engine`. No stand-in:
+nothing left in `pdfmd.py` calls a moved name bare. By hand:
+-  Packaging: `pdfmd_cite` in `pyproject.toml` (`packages`, `[tool.setuptools.package-dir]`) and in `PACKAGES` of
+  `scripts/build_zipapp.py`.
+-  `from tempfile import ... mkstemp` is out of `pdfmd.py`'s import line (`ruff --select F`, F401: only the moved
+  `convert_via_native_bibliography` read it; no test or lib/ module reads `pdfmd.mkstemp`).
+-  `DEFAULT_MARGIN` stays in `pdfmd.py`, defined where it was (SPLIT.md left the choice to this move, "with its last bare
+  reader, or to `pdfmd_build`"; the author's brief for the wave settled it): nothing in `pdfmd.py` reads it bare any more,
+  and every reader in lib/ reads `core.DEFAULT_MARGIN`.
+-  SPLIT.md marks the move done.
+
+What is different: a build that needs a citation style from a URL, `--check`, `--assemble-only` with a
+`.bib` file, or `citation-engine: natbib` or `biblatex` loads `pdfmd_cite`; every build that reads one of the names
+(lib/pdfmd_build asks `frontmatter_citation_engine` on the way) loads it too: that is every build.
+
+`pdfmd.py`: 14,219 -> 13,854 lines. Start-up: the same 205 modules after `import pdfmd` with `--version`, and `pdfmd_cite` is
+not among them; `scripts/pdfmd --version` (split_check, best / median of ten) 89 / 90 ms before, 89 / 91 ms after, and
+90 / 91 against 90 / 91 in its second run. Proof: `ruff --select F` clean; 815 tests of 42 modules (the move's `test_remote_csl`
+and `test_setup`, the always-run set with `test_split_tools`, and the modules that build with a bibliography or a citation
+style: `test_native_bibliography_markup`, `test_bibliography_layers`, `test_bibliography_discovery`, `test_biber_direct`
+(it passes here), `test_fullcite`, `test_check`, `test_attach`, `test_embedding`, `test_standalone_source`,
+`test_metadata_parents`, `test_top_level_options`, `test_tex_repair`, `test_flat`, `test_tex_cause`, `test_typst_input`,
+`test_engine_filters`, `test_author_meta`, `test_cli_paths`, `test_bibliography_indent`, `test_autolog`,
+`test_readonly_home`, `test_kit_install`, `test_kit_selection`, `test_md_macro`, `test_rawcode`, `test_edit_pdf`,
+`test_templates`, `test_setup_folder`), five skipped (four need KaTeX installed, one because prompt_toolkit is installed);
+the real cache's build records unchanged around the run. Three failed, none from the move: two read the changelog's first
+heading, which the entry that this text belongs to had not yet been written (they pass with it), and `test_probes`'
+`test_no_text_mode_call_leaves_the_decoding_to_the_console_code_page` names
+`lib/pdfmd_bibliography/sources.py:117`, a `subprocess.run(..., text=True)` of 3.33.232, which is a bug of that commit and
+not fixed here. `scripts/split_check.py` SAME on 42 checks with 12 extra builds (inputs in a folder of their own, a
+bibliography of two entries and Pandoc's default CSL style): `citeproc` (`document_csl`, `csl_args`, `--citeproc` with a
+local `csl:`), `natbib` and `biblatex` to PDF with `-e pdflatex` (`frontmatter_citation_engine` and
+`convert_via_native_bibliography`, with bibtex and biber), `natbib` to LaTeX, a `csl:` URL on a local `http.server` at
+127.0.0.1 to PDF and HTML (`csl_args`, `remote_csl`, `fetch_csl`, `open_url`, the cache), an unreachable URL (Pandoc's
+default style and its WARN) and, as a declared failure, the same with `csl-fallback: error`, `-e inkmd` (the native tier,
+which says the keys are not used), `--assemble-only`, `--merge` and `--check` of the same document. It said NOT THE SAME
+at first, in 10 of the 42 checks, and every hunk was one line: the `qpdf` command's temporary name
+(`.NAME.<pid>.<8 hex>.part`, from the PDF compressor of an earlier version), which `split_check` does not mask and which
+differs between any two runs; a copy of the script with that name masked (not committed) said SAME. A build of the same
+document with an empty `PATH` and an empty config in a copy of the parent and in the move gave the same log but for the
+temporary names and the build record's folder name; with the PATH empty pdfmd found Calibre by its application path and
+ran it for that one build in each copy (the move's brief said no Calibre run; the output is only a scratch file).
+
 ## v3.33.233a — 2026-11-16
 
 Pre-edit state: commit `2ce3eb9`. Tooling only, no shipped code. **`scripts/split_check.py` masks the atomic replace's temporary name** (`.NAME.<pid>.<8 hex>.part`, written by `pdfmd_base` and shown in the shrink step's qpdf command since 3.33.227): every split_check of a build with a PDF reported NOT THE SAME on that one line (found by wave 2's move 6, which proved SAME with a masked copy).

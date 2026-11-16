@@ -198,7 +198,7 @@ Tests: `test_odt_route`, `test_engine_filters`, `test_build_record`, `test_soffi
 
 ### Wave 2: what only the run and the build called
 
-#### 6. `pdfmd_cite` (new package): 10 definitions, 5 constants, ~377 lines
+#### 6. `pdfmd_cite` (new package): 10 definitions, 5 constants, ~377 lines; done in 3.33.234 (as the tool wrote it: ten names in the table, no stand-ins, 56 `core.` rewrites, `fetch_csl` read as `core.fetch_csl` in `remote_csl`, the `urllib` imports still inside the functions; `DEFAULT_MARGIN` stays in `pdfmd.py`, where it is still defined, and nothing there reads it bare any more; `pdfmd.py` lost its `mkstemp` import)
 
 Goes to `lib/pdfmd_cite/__init__.py`.
 
