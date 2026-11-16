@@ -494,7 +494,7 @@ Note: One `@timed`; `logging` and `warnings` are then imported inside `stamp_pdf
 
 Tests: `test_partial_provenance`, `test_partial_history`, `test_history`, `test_setup`, `test_pdf_rewrite`, `test_folder_settings`, `test_atomic`, `test_build_time`, `test_standalone_source`.
 
-#### 25. `pdfmd_history.record` (existing package): 12 definitions, 4 constants, ~255 lines
+#### 25. `pdfmd_history.record` (existing package; done in 3.33.254): 12 definitions, 4 constants, ~255 lines
 
 Goes to `lib/pdfmd_history/record.py`.
 

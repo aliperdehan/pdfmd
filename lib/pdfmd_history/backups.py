@@ -14,8 +14,8 @@ stand-in in `pdfmd.py` loads it on the first call; the first binding wins); the 
 `pdfmd_build_notes`, `plan_scaffold`, `resolve_backup_options`, `resolve_stamp_options`, `sha256_text`, `stamp_line_pattern`,
 `update_build_notes` and `vprint`) are read as `core.X` when it runs. `backup_after_success` and `backup_pdf_after_success` are
 decorated with `@timed` from `pdfmd_base` (since v3.33.210; while `timed` was defined in `pdfmd.py`, below the place where
-`pdfmd.py` can load this module, a copy here, `_timed`, looked `core.timed` up at each call). `history_module()` stays in `pdfmd.py`
-(other code calls it); the functions that `pdfmd.py`, `lib/pdfmd_report` or the tests call are reached through the stand-ins there.
+`pdfmd.py` can load this module, a copy here, `_timed`, looked `core.timed` up at each call). `history_module()` now lives in `pdfmd_history.record`, with recording and backup-option helpers, reached through
+pdfmd.py's names table; the functions that `pdfmd.py`, `lib/pdfmd_report` or the tests call are reached through the stand-ins there.
 """
 
 from __future__ import annotations

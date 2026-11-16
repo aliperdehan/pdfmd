@@ -19,6 +19,30 @@ same commit as the change.
 
 ---
 
+## v3.33.254 — 2026-11-16
+
+Pre-edit state: commit `258bcdb`. Phase 2 of the split, wave 3, move 25: history recording and backup options
+move to `lib/pdfmd_history/record.py`, with four constants including compile_entry's alias. A pure move.
+The tool moved sixteen statements, made 23 core rewrites and registered twelve table names, with no stand-ins
+or refusals; its AST self-check passed. note_entry precedes compile_entry = note_entry, preserving the alias.
+history_file, record_history and backup_before_edit read patched resolve_backup_options through core. By hand,
+the nine-line stamp banner and eight-line backup banner/location block are restored to pdfmd.py. An F401 annotation
+retains datetime for unchanged startup and module attributes. The history package and backups module docstrings
+locate the moved helpers; version, this entry and SPLIT.md progress are updated by hand. No packaging change.
+`pdfmd.py`: 8,551 -> 8,335 lines.
+
+Proof: Ruff F clean. Fifteen modules (section tests, every moved-name match, always-run set and test_split_tools),
+307 tests: 286 passed, two skipped (prompt_toolkit installed and sandbox LibreOffice), three failures and sixteen
+errors, all nineteen requiring blocked sockets in test_serve. Backup PDF retention and pruning builds pass. The
+real build-cache directory diff is empty (116 entries; sandbox writes are blocked). Isolation identified another
+session's report records and a TeX kit cache changing: the latest record names that report, pdfmd 3.33.248; the TeX
+file names its APA kit and contains no task fixture path. No real files were touched. split_check: SAME on 34 checks,
+no BOTH FAILED. Extras write two distinguishable compile-history entries through HTML builds, list the history,
+and extract a table in a scratch source, reaching backup_before_edit through the tables command. Mutating inputs
+are the harness's separate scratch copies. Start-up has the same 205 modules; interleaved scripts/pdfmd --version
+best/median of ten: 197/228 ms before, 206/233 ms after (harness sequential: 134/145 and 165/226 ms).
+Outside-sandbox socket, LibreOffice and cache verification remains for the reviewer.
+
 ## v3.33.253 — 2026-11-16
 
 Pre-edit state: commit `4631618`. Phase 2 of the split, wave 3, move 24: build stamps, BUILD NOTES and PDF
