@@ -19,6 +19,25 @@ same commit as the change.
 
 ---
 
+## v3.33.264 — 2026-11-16
+
+Pre-edit state: commit `ff9195c`. Pandoc 3.1.3 receives every accumulated bibliography source, but its LaTeX
+writer escapes underscores in `\bibliography{...}` and `\addbibresource{...}` paths. BibTeX cannot find the
+cached filtered lower layer or generated inline references; the natbib PDF prints question marks. The biblatex
+PDF also fails to resolve its references. A final `bibliography_paths.lua` filter now represents native LaTeX
+bibliography paths as raw LaTeX inlines, preserving their literal names in both templates. It runs after citeproc
+and the document's filters in both LaTeX export and native bibliography PDF builds; citeproc still reads ordinary
+metadata. The original files are unchanged. Pandoc 3.13's generated natbib and biblatex LaTeX is byte-identical.
+No version threshold or new setting is needed: these values are file names in both native routes. The existing source test now requires cached paths
+with underscores to occur literally in both writers; none of its earlier assertions is removed.
+
+Proof: the original natbib and biblatex extracted-PDF tests fail before the fix with 3.1.3 and pass with 3.13.
+Both full bibliography modules and the required split, packaging, docs-consistency, setup and isolation modules
+pass with both Pandocs, including all extracted-PDF bibliography routes: 152 tests per Pandoc, 151 passed and one
+setup test skipped because prompt_toolkit is installed. Ruff F checks pass. The start-up import set is unchanged.
+`pdfmd.py`: 9,939 -> 9,939 lines (version only). Configuration, cache, data and TeX cache folders are in scratch;
+no requested checks are blocked by the sandbox.
+
 ## v3.33.263 — 2026-11-16
 
 Pre-edit state: commit `8341a26`. With Pandoc 3.1.3, Typst's native `citations` writer extension emits

@@ -373,6 +373,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             core.keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]
+            cmd += core.deferred("pdfmd_bibliography", "native_path_args")(cmd)
             cmd = core.headers_as_metadata(cmd)
             core.log_cmd(cmd, pandoc_cwd, verbose)
             result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)

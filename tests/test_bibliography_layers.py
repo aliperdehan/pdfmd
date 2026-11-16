@@ -133,6 +133,8 @@ class Layers(Tree):
             self.assertIn(name, warnings[0])
 
     def test_natbib_and_biblatex_receive_all_files_and_inline_references(self):
+        cache = self.root / "cache_with_underscores"
+        self.env.update(XDG_CACHE_HOME=str(cache), LOCALAPPDATA=str(cache))
         self.bib("low.bib", "low", "Low Book")
         self.bib("high.bib", "high", "High Book")
         self.write("metadata.yaml", "bibliography: low.bib\n")
@@ -144,8 +146,10 @@ class Layers(Tree):
                 self.assertIn("high.bib" if mode == "biblatex" else "high", tex)
                 self.assertIn("inline", tex)
                 # The generated bib resource, not merely a citation command, must hold the inline entry.
-                resources = list((self.root / "cache").rglob("*.bib"))
+                resources = list(cache.rglob("*.bib"))
                 self.assertTrue(any("Inline {Book}" in p.read_text(encoding="utf-8") for p in resources))
+                for resource in resources:
+                    self.assertIn(resource.resolve().as_posix(), tex)     # paths reach BibTeX/Biber literally, including `_`
 
     def test_a_file_beside_the_document_keeps_its_name_in_the_native_writers(self):
         """Pandoc 3.1.3 writes the bibliography command with every `_` of a long absolute path escaped (Pandoc issue 7414), which broke

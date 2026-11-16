@@ -612,6 +612,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += core.ebook_filter_args()                          # a Calibre ebook with no math: after \ce is converted
                 if flat_target:
                     cmd += core.flat_filter_args(flat, target_format)       # last: it sees what every other filter made
+                if is_tex_target:
+                    cmd += core.deferred("pdfmd_bibliography", "native_path_args")(cmd)
                 ascii_scratch = tempfile.TemporaryDirectory(prefix="pdfmd-ascii-") if ascii_on else None
                 try:
                     ascii_missing_mode = core.ascii_missing(md_path, metadata_files) if ascii_on else None

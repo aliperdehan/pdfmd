@@ -94,3 +94,16 @@ def bibliography_indent_args(sources: Path | list[Path], metadata_files: list[Pa
         return []
     return ["-M", f"pdfmd-bibliography-indent={value}" if value else f"pdfmd-bibliography-indent-default={DEFAULT}",
             "--lua-filter", str(shipped)]
+
+
+def native_path_args(command: list[str]) -> list[str]:
+    """Preserve BibTeX/Biber file names in LaTeX templates, after citeproc and the document's own filters."""
+    if not any(option in command for option in ("--natbib", "--biblatex")):
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        core.pdfmd_lua_missing()
+        return []
+    shipped = pdfmd_lua.path("bibliography_paths")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []
