@@ -19,6 +19,39 @@ same commit as the change.
 
 ---
 
+## v3.33.267 — 2026-11-16
+
+Pre-edit state: commit `f6729e5`. Phase 2 of the split, wave 4, move 36: engine lists, selection,
+resolution and dependency reporting move to lib/pdfmd_engines/__init__.py. A pure move.
+ENGINE_GROUPS moves one move early with its defining lists and select_engines, as the reviewer chose:
+leaving its import-time expression for move 38 would newly load pdfmd_engines on --version.
+SPLIT.md records the changed constant lists and drops move 38's old note. The initial tool refused
+the three lists' eager use and then BROWSER_ENGINES's remaining bare reader; by hand engine_executable
+uses the established sys.modules[__name__] lazy lookup. The tool then moved sixteen statements, made
+45 core rewrites, registered thirteen table names and left installed_engines as a stand-in; AST
+self-check passed. Its six carried comments belong to their constants. Patched installed_engines
+calls remain through core. By hand: three packaging registrations, an F401 annotation retaining
+pdfmd_install for unchanged startup and module attributes, version, changelog and progress.
+No submodules are imported by the new package.
+`pdfmd.py`: 5,106 -> 4,740 lines.
+
+Proof: Ruff F and whitespace clean. 19 modules (section tests, every moved-name match,
+always-run set and test_split_tools), 418 tests: 392 passed, 3 failures,
+16 errors, 7 skipped; limitations are listed below. Real build-cache listing diff empty
+(121 entries); sandbox blocks real-cache writes. split_check: SAME: 33 checks (help, logs, outputs);
+no BOTH FAILED. Extras select the HTML family for HTML export, explicitly build with inkmd, and
+run --check-dependencies, reaching selection/resolution and dependency_report through the real CLI.
+An initial proof run was interrupted before comparison after discovering nonexistent extra inputs;
+the completed run uses the tracked results.md. Nineteen test_serve cases require blocked sockets;
+four real Calibre build cases are deliberately skipped. Two initial version-consistency failures
+were caused by the version bump preceding this entry; all 22 docs/packaging tests pass on rerun.
+Other skips: missing pymd2pdf, opt-in golden output and installed prompt_toolkit.
+Matplotlib's initial home-cache attempt was blocked and fell back to scratch; subsequent checks
+explicitly set MPLCONFIGDIR in scratch. No real configuration or cache files were changed.
+Start-up module sets identical (205); scripts/pdfmd --version interleaved best/median
+of ten: 132.6/204.9 ms before, 147.1/185.6 ms after.
+Outside-sandbox verification of the listed limitations remains for the reviewer.
+
 ## v3.33.266 — 2026-11-16
 
 Pre-edit state: commit `a692805`. Phase 2 of the split, wave 4, move 35: embedding options, source markers and
