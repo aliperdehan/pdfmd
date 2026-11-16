@@ -865,7 +865,7 @@ Tests: none name it; the always-run set.
 | 5a | Phase 1's re-export statements and stand-ins become table lines, so their packages load on first use. Proof: the always-run set, `split_check`, and `sys.modules` after `--version` listing only what that run used. |
 | 5b (done in 3.33.279) | The standard-library imports `pdfmd.py` no longer uses go (at start today: `logging`, `zipfile`, `urllib.parse`, `hashlib`). Tests read `pdfmd.subprocess`, `.yaml`, `.sys`, `.os`, `.platform`, `.shutil`, `.time`, `.Path`, `.json`, `.which`, and lib/ reads `core.which`, `core.yaml`, `core.pypdf`: those stay. |
 | 5c (done in 3.33.280) | The pointer comments phase 1 left (`# x: lib/pdfmd_y (v3.33.z)`) and the comment blocks of moved features go; each state name keeps one line. |
-| 5d | Dead constants (`PREAMBLE`, `FOLDER_METADATA`, `PAGE_WIDTHS` had no reader at 3.33.74; check again), each in a commit of its own. |
+| 5d | Dead constants (`PREAMBLE`, `FOLDER_METADATA`, `PAGE_WIDTHS` had no reader at 3.33.74; check again), each in a commit of its own. PREAMBLE done in 3.33.281. |
 | 5e | The module docstring becomes `docs/reference.md`, read with `pdfmd --doc reference` (D3): a feature commit (a new `--doc` name, five help texts and the README repointed), not a move; about 25 lines stay. |
 | 5f | This file becomes the record of both phases; CLAUDE.md's "pdfmd.py holds only the core" describes the shared `core`, the table and "callers first" (shown to the author first). |
 | 5g | The full suite, once. |

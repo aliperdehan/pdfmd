@@ -6,7 +6,7 @@ the engine that built it and --strict, with `finish_build`, and the document's `
 `_convert_one_recorded` (a partial build's label scan and calculator names, the --backup snapshot), `_convert_one` (the
 embedded bibliography files findable, the ODT route), `_convert_one_core` (discovery, the Pandoc command, the engine chain,
 `make_embed_plan` for --embed-metadata, `run_engine_command`, which lib/pdfmd_report calls too) and `convert_via_cache` (the
-cache route: Pandoc writes the .tex, pdfmd compiles it), with the build's defaults (`PREAMBLE`, `PREFERRED_FONT`,
+cache route: Pandoc writes the .tex, pdfmd compiles it), with the build's defaults (`PREFERRED_FONT`,
 `DEFAULT_MONOFONT`, `DEFAULT_VARS`) and `WEASYPRINT_CSS_NOISE`. What a build leaves for the command line to report (the
 `LAST_*` label counts) and the calculator's seed files (`CALC_SEED`, `CALC_BELOW`, `CALC_DUMP`) stay pdfmd's state, written
 as `core.X = ...`, and so does `SOFFICE_TIMEOUT_NOW`; `DEFAULT_MARGIN` stays in pdfmd.py for now (SPLIT.md, moves 5 and 6).
@@ -35,7 +35,6 @@ from pdfmd_base import core
 from pdfmd_base import noted, timed
 
 
-PREAMBLE = r"\setcounter{MaxMatrixCols}{20}"
 
 
 # Tried first, when neither the document nor -f/--font names a mainfont:
