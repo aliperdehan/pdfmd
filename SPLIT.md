@@ -244,7 +244,7 @@ Traps: none found by the audit.
 
 Tests: `test_readonly_home`, `test_cache_location`, `test_setup`, `test_cache_manage`, `test_config`.
 
-#### 9. `pdfmd_tex.failure` (existing package): 5 definitions, 4 constants, ~136 lines
+#### 9. `pdfmd_tex.failure` (existing package): 5 definitions, 4 constants, ~136 lines; done in 3.33.237 (as the tool wrote it: seven names in the table, no stand-ins, five `core.` rewrites (`which`, `display_path`, `tex_failure_cause`, `engine_failure_reason`); `TEX_PROBES` and `SHOWN_LOCATIONS` are mutated in place and never rebound, so the table's object is the module's)
 
 Goes to `lib/pdfmd_tex/failure.py`.
 
@@ -256,7 +256,7 @@ Facts: 7 of its names are read from outside it (the table); 1 pdfmd names read t
 
 Traps: none found by the audit.
 
-Tests: `test_tex_cause`, `test_latex_errors`.
+Tests: `test_tex_cause`, `test_latex_errors`, `test_tex_repair`, `test_labels`.
 
 #### 10. `pdfmd_build.results` (new package): 18 definitions, 6 constants, ~295 lines
 

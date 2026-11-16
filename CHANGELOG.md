@@ -19,6 +19,48 @@ same commit as the change.
 
 ---
 
+## v3.33.237 — 2026-11-16
+
+Pre-edit state: commit `180ed82`. Phase 2 of the split, wave 2, move 9: **what is said when a TeX engine attempt failed moves to a
+new module `lib/pdfmd_tex/failure.py`** of the existing package, which `pdfmd.py` does not load at start: `probe_tex_cause`,
+`source_line_for`, `latex_error_location`, `report_engine_failure`, `tex_argument` and the constants `TEX_PROBE_DOCUMENT`,
+`TEX_PROBES`, `SHOWN_LOCATIONS` and `LATEX_CONTEXT_RE`, text and docstrings unchanged. `scripts/split_move.py pdfmd_tex.failure`
+moved the 9 statements with 4 `core.NAME` rewrites and no `global` line to change: the module reads `which` (patched by tests as
+`pdfmd.which`), `display_path`, `tex_failure_cause` and `engine_failure_reason` as `core.X` when it runs (the last two are
+`pdfmd_tex`'s own functions, which `pdfmd.py` imports, so `core` serves them; the audit had listed them as imports of the package).
+`TEX_PROBES` (the probe's answers, once per engine) and `SHOWN_LOCATIONS` (what was already printed for a document) are
+mutated in place (`TEX_PROBES[engine] = ...`, `SHOWN_LOCATIONS.add(...)`, and the tests' `.clear()`), never rebound, and nothing
+else in lib/ names them (the TeX self-repair, `lib/pdfmd_tex/repair.py`, reads only `core.probe_tex_cause`, in
+`corrupt_database`), so the table's object is the module's. In `pdfmd.py` it added, after the table's last line,
+`names("pdfmd_tex.failure", "TEX_PROBES probe_tex_cause SHOWN_LOCATIONS source_line_for latex_error_location
+report_engine_failure tex_argument")` (seven names, no stand-ins: nothing left in `pdfmd.py` reads one bare; lib/pdfmd_bridge,
+pdfmd_build and pdfmd_chain read `report_engine_failure`, `repair.py` `probe_tex_cause`, `pdfmd_tex/__init__.py` and
+`pdfmd_labels/seed.py` `tex_argument`, all as `core.X`). `TEX_PROBE_DOCUMENT` and `LATEX_CONTEXT_RE` are read only inside the
+module. `pdfmd.py` kept the pointer comments, with the two that were already there (`engine_failure_reason ... lib/pdfmd_tex`
+and `Direct .tex compilation ...`) now followed by a line each saying where the moved names went. By hand:
+-  `lib/pdfmd_tex/__init__.py`'s docstring says what the new `failure.py` is.
+-  SPLIT.md marks the move done and lists `test_tex_repair` and `test_labels` among its tests.
+-  The two pointer comment lines in `pdfmd.py` and the version bump.
+
+What is different: nothing a user sees; a build that fails in a PDF engine loads the module (the chain's report), and so does
+the direct `.tex` route and a `--seed-labels draft` pass (`tex_argument`).
+
+`pdfmd.py`: 13,280 -> 13,155 lines. Start-up: the same 205 modules after `import pdfmd` with `--version`, with no
+`pdfmd_tex.failure` among them (listing from `git archive` of the parent against the working tree); `scripts/pdfmd --version`
+(split_check, best / median of ten) 90 / 92 ms before, 95 / 97 ms after in a first run and 124 / 133 against 116 / 119 in the
+second (load from other sessions); 12 interleaved runs by hand 93.7 / 100.0 ms before, 93.3 / 99.2 ms after. Proof: `ruff
+--select F` clean; 332 tests of 14 modules (the move's `test_tex_cause` and `test_latex_errors`, `test_tex_repair` and
+`test_labels`, which name moved names or build through them, the always-run set with `test_split_tools`), one skipped, the real
+cache's builds folder and the real config folder unchanged around them (the two changelog tests failed until this entry
+existed and passed after it); `split_check` with seven extra builds, SAME in 37 checks, run with a stand-in `lualatex` first on
+PATH that runs the real one except for a document holding a marker (a bare `Fatal error occurred`) and for the one-page probe
+(which then prints the unwritable-cache console text): a LaTeX error in a known line of a Markdown document with `-e lualatex`
+(`near line 9 of ...: ... \badmacro` after the engine's one-line reason, an intended failure), the same document with
+`--engine-fallback on` (the `trying the next engine` branch of `report_engine_failure` three times, the place of the error
+shown once; the `stopped` branch is the first build, the `no more engines` branch the last two), a document whose engine says only `Fatal error occurred` (the probe runs and `cause: the TeX cache folder
+is not writable` is printed; an intended failure), a passing LaTeX build, a part built with `--seed-labels draft` (`tex_argument`
+in the draft pass), a direct `.tex` build and a direct `.tex` build with an error (the chain's report and its fallback to Pandoc).
+
 ## v3.33.236 — 2026-11-16
 
 Pre-edit state: commit `0bca077`. Phase 2 of the split, wave 2, move 8: **the cache settings and the writable-places code move to a

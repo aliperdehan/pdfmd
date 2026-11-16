@@ -7,6 +7,11 @@ reruns and bibtex/biber pass (`compile_tex_direct`, `run_tex_engine`, `latex_eng
 `tex_wants_rerun`), and the standalone jobs of the picture cache (`render_plot_requests`, `plot_recorded_inputs`, `plot_preamble`,
 `tex_tree_stamp`).
 
+The submodule `failure` (v3.33.237) holds what is said when an engine attempt failed (`report_engine_failure`, with the error's
+place in the Markdown, `latex_error_location` and `source_line_for`, and the one-page probe of an engine whose message names no
+cause, `probe_tex_cause`) and `tex_argument`; it is not loaded at start. The module `repair` is the TeX self-repair, `markup` the
+universal markup's header.
+
 Moved out of `pdfmd.py` unchanged (v3.33.36, SPLIT.md), with `TEX_CAUSES`, `TEX_PACKAGES`, `MAX_TEX_DIRECT_PASSES`,
 `TEX_RERUN_TRIGGERS`, `TEX_LOG_WRAP_WIDTH`, `AUX_CLEAN_SUFFIXES` and `PLOT_CTX_TWICE`, `PLOT_CTX_MARGIN` and `PLOT_CTX_PLAIN` (the
 protocol they belong to is described in `pdfmd.py`, above `CACHE_HANDSHAKE`, which stays). `core` is the `pdfmd` module, bound by
