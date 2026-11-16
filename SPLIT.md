@@ -714,7 +714,7 @@ Note: Ten patched names, among them the constants `PROBE_TIMEOUT` and `TOOL_WARN
 
 Tests: `test_tool_locations`, `test_soffice_timeout`, `test_probes`, `test_native`, `test_tex_bin`, `test_browser_engine`, `test_odt_route`, `test_install_calibre`, `test_calibre`, `test_embedding`, `test_markup_word`, `test_calibre_targets`, `test_calibre_markdown`, `test_direct`.
 
-#### 39. `pdfmd_log` (new package): 8 definitions, 3 constants, ~345 lines
+#### 39. `pdfmd_log` (new package): 8 definitions, 3 constants, ~345 lines; done in 3.33.270
 
 Goes to `lib/pdfmd_log/__init__.py`.
 

@@ -19,6 +19,37 @@ same commit as the change.
 
 ---
 
+## v3.33.270 — 2026-11-16
+
+Pre-edit state: commit `6f79d41`. Phase 2 of the split, wave 4, move 39: path display, automatic-discovery
+summaries and command logging move to lib/pdfmd_log/__init__.py, with three constants. A pure move.
+The tool initially refused AUTO_LOG's bare worker-state reader; by hand restore_worker_state uses
+load_package("pdfmd_log").AUTO_LOG.quiet as the plan specifies. The tool then moved eleven statements,
+made 22 core rewrites, registered nine names and left display_path as a stand-in; AST self-check
+passed. AutoLog precedes AUTO_LOG = AutoLog(). The four path-style comments belong to the moved modes.
+By hand, display_path's three DISPLAY_ALIAS reads use core as the trap list specifies (the tool
+keeps local reads for a patch.dict-only name). All other patched-name calls use core. Three packaging
+registrations and F401 annotations retain shlex, shutil and which for unchanged startup, module
+attributes and patches. Version, this entry and SPLIT.md progress are updated by hand.
+`pdfmd.py`: 4,161 -> 3,822 lines.
+
+Proof: Ruff F and whitespace clean. 17 modules (section tests, every moved-name match,
+always-run set and test_split_tools), 320 tests: 298 passed, 5 failures,
+16 errors, 1 skipped; limitations are listed below. Real build-cache listing diff empty
+(121 entries); sandbox blocks real-cache writes. split_check: SAME: 33 checks (help, logs, outputs);
+no BOTH FAILED. Extras export results.md with home-style paths, lecture.md with relative paths
+and zero parent traversal, and run a two-worker HTML batch in the example folder. They exercise
+display_path/path_style_settings, CMD quoting, automatic-discovery summaries and restore_worker_state
+through real build and spawned-worker callers. The final core.DISPLAY_ALIAS change passes a focused
+25-test rerun of display-path, path-style and ebook-input modules. Nineteen serve cases require
+blocked sockets. Two PDF-dependent checks (partial-build AutoLog summary and parts-backup summary)
+fail with the explicit unwritable TeX-cache cause, despite scratch settings; the lone skip is
+installed prompt_toolkit. No real
+configuration or cache files were changed.
+Start-up module sets identical (205); scripts/pdfmd --version interleaved best/median
+of ten: 147.9/165.6 ms before, 139.5/175.4 ms after.
+Outside-sandbox verification of the listed limitations remains for the reviewer.
+
 ## v3.33.269 — 2026-11-16
 
 Pre-edit state: commit `1076029`. Phase 2 of the split, wave 4, move 38: tool discovery, office resolution,
