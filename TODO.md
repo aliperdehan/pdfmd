@@ -11,8 +11,9 @@ wait for an answer before any code.
 ## The queue, paused after the 3.33.191 release (2026-11-12): resume in this order
 
 - [ ] No release until this queue is done, the GUI decided and built; CI runs on the branch `fixes-3.33.168`, at a wave end, before a release or for a CI-only risk [D60 Q73]
-- [ ] 4. Wave 2, then the biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
-- [ ] 5. Waves 3 to 5 (the docstring becomes `docs/reference.md`, `--doc reference`), then the full suite [3fi D29]
+- [ ] 4. The biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
+- [ ] 5. Waves 4 and 5 (the docstring becomes `docs/reference.md`, `--doc reference`; CLAUDE.md rewritten whole at 5f, shown first), then the full suite once; between waves only the touched tests and CI [3fi D29 D86]
+- [ ] 5a. 3.33 closes with the full suite's and CI's fixes, the split's leftovers, the `md2pdf` overwrite, the watcher test and the 3eg WARN (their lines below); released after a real-document check against v3.33.191 and the author's go; then 3.34 [D86 D88]
 - [ ] 5b. After wave 5: excerpts (source tracking: `[@key#N]` markers, `excerpts.json`, pagecite), pdfmd first, then Colophon's Source pane; spec approved [3fq 3fr 3fs D79 D80 Q74]
 - [ ] 5c. Then the Obsidian flavour and its community plugins (the sections below), before Colophon: plugin support may be wanted before committing fully to it [3ee 3er D85]
 - [ ] 6. Colophon by hand (`--smoke-web`, Cmd-Q with an unsaved tab, `gui.yml` on main), the review's list below in its order, then the GUI decisions and build [D59 D60 D81]
