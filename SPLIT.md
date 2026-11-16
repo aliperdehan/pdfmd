@@ -448,7 +448,7 @@ Note: `set_translit` writes `TRANSLIT_PACKS` and `TRANSLIT_CYRILLIC` (`core.X = 
 
 Tests: `test_translit`, `test_lookup`, `test_sections`.
 
-#### 22. `pdfmd_unicode.document` (existing package): 23 definitions, 13 constants, ~382 lines
+#### 22. `pdfmd_unicode.document` (existing package; done in 3.33.251): 23 definitions, 13 constants, ~382 lines
 
 Goes to `lib/pdfmd_unicode/document.py`.
 

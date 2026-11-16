@@ -4,10 +4,11 @@ fonts.py    reading fonts (family names, covered code points) and finding instal
 scripts.py  which script a character is in, and the fonts tried for each script
 plan.py     the plan for one document: a LaTeX preamble and a Pandoc Lua filter
 translit.py romanization packs for finding names in other scripts
+document.py document font settings, indices, math companions, fallback modes and missing-glyph diagnostics
 fonts_choice.py  how pdfmd chooses its fonts: missing fonts and their stand-ins, --check-fonts, the per-script fallback of a build
 
-Independent of pdfmd.py (which imports it lazily), except fonts_choice.py: moved out of pdfmd.py (v3.33.34), it reads pdfmd as
-its `core` and is not imported here.
+Independent of pdfmd.py (which imports it lazily), except fonts_choice.py and document.py: moved out of pdfmd.py, they read pdfmd as
+their `core` and are not imported here.
 """
 
 from . import translit

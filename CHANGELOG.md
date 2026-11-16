@@ -19,6 +19,29 @@ same commit as the change.
 
 ---
 
+## v3.33.251 — 2026-11-16
+
+Pre-edit state: commit `122f6d5`. Phase 2 of the split, wave 3, move 22: document fonts and Unicode helpers move
+to `lib/pdfmd_unicode/document.py`, with thirteen constants. A pure move. The tool moved 36 statements, made 33 core rewrites and converted two global
+declarations, with no refusals; its AST self-check passed. It registered 21 table names and left document_font_setting
+and fonts_directory as stand-ins. By hand, the twelve-line script-fallback section banner is restored to pdfmd.py;
+the other five carried comment blocks belong with their constants. _FONT_INDEX and _MANAGED_INDEX remain state in
+pdfmd.py, written as core attributes. Calls to patched managed_face and template_has_variable go through core;
+UNICODE_UNCOVERED and UNICODE_CODE_FONTS remain the same mutable objects. The Unicode package docstring locates
+the new module; version, this entry and SPLIT.md progress are updated by hand. No packaging change.
+`pdfmd.py`: 9,571 -> 9,229 lines.
+
+Proof: Ruff F clean. Sixteen modules (section tests, every moved-name match, always-run set and test_split_tools),
+331 tests: 311 passed, one skipped (prompt_toolkit installed), three failures and sixteen errors, all nineteen
+requiring blocked sockets in test_serve. Font-retry builds pass. Tests use scratch TeX folders. The real build-cache
+directory diff is empty (116 entries; sandbox writes are blocked). Isolation noticed a new record inside an existing
+cache folder: it names another session's report build, pdfmd 3.33.248, not a test document; no real files were touched.
+split_check: SAME on 33 checks, no BOTH FAILED. Extras build automatic main/math-font settings with bibliography and
+code to LaTeX, explicit document fonts with fallback off to LaTeX, and the automatic settings to Typst, exercising
+the real build's font and Unicode call sites. Start-up has the same 205 modules; interleaved scripts/pdfmd --version
+best/median of ten: 150/177 ms before, 149/185 ms after (harness sequential: 117/142 and 123/155 ms).
+Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.250 — 2026-11-16
 
 Pre-edit state: commit `7bb4fa2`. Phase 2 of the split, wave 3, move 21: document lookup moves to
