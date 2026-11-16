@@ -11,7 +11,7 @@ the order of the renderers (`native_order`), and what the tier could not honour 
 
 Moved out of `pdfmd.py` unchanged (v3.33.39, SPLIT.md), with the constants only this code reads (`NATIVE_SOURCE_SUFFIXES`,
 `NATIVE_READERS`, `NATIVE_META_KEYS`, the patterns from `HEADING_ATTR_RE` to `PAPER_SIZES`, the tables of the math converter from
-`MATH_GREEK` to `MARKDOWN_ESCAPE_RE` but `MATH_LINE_BREAK`, `NO_BREAK_SPACE`, `MATHTEXT_REWRITES`, `CSV_DIV_LINE_RE`,
+`MATH_GREEK` to `MARKDOWN_ESCAPE_RE`, `NO_BREAK_SPACE`, `MATHTEXT_REWRITES`, `CSV_DIV_LINE_RE`,
 `DIV_CLOSE_RE`, `DIV_ATTRIBUTE_RE`, `CSV_ALIGNMENTS`, `CSV_SEPARATOR_CELL_RE`, `CALIBRE_MARKDOWN_EXTENSIONS`, and
 `NATIVE_PAPER_NOTED`, the papers already noted) and the comments that are theirs alone: the one on math without a typesetter
 (which `MathText` points at) and those on `NATIVE_META_KEYS` and `MATHTEXT_REWRITES`. In `MathText.command`, the local `core` (the
@@ -25,7 +25,8 @@ module, bound by `pdfmd.py` when it loads (the first binding wins); the pdfmd na
 `resolve_calibre`, `scalar_text`, `split_front_matter`, `vprint` and `yaml`.
 `NATIVE_LOST` (what the tier left out, which `pdfmd.py` reads after the build) stays there as state: `native_lose` adds to
 `core.NATIVE_LOST`. `PAPER_CLI` stays, rebound with `global` in `main`; `matplotlib_available` and `resolve_calibre` are patched
-by tests as `pdfmd.X`; `math_lines`, with `Chunk` and `MATH_LINE_BREAK`, stays because `lib/pdfmd_ansi` reads it; `csv_defaults`
+by tests as `pdfmd.X`; `math_lines`, with `Chunk`, `MATH_LINE_BREAK`, `_millimetres` and the native paper tables,
+moved here in v3.33.272; the names read by other packages are served by the names table; `csv_defaults`
 is `pdfmd_tables`'s, read through pdfmd as before; `pypdf` is pdfmd's lazy loader and `yaml` its own optional import. The vendored
 inkmd (`pdfmd_inkmd`), md2pdf, matplotlib's `mathtext` and `traceback` are imported inside the functions that use them, as before,
 so loading this package loads none of them.
@@ -1526,3 +1527,43 @@ def describe_native_changes(engine: str, md_path: Path, source: NativeSource, co
         shown = ", ".join(ignored[:8]) + (", ..." if len(ignored) > 8 else "")
         say(f"front-matter keys not used: {shown}")
         native_lose("keys", len(ignored))
+
+
+Chunk = tuple[str, str, float]  # (Markdown/inline-HTML, the text as it prints, size scale)
+
+
+MATH_LINE_BREAK = "\x00"
+
+
+def math_lines(expression: str, html: bool = True) -> list[list[Chunk]]:
+    """One list of chunks per displayed line (an `aligned` block has several)."""
+    lines: list[list[Chunk]] = [[]]
+    for chunk in core.MathText(expression, html).sequence():
+        if chunk[0] == MATH_LINE_BREAK:
+            lines.append([])
+        else:
+            lines[-1].append(chunk)
+    return [line for line in lines if "".join(piece for _, piece, _ in line).strip()] or [[]]
+
+
+def _millimetres(width: float, height: float) -> tuple[float, float]:
+    return (round(width * 72 / 25.4, 2), round(height * 72 / 25.4, 2))
+
+
+# Every paper the built-in renderers can set, portrait, in points (ISO sizes from their millimetres). inkmd knows the names in
+# PAPER_SIZES; the rest reach it as a (width, height) pair. md2pdf takes the names ReportLab has (a0-a10, b0-b10, c0-c10, letter,
+# legal, elevenseventeen), so the ones it lacks (executive, folio, tabloid) get a NOTE there and its own default.
+NATIVE_PAPER_POINTS = {
+    "a0": _millimetres(841, 1189), "a1": _millimetres(594, 841), "a2": _millimetres(420, 594), "a3": (841.89, 1190.55),
+    "a4": (595.28, 841.89), "a5": (419.53, 595.28), "a6": _millimetres(105, 148),
+    "b4": _millimetres(250, 353), "b5": _millimetres(176, 250), "b6": _millimetres(125, 176),
+    "c4": _millimetres(229, 324), "c5": _millimetres(162, 229),
+    "letter": (612.0, 792.0), "legal": (612.0, 1008.0), "tabloid": (792.0, 1224.0),
+    "executive": (522.0, 756.0), "folio": (612.0, 936.0),
+}
+
+
+PAPER_NAME_ALIASES = {"us-letter": "letter", "usletter": "letter", "us-legal": "legal", "uslegal": "legal"}
+
+
+PAGE_WIDTHS = {name: points[0] for name, points in NATIVE_PAPER_POINTS.items()}

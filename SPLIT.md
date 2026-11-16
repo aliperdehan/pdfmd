@@ -68,12 +68,12 @@ name, packaging in three places, `split_check`. Phase 2 adds five things, all in
 
 Decisions (the author, 2026-11-10 and 11): D1, `run_main` moves whole, to `pdfmd_run`; D2, one shared `core`; D3, the
 module docstring becomes `docs/reference.md`, read with `pdfmd --doc reference` (wave 5); D4, the 15 package names above;
-D5, the mover tool; D6, the full suite twice, after move 5 and at the end; D7, moves 41-47 (single constants) in one commit.
+D5, the mover tool; D6, the full suite twice, after move 5 and at the end; D7, moves 41-47 (single constants) in one commit (superseded by the wave-4 brief: one commit per move).
 
 ### The pattern for every move (phase 2)
 
 0. **Clean tree, then the spec.** `git status` clean at HEAD; `python3 scripts/split_spec.py KEY`.
-1. **One section per commit, a pure move** (moves 41-47 together, D7). Each is a 3.33.x patch with its own changelog entry
+1. **One section per commit, a pure move** (the wave-4 brief also requires moves 41-47 separately, superseding D7). Each is a 3.33.x patch with its own changelog entry
    and `PDFMD_VERSION` bump; a bug found on the way is fixed in a commit of its own.
 2. **The tool.** `python3 scripts/split_move.py KEY --dry-run`, then without `--dry-run`. It writes the module (a new
    `lib/pdfmd_x/__init__.py` for `pdfmd_x`, `lib/pdfmd_x/role.py` for `pdfmd_x.role`, appended when it exists), the table
@@ -746,7 +746,7 @@ Note: The last hub: `config_options` (patched by nine test files), `first_pdfmd_
 
 Tests: `test_setup_folder`, `test_folder_settings`, `test_config`, `test_settings_routes`, `test_named_files`, `test_auto_states`, `test_kit_carry`, `test_setup`, `test_attach`, `test_kits`, `test_attach_layers`, `test_cache_location`, `test_atomic`, `test_kit_selection`.
 
-#### 41. `pdfmd_native` (existing package): 2 definitions, 5 constants, ~44 lines
+#### 41. `pdfmd_native` (done in 3.33.272; existing package): 2 definitions, 5 constants, ~44 lines
 
 Goes to `lib/pdfmd_native/__init__.py` (appended).
 
@@ -758,7 +758,7 @@ Facts: 5 of its names are read from outside it (the table); 0 pdfmd names read t
 
 Traps: none found by the audit.
 
-Note: Moves 41-47 go in one commit, with one changelog entry that lists the seven (D7).
+Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and version.
 
 Tests: `test_native`.
 
@@ -774,7 +774,7 @@ Facts: 3 of its names are read from outside it (the table); 0 pdfmd names read t
 
 Traps: none found by the audit.
 
-Note: Moves 41-47 go in one commit, with one changelog entry that lists the seven (D7).
+Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and version.
 
 Tests: `test_attach`.
 
@@ -790,7 +790,7 @@ Facts: 4 of its names are read from outside it (the table); 0 pdfmd names read t
 
 Traps: none found by the audit.
 
-Note: Moves 41-47 go in one commit, with one changelog entry that lists the seven (D7).
+Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and version.
 
 Tests: none name it; the always-run set.
 
@@ -806,7 +806,7 @@ Facts: 1 of its names are read from outside it (the table); 0 pdfmd names read t
 
 Traps: none found by the audit.
 
-Note: Moves 41-47 go in one commit, with one changelog entry that lists the seven (D7).
+Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and version.
 
 Tests: none name it; the always-run set.
 
@@ -822,7 +822,7 @@ Facts: 1 of its names are read from outside it (the table); 0 pdfmd names read t
 
 Traps: none found by the audit.
 
-Note: Moves 41-47 go in one commit, with one changelog entry that lists the seven (D7).
+Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and version.
 
 Tests: none name it; the always-run set.
 
@@ -838,7 +838,7 @@ Facts: 1 of its names are read from outside it (the table); 0 pdfmd names read t
 
 Traps: none found by the audit.
 
-Note: Moves 41-47 go in one commit, with one changelog entry that lists the seven (D7).
+Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and version.
 
 Tests: none name it; the always-run set.
 
@@ -854,7 +854,7 @@ Facts: 1 of its names are read from outside it (the table); 0 pdfmd names read t
 
 Traps: none found by the audit.
 
-Note: Moves 41-47 go in one commit, with one changelog entry that lists the seven (D7).
+Note: The wave-4 brief supersedes D7: moves 41-47 each get a separate commit and version.
 
 Tests: none name it; the always-run set.
 

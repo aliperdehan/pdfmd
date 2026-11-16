@@ -19,6 +19,28 @@ same commit as the change.
 
 ---
 
+## v3.33.272 — 2026-11-17
+
+Pre-edit state: commit `33354dc`. Phase 2 of the split, wave 4, move 41: math_lines, _millimetres and five
+native math/paper constants move to lib/pdfmd_native/__init__.py. A pure move. The tool moved seven statements,
+made one core rewrite and registered five names, with no stand-ins or refusals; AST self-check passed.
+The paper tables retain their defining order. By hand, two prior-location comments are restored to pdfmd.py;
+the three paper-size comments move with their constant. CLAUDE.md and the native package docstring locate the
+moved helpers. Version, this entry and SPLIT.md progress are updated; the brief's separate commits supersede
+SPLIT.md's older D7 note. No packaging change. `pdfmd.py`: 3,333 -> 3,304 lines.
+
+Proof: Ruff F and whitespace clean. Twelve modules (section tests, every moved-name match, the always-run set,
+test_split_tools and the shared ANSI caller), 366 tests: 344 passed, three failures, sixteen errors and three
+skipped. All nineteen failures/errors require blocked sockets in test_serve; skips are absent pymd2pdf,
+opt-in native goldens and installed prompt_toolkit. Both real build-cache listing diffs are empty (121 entries;
+sandbox blocks real-cache writes). split_check: SAME on 32 checks, no BOTH FAILED. Extras render a B6 document
+with inline and aligned display math through inkmd and ANSI, reaching the moved paper tables and math_lines
+through their real renderers. Both trees report the same external kpsewhich probe timeout; no rerun is needed.
+Start-up module sets are identical (205). scripts/pdfmd --version interleaved best/median of ten: 120.2/137.1 ms
+before, 119.1/136.6 ms after (harness sequential: 108/115 and 97/105 ms). TeX and Matplotlib settings point to
+scratch. No real configuration or cache files were changed; outside-sandbox socket and cache verification
+remains for the reviewer.
+
 ## v3.33.271 — 2026-11-16
 
 Pre-edit state: commit `49195f1`. Phase 2 of the split, wave 4, move 40: global and folder configuration,

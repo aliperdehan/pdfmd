@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.271"
+PDFMD_VERSION = "3.33.272"
 import argparse  # noqa: F401 -- preserve startup and the public module attribute
 import atexit  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 18)
 import contextlib  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
@@ -1969,6 +1969,7 @@ names("pdfmd_config", "frontmatter_no_auto no_auto_from_value has_embedded_pream
                       "FOLDER_DIR folder_file_data folder_walk folder_layer_files folder_metadata_files "
                       "is_folder_metadata is_setup_layer folder_layers option_sources first_pdfmd_option "
                       "resolve_strip_comments merge_option_dicts option_flag_number front_matter_dict")
+names("pdfmd_native", "Chunk MATH_LINE_BREAK math_lines NATIVE_PAPER_POINTS PAPER_NAME_ALIASES")
 display_path = deferred("pdfmd_log", "display_path")
 installed_engines = deferred("pdfmd_engines", "installed_engines")
 mask_embedded_blocks = deferred("pdfmd_assemble.embed", "mask_embedded_blocks")
@@ -2221,44 +2222,14 @@ NATIVE_LOST: dict[str, int] = {}
 
 
 # the comment on math without a typesetter: lib/pdfmd_native (v3.33.39)
-Chunk = tuple[str, str, float]  # (Markdown/inline-HTML, the text as it prints, size scale)
 
 # MATH_GREEK, MATH_SYMBOLS and the other tables of the math converter up to MATH_ESCAPES: lib/pdfmd_native (v3.33.39)
-MATH_LINE_BREAK = "\x00"
 # SUPERSCRIPTS, SUBSCRIPTS, MARKDOWN_ESCAPE_RE, escape_markup and MathText: lib/pdfmd_native (v3.33.39)
-
-
-def math_lines(expression: str, html: bool = True) -> list[list[Chunk]]:
-    """One list of chunks per displayed line (an `aligned` block has several)."""
-    lines: list[list[Chunk]] = [[]]
-    for chunk in MathText(expression, html).sequence():
-        if chunk[0] == MATH_LINE_BREAK:
-            lines.append([])
-        else:
-            lines[-1].append(chunk)
-    return [line for line in lines if "".join(piece for _, piece, _ in line).strip()] or [[]]
 
 
 # chunks_markup and chunks_width: lib/pdfmd_native (v3.33.39)
 
 
-def _millimetres(width: float, height: float) -> tuple[float, float]:
-    return (round(width * 72 / 25.4, 2), round(height * 72 / 25.4, 2))
-
-
-# Every paper the built-in renderers can set, portrait, in points (ISO sizes from their millimetres). inkmd knows the names in
-# PAPER_SIZES; the rest reach it as a (width, height) pair. md2pdf takes the names ReportLab has (a0-a10, b0-b10, c0-c10, letter,
-# legal, elevenseventeen), so the ones it lacks (executive, folio, tabloid) get a NOTE there and its own default.
-NATIVE_PAPER_POINTS = {
-    "a0": _millimetres(841, 1189), "a1": _millimetres(594, 841), "a2": _millimetres(420, 594), "a3": (841.89, 1190.55),
-    "a4": (595.28, 841.89), "a5": (419.53, 595.28), "a6": _millimetres(105, 148),
-    "b4": _millimetres(250, 353), "b5": _millimetres(176, 250), "b6": _millimetres(125, 176),
-    "c4": _millimetres(229, 324), "c5": _millimetres(162, 229),
-    "letter": (612.0, 792.0), "legal": (612.0, 1008.0), "tabloid": (792.0, 1224.0),
-    "executive": (522.0, 756.0), "folio": (612.0, 936.0),
-}
-PAPER_NAME_ALIASES = {"us-letter": "letter", "usletter": "letter", "us-legal": "legal", "uslegal": "legal"}
-PAGE_WIDTHS = {name: points[0] for name, points in NATIVE_PAPER_POINTS.items()}
 # NO_BREAK_SPACE, centred_math, inline_math, stacked_math, MATHTEXT_REWRITES (with its comment), mathtext_form and NativeSource: lib/pdfmd_native (v3.33.39)
 
 
