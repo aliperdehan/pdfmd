@@ -455,7 +455,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "`--setup FOLDER` (or `.`) does it for that folder and every folder under it, in FOLDER/.pdfmd/. "
                              "--config is the same")
     parser.add_argument("--doc", nargs="*", default=None, metavar="NAME",
-                        help="the documents of this version, offline: --doc lists them (readme, recipes, agents, changelog); --doc NAME "
+                        help="the documents of this version, offline: --doc lists them (readme, recipes, agents, changelog, reference); --doc NAME "
                              "shows one (the Markdown when the output is not a terminal or with --print, else a web page it opens); "
                              "--doc NAME SECTION shows a part (a number counts the ## headings, else a word of the title); "
                              "--doc search WORD finds the lines that have it; --path says where the file is")
@@ -868,7 +868,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "it stops with the list), "
                              "files (metadata+preamble+lua together), lookup (finding a document by "
                              "its title, alias, the start of its name or a looser spelling), texdirect (the direct-.tex-"
-                             "compile path -- see 'Input formats' in the module docstring; disabling "
+                             "compile path -- see 'Input formats' in --doc reference; disabling "
                              "it routes .tex input back through Pandoc the pre-v3.1.0 way), "
                              "officedirect (the direct office-document-to-PDF path, same section -- "
                              "disabling it on a .docx/.odt is an error in this version, not a route "
@@ -876,10 +876,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), smiles (```smiles / ::: smiles blocks drawn as chemical structures), mathjax (MathJax typesets the math of WeasyPrint PDFs; off, KaTeX or text does), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), draftpictures (the draft pass of seed-labels: draft does not draw TikZ, chemfig or images), remotecsl (a csl: style named by URL fetched once and kept, with Pandoc's own csl/ folder and its default style as fallbacks), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
                              "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
-                             "pdfmd-options.citation-engine setting -- see 'Output formats' in the module "
-                             "docstring; disabling this KIND always means plain --citeproc), csvtable "
-                             "(the .csv-div table inclusion -- see 'CSV/TSV table inclusion' in the module "
-                             "docstring), papersize (a document's own pagesize: front-matter key, "
+                             "pdfmd-options.citation-engine setting -- see 'Output formats' in --doc reference; disabling this KIND always means plain --citeproc), csvtable "
+                             "(the .csv-div table inclusion -- see 'CSV/TSV table inclusion' in --doc reference), papersize (a document's own pagesize: front-matter key, "
                              "auto-translated to Pandoc's real papersize: variable since pagesize: alone "
                              "silently does nothing -- disabling this KIND leaves that typo uncorrected, "
                              "same as before this existed), kit / kpsewhich (a package's "
@@ -889,7 +887,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "explicit -y/-H/-f/-V/--from always wins over --no-auto metadata/preamble "
                              "regardless of this flag -- --no-auto only stops pdfmd from filling in or "
                              "discovering what's otherwise unset. Same KIND names work in a document's "
-                             "own pdfmd-options.no-auto front matter (see the module docstring)")
+                             "own pdfmd-options.no-auto front matter (see --doc reference)")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="show each decision pdfmd made, with its reason, as it happens (AUTO YAML, AUTO TEX, "
                              "AUTO MARGIN ...). Default is three short lines: FOUND (the metadata, preamble, "
@@ -949,8 +947,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "each of which produce exactly one output; ignored in batch mode "
                              "(-b), which would otherwise pop open every file in the directory")
     parser.add_argument("--keep-aux", action="store_true",
-                        help="for a direct .tex compile (see 'Input formats' in the module "
-                             "docstring), keep .aux/.log/.out/etc. beside the source instead of "
+                        help="for a direct .tex compile (see 'Input formats' in --doc reference), keep .aux/.log/.out/etc. beside the source instead of "
                              "the v3.1.0-default scratch-directory cleanup that leaves only the "
                              "PDF -- use this to inspect a failing or suspicious compile's own "
                              ".log by hand. No effect on a Markdown (Pandoc-mediated) input")

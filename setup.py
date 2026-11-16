@@ -1,5 +1,5 @@
 """Packaging is in pyproject.toml. This file only has the build copy the documents into the `pdfmd_docs` package, so that an
-installed pdfmd has the README, the recipes, the agent guide and the changelog of its own version (`pdfmd --doc`)."""
+installed pdfmd has the README, recipes, agent guide, changelog and reference of its own version (`pdfmd --doc`)."""
 
 import shutil
 from pathlib import Path
@@ -8,7 +8,7 @@ from setuptools import setup
 from setuptools.command.build_py import build_py
 
 DOCUMENTS = (("README.md", "README.md"), ("CHANGELOG.md", "CHANGELOG.md"), ("docs/recipes.md", "recipes.md"),
-             ("docs/agents.md", "agents.md"))
+             ("docs/agents.md", "agents.md"), ("docs/reference.md", "reference.md"))
 
 
 class BuildPy(build_py):

@@ -503,7 +503,8 @@ It takes a few seconds per engine (a minute or more if TeX has to fetch packages
 ### The documents of your version: `pdfmd --doc`
 
 `pdfmd --doc` lists the documents that came with the pdfmd you have, offline: `readme` (the manual), `recipes` (worked
-examples), `agents` (a short guide for a program or an AI assistant that runs pdfmd) and `changelog`. `pdfmd --doc readme`
+examples), `agents` (a short guide for a program or an AI assistant that runs pdfmd), `changelog` and `reference`
+(the full reference for formats, settings and rendering). `pdfmd --doc readme`
 opens a web page of one in your browser (made once per version by Pandoc, kept in the cache); when the output is not a
 terminal, or with `--print`, it prints the Markdown instead, which is what a script or an assistant wants. `--doc readme 3`
 shows the third `##` section of it, `--doc readme completion` the
@@ -3676,7 +3677,7 @@ read with `pdfinfo -meta`. Turn this off with `--no-stamp-pdf-metadata`.
 
 - [`docs/recipes.md`](https://github.com/aliperdehan/pdfmd/blob/main/docs/recipes.md) is the task-by-task manual: fifteen chapters of "how do I..." with the commands (the basics, a house style, long documents, tables, code and images, raw HTML/LaTeX/Typst, other inputs and outputs, the PDF that carries its source, history, fonts and scripts, speed, the editor and VS Code, and what to do when something looks wrong), plus an option reference by task.
 - `pdfmd --help` lists every flag.
-- The docstring at the top of [`pdfmd.py`](https://github.com/aliperdehan/pdfmd/blob/main/pdfmd.py) is the full reference
+- [`docs/reference.md`](https://github.com/aliperdehan/pdfmd/blob/main/docs/reference.md), also read with `pdfmd --doc reference`, is the full reference
   for each behaviour and its edge cases.
 - [`CHANGELOG.md`](https://github.com/aliperdehan/pdfmd/blob/main/CHANGELOG.md) records what changed in each version and
   why.

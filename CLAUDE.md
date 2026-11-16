@@ -6,7 +6,7 @@ batch script (see the changelog's v0.1.0); has since grown auto-discovery for me
 LaTeX preambles, Lua filters, and fonts, a multi-engine PDF fallback chain,
 a `pdfmd-options:` front-matter block, batch/report/book modes, and its
 own generic table-width-balancing Lua filter (`lib/pdfmd_lua/table_width.lua`) —
-see the module's own docstring (`pdfmd.py`'s opening lines) for the
+see `docs/reference.md` (`pdfmd --doc reference`) for the
 current, authoritative feature list; don't rely on this file for feature
 details, only for process.
 

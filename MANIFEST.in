@@ -1,2 +1,2 @@
 include README.md CHANGELOG.md LICENSE
-include docs/recipes.md docs/agents.md
+include docs/recipes.md docs/agents.md docs/reference.md

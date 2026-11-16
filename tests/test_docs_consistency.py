@@ -78,10 +78,10 @@ class Readme(unittest.TestCase):
         self.assertEqual(shown[len(shown) - len(expected):], expected)          # the one-line list first, then every section
 
     def test_every_doc_example_of_the_documents_finds_its_section(self):
-        for name in ("README.md", "docs/recipes.md", "docs/agents.md"):
+        for name in ("README.md", "docs/recipes.md", "docs/agents.md", "docs/reference.md"):
             text = (ROOT / name).read_text(encoding="utf-8")
-            for document, selector in re.findall(r"`pdfmd --doc (readme|recipes|agents|changelog) ([\w][\w ]*?)`", text) + \
-                    re.findall(r"`--doc (readme|recipes|agents|changelog) ([\w][\w ]*?)`", text):
+            for document, selector in re.findall(r"`pdfmd --doc (readme|recipes|agents|changelog|reference) ([\w][\w ]*?)`", text) + \
+                    re.findall(r"`--doc (readme|recipes|agents|changelog|reference) ([\w][\w ]*?)`", text):
                 with self.subTest(name=name, document=document, selector=selector):
                     found = pdfmd.document_section(pdfmd.document_file(document).read_text(encoding="utf-8"), selector)
                     self.assertIsNotNone(found, f"{name}: --doc {document} {selector} finds no section")

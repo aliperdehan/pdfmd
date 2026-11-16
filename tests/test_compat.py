@@ -115,8 +115,12 @@ class Zipapp(unittest.TestCase):
         bundled = [f"{module}/__init__.py" for module in ("pypdf",) if importlib.util.find_spec(module)]
         for name in ("pdfmd.py", "pdfmd_yaml/__init__.py", "pdfmd_lua/table_width.lua", "pdfmd_lua/code_wrap.tex", *bundled):
             self.assertTrue((unpacked[0] / name).is_file(), name)
-        for name in ("README.md", "CHANGELOG.md", "recipes.md", "agents.md"):             # `pdfmd --doc` works from a zipapp
+        for name in ("README.md", "CHANGELOG.md", "recipes.md", "agents.md", "reference.md"):             # `pdfmd --doc` works from a zipapp
             self.assertTrue((unpacked[0] / "pdfmd_docs" / name).is_file(), name)
+        reference = subprocess.run([sys.executable, "-S", str(archive), "--doc", "reference", "--print"], cwd=directory,
+                                   capture_output=True, text=True, encoding="utf-8", env=env)
+        self.assertEqual(reference.returncode, 0, reference.stderr)
+        self.assertEqual(reference.stdout, (ROOT / "docs" / "reference.md").read_text(encoding="utf-8"))
         again = subprocess.run([sys.executable, "-S", str(archive), "--version"], cwd=directory, capture_output=True,
                                text=True, env=env)
         self.assertEqual(again.stdout, done.stdout)

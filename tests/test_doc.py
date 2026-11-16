@@ -29,7 +29,7 @@ class Command(unittest.TestCase):
     def test_the_list_names_each_document_with_its_size(self):
         done = run("--doc")
         self.assertEqual(done.returncode, 0, done.stderr)
-        for name in ("readme", "recipes", "agents", "changelog"):
+        for name in ("readme", "recipes", "agents", "changelog", "reference"):
             self.assertRegex(done.stdout, rf"(?m)^\s+{name}\s+\d+ KB")
         self.assertIn(pdfmd.PDFMD_VERSION, done.stdout)
 
@@ -38,6 +38,16 @@ class Command(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue(done.stdout.startswith("# pdfmd for an agent"))
         self.assertEqual(run("--doc", "agents", "--print").stdout, done.stdout)
+
+    def test_the_reference_prints_its_bundled_text_and_selects_a_section(self):
+        done = run("--doc", "reference", "--print")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout, (ROOT / "docs" / "reference.md").read_text(encoding="utf-8"))
+        section = run("--doc", "reference", "input formats", "--print")
+        self.assertEqual(section.returncode, 0, section.stderr)
+        self.assertTrue(section.stdout.startswith("## Input formats\n"))
+        self.assertIn(".qmd (Quarto)", section.stdout)
+        self.assertNotIn("## Older Pandoc", section.stdout)
 
     def test_the_path_is_the_file(self):
         done = run("--doc", "recipes", "--path")
@@ -156,14 +166,19 @@ class Bundling(unittest.TestCase):
         if version < (77, 0):               # pyproject.toml's `license = "MIT AND Apache-2.0"` (PEP 639) is read by setuptools 77 and later
             self.skipTest(f"the license of pyproject.toml needs setuptools 77 or newer (this is {setuptools.__version__})")
         with tempfile.TemporaryDirectory() as folder:
-            done = subprocess.run([sys.executable, "setup.py", "-q", "build_py", "--build-lib", folder], cwd=ROOT,
+            done = subprocess.run([sys.executable, "setup.py", "-q", "egg_info", "--egg-base", folder, "build_py", "--build-lib", folder], cwd=ROOT,
                                   capture_output=True, text=True)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            for name in ("README.md", "CHANGELOG.md", "recipes.md", "agents.md"):
+            for name in ("README.md", "CHANGELOG.md", "recipes.md", "agents.md", "reference.md"):
                 self.assertTrue((Path(folder) / "pdfmd_docs" / name).is_file(), name)
             self.assertEqual((Path(folder) / "pdfmd_docs" / "agents.md").read_text(encoding="utf-8"),
                              (ROOT / "docs" / "agents.md").read_text(encoding="utf-8"))
             self.assertTrue((Path(folder) / "pdfmd_docs" / "__init__.py").is_file())
+            env = {**os.environ, "PYTHONPATH": folder, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+            printed = subprocess.run([sys.executable, str(Path(folder) / "pdfmd.py"), "--doc", "reference", "--print"],
+                                     cwd=folder, capture_output=True, text=True, encoding="utf-8", env=env)
+            self.assertEqual(printed.returncode, 0, printed.stderr)
+            self.assertEqual(printed.stdout, (ROOT / "docs" / "reference.md").read_text(encoding="utf-8"))
         # (the git checkout has no copies: they are made by the build)
         self.assertFalse((ROOT / "lib" / "pdfmd_docs" / "README.md").exists())
 

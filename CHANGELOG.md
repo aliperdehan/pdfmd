@@ -19,6 +19,38 @@ same commit as the change.
 
 ---
 
+## v3.33.284 — 2026-11-17
+
+Pre-edit state: commit `9670f8e`. Phase 2 wave 5, step 5e: the full module reference becomes
+docs/reference.md, available offline as pdfmd --doc reference. The launchpad keeps a 24-line introduction.
+The reference uses Markdown headings and fenced examples; source escapes become literal document text.
+Its native-renderer pointer now locates lib/pdfmd_engines/native.py.
+Five help-text references, the --doc name list, README and CLAUDE.md's introductory pointer now locate it.
+The existing wildcard package data covers it; setup.py, the zipapp document list and MANIFEST.in ship it.
+All edits are by hand. A new checkout test prints and selects its input-formats section; the existing
+zipapp and build_py tests print the reference from their installed layouts and compare the full text.
+The build_py test also puts its egg-info under its temporary folder. No new flag or option key is added.
+`pdfmd.py`: 2,369 -> 904 lines.
+
+Proof: Ruff F and whitespace clean. Seventeen selected modules (always-run set, split tools, loading checks
+and every --doc test module), 356 tests: 336 passed, three failures, sixteen errors, one skipped. The nineteen
+failures/errors require blocked serve sockets; the skip is installed prompt_toolkit. New reference checks pass
+in the checkout, zipapp and build_py layout, printing byte-identical text. An isolated scripts/pdfmd --doc
+reference --print also matches the file. All 1,373 nonblank reference source lines are preserved in order;
+the core AST differs only in its docstring and version. Pandoc parses 36 second-level sections and 13 fenced
+examples. Real build-cache listing diff empty (122 entries), no isolation warning. A first direct checkout
+print emitted the sandbox's read-only-cache fallback note; its explicit scratch repeat completed without it.
+
+split_check: the intended five differences among 32 checks are help debug, help output and help setup
+(the five docstring pointers and the new --doc name), log reference (formerly exit 2, now prints the reference)
+and log document-list (adds reference and reports the larger required changelog). No other output differs,
+no BOTH FAILED. The two extras exercise --doc reference --print and the document list through real CLI callers.
+Only --doc, --no-auto and --keep-aux action help strings change. Startup module sets identical (205).
+Interleaved best/median of ten: 197.2/213.9 ms before, 181.3/209.6 ms after; harness 113/123 and 106/116 ms.
+Normalized scratch paths and the scratch font-cache copy are used; real config/cache/data stay unchanged.
+No timeout or mask changes, no Calibre, no full suite. Socket and real-cache checks outside the sandbox remain
+for the reviewer. Step 5a remains untouched pending the alias decision; it is why the launchpad still has 904 lines.
+
 ## v3.33.283 — 2026-11-17
 
 Pre-edit state: commit `1c002f5`. Phase 2 wave 5, step 5d: remove the dead PAGE_WIDTHS definition
