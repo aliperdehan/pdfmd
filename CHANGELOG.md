@@ -19,6 +19,26 @@ same commit as the change.
 
 ---
 
+## v3.33.244 — 2026-11-16
+
+Pre-edit state: commit `78c15c7`. Phase 2 of the split, wave 2, move 15: installer-management helpers move to
+`lib/pdfmd_install/manage.py`. A pure move: the tool moved eight statements, made eleven `core.` rewrites,
+converted one global declaration, added eight names to the table and no stand-ins; its AST self-check passed,
+with no refusals or carried comments. `reset_font_caches` writes `core._FONT_INDEX` and `core._MANAGED_INDEX`;
+`uninstall_kit` reads the patched `kits_install_directory` through core. By hand: the fonts_choice docstring
+locates reset_font_caches in its new module; the version, this entry and SPLIT.md's progress heading are updated.
+No packaging change is needed. `pdfmd.py`: 11,295 -> 11,184 lines.
+
+Proof: Ruff's F checks pass. The section's tests, every test module naming a moved name, the always-run set and
+`test_split_tools`: fourteen modules, 334 tests, 314 passed, one skipped (prompt_toolkit is installed), three failures
+and sixteen errors; all nineteen unsuccessful tests require blocked sockets in test_serve. Tests used scratch TeX
+config/cache folders; the real build-cache listing is unchanged (116 entries; the sandbox prevents writes there).
+`split_check` extras use the real command dispatch for --translit list, the OCR language listing (--install ocr,
+which installs nothing), font removal from empty scratch data (including reset_font_caches), and intended failures
+for kit removal and --setup plain with PDFMD_CONFIG empty: SAME, 35 checks, no BOTH FAILED. Start-up has the same
+205 modules; alternating scripts/pdfmd --version best/median of ten: 133/140 ms before, 123/143 ms after
+(split_check's own runs: 93/104 and 127/132 ms). Outside-sandbox socket and cache verification remains for the reviewer.
+
 ## v3.33.243 — 2026-11-16
 
 Pre-edit state: commit `d2073e5`. Phase 2 of the split, wave 2, move 14: plot-cache helpers move to

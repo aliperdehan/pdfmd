@@ -1512,7 +1512,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.243"
+PDFMD_VERSION = "3.33.244"
 import argparse
 import atexit
 import contextlib
@@ -1873,6 +1873,8 @@ names("pdfmd_flavours.markup", "FLAVOUR_PRESETS FLAVOUR_WORDS MARKUP_KINDS marku
                                "MARKUP_HEADERS markup_header_args")
 names("pdfmd_tex.plots", "CACHE_HANDSHAKE picture_cache_styles cache_aliases user_tex_trees plot_key_text "
                          "plot_cache_directory prune_plot_directories validate_plot_entries read_plot_requests")
+names("pdfmd_install.manage", "translit_report kits_install_directory uninstall_kit uninstall_fonts tessdata_directory "
+                              "install_ocr_languages reset_font_caches setup_module")
 resolve_raw = deferred("pdfmd_filters", "resolve_raw")
 crossref_filter_args = deferred("pdfmd_reader", "crossref_filter_args")
 safe_stem = deferred("pdfmd_labels.seed", "safe_stem")
@@ -5674,132 +5676,19 @@ def mathjax_font_for(body_font: str | None, installed: list[str]) -> tuple[str, 
 # the installers of D2 and Graphviz, Calibre and Tectonic, with their banner comments: lib/pdfmd_install/__init__.py (v3.33.35)
 
 
-def translit_report() -> bool:
-    """`--translit list`: the packs, which are on, which could work."""
-    module = unicode_module()
-    print("Romanization packs (names in other scripts, found by typing them in Latin letters):")
-    print("  cyrillic   always on: Russian, Ukrainian, Belarusian, Kazakh (built in)")
-    if module is None:
-        print("  the other packs are part of the pdfmd_unicode package, which is not installed here")
-        return False
-    for pack in module.translit.PACKS:
-        state = ("on" if pack in TRANSLIT_PACKS else "ready" if module.translit.available(pack)
-                 else "needs " + module.translit.needs(pack))
-        scripts = ", ".join(sorted(module.SCRIPT_NAMES.get(code, code)
-                                   for code in module.translit.PACK_SCRIPTS.get(pack, ()))) or "all the rest"
-        print(f"  {pack:<10} {state:<44} {scripts}")
-    print("Turn them on with --translit greek,hangul (or all), or PDFMD_TRANSLIT=greek,hangul.")
-    return True
-
-
 # install_kind, uninstall_kind, KIT_SOURCES_DEFAULT and kit_install_settings: lib/pdfmd_install/__init__.py (v3.33.35)
-
-
-def kits_install_directory() -> Path | None:
-    """The folder pdfmd installs kits into: `kits/` beside the config file, which kit discovery reads already."""
-    config = config_path()
-    return None if config is None else config.parent / "kits"
 
 
 # install_kits: lib/pdfmd_install/__init__.py (v3.33.35)
 
 
-def uninstall_kit(name: str) -> bool:
-    """`pdfmd --uninstall kit:NAME`: remove a kit that `--install kit` put in the kits folder (never one placed there by hand)."""
-    from pdfmd_kits import install as kit_installer
-    target = kits_install_directory()
-    if target is None:
-        print("ERROR  PDFMD_CONFIG is empty: there is no config folder", file=sys.stderr)
-        return False
-    try:
-        folder = kit_installer.uninstall(name, target)
-    except kit_installer.InstallError as error:
-        print(f"ERROR  {error}", file=sys.stderr)
-        return False
-    print(f"REMOVED  {display_path(folder)}")
-    return True
-
-
 # install_fonts: lib/pdfmd_install/__init__.py (v3.33.35)
-
-
-def uninstall_fonts(names: str) -> bool:
-    module = unicode_module()
-    if module is None:
-        return False
-    from pdfmd_unicode import install as installer
-    try:
-        keys = installer.resolve(names.split(",")) if names.strip() else []
-    except installer.UnknownPackage as error:
-        print(f"No font package or group called {error.args[0]!r}.", file=sys.stderr)
-        return False
-    if not keys:
-        print("Name what to remove: pdfmd --uninstall fonts:arabic,cjk-sc", file=sys.stderr)
-        return False
-    installer.uninstall(keys, fonts_directory())
-    reset_font_caches()
-    return True
-
-
-def tessdata_directory() -> Path:
-    """Where pdfmd keeps the Tesseract language files `pdfmd --install ocr:LANG` fetches."""
-    return data_root() / "tessdata"
-
-
-def install_ocr_languages(names: str, remove: bool = False) -> bool:
-    """`pdfmd --install ocr[:LANG,...]` / `--uninstall ocr:LANG`: list the languages, or fetch them
-    (pdfmd_unicode/tessdata.py)."""
-    if unicode_module() is None:
-        print("The OCR language installer is part of the pdfmd_unicode package, which is not installed "
-              "beside this file (pip install pdfmd-cli).", file=sys.stderr)
-        return False
-    from pdfmd_unicode import tessdata
-    if not names.strip():
-        if remove:
-            print("Name what to remove: pdfmd --uninstall ocr:rus,kaz", file=sys.stderr)
-            return False
-        print(tessdata.table(tessdata_directory()))
-        return True
-    try:
-        codes = tessdata.resolve(names.split(","))
-    except tessdata.UnknownLanguage as error:
-        print(f"No Tesseract language called {error.args[0]!r}. `pdfmd --install ocr` lists them.", file=sys.stderr)
-        return False
-    if remove:
-        tessdata.uninstall(codes, tessdata_directory())
-        return True
-    failed = tessdata.install(codes, tessdata_directory())
-    done = [code for code in codes if code not in failed]
-    if done:
-        print(f"Installed {', '.join(done)} in {tessdata_directory()}; `pdfmd scan.pdf --lang {'+'.join(done)}` "
-              "uses them (remove with `pdfmd --uninstall ocr:LANG`).")
-    return not failed
 
 
 # tessdata_environment: lib/pdfmd_routing/__init__.py (v3.33.25)
 
 
-def reset_font_caches() -> None:
-    global _FONT_INDEX, _MANAGED_INDEX
-    _FONT_INDEX = _MANAGED_INDEX = None
-    # the cached functions are in pdfmd_unicode.fonts_choice (v3.33.34), whose stand-ins here have no cache_clear;
-    # before that module is loaded nothing is cached
-    fonts = sys.modules.get("pdfmd_unicode.fonts_choice")
-    for name in ("font_missing", "system_font_missing", "default_monofont", "fallback_font", "preferred_font"):
-        clear = getattr(getattr(fonts, name, None), "cache_clear", None)
-        if clear:
-            clear()
-
-
 # install_extra: lib/pdfmd_install/__init__.py (v3.33.35)
-
-
-def setup_module():
-    try:
-        import pdfmd_setup
-    except ImportError:
-        return None
-    return pdfmd_setup
 
 
 # setup_hint_state, maybe_hint_setup, flag_topics and flag_names: lib/pdfmd_setup/command.py (v3.33.21)

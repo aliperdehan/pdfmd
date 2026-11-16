@@ -338,7 +338,7 @@ Note: `user_tex_trees` is `lru_cache`d with `.cache_clear()` callers in tests.
 
 Tests: `test_plot_cache`, `test_picture_cache_protocol`, `test_cache_location`.
 
-#### 15. `pdfmd_install.manage` (existing package): 8 definitions, 0 constants, ~132 lines
+#### 15. `pdfmd_install.manage` (existing package): 8 definitions, 0 constants, ~132 lines; done in 3.33.244
 
 Goes to `lib/pdfmd_install/manage.py`.
 

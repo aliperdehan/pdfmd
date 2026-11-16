@@ -13,7 +13,7 @@ wins), and the pdfmd names the code uses (`DEFAULT_MONOFONT`, `EMBED_BLOCK_RE`, 
 `own_script_setup`, `unicode_module` and `unicode_source_text`) are read as `core.X` when it runs. Tests patch `pdfmd.system_font_missing`
 and `pdfmd.preferred_font` (and `pdfmd.config_options`), so `font_missing`, `font_args` and `check_fonts` call them as `core.X`.
 `pdfmd.installed_font_families` is this module's own function (`DEFERRED_NAMES` in `pdfmd.py`), so a test's `.cache_clear()` reaches
-its cache; `reset_font_caches` in `pdfmd.py` clears the other caches here by name.
+its cache; `reset_font_caches` in `pdfmd_install.manage` clears the other caches here by name.
 """
 
 from __future__ import annotations
