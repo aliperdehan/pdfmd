@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.233a — 2026-11-16
+
+Pre-edit state: commit `2ce3eb9`. Tooling only, no shipped code. **`scripts/split_check.py` masks the atomic replace's temporary name** (`.NAME.<pid>.<8 hex>.part`, written by `pdfmd_base` and shown in the shrink step's qpdf command since 3.33.227): every split_check of a build with a PDF reported NOT THE SAME on that one line (found by wave 2's move 6, which proved SAME with a masked copy).
+
 ## v3.33.233 — 2026-11-16
 
 Pre-edit state: commit `a3c3282`. **The `bib` auto kind finds local files for missing citation keys** (D60).

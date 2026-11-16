@@ -161,6 +161,8 @@ def mask(text: str, tree: Path, out: Path) -> str:
     text = re.sub(r"(?<![\w:.])(?:\d+ d )?\d{1,2}(?::\d{2}){1,2}(?![\w:])", "N s", text)
     text = re.sub(r"\d+ ms\b", "N ms", text)
     text = re.sub(r'"(mtime|seconds)": ("?)[\d.]+\2', r'"\1": N', text)  # --api answers
+    # pdfmd_base's atomic replace (`.NAME.<pid>.<8 hex>.part`, the shrink step's qpdf output since 3.33.227)
+    text = re.sub(r"(\.[^\s/]+)\.\d+\.[0-9a-f]{8}\.part\b", r"\1.PID.RANDOM.part", text)
     # tempfile's names: a prefix (`.b.pdfmd-title-`, `.results.pdfmd-`) and eight random characters; a bare `pdfmd-` only
     # after a dot, so that fixed names such as `pdfmd-manifest` stay
     return re.sub(r"((?<=\.)pdfmd-|pdfmd-[a-z]+(?:-[a-z]+)*-)[a-z0-9_]{8}(?![A-Za-z0-9_])", r"\1RANDOM", text)
