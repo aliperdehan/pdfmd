@@ -408,6 +408,42 @@ class Arguments(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
         return path
 
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_unreachable_svg_and_png_are_removed_before_the_writer(self):
+        for suffix in ("svg", "png"):
+            for down in (False, True):
+                with self.subTest(suffix=suffix, down=down):
+                    url = f"https://example.invalid/unreachable.{suffix}"
+                    source = self.document(f"Before ![lost image]({url}) after.\n")
+                    pdfmd.SVG_WARNED.clear()
+                    errors = io.StringIO()
+                    with mock.patch("pdfmd_images.fetch_remote", return_value=(None, "no DNS", down)), redirect_stderr(errors):
+                        args = pdfmd.image_filter_args(None, [source])
+                    self.assertEqual(errors.getvalue().count("WARN"), 1, errors.getvalue())
+                    self.assertIn(url, errors.getvalue())
+                    self.assertIn("--metadata-file", args)
+                    done = subprocess.run([PANDOC, str(source), "-t", "latex", *args], capture_output=True, text=True)
+                    self.assertEqual(done.returncode, 0, done.stderr)
+                    self.assertNotIn("includegraphics", done.stdout)
+                    self.assertNotIn("includesvg", done.stdout)
+                    self.assertIn("lost image", done.stdout)
+
+    @unittest.skipUnless(PANDOC and shutil.which("xelatex"), "needs Pandoc and XeLaTeX")
+    def test_unreachable_images_build_with_the_first_engine(self):
+        script = ("import sys; sys.path.insert(0, sys.argv.pop(1)); import pdfmd, pdfmd_images; "
+                  "pdfmd_images.fetch_remote = lambda *a, **k: (None, 'no DNS', True); pdfmd.main()")
+        for suffix in ("svg", "png"):
+            with self.subTest(suffix=suffix):
+                url = f"https://example.invalid/badge.{suffix}"
+                source = self.document(f"---\ntitle: Offline\n---\n\nBefore ![lost image]({url}) after.\n")
+                done = subprocess.run([sys.executable, "-c", script, str(ROOT), str(source), "-e", "xelatex",
+                                       "--no-stamp", "--no-backup"], capture_output=True, text=True,
+                                      env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertTrue(source.with_suffix(".pdf").is_file())
+                self.assertNotIn("xelatex failed", done.stderr)
+                self.assertEqual(done.stderr.count(url), 1, done.stderr)
+
     def test_nothing_is_added_for_a_document_without_such_images(self):
         self.assertEqual(pdfmd.image_filter_args(None, [self.document("Just text ![p](photo.png)\n")]), [])
 
@@ -576,7 +612,7 @@ class Remote(unittest.TestCase):
                 mock.patch("pdfmd_images.remote.urllib.request.urlopen", side_effect=__import__("urllib.error").error.URLError("no DNS")):
             args = pdfmd.image_filter_args(None, [source])
         self.assertEqual(errors.getvalue().count("no network"), 1)
-        self.assertEqual(args, [])
+        self.assertIn("--metadata-file", args)
 
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")

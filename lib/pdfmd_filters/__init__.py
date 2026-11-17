@@ -139,15 +139,18 @@ def image_filter_args(no_auto: list[str] | None, sources: list[Path], metadata_f
             if reference.path in mapping:
                 continue
             if reference.remote:
-                if not (fetch_remote and reference.kind == "markdown" and reference.path.lower().startswith(("http://", "https://"))) \
-                        or offline:
+                if not (fetch_remote and reference.kind == "markdown" and reference.path.lower().startswith(("http://", "https://"))):
+                    continue
+                if offline:
+                    mapping[reference.path] = ""
                     continue
                 local, why, down = pdfmd_images.fetch_remote(reference.path, core.cache_root() / "images" / "remote")
                 if local is None:
+                    mapping[reference.path] = ""  # remove it before any writer or engine tries the URL again
                     if down:
                         offline = True
                         print(f"WARN  {core.display_path(source)}: no network, so remote images ({reference.path} and the "
-                              "others) cannot be fetched; Pandoc will leave their descriptions instead", file=sys.stderr)
+                              "others) cannot be fetched; leaving their descriptions instead", file=sys.stderr)
                     elif reference.path not in SVG_WARNED:
                         SVG_WARNED.add(reference.path)
                         print(f"WARN  {core.display_path(source)}: {reference.path} could not be fetched ({why})", file=sys.stderr)
@@ -170,7 +173,7 @@ def image_filter_args(no_auto: list[str] | None, sources: list[Path], metadata_f
                 mapping[reference.path] = converted
     args: list[str] = []
     if mapping:
-        mapping = {name: Path(path).as_posix() for name, path in mapping.items()}      # LaTeX reads a backslash as a command
+        mapping = {name: Path(path).as_posix() if path else "" for name, path in mapping.items()}      # LaTeX reads a backslash as a command
         digest = hashlib.sha1(json.dumps(mapping, sort_keys=True).encode("utf-8")).hexdigest()[:16]
         map_file = core.cache_root() / "images" / "maps" / f"{digest}.yaml"
         if not map_file.is_file():

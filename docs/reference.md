@@ -1651,3 +1651,7 @@ margin, font or table-width defaults with `no-auto:` (v3.32.8), and a kind of un
 Raw HTML `<img src=... width=...>` stays opt-in for LaTeX, Typst and Word: these writers drop it by default,
 with one WARN per build. Use `--raw` or `pdfmd-options: {raw: {tex: [html], typst: [html], office: [html]}}`
 to carry it through Pandoc's HTML reader (local and remote sources, with or without width).
+
+When a remote Markdown image cannot be fetched, pdfmd removes its image reference before the writer runs,
+leaves the description as text and warns with the URL. This includes SVG and PNG: a missing download cannot
+make the LaTeX engine try a missing converted file. `--no-auto remoteimages` disables this handling.

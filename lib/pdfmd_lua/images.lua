@@ -64,6 +64,7 @@ function Pandoc(doc)
   return doc:walk({
     Image = function(image)
       local replaced = named(image.src)
+      if replaced == "" then return image.caption end
       if replaced then image.src = replaced; return image end
       return nil
     end,
