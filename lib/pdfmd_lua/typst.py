@@ -15,6 +15,22 @@ from pathlib import Path
 from pdfmd_base import core
 
 
+_HEADING_WRAP: dict[tuple[int, ...], bool] = {}
+
+
+def heading_args() -> list[str]:
+    """`--wrap=none` for a Pandoc whose Typst writer wraps a long heading over several source lines (3.1.3 does): Typst
+    reads the continuation as body text, which then swallows the next paragraph's first line. Asked of the writer once
+    per Pandoc version; a writer that keeps its headings on one line (3.13) gets nothing, so its output is unchanged."""
+    version = core.pandoc_version()
+    if version not in _HEADING_WRAP:
+        done = core.run_probe(["pandoc", "-f", "markdown", "-t", "typst"], input="# " + "word " * 30 + "\n")
+        lines = done.stdout.splitlines() if done is not None and done.returncode == 0 else []
+        _HEADING_WRAP[version] = (len(lines) > 1 and lines[0].startswith("= ") and lines[1].strip() != ""
+                                  and not lines[1].startswith("<"))
+    return ["--wrap=none"] if _HEADING_WRAP[version] else []
+
+
 def line_spacing_mode(md_path: Path, metadata_files: list[Path]) -> str:
     """LaTeX's line pitch by default, or Pandoc's unmodified Typst template (DECISION 96)."""
     value = core.first_pdfmd_option(md_path, metadata_files, "typst-line-spacing")

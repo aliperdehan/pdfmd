@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.33.316 — 2026-11-17
+
+Pre-edit state: commit `11c28b4`. Pandoc 3.1.3's Typst writer wraps a long heading over several source lines like
+prose, but Typst headings are line-based: the continuation became body text and swallowed the next paragraph's first
+line (the cause of the title/abstract pitch test's StopIteration with 3.1.3). The Typst route now asks the writer once
+per Pandoc version, with a long heading, whether it wraps headings, and passes `--wrap=none` to one that does
+(lib/pdfmd_lua/typst.py `heading_args`); Typst still wraps the printed heading on the page. Pandoc 3.13 keeps headings
+on one line, gets no option and its output is unchanged. (A first attempt with raw spaces inside headings did not stop
+3.1.3 wrapping them and was replaced before landing; the reviewer narrowed the probe from "writes `= ` headings", true of
+3.13 too, to "wraps a long heading", and cached it.) Tests: a PDF regression (a long heading, then the next paragraph's
+first word at its own line top), failing before with 3.1.3 and passing with 3.1.3 and 3.13; `heading_args` with the
+two writers' answers and the cache. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.315a — 2026-11-17
 
 Pre-edit state: commit `d78970b`. A filter-only spacing fixture invoked bare Pandoc 3.1.3 without a main font; its template passes an empty font list, which current Typst rejects. Name Typst's bundled Libertinus Serif explicitly: the spacing assertion is unchanged and now passes with 3.1.3. Also narrow the preceding defaults-path skip to the unsupported parent path, exercising the supported template path first; the original failure is `${.}/base.yaml`, not the template path. Test only; CI's old-Pandoc job has no Typst.

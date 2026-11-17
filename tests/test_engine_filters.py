@@ -294,6 +294,15 @@ class CommandLine(unittest.TestCase):
         text = (self.directory / "doc.typ").read_text(encoding="utf-8")
         self.assertLess(text.index("leading: 1.7076em"), text.index("title: [Titlefirst]"))
 
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_long_headings_do_not_spill_into_the_following_paragraph(self):
+        (self.directory / "doc.md").write_text(
+            "---\nfontsize: 12pt\n---\n\n# Headingfirst " + "heading " * 20 +
+            "\n\nBodyfirst bodyword.\n", encoding="utf-8")
+        done = self.run_pdfmd("doc.md", "-e", "typst", "--no-stamp")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Bodyfirst", [first for _, first in self.line_tops()])
+
     def test_a_link_to_a_missing_anchor_does_not_stop_the_pdf(self):
         (self.directory / "doc.md").write_text(DOCUMENT, encoding="utf-8")
         done = self.run_pdfmd("doc.md", "-e", "typst")
@@ -787,6 +796,38 @@ class WeasyPrintKatex(unittest.TestCase):
         info = subprocess.run(["pdfinfo", str(self.directory / "doc.pdf")], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         self.assertIn("Energy E = mc^2 here", info)
         self.assertIn("KaTeX_Main", self.fonts())                  # on the page, typeset
+
+
+class TypstHeadingWrap(unittest.TestCase):
+    """`--wrap=none` only for a Pandoc whose Typst writer wraps a long heading (3.1.3), asked once per version (v3.33.316)."""
+
+    def answers(self, output: str, version: tuple[int, ...]):
+        from pdfmd_lua import typst
+        calls = []
+
+        def probe(command, **options):
+            calls.append(command)
+            return subprocess.CompletedProcess(command, 0, output, "")
+        return typst, calls, (mock.patch.object(pdfmd, "run_probe", probe),
+                              mock.patch.object(pdfmd, "pandoc_version", lambda: version),
+                              mock.patch.dict(typst._HEADING_WRAP, clear=True))
+
+    def test_a_wrapping_writer_gets_wrap_none_once(self):
+        typst, calls, patches = self.answers("= word word word\nword word\n<word-word>\n", (3, 1, 3))
+        with patches[0], patches[1], patches[2]:
+            self.assertEqual(typst.heading_args(), ["--wrap=none"])
+            self.assertEqual(typst.heading_args(), ["--wrap=none"])
+        self.assertEqual(len(calls), 1)
+
+    def test_a_writer_keeping_headings_on_one_line_gets_nothing(self):
+        typst, calls, patches = self.answers("= word word word word\n<word-word-word-word>\n", (3, 13))
+        with patches[0], patches[1], patches[2]:
+            self.assertEqual(typst.heading_args(), [])
+
+    def test_no_answer_gets_nothing(self):
+        typst, calls, patches = self.answers("", (0,))
+        with patches[0], patches[1], patches[2]:
+            self.assertEqual(typst.heading_args(), [])
 
 
 if __name__ == "__main__":

@@ -765,4 +765,5 @@ def typst_filter_args(writer: str, command: list[str] | None = None, directory: 
     # Explicitly use that text; current Pandoc writes the same output with either extension setting.
     citations = ["-t", "typst-citations"] if "--citeproc" in (command or []) else []
     paths = core.deferred("pdfmd_bibliography", "typst_path_args")(command or [])
-    return citations + core.typst_template_args(writer, command or [], directory) + paths + ["--lua-filter", str(shipped)] if shipped is not None else []
+    from pdfmd_lua.typst import heading_args
+    return heading_args() + citations + core.typst_template_args(writer, command or [], directory) + paths + ["--lua-filter", str(shipped)] if shipped is not None else []
