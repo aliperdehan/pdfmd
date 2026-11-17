@@ -150,6 +150,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                   if isinstance(selection, (set, frozenset)) and parts_inputs else parts_inputs)
         core.BUILD["partial"] = {"parts": [Path(item) for item in chosen], "root": parts_root,
                             "cut": source_override[0] if source_override is not None else None}
+    measurement_state = {}
     noted: set[tuple[str, str]] = set()
 
     def note(kind: str, detail: str) -> None:
@@ -627,6 +628,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if ascii_scratch is not None:
                         cmd += core.ascii_filter_args(Path(ascii_scratch.name), ascii_missing_mode,
                                                  smart=target_format in ("markdown", "commonmark_x", "txt", "plain"))     # after those
+                    from pdfmd_tables.measure import prepare
+                    cmd = prepare(cmd, target_format, [md_path, *parts_inputs], metadata_files, pandoc_cwd,
+                                  verbose, enabled=tablewidth_auto, export=True, state=measurement_state)
                     if office_arguments.filter_arguments:
                         result = core.run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug)
                     else:
@@ -903,6 +907,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += last_filters
 
                     def run_pandoc(command: list[str], target: Path):
+                        from pdfmd_tables.measure import prepare
+                        command = prepare(command, engine, [md_path, *parts_inputs], metadata_files, pandoc_cwd,
+                                          verbose, enabled=tablewidth_auto, state=measurement_state)
                         command = core.headers_as_metadata(command)
                         core.log_cmd(command, pandoc_cwd, verbose)
                         return pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,

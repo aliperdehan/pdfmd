@@ -177,6 +177,7 @@ def run(core, *,
     pandoc_cwd = pandoc_working_directory(metadata_cwd(metadata_files, files[0].parent))
     report_resource_path = resource_path_option(files[0].parent, pandoc_cwd, metadata_files)
 
+    measurement_state = {}
     with table_width_filter() as width_filter, csv_table_filter() as csv_filter, titles.Hidden() as hidden:
         if target_format != "pdf":
             # See convert_one's matching comment: a TEX_STANDALONE_FORMATS
@@ -332,6 +333,9 @@ def run(core, *,
                                         report_no_auto)
                 cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
                 cmd += typst_filter_args(target_format, cmd, pandoc_cwd)
+                from pdfmd_tables.measure import prepare
+                cmd = prepare(cmd, target_format, list(files), metadata_files, pandoc_cwd, args.verbose,
+                              enabled=not auto_disabled(report_no_auto, "tablewidth"), export=True, state=measurement_state)
                 if report_office_arguments.filter_arguments:
                     result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
                                                args.verbose, args.debug)
@@ -476,6 +480,9 @@ def run(core, *,
                         report_no_auto)
 
                     def run_report_pandoc(command: list[str], target: Path):
+                        from pdfmd_tables.measure import prepare
+                        command = prepare(command, engine, list(files), metadata_files, pandoc_cwd,
+                                          args.verbose, enabled=report_tablewidth_auto, state=measurement_state)
                         log_cmd(command, pandoc_cwd, args.verbose)
                         return pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                               env=tex_search_env(files[0].parent, pandoc_cwd, files[0]))

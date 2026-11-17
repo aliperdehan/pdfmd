@@ -110,27 +110,70 @@ local function collect(tbl, count_raw)
   return rows, longest, word
 end
 
+-- Loaded only for the opt-in mode. Measurements are taken at this filter's table position in the document.
+local tables_seen = 0
+local measurements = nil
+local function dimensions(tbl, o)
+  local char_rows, char_longest, char_word = collect(tbl, o.count_raw)
+  local data = o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]
+  if not data then
+    return char_rows, char_longest, char_word, CHAR_BUDGET - #tbl.colspecs * PER_COLUMN_OVERHEAD
+  end
+  local rows, longest, word, char_totals, point_totals = {}, {}, {}, {}, {}
+  for c = 1, #tbl.colspecs do longest[c], word[c], char_totals[c], point_totals[c] = 1, 1, 0, 0 end
+  local row_number = 0
+  local function add(row)
+    row_number = row_number + 1
+    local lengths, counts = {}, {}
+    for c = 1, #tbl.colspecs do lengths[c], counts[c] = 0, 0 end
+    for c, cell in ipairs(row.cells) do
+      local measured = data.cells[row_number][c]
+      local span = cell.col_span or 1
+      for k = c, math.min(c + span - 1, #tbl.colspecs) do
+        local width, floor = math.max(1, measured.width / span), math.max(1, measured.word / span)
+        lengths[k] = width
+        counts[k] = math.max(1, cell_length(cell, o.count_raw) / span)
+        longest[k], word[k] = math.max(longest[k], width), math.max(word[k], floor)
+        char_totals[k], point_totals[k] = char_totals[k] + counts[k], point_totals[k] + width
+      end
+    end
+    rows[#rows + 1] = lengths
+    char_rows[row_number] = counts
+  end
+  for _, row in ipairs(tbl.head.rows) do add(row) end
+  for _, body in ipairs(tbl.bodies) do
+    for _, row in ipairs(body.head) do add(row) end
+    for _, row in ipairs(body.body) do add(row) end
+  end
+  for _, row in ipairs(tbl.foot.rows) do add(row) end
+  local scale = {}
+  for c = 1, #tbl.colspecs do scale[c] = point_totals[c] / math.max(1, char_totals[c]) end
+  return rows, longest, word, data.line - #tbl.colspecs * data.sep, char_rows, scale
+end
+
 -- A cell that is far longer than every other cell of its column (a 66-character note among cells of 8 to 24) must not
 -- size the column: the others would starve to hold it on one line. The cap of such a column is its next-longest cell
 -- and the outlier wraps; what is left over goes back to the outlier's column at the end (best_widths). `ratio` is the
 -- times-longer threshold (`column-outlier`, 0 switches it off); a column of fewer than `column-outlier-rows` rows,
 -- or an outlier shorter than `column-outlier-length` characters, is never judged.
-local function outlier_caps(rows, longest, o)
+local function outlier_caps(rows, longest, o, char_rows)
   local ratio, min_rows, min_length = o["column-outlier"], o["column-outlier-rows"], o["column-outlier-length"]
   local caps = {}
   for c = 1, #longest do
     caps[c] = longest[c]
     if ratio > 0 then
-      local first, second, count = 0, 0, 0
-      for _, lengths in ipairs(rows) do
+      local first, second, count, first_chars = 0, 0, 0, 0
+      for r, lengths in ipairs(rows) do
         local length = lengths[c] or 0
         if length > 0 then
           count = count + 1
-          if length > first then first, second = length, first
+          if length > first then
+            first, second = length, first
+            first_chars = char_rows and char_rows[r][c] or length
           elseif length > second then second = length end
         end
       end
-      if count >= min_rows and first >= min_length and second > 0 and first > ratio * second then
+      if count >= min_rows and first_chars >= min_length and second > 0 and first > ratio * second then
         caps[c] = second
       end
     end
@@ -243,7 +286,7 @@ end
 
 -- pdfmd asks to hear about a table it had to resize (PDFMD_TABLEWIDTH_LOG: a file it reads afterwards); nothing
 -- is written when the variable is not set, or for a table that already fits
-local tables_seen = 0           -- the table's place in the document: engines tried one after the other count it once
+-- tables_seen is the table's place in the document; shared by measurement and balancing
 local function report(kind)
   local path = os.getenv("PDFMD_TABLEWIDTH_LOG")
   if path == nil or path == "" then return end
@@ -261,11 +304,11 @@ end
 -- longest word is returned untouched; one whose floors do not fit at all keeps the choice.
 local function keep_words(tbl, o)
   local ncols = #tbl.colspecs
-  local _, longest, word = collect(tbl, o.count_raw)
-  local room = CHAR_BUDGET - ncols * PER_COLUMN_OVERHEAD
+  local _, longest, word, room, _, scale = dimensions(tbl, o)
+  if room <= 0 then return nil end
   local floor_, chars, floor_sum, short = {}, {}, 0, false
   for c = 1, ncols do
-    floor_[c] = math.min(word[c], longest[c], o["column-word-floor-limit"])
+    floor_[c] = math.min(word[c], longest[c], o["column-word-floor-limit"] * (scale and scale[c] or 1))
     chars[c] = tbl.colspecs[c][2] * room
     floor_sum = floor_sum + floor_[c]
     if chars[c] < floor_[c] - 1e-9 then short = true end
@@ -305,7 +348,7 @@ end
 local MODES = {auto = true, keep = true, force = true}
 local SWITCH = {on = true, ["true"] = true, yes = true, off = false, ["false"] = false, no = false}
 local GLOBAL = {
-  mode = "auto", floor = true, count_raw = true,
+  mode = "auto", floor = true, count_raw = true, estimate = "count",
   ["column-outlier"] = 2, ["column-outlier-rows"] = 4, ["column-outlier-length"] = 30, ["column-word-floor-limit"] = 16,
 }
 local NUMBERS = {"column-outlier", "column-outlier-rows", "column-outlier-length", "column-word-floor-limit"}
@@ -327,6 +370,12 @@ local function table_options(attributes)
   if given ~= nil then
     if MODES[given:lower()] then o.mode = given:lower() end
     attributes["widths"] = nil
+  end
+  given = attributes["column-estimate"]
+  if given ~= nil then
+    local estimate = given:lower():match("^%s*(.-)%s*$")
+    if estimate == "count" or estimate == "measure" then o.estimate = estimate end
+    attributes["column-estimate"] = nil
   end
   given = attributes["word-floor"]
   if given ~= nil then
@@ -378,20 +427,20 @@ local function rebalance(tbl)
     return tbl
   end
 
-  local rows, longest, word = collect(tbl, o.count_raw)
+  local rows, longest, word, room, char_rows = dimensions(tbl, o)
+  if room <= 0 and char_rows then return nil end
   local total = 0
   for i = 1, ncols do total = total + longest[i] end
   -- The table's own content already fits a line: leave it at its natural size (and give back the natural
   -- size to a table whose equal widths were only the separator's), rather than stretching a table nobody
   -- asked to have stretched.
-  if total + ncols * PER_COLUMN_OVERHEAD <= CHAR_BUDGET then
+  if total <= room then
     if has_default(tbl.colspecs) then return nil end
     for i, spec in ipairs(tbl.colspecs) do tbl.colspecs[i] = {spec[1]} end
     return tbl
   end
 
-  local widths = best_widths(rows, longest, word, CHAR_BUDGET - ncols * PER_COLUMN_OVERHEAD,
-                             outlier_caps(rows, longest, o))
+  local widths = best_widths(rows, longest, word, room, outlier_caps(rows, longest, o, char_rows))
   local sum = 0
   for i = 1, ncols do sum = sum + widths[i] end
   for i, spec in ipairs(tbl.colspecs) do
@@ -413,6 +462,9 @@ local function setting(meta, name)
 end
 
 function Pandoc(doc)
+  local estimate = setting(doc.meta, "column-estimate")
+  if estimate then estimate = estimate:match("^%s*(.-)%s*$") end
+  if estimate == "count" or estimate == "measure" then GLOBAL.estimate = estimate end
   local mode = setting(doc.meta, "column-widths") or setting(doc.meta, "table-widths")
   if mode ~= nil and MODES[mode] then GLOBAL.mode = mode end
   local floor = SWITCH[setting(doc.meta, "column-word-floor") or setting(doc.meta, "table-word-floor") or ""]
@@ -422,6 +474,15 @@ function Pandoc(doc)
   for _, key in ipairs(NUMBERS) do
     local value = number_of(setting(doc.meta, key))
     if value ~= nil then GLOBAL[key] = value end
+  end
+  if doc.meta["pdfmd-measure-role"] and pandoc.utils.stringify(doc.meta["pdfmd-measure-role"]) == "dump" then
+    local measuring = dofile(PANDOC_SCRIPT_FILE:match("^(.*[/\\])") .. "table_measure.lua")
+    return measuring.dump(doc, table_options)
+  end
+  if doc.meta["pdfmd-column-measurements"] then
+    local handle = assert(io.open(pandoc.utils.stringify(doc.meta["pdfmd-column-measurements"]), "r"))
+    measurements = pandoc.json.decode(handle:read("*a"))
+    handle:close()
   end
   return pandoc.Pandoc(doc.blocks:walk({Table = rebalance}), doc.meta)
 end

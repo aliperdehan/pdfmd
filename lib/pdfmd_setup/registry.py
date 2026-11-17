@@ -432,6 +432,11 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                (("auto", "guessed from the first lines (a warning when it is not what the file name says)"),
                 ("comma", ","), ("semicolon", ";"), ("tab", "tab"), ("pipe", "|")), "auto",
                "A div's delimiter= wins.", "Tables"),
+        choice("options.column-estimate", "How table cell widths are estimated",
+               (("count", "character counts (fast, the default)"),
+                ("measure", "measure with the selected PDF engine; cache unchanged measurements")), "count",
+               "LaTeX PDF builds only. Exports and other writers keep count with a NOTE; a failed measurement "
+               "keeps count with a WARN. One table: {column-estimate=measure} after its caption.", "Tables"),
         choice("options.column-widths", "Pipe-table column widths",
                (("auto", "a `---|---` separator means no opinion: widths that give the fewest lines"),
                 ("keep", "exactly the widths the separator's dashes say"),

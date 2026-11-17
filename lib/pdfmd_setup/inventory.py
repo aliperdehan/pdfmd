@@ -237,7 +237,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "report-build": "options.report-build", "report-titles": "options.report-titles",
     "build-log": "options.build-log", "build-log-keep": "options.build-log-keep", "build-log-max-size": "options.build-log-max-size",
     "strip-comments": "options.strip-comments",
-    "column-widths": "options.column-widths", "table-widths": "options.column-widths",
+    "column-estimate": "options.column-estimate", "column-widths": "options.column-widths", "table-widths": "options.column-widths",
     "column-word-floor": "options.column-word-floor", "table-word-floor": "options.column-word-floor",
     "column-word-floor-limit": "options.column-word-floor-limit",
     "column-outlier": "options.column-outlier", "column-outlier-rows": "options.column-outlier-rows",

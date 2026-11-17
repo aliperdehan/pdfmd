@@ -1380,6 +1380,22 @@ column of four rows or more, does not size its column: it wraps and the others k
 caption wins. `--no-auto tablewidth` switches the filter off. LaTeX engines only: the other writers take Pandoc's
 widths as given.
 
+`pdfmd-options: {column-estimate: count}` is the default and keeps the character-count result unchanged.
+Opt in to `measure` for LaTeX PDF builds (pdflatex, xelatex, lualatex or tectonic), globally in the config or
+`--setup`, in the document, or per table with `{column-estimate=measure}` after its caption (Pandoc 3.8.2+).
+An extra Pandoc pass uses the build's template, fonts, headers, preambles and filters; the selected engine
+measures each formatted cell, its unbreakable words, the line width and twice `\tabcolsep` per column.
+The existing balancing algorithm then works in points. `column-outlier-length` and `column-word-floor-limit`
+still mean characters: the former qualifies the longest measured cell before the outlier ratio is judged;
+the latter caps a chosen column's word floor at its limit times that column's measured points per character
+(total cell widths divided by total counted cell lengths). `column-count-raw-tex` affects these character
+checks; engine measurements include raw TeX regardless. `column-widths: keep`, fixed CSV widths and
+`--no-auto tablewidth` still take precedence.
+Measurements are cached in pdfmd's cache by generated source, engine executable identity and engine options.
+Unchanged tables cost one extra Pandoc pass but no extra engine run. Exports (`--to latex`, `--to typst`, Word,
+ODT, HTML, EPUB and other formats) run no measuring engine and keep count with one NOTE when measure was requested.
+A failed measurement keeps count for that build with one WARN naming the cause; the normal build continues.
+
 ## Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block
 
 --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/

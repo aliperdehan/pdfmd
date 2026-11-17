@@ -64,6 +64,12 @@ class TieredHelp(unittest.TestCase):
     def test_csl_line_spacing_is_in_output_help(self):
         self.assertIn("CSL line-spacing", run("--help", "output").stdout)
 
+    def test_tables_help_explains_column_estimate(self):
+        text = run("--help", "tables").stdout
+        self.assertIn("column-estimate", text)
+        self.assertIn("measure", text)
+        self.assertIn("count (default)", " ".join(text.split()))
+
     def test_every_topic_prints(self):
         for topic in [*pdfmd_help.TOPICS, "other"]:
             done = run("--help", topic)

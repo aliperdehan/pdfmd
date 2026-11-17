@@ -100,12 +100,13 @@ CSV_TABLE_LUA_FILTER = "csv_table"   # pdfmd_lua/csv_table.lua
 
 def width_filter_args(width_filter: Path) -> list[str]:
     """``--lua-filter`` for the table-width filter, with the global column settings of the config or `--setup` handed
-    to it (`column-widths`, `column-word-floor`, `column-count-raw-tex`, and the numbers `column-outlier`,
+    to it (`column-widths`, `column-estimate`, `column-word-floor`, `column-count-raw-tex`, and the numbers `column-outlier`,
     `column-outlier-rows`, `column-outlier-length`, `column-word-floor-limit`); a document's own `pdfmd-options` reaches
     it through the metadata and wins. `table-widths` and `table-word-floor` are the older names, still read."""
     args = ["--lua-filter", str(width_filter)]
     options = core.config_options()
     words = (("column-widths", "table-widths", ("auto", "keep", "force")),
+             ("column-estimate", None, ("count", "measure")),
              ("column-word-floor", "table-word-floor", ("on", "off", "true", "false")),
              ("column-count-raw-tex", None, ("on", "off", "true", "false")))
     for key, older, allowed in words:

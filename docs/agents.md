@@ -120,3 +120,8 @@ Use `--strip-comments` or `pdfmd-options: {strip-comments: true}` to remove HTML
 Document `indent:` (front matter or pdfmd-options) accepts lengths such as 0.5in, 3em and 1cm in LaTeX, Typst, Word and HTML. True stays 1.5em; false/unset keeps defaults. Invalid lengths stop the build; indent divs still override a stretch.
 
 CSL bibliography line-spacing (for example 2 for double spacing) applies locally in LaTeX, Typst, Word and HTML; native writer spacing is retained. A style without it keeps its output unchanged.
+
+Table width estimation: `pdfmd-options: {column-estimate: measure}` opts in to measured cell and word widths
+for LaTeX PDF builds with their selected engine. The default `count` is unchanged. `--setup` offers the key;
+a table caption can carry `{column-estimate=measure}` (recent Pandoc). Exports keep count with a NOTE;
+measurement failures keep count with a cause-naming WARN. See the reference for caching and character limits.

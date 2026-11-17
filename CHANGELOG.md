@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.332 — 2026-11-17
+
+Pre-edit state: commit `385d41b`. [tables] Character counts misjudge formatted cells and unusual pages. Add opt-in `column-estimate: measure` for LaTeX PDF builds (pdflatex, xelatex, lualatex, tectonic): an extra Pandoc pass retains the build's arguments and the selected engine measures cells, unbreakable words, linewidth and column padding. Cache by generated source and engine identity/options; the allocator works in points. The outlier minimum remains characters; the chosen-width word-floor cap is the character limit times each column's measured points per character. Exports keep count with one NOTE; a failed measurement warns with its cause and keeps count. Add the setup row, inventory, help, guide and reference. Regressions fail before for the missing setting and cache; algorithm, character-limit, fallback and filter-order tests cover the new path. Existing count-width tests and scratch .tex/.typ comparisons retain the old result. Engine and required safety checks are in the batch report. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.331 — 2026-11-17
 
 Pre-edit state: commit `64aeeec`. pdfmd hands its Lua filters their folders and files (the picture cache, the SVG
