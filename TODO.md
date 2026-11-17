@@ -10,10 +10,7 @@ wait for an answer before any code.
 
 ## The queue, paused after the 3.33.191 release (2026-11-12): resume in this order
 
-- [ ] No release until this queue is done, the GUI decided and built; CI runs on the branch `fixes-3.33.168`, at a wave end, before a release or for a CI-only risk [D60 Q73]
 - [ ] 4. The biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
-- [ ] 5. Waves 4 and 5 (the docstring becomes `docs/reference.md`, `--doc reference`; CLAUDE.md rewritten whole at 5f, shown first), then the full suite once; between waves only the touched tests and CI [3fi D29 D86]
-- [ ] 5a. 3.33 closes with the full suite's and CI's fixes, the split's leftovers, the `md2pdf` overwrite, the watcher test and the 3eg WARN (their lines below); released after a real-document check against v3.33.191 and the author's go; then 3.34 [D86 D88]
 - [ ] 5b. After wave 5: excerpts (source tracking: `[@key#N]` markers, `excerpts.json`, pagecite), pdfmd first, then Colophon's Source pane; spec approved [3fq 3fr 3fs D79 D80 Q74]
 - [ ] 5c. Then the Obsidian flavour and its community plugins (the sections below), before Colophon: plugin support may be wanted before committing fully to it [3ee 3er D85]
 - [ ] 6. Colophon by hand (`--smoke-web`, Cmd-Q with an unsaved tab, `gui.yml` on main), the review's list below in its order, then the GUI decisions and build [D59 D60 D81]
@@ -40,6 +37,7 @@ wait for an answer before any code.
 - [ ] Settings layers: a per-install layer that wins over the user config, `--json` for `--show-config` and `--doctor` [3bh]
 - [ ] Word `keep`; markup (centre, highlight, landscape) in OpenDocument; markup in the native tier [3bh, 3ay]
 - [ ] CSS: headings in Word and Typst; MathJax for the non-STIX fonts (tall brackets) [3am, 3ao]
+- [ ] Hiding, properly: definitions inside a `hide` block keep working (TeX macros and other uses, as calc lines do), Quarto's `.hidden` macros handled, and possibly `hide` and `hidden` unified again [D98]
 - [ ] Calculator: `.qmd` spellings and the `all` mode, native tier, constants file included from the body, check mode, significant-figure tracking [3bw, 3cu]
 - [ ] Calculator typeset styling: Greek names (upright/italic), styling one occurrence of a piece in a line (the in-name `V_[x]s`), spaces inside the `{upright:..}` marker [3cw]
 - [ ] `--to ansi`: stacked math (levels b and c) [3ci]
@@ -101,8 +99,6 @@ wait for an answer before any code.
 
 ## Making the main `pdfmd.py` main code more manageable [3fi]
 
-- [ ] The split of `pdfmd.py`, phase 2 (`SPLIT.md`, 47 moves): wave 0 done (3.33.187i to 3.33.191b); wave 1 done; waves 2 to 5 open; a local full suite (`scripts/test_parallel.py`) after waves 1 and 5 only [3fi D28 D29]
-- [ ] After phase 1: the gathered oddities and bugs (split_check's weaknesses, Typst `indent: true`, cache-location words, a real `--install` check), then the full suite [3fi]
 - [ ] Runtime: lazy heavy imports (pypdf alone is about half of every start), a probe cache, fewer engine re-runs; no Rust/Go rewrite [3fj]
 - [ ] After the whole queue: pytest + pytest-xdist as an optional development extra (CI stays on unittest); `scripts/test_parallel.py` stays the runner unless it keeps failing in the waves [3fi D62]
 
@@ -130,7 +126,6 @@ batchocr's, so what is listed for it lands in batchocr. Never delegate to a copy
 is low priority. [3di]
 
 - [ ] batchocr (PDF to Markdown): `--pages 1,3,5-8` (PyPI `pdfmd`'s `-p`), standard input `-` and URL inputs (Rust `pdfmd`), `--extract-images DIR` as a spelling of `--export-images`, a folder as input (npm `pdfmd -i DIR -o DIR`)
-- [ ] `md2pdf` leftovers: `pdfmd --install math` installs `pymd2pdf`, whose own `md2pdf` script then replaces pdfmd's in the same folder (restore it after the install)
 - [ ] `--security basic|default|strict` as one switch over the HTML, remote-file and script switches (markdown-convert); with a wkhtmltopdf / untrusted-input warning in the docs and `--doctor` [3di, 3en]
 - [ ] Long keys of the other personas (approved) (`--stylesheet`, `--border`, `--orientation`, `--format`, `--as-html`...) accepted by plain `pdfmd` when no downstream program (Pandoc, Calibre, batchocr) has the key; short and clashing keys (`-h`, `-s`, `-c`, `-e`, `--css`, `--header`) stay persona-only; a test compares the table against `pandoc --help` [3di]
 - [ ] Take over, each checked first: Jinja context from the front matter for `.md.j2` (jmaupetit), `.page-break` and a custom page-break marker (`md-to-pdf`, mdPDFinator `-n`), `--document-title` and `--body-class` for the HTML route, emoji shortcodes (`:thumbsup:`), theme files and `--dump-theme` (Go `mdpdf`), `[TOC]` and `!!!` admonitions (markdown-convert)
