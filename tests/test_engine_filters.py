@@ -453,11 +453,25 @@ class CommandLine(unittest.TestCase):
         (folder / "nested").mkdir()
         (folder / "nested" / "piece.typ").write_text('#set par(spacing: 30pt)\n\n', encoding="utf-8")
         template.write_text('#set text(size: 12pt)\n#set par(leading: 2em)\n$nested/piece.typ()$\n$body$\n', encoding="utf-8")
+        self.check_template_pitch(environment, ["--template=" + str(template)], 32.4, 38.4)
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_defaults_relative_template_and_parent_paths(self):
+        version = subprocess.check_output([PANDOC, "--version"], text=True).splitlines()[0]
+        if version == "pandoc 3.1.3":
+            self.skipTest("Pandoc 3.1.3 does not expand ${.} in defaults-file template or parent paths")
+        (self.directory / "doc.md").write_text(
+            "---\nfontsize: 12pt\nlinestretch: 2\n---\n\nFirst  \nline\n\nSecond  \nline\n", encoding="utf-8")
+        folder = self.directory / "custom templates"
+        folder.mkdir()
+        template = folder / "own.typ"
+        template.write_text('#set text(size: 12pt)\n#set par(leading: 2em, spacing: 30pt)\n$body$\n', encoding="utf-8")
+        environment = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                       "XDG_CONFIG_HOME": str(self.directory / "config"),
+                       "XDG_CACHE_HOME": str(self.directory / "cache"), "XDG_DATA_HOME": str(self.directory / "data")}
         defaults = folder / "defaults.yaml"
         defaults.write_text('template: "${.}/own.typ"\n', encoding="utf-8")
-        for options in (["--template=" + str(template)], ["--defaults", str(defaults)]):
-            with self.subTest(options=options):
-                self.check_template_pitch(environment, options, 32.4, 38.4)
+        self.check_template_pitch(environment, ["--defaults", str(defaults)], 32.4, 38.4)
         defaults_folder = Path(environment["XDG_DATA_HOME"]) / "pandoc" / "defaults"
         defaults_folder.mkdir(parents=True)
         (defaults_folder / "base.yaml").write_text("template: " + str(template) + "\n", encoding="utf-8")

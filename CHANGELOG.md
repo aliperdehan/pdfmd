@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.314a — 2026-11-17
+
+Pre-edit state: commit `6ccc0fa`. The Typst defaults-path test assumed Pandoc 3.1.3 expands `${.}` in template and parent-default paths; bare Pandoc rejects that spelling before pdfmd can replace its template. Split that capability check from the custom-template spacing checks and skip only the former on 3.1.3, with the reason. The retained spacing test passes there; the defaults-path test passes on 3.13. CI's 3.1.3 job has no Typst, so previously skipped both. Test only.
+
 ## v3.33.314 — 2026-11-17
 
 Pre-edit state: commit `76cdeb0`. Tectonic was excluded from Unicode fallback even though it shares XeTeX's ability to include extracted emoji PNGs. It now uses the same fallback as XeLaTeX and LuaLaTeX. Where no PNG can be extracted, the XeTeX routes' warning names the emoji and engine and suggests Typst or the native renderer. Two regressions (three failing subcases before) cover both XeTeX engines with and without an extractable font; all 59 Unicode tests pass. Real-build results and limitations are in the batch report. pdfmd.py stays at 785 lines (version only).
