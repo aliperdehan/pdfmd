@@ -23,9 +23,11 @@ INSTALL_KINDS = ("pandoc", "typst", "full", "core", "cortex", "math", "diagram",
 
 
 INSTALL_SIZES = {"kit": "the repository you name", "tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
-                 "typst": "about 15 MB download", "full": "about 50 MB download",
+                 "typst": "about 15 MB download", "full": "Pandoc 35 MB and Typst 15 MB download (about 50 MB)",
                  "diagram": "about 20 MB: D2 17 MB, Graphviz 2 MB",
-                 "calibre": "190 to 360 MB download", "core": "Pandoc 35 MB and Tectonic 10 to 22 MB download",
+                 "calibre": "190 to 360 MB download", "core": "Pandoc 35 MB and Typst 15 MB download (about 50 MB)",
+                 "core:typst": "Pandoc 35 MB and Typst 15 MB download (about 50 MB)",
+                 "core:tex": "Pandoc 35 MB and Tectonic 10 to 22 MB download",
                  "cortex": "Pandoc 35 MB and Tectonic 10 to 22 MB download",
                  "batchocr": "about 40 MB with PyMuPDF"}
 

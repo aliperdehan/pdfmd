@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.33.304 — 2026-11-17
+
+Pre-edit state: commit `b4091f3`. The size mapping described `core` as Pandoc and Tectonic although it routes to
+`full` (Pandoc and Typst); the help omitted bare `core`. Name the right tools and download sizes for `core`,
+`core:typst`, `full`, `core:tex` and `cortex`, keeping installation unchanged. Update README, reference, help,
+the invalid-kind hint and the agent guide. This checkout's bare `--install` requires an argument; there is no
+bare size table to change. No settings or TODO changes; pdfmd.py stays at 784 lines (version only).
+
+Regression proof: four size-description subcases and the help regression fail before the fix. The installer, native, help and five required safety modules ran: 198 tests, one failure, zero errors, three
+skips. The failure is pre-existing help-topic coverage (`['--show-hidden'] != []`), reproduced with the original
+checkout's parser; all installer regressions pass. The ten-test installer rerun passes after extending the alias
+routing assertions. Ruff F and whitespace checks pass. No real installs or network access were used.
+
 ## v3.33.303 — 2026-11-17
 
 Pre-edit state: commit `8ad6a65`. Office replacement values were literal and applied to the reference document

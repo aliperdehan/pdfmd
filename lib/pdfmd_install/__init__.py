@@ -956,7 +956,8 @@ def install_kind(value: str) -> str:
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(core.INSTALL_KINDS)}; "
                                          "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz; "
                                          "math:mathjax is MathJax and math:katex is KaTeX, for math in WeasyPrint's PDFs; diagram:d2 and "
-                                         "diagram:dot draw ```d2 and ```dot blocks; core:tex is Pandoc and Tectonic, core:typst Pandoc and Typst; "
+                                         "diagram:dot draw ```d2 and ```dot blocks; core:tex (also cortex) is Pandoc and Tectonic, "
+                                         "core (also core:typst and full) is Pandoc and Typst; "
                                          "kit:SOURCE installs the kits of a repository: kit:owner/repo, kit:owner/repo@v1#name, kit:apa7)")
     return value
 

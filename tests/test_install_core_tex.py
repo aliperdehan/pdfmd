@@ -65,6 +65,20 @@ class Kinds(unittest.TestCase):
         for kind in ("core", "cortex"):
             self.assertIn(kind, pdfmd.INSTALL_SIZES)
 
+    def test_sizes_name_the_tools_that_each_core_installs(self):
+        for kind, engine in (("core", "Typst"), ("core:typst", "Typst"), ("full", "Typst"),
+                             ("core:tex", "Tectonic"), ("cortex", "Tectonic")):
+            with self.subTest(kind=kind):
+                size = pdfmd.INSTALL_SIZES.get(kind, "")
+                self.assertIn("Pandoc 35 MB", size)
+                self.assertIn(engine, size)
+                self.assertNotIn("Tectonic" if engine == "Typst" else "Typst", size)
+
+    def test_install_help_names_core_and_its_typst_alias(self):
+        action = next(action for action in pdfmd.build_parser()._actions if action.dest == "install")
+        self.assertIn("'core' (also 'core:typst' and 'full': Pandoc and Typst", action.help)
+        self.assertIn("'core:tex' (also 'cortex': Pandoc and Tectonic", action.help)
+
     def test_core_is_full_and_core_tex_is_pandoc_then_tectonic(self):
         calls: list[str] = []
         with mock.patch.object(pdfmd, "install_typst", lambda: calls.append("typst") or True), \
@@ -76,9 +90,10 @@ class Kinds(unittest.TestCase):
             self.assertEqual(calls.count("tectonic"), 2)
             self.assertNotIn("typst", calls)
             calls.clear()
-            pdfmd.install_extra("core:typst")
-            self.assertIn("typst", calls)
-            self.assertNotIn("tectonic", calls)
+            for kind in ("core", "core:typst", "full"):
+                calls.clear()
+                pdfmd.install_extra(kind)
+                self.assertEqual(calls, ["pip", "typst"], kind)
 
 
 class Install(unittest.TestCase):

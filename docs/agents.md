@@ -21,7 +21,8 @@ pdfmd --doctor --deep               # also builds a small page with every engine
 pdfmd report.md --check             # what would go wrong, without building (links, images, labels, citations ...)
 pdfmd report.md --verbose           # the exact Pandoc command and every automatic decision, with its reason
 pdfmd report.md --stop-at tex       # stop at the .tex Pandoc made, to read what LaTeX will see
-pdfmd --install full                # Pandoc and Typst into pdfmd's own folder, no admin rights
+pdfmd --install full                # also core, core:typst: Pandoc 35 MB and Typst 15 MB download
+pdfmd --install core:tex            # also cortex: Pandoc 35 MB and Tectonic 10 to 22 MB download
 pdfmd --restore report.pdf          # a PDF that carries its own source: write the folder back (never over a file)
 pdfmd --check-source report.pdf     # does this PDF carry its source? (reads the attachment list only)
 ```

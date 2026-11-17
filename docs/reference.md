@@ -285,6 +285,10 @@ other front-matter keys are listed as unused. Not available there: filters,
 preambles, citations, slides, parts/report mode, non-Markdown input.
 See normalise_gfm() in lib/pdfmd_native and the native renderer in lib/pdfmd_engines/native.py.
 
+`--install core` (also `core:typst`, `full`) installs Pandoc and Typst: 35 MB and 15 MB download,
+about 50 MB together. `--install core:tex` (also `cortex`) installs Pandoc and Tectonic: 35 MB and
+10 to 22 MB download. Tectonic fetches the TeX files a document needs on first use and then caches them.
+
 ## Finding a document by name
 
 `pdfmd report` looks for report.md. When no file has exactly that name
