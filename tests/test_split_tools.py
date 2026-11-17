@@ -7,6 +7,8 @@ every kind, pdfmd.py's own `__file__`, the state the moved code writes."""
 from __future__ import annotations
 
 import ast
+import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -21,6 +23,7 @@ import isolation_support  # noqa: E402,F401  (the run's own cache, config and da
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import split_check  # noqa: E402
 import split_spec  # noqa: E402
 
 SPLIT = textwrap.dedent("""\
@@ -56,6 +59,118 @@ SPLIT = textwrap.dedent("""\
 
     Definitions: `elsewhere`.
 """)
+
+
+class Comparison(unittest.TestCase):
+    """The comparison masks run noise without hiding document or command changes."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        (self.root / "pdfmd.py").write_text('PDFMD_VERSION = "3.33.301"\n')
+
+    def mask(self, text):
+        return split_check.mask(text, self.root, self.root / "run")
+
+    def test_api_times_are_masked_but_values_remain(self):
+        old = '{"mtime": "123456000000000", "seconds": 0.025, "value": 42}'
+        new = '{"mtime": "789012000000000", "seconds": 1.25, "value": 42}'
+        self.assertEqual(self.mask(old), self.mask(new))
+        self.assertNotEqual(self.mask(old), self.mask(new.replace('42', '43')))
+
+    def test_home_and_absolute_cmd_spellings_match(self):
+        tree = self.root / "project"
+        with unittest.mock.patch.object(split_check.Path, "home", return_value=self.root), \
+             unittest.mock.patch.object(split_check, "version", return_value="3.33.301"):
+            absolute = split_check.mask(f"CMD python {tree}/scripts/pdfmd a.md", tree, self.root / "run")
+            short = split_check.mask("CMD python ~/project/scripts/pdfmd a.md", tree, self.root / "run")
+        self.assertEqual(absolute, short)
+        self.assertIn("TREE/scripts/pdfmd", short)
+
+    def test_backup_and_build_record_stamps_match(self):
+        old = "BACKUP report.md.bak.20261117091500\nbuilds/hash/20261117-091500-2-ok.log"
+        new = "BACKUP report.md.bak.20261117091501\nbuilds/hash/20261117-091501-ok.log"
+        self.assertEqual(self.mask(old), self.mask(new))
+        self.assertEqual(self.mask("BACKUP report.11-17_09-15-00"), self.mask("BACKUP report.11-17_09-15-01"))
+        self.assertNotEqual(self.mask(old), self.mask(new.replace("ok.log", "failed.log")))
+
+    def test_doctor_cache_size_is_run_noise(self):
+        line = "NOTE  cache: OUT/cache/pdfmd ({}; pdfmd --cache-info, pdfmd --clear-cache)"
+        for size in ("0.1 MB", "empty"):
+            with self.subTest(size=size):
+                self.assertEqual(self.mask(line.format("0.0 MB")), self.mask(line.format(size)))
+        meaningful = "output: 0.0 MB\n  cache: elsewhere (0.1 MB; other command)"
+        self.assertEqual(self.mask(meaningful), meaningful)
+        self.assertNotEqual(self.mask(line.format("0.1 MB")), self.mask(line.format("0.1 MB").replace("cache/pdfmd", "cache/other")))
+
+    def test_duplicate_extra_names_are_refused_before_building(self):
+        for extra in (["pdf:a.md"], ["pdf!:a.md"], ["probe:a.md", "probe!:b.md"]):
+            args = ["split_check", *(word for item in extra for word in ("--extra", item))]
+            with self.subTest(extra=extra), unittest.mock.patch.object(sys, "argv", args), \
+                 unittest.mock.patch.object(sys, "stderr", io.StringIO()), \
+                 unittest.mock.patch.object(split_check, "run_tree") as run:
+                with self.assertRaises(SystemExit) as error:
+                    split_check.main()
+                self.assertEqual(error.exception.code, 2)
+                run.assert_not_called()
+
+    def test_unchanged_head_files_and_scratch_copies_keep_source_times(self):
+        head = self.root / "head"
+        for tree in (self.root, head):
+            (tree / "examples").mkdir(parents=True)
+            for name in ("results.md", "lecture.md"):
+                (tree / "examples" / name).write_text(name)
+        original = self.root / "examples/results.md"
+        changed = head / "examples/lecture.md"
+        changed.write_text("changed")
+        os.utime(original, ns=(1_000_000_000, 2_000_000_000))
+        os.utime(head / "examples/results.md", ns=(3_000_000_000, 4_000_000_000))
+        os.utime(changed, ns=(5_000_000_000, 6_000_000_000))
+        files = ["examples/results.md", "examples/lecture.md"]
+        with unittest.mock.patch.object(split_check, "ROOT", self.root), \
+             unittest.mock.patch.object(split_check, "git_files", return_value=files), \
+             unittest.mock.patch.object(split_check.subprocess, "run", return_value=unittest.mock.Mock(stdout="<info>")):
+            split_check.same_times(head)
+            work = split_check.scratch(head, self.root / "scratch")
+        self.assertEqual((head / files[0]).stat().st_mtime_ns, original.stat().st_mtime_ns)
+        self.assertEqual(changed.stat().st_mtime_ns, 6_000_000_000)
+        self.assertEqual((work / files[0]).stat().st_mtime_ns, original.stat().st_mtime_ns)
+        self.assertEqual((work / "batch/a.md").stat().st_mtime_ns, original.stat().st_mtime_ns)
+
+    def test_both_trees_share_the_hashed_paths_and_scratch_data(self):
+        base = (self.root / "compare").resolve()
+        base.mkdir()
+        calls = []
+
+        def run(tree, out, extra, data):
+            out.mkdir()
+            calls.append((out, data))
+            return {"exits": {name: 0 for name, _, _ in split_check.RUNS}, "startup": (1, 1)}
+
+        with unittest.mock.patch.object(sys, "argv", ["split_check"]), \
+             unittest.mock.patch.object(sys, "stdout", io.StringIO()), \
+             unittest.mock.patch.object(split_check.shutil, "which", return_value="pandoc"), \
+             unittest.mock.patch.object(split_check.tempfile, "mkdtemp", return_value=str(base)), \
+             unittest.mock.patch.object(split_check.subprocess, "run"), \
+             unittest.mock.patch.object(split_check, "same_times"), \
+             unittest.mock.patch.object(split_check, "run_tree", side_effect=run):
+            self.assertEqual(split_check.main(), 0)
+        self.assertEqual(calls, [(base / "run", base / "data"), (base / "run", base / "data")])
+
+    def test_every_child_gets_the_scratch_data_home(self):
+        data = self.root / "data"
+        child = unittest.mock.Mock(stdout=b"", stderr=b"")
+        with unittest.mock.patch.object(split_check, "RUNS", []), \
+             unittest.mock.patch.object(split_check, "scratch", return_value=self.root), \
+             unittest.mock.patch.object(split_check, "attachments", return_value={}), \
+             unittest.mock.patch.object(split_check.subprocess, "run", return_value=child) as run:
+            split_check.run_tree(self.root, self.root / "run", [], data)
+        for call in run.call_args_list:
+            env = call.kwargs["env"]
+            self.assertEqual(env["XDG_DATA_HOME"], str(data))
+            self.assertEqual(env["XDG_CONFIG_HOME"], str(self.root / "run/config"))
+            self.assertEqual(env["XDG_CACHE_HOME"], str(self.root / "run/cache"))
 
 
 class SectionLookup(unittest.TestCase):

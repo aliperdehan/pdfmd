@@ -12,8 +12,8 @@ empty config and a cache of their own:
 - `--verbose` builds: a document to PDF, `--to html`, `--to docx`, `-r` on examples/book, `-b -j 2`, and a document with
   comments of every kind (Markdown, LaTeX preamble, .bib, CSL) through `--assemble-only`, `--merge` and `--attach-source`:
   the logs line for line with the trees' own paths, times, dates, durations, time stamps in file names, temporary names and
-  the mtimes and seconds of `--api` answers masked (a run with `-j` compares its lines sorted, as parallel workers print in
-  any order), and the assembled, merged and attached text byte for byte;
+  the mtimes and seconds of `--api` answers and the doctor's scratch cache size masked (a run with `-j` compares its
+  lines sorted, as parallel workers print in any order), and the assembled, merged and attached text byte for byte;
 - `--extra 'NAME:ARGS'` adds a build of the package's own feature, run in the scratch copy of examples/ (`{root}` in ARGS is
   the tree being run); NAME may not be a default build's. A build that fails in both trees proves nothing: it is reported
   (BOTH FAILED) and the result is not SAME, unless it is declared an intended failure, `--extra 'NAME!:ARGS'`, which must
@@ -161,6 +161,9 @@ def mask(text: str, tree: Path, out: Path) -> str:
     text = re.sub(r"(?<![\w:.])(?:\d+ d )?\d{1,2}(?::\d{2}){1,2}(?![\w:])", "N s", text)
     text = re.sub(r"\d+ ms\b", "N ms", text)
     text = re.sub(r'"(mtime|seconds)": ("?)[\d.]+\2', r'"\1": N', text)  # --api answers
+    # --doctor's scratch caches contain records and generated files whose size varies between copies.
+    text = re.sub(r"(?m)^([ \t]*NOTE[ \t]+cache: [^\n]* \()(?:[0-9]+(?:\.[0-9]+)? MB|empty)"
+                  r"(; pdfmd --cache-info, pdfmd --clear-cache\))$", r"\1SIZE\2", text)
     # pdfmd_base's atomic replace (`.NAME.<pid>.<8 hex>.part`, the shrink step's qpdf output since 3.33.227)
     text = re.sub(r"(\.[^\s/]+)\.\d+\.[0-9a-f]{8}\.part\b", r"\1.PID.RANDOM.part", text)
     # tempfile's names: a prefix (`.b.pdfmd-title-`, `.results.pdfmd-`) and eight random characters; a bare `pdfmd-` only

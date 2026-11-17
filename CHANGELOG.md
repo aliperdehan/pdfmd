@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.301e — 2026-11-17
+
+Pre-edit state: commit `ab635c1`. split_check still compared the doctor's rounded scratch cache size, so two otherwise identical runs could differ at 0.0 versus 0.1 MB. Mask only that size (including empty), keeping the cache path, other sizes and the command hints significant. Eight focused regressions verify the existing shared hash paths, API times, duplicate-name refusal, preserved file ages, home-path spellings, backup/build-record stamps and scratch data environment as well as this fix. Only the two cache-size subcases fail before; all pass after. Two real doctor runs reproduce the rounding difference and now compare equally. Scripts/tests only: PDFMD_VERSION stays 3.33.301; pdfmd.py stays at 784 lines; no TODO changes. Split-tools and the five required safety modules: 151 tests, zero failures/errors, one skip; the final 35-test split-tools rerun, Ruff F and whitespace checks pass. No full two-tree build comparison was run; these are harness checks, with no shipped-code move to prove.
+
 ## v3.33.301d — 2026-11-17
 
 Pre-edit state: commit `16e450a`. The README's keep-source section described pictures through the PDF comparison but omitted the YAML bundle values. State directly that pictures are excluded by default and give the true/all spellings beside their CLI forms. Name the one added state line, SHOW_HIDDEN_CLI, and its worker-transfer requirement in the v3.33.290 entry. Two focused documentation checks fail before and pass after; the five required safety modules pass: 116 tests, zero failures/errors, one skip. Whitespace checks pass. Docs only: PDFMD_VERSION stays 3.33.301; pdfmd.py stays at 784 lines; no TODO changes.
