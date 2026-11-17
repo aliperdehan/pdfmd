@@ -307,9 +307,11 @@ local function keep_words(tbl, o)
   local _, longest, word, room, _, scale = dimensions(tbl, o)
   if room <= 0 then return nil end
   local floor_, chars, floor_sum, short = {}, {}, 0, false
+  local data = o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]
   for c = 1, ncols do
     floor_[c] = math.min(word[c], longest[c], o["column-word-floor-limit"] * (scale and scale[c] or 1))
     chars[c] = tbl.colspecs[c][2] * room
+    if data and data.inset then chars[c] = tbl.colspecs[c][2] * data.line - data.inset end
     floor_sum = floor_sum + floor_[c]
     if chars[c] < floor_[c] - 1e-9 then short = true end
   end
@@ -333,7 +335,9 @@ local function keep_words(tbl, o)
     end
   end
   for c, spec in ipairs(tbl.colspecs) do
-    tbl.colspecs[c] = {spec[1], widths[c] / room}
+    local width = widths[c] / room
+    if data and data.inset then width = (widths[c] + data.inset) / data.line end
+    tbl.colspecs[c] = {spec[1], width}
   end
   report("w")
   return tbl
@@ -412,14 +416,23 @@ local function rebalance(tbl)
   tables_seen = tables_seen + 1
   local ncols = #tbl.colspecs
   if ncols == 0 then return nil end
-  without_dash_widths(tbl)
+  local typst = FORMAT:match("typst") ~= nil
+  if not typst then without_dash_widths(tbl) end
   local attributes = tbl.attr.attributes
   if attributes["data-pdfmd-widths"] == "fixed" then return nil end     -- widths= on a .csv div
   local o = table_options(attributes)
+  if typst then
+    if not (o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]) then return nil end
+    without_dash_widths(tbl)
+  end
   if o.mode == "keep" then return nil end
   local chosen = not has_default(tbl.colspecs) and not equal_widths(tbl.colspecs) and o.mode ~= "force"
   if chosen then
-    if o.floor then return keep_words(tbl, o) end
+    if o.floor then
+      local widened = keep_words(tbl, o)
+      if typst and widened then widened.attributes["data-pdfmd-measured"] = "true" end
+      return widened
+    end
     return nil
   end
   if ncols == 1 and not has_default(tbl.colspecs) then
@@ -443,9 +456,13 @@ local function rebalance(tbl)
   local widths = best_widths(rows, longest, word, room, outlier_caps(rows, longest, o, char_rows))
   local sum = 0
   for i = 1, ncols do sum = sum + widths[i] end
+  local data = o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]
   for i, spec in ipairs(tbl.colspecs) do
-    tbl.colspecs[i] = {spec[1], widths[i] / sum}
+    local width = widths[i] / sum
+    if data and data.inset then width = (widths[i] + data.inset) / data.line end
+    tbl.colspecs[i] = {spec[1], width}
   end
+  if typst then tbl.attributes["data-pdfmd-measured"] = "true" end
   report()
   return tbl
 end

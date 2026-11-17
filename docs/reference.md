@@ -1377,14 +1377,17 @@ A cell more than `column-outlier` (2) times longer than the next one in its colu
 column of four rows or more, does not size its column: it wraps and the others keep their room (0 switches it off).
 `pdfmd-options: {column-widths: keep}` (or the same in the config, or --setup; `table-widths` is the older name) leaves every table as written;
 `force` ignores the dashes and balances every table. A table's own `{widths=force word-floor=off}` after its
-caption wins. `--no-auto tablewidth` switches the filter off. LaTeX engines only: the other writers take Pandoc's
-widths as given.
+caption wins. `--no-auto tablewidth` switches the filter off. In count mode this applies to LaTeX engines only:
+the other writers take Pandoc's widths as given. Typst PDF builds can opt in to measure below.
 
 `pdfmd-options: {column-estimate: count}` is the default and keeps the character-count result unchanged.
-Opt in to `measure` for LaTeX PDF builds (pdflatex, xelatex, lualatex or tectonic), globally in the config or
+Opt in to `measure` for PDF builds with pdflatex, xelatex, lualatex, tectonic or Typst, globally in the config or
 `--setup`, in the document, or per table with `{column-estimate=measure}` after its caption (Pandoc 3.8.2+).
-An extra Pandoc pass uses the build's template, fonts, headers, preambles and filters; the selected engine
+An extra Pandoc pass uses the build's template, fonts, headers, preambles and filters. For LaTeX, the selected engine
 measures each formatted cell, its unbreakable words, the line width and twice `\tabcolsep` per column.
+Typst uses contextual `measure` calls and labelled metadata read by `typst query`, with the same template,
+fonts and page setup. It measures the table's inset and column gutter; column percentages include their inset
+and leave the measured gutters free. Relative cell images use content-addressed copies in the measurement cache.
 The existing balancing algorithm then works in points. `column-outlier-length` and `column-word-floor-limit`
 still mean characters: the former qualifies the longest measured cell before the outlier ratio is judged;
 the latter caps a chosen column's word floor at its limit times that column's measured points per character
@@ -1392,6 +1395,7 @@ the latter caps a chosen column's word floor at its limit times that column's me
 checks; engine measurements include raw TeX regardless. `column-widths: keep`, fixed CSV widths and
 `--no-auto tablewidth` still take precedence.
 Measurements are cached in pdfmd's cache by generated source, engine executable identity and engine options.
+`--verbose` reports whether widths were measured or cached, the line width and per-column padding/gaps in points.
 Unchanged tables cost one extra Pandoc pass but no extra engine run. Exports (`--to latex`, `--to typst`, Word,
 ODT, HTML, EPUB and other formats) run no measuring engine and keep count with one NOTE when measure was requested.
 A failed measurement keeps count for that build with one WARN naming the cause; the normal build continues.

@@ -406,6 +406,11 @@ local function line_spacing(doc)
   return doc
 end
 
+local measured_tables = nil
+local function write_table(tbl)
+  return (measured_tables and measured_tables.typst_widths(tbl)) or pandoc.write(pandoc.Pandoc({tbl}), "typst")
+end
+
 -- The default template places its contents before body; these lists therefore follow it, or occupy that
 -- position when there is no contents. Typst's automatic outline title is always "Contents", even for figures.
 -- Read Pandoc's bundled translations for the document language rather than maintaining another language table.
@@ -434,12 +439,12 @@ local function figure_lists(doc)
   if lot then
     doc = doc:walk({Table = function(tbl)
       if #tbl.caption.long == 0 then return nil end
-      local written = pandoc.write(pandoc.Pandoc({tbl}), "typst")
+      local written = write_table(tbl)
       if written:match("^%s*#figure%s*%(") then return nil end
       -- Pandoc 3.1.3 writes a caption as plain text after #table, outside a figure. An outline cannot find it.
       local caption = pandoc.write(pandoc.Pandoc(tbl.caption.long), "typst"):gsub("%s+$", "")
       tbl.caption = {long = {}}
-      local body = pandoc.write(pandoc.Pandoc({tbl}), "typst"):gsub("%s+$", "")
+      local body = write_table(tbl):gsub("%s+$", "")
       return pandoc.RawBlock("typst", "#figure([\n" .. body .. "\n], caption: [" .. caption .. "], kind: table)")
     end})
   end
@@ -456,6 +461,16 @@ local function figure_lists(doc)
 end
 
 return {{Meta = meta_rules, Pandoc = function(doc)
+  if doc.meta["pdfmd-column-measurements"] then
+    measured_tables = dofile(csl_here .. "table_measure.lua")
+  end
   doc = doc:walk({Div = function(div) return entry_spacing(div, doc.meta) end})
-  return line_spacing(figure_lists(absolute_pictures(call_delimiters(plain_missing_links(doc)))))
+  doc = line_spacing(figure_lists(absolute_pictures(call_delimiters(plain_missing_links(doc)))))
+  if measured_tables then
+    doc = doc:walk({Table = function(tbl)
+      local source = measured_tables.typst_widths(tbl)
+      if source then return pandoc.RawBlock("typst", source) end
+    end})
+  end
+  return doc
 end}}

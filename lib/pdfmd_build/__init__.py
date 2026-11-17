@@ -867,6 +867,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                     if tablewidth_auto and engine in core.LATEX_ENGINES:
                         cmd += core.width_filter_args(width_filter)
+                    if tablewidth_auto and engine == "typst":
+                        from pdfmd_tables.measure import requested
+                        if requested([md_path, *parts_inputs], metadata_files):
+                            cmd += core.width_filter_args(width_filter)
                     cmd += core.cellalign_args([md_path, *parts_inputs], metadata_files)
                     if engine in core.LATEX_ENGINES:
                         cmd += core.tblr_header_args([md_path, *parts_inputs], metadata_files)
@@ -883,6 +887,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         engine, pandoc_options,
                         selected_font or core.document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables),
                         no_auto)
+                    def measure_command(command):
+                        from pdfmd_tables.measure import prepare
+                        return prepare(command, engine, [md_path, *parts_inputs], metadata_files, pandoc_cwd,
+                                       verbose, enabled=tablewidth_auto, state=measurement_state)
+
                     page_options = lambda: (core.browser_page_css(md_path, metadata_files, variables) if engine in core.BROWSER_ENGINES
                                             else core.calibre_page_options(md_path, metadata_files, variables))
                     if engine == "calibre" or engine in core.BROWSER_ENGINES or (engine in ("typst", "weasyprint") and core.office_fallback_wanted(
@@ -900,16 +909,14 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                 answer = run_engine_command(
                                     cmd, engine, output,
                                     lambda command, target: core.run_office_pandoc(command, target, office_arguments,
-                                                                              pandoc_cwd, verbose),
+                                                                              pandoc_cwd, verbose, prepare_command=measure_command),
                                     page_options, verbose)
                                 core.office_finish(office_arguments, md_path, verbose)
                                 return answer
                     cmd += last_filters
 
                     def run_pandoc(command: list[str], target: Path):
-                        from pdfmd_tables.measure import prepare
-                        command = prepare(command, engine, [md_path, *parts_inputs], metadata_files, pandoc_cwd,
-                                          verbose, enabled=tablewidth_auto, state=measurement_state)
+                        command = measure_command(command)
                         command = core.headers_as_metadata(command)
                         core.log_cmd(command, pandoc_cwd, verbose)
                         return pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,

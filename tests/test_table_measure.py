@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -78,6 +79,44 @@ class Fallbacks(unittest.TestCase):
         self.assertEqual(out.getvalue().count("WARN  column-estimate"), 1)
         self.assertIn("bad measurement", out.getvalue())
 
+    def test_typst_failure_warns_once_even_without_a_diagnostic(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+        from pdfmd_tables.measure import prepare
+        with mock.patch("pdfmd_tables.measure.requested", return_value=True), mock.patch.object(
+                pdfmd, "which", return_value=sys.executable), mock.patch("pdfmd_tables.measure.run", return_value=
+                subprocess.CompletedProcess([], 1, "", "  \n")), redirect_stderr(StringIO()) as out:
+            state = {}
+            for _ in range(2):
+                self.assertEqual(prepare(["pandoc"], "typst", [Path(__file__)], [], ROOT, state=state), ["pandoc"])
+        self.assertEqual(out.getvalue().count("WARN  column-estimate"), 1)
+        self.assertIn("measurement Pandoc: no diagnostic", out.getvalue())
+
+    def test_typst_query_failure_keeps_count_and_names_the_engine_cause(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+        from pdfmd_tables.measure import prepare
+        with tempfile.TemporaryDirectory(prefix="pdfmd-query-failure-") as folder:
+            def run(command, *args):
+                if "-o" in command:
+                    Path(command[command.index("-o") + 1]).write_text("#metadata(()) <pdfmd-measure>", encoding="utf-8")
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                return subprocess.CompletedProcess(command, 1, "", "error: font unavailable")
+            with mock.patch("pdfmd_tables.measure.requested", return_value=True), mock.patch.object(
+                    pdfmd, "which", return_value=sys.executable), mock.patch.object(
+                    pdfmd, "cache_root", return_value=Path(folder)), mock.patch(
+                    "pdfmd_tables.measure.run", side_effect=run) as invoked, redirect_stderr(StringIO()) as out:
+                command = ["pandoc", "--pdf-engine=typst", "--pdf-engine-opt=--font-path=fonts"]
+                state = {}
+                for _ in range(2):
+                    self.assertEqual(prepare(command, "typst", [Path(__file__)], [], ROOT, state=state), command)
+            self.assertEqual(invoked.call_count, 2)
+            query = invoked.call_args.args[0]
+            self.assertIn("query", query)
+            self.assertIn("--font-path=fonts", query)
+            self.assertEqual(out.getvalue().count("WARN  column-estimate"), 1)
+            self.assertIn("measurement typst: error: font unavailable", out.getvalue())
+
     def test_dump_preserves_filter_order_and_engine_options_are_separate(self):
         from pdfmd_tables.measure import dump_command, engine_options
         width = Path("width.lua")
@@ -88,6 +127,39 @@ class Fallbacks(unittest.TestCase):
         self.assertNotIn("old.pdf", dumped)
         self.assertNotIn("--pdf-engine=xelatex", dumped)
         self.assertEqual(engine_options(command), ["-shell-escape"])
+
+    def test_office_collection_does_not_measure_but_final_render_does(self):
+        from types import SimpleNamespace
+        from pdfmd_office.build import build_office_pandoc
+        with tempfile.TemporaryDirectory(prefix="pdfmd-office-measure-") as folder:
+            scratch = Path(folder)
+            arguments = SimpleNamespace(context={"target": "typst"}, scratch=scratch, filter_arguments=["filter"])
+            command = ["pandoc", "d.md", "--pdf-engine=typst", "-o", str(scratch / "out.pdf")]
+            def run(cmd, **kwargs):
+                if "pdfmd-office-mode=collect" in cmd:
+                    (scratch / "wanted.json").write_text("[]", encoding="utf-8")
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            prepare = mock.Mock(side_effect=lambda cmd: [*cmd, "-M", "prepared=true"])
+            with mock.patch.object(pdfmd, "office_module", return_value=object()), mock.patch(
+                    "pdfmd_office.build.subprocess.run", side_effect=run), mock.patch.object(pdfmd, "log_cmd"):
+                build_office_pandoc(command, scratch / "out.pdf", arguments, scratch, False, prepare_command=prepare)
+            self.assertEqual(prepare.call_count, 1)
+            self.assertEqual(prepare.call_args.args[0], command)
+
+    def test_typst_records_reject_invalid_measurements(self):
+        from pdfmd_tables.measure import parse_typst
+        records = [{"kind": "T", "table": "1", "line": 120, "sep": 12, "inset": 12, "gutter": 0},
+                   {"kind": "C", "table": "1", "row": 1, "col": 1, "width": 50},
+                   {"kind": "W", "table": "1", "row": 1, "col": 1, "width": 20}]
+        self.assertEqual(parse_typst(json.dumps(records))["tables"]["1"]["cells"], [[{"width": 50, "word": 20}]])
+        for value in (float("nan"), float("inf"), -1):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                parse_typst(json.dumps([records[0], {**records[1], "width": value}]))
+        for values in ({"line": 0}, {"line": 10}, {"inset": float("inf")}):
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                parse_typst(json.dumps([{**records[0], **values}, records[1]]))
+        with self.assertRaises(ValueError):
+            parse_typst(json.dumps([records[0]]))
 
     def test_parse_records_and_reject_invalid_dimensions(self):
         from pdfmd_tables.measure import parse_latex
@@ -125,6 +197,44 @@ class MeasuredAlgorithm(unittest.TestCase):
         result = self.apply(text, data, "--columns=10", "-M", "pdfmd-column-word-floor-limit=4")
         self.assertAlmostEqual(result[0], 0.16)
 
+    def test_typst_count_override_and_failed_measurement_preserve_the_writer(self):
+        from tests.test_table_widths import SITES, FILTER
+        base = ["pandoc", "-f", "markdown", "-t", "typst"]
+        plain = subprocess.run(base, input=SITES, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        for mode in ("count", "measure"):
+            filtered = subprocess.run([*base, "--lua-filter", str(FILTER), "-M", "pdfmd-column-estimate=" + mode],
+                                      input=SITES, capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(filtered.returncode, 0, filtered.stderr)
+            self.assertEqual(filtered.stdout, plain.stdout)
+
+    def test_typst_measured_percentages_reserve_inset_and_gutters(self):
+        from tests.test_table_widths import FILTER
+        table = {"line": 120, "sep": 15.5, "inset": 14, "gutter": 3,
+                 "cells": [[{"width": 5, "word": 5}] * 2,
+                           [{"width": 90, "word": 12}, {"width": 270, "word": 36}]]}
+        text = "| A | B |\n|---|---|\n| iii iii iii | WWW WWW WWW |\n\n: Caption\n"
+        with tempfile.TemporaryDirectory(prefix="pdfmd-typst-widths-") as folder:
+            path = Path(folder) / "widths.json"
+            path.write_text(json.dumps({"tables": {"1": table}}), encoding="utf-8")
+            for extra in ([], ["-M", "lot=true"]):
+                with self.subTest(extra=extra):
+                    done = subprocess.run(["pandoc", "-f", "markdown", "-t", "typst", "--lua-filter", str(FILTER),
+                                           "--lua-filter", str(ROOT / "lib" / "pdfmd_lua" / "typst.lua"),
+                                           "-M", "pdfmd-column-estimate=measure", "-M",
+                                           "pdfmd-column-measurements=" + str(path), *extra],
+                                          input=text, capture_output=True, text=True, encoding="utf-8")
+                    self.assertEqual(done.returncode, 0, done.stderr)
+                    columns = re.search(r"columns: \(([^)]+)\)", done.stdout)
+                    self.assertIsNotNone(columns, done.stdout)
+                    left, right = [float(value) / 100 for value in re.findall(r"([0-9.]+)%", columns[1])]
+                    self.assertGreater(right, left)
+                    self.assertAlmostEqual((left + right) * 120 + 3, 120, places=2)
+                    self.assertGreater(left * 120, 14)  # each percentage includes that column's inset
+                    if extra:
+                        self.assertIn("target: figure.where(kind: table)", done.stdout)
+                        self.assertIn("caption: [Caption]", done.stdout)
+
     def test_outlier_minimum_stays_in_characters(self):
         from tests.test_table_widths import SITES
         data = {"line": 100, "sep": 2, "cells": [[{"width": a, "word": 3}, {"width": b, "word": 3},
@@ -147,7 +257,7 @@ class Latex(unittest.TestCase):
         source.write_text(text, encoding="utf-8")
         target = self.folder / "out.pdf"
         done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(source),
-                               "-e", "xelatex", "-o", str(target), *args],
+                               "-e", getattr(self, "engine", "xelatex"), "-o", str(target), *args],
                               capture_output=True, text=True, encoding="utf-8",
                               env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
                                    "XDG_CACHE_HOME": str(self.folder / "cache")})
@@ -155,22 +265,95 @@ class Latex(unittest.TestCase):
         return done, target.read_bytes()
 
     def test_printed_widths_and_linewidth_are_cached(self):
-        done, measured = self.build()
+        done, measured = self.build(TEXT, "--verbose")
+        engine = getattr(self, "engine", "xelatex")
+        self.assertIn(f"MEASURE  {engine}: measured widths for 1 table(s)", done.stderr)
+        self.assertIn("table 1: line", done.stderr)
         records = list((self.folder / "cache").rglob("column-measure/*.json"))
         self.assertEqual(len(records), 1, done.stderr)
         data = json.loads(records[0].read_text(encoding="utf-8"))
         table = data["tables"]["1"]
         self.assertGreater(table["line"], 200)
         self.assertGreater(table["sep"], 0)
+        if engine == "typst":
+            self.assertAlmostEqual(table["inset"], 12)  # both supported Pandoc writers use a 6pt default
         left, right = table["cells"][1]
         self.assertGreater(right["width"], left["width"] * 2)
         self.assertGreater(right["word"], left["word"] * 2)
         self.assertAlmostEqual(table["cells"][2][0]["width"], 20, places=3)
         stamp = records[0].stat().st_mtime_ns
-        self.build()
+        reused, _ = self.build(TEXT, "--verbose")
+        self.assertIn(f"MEASURE  {engine}: cached widths for 1 table(s)", reused.stderr)
         self.assertEqual(records[0].stat().st_mtime_ns, stamp)
         _, counted = self.build(TEXT.replace("measure", "count"))
         self.assertNotEqual(measured, counted)
+
+
+@unittest.skipUnless(shutil.which("pandoc") and shutil.which("typst"), "needs Pandoc and Typst")
+class Typst(unittest.TestCase):
+    engine = "typst"
+    setUp = Latex.setUp
+
+    def build(self, text=TEXT, *args):
+        text = text.replace("`\\rule{20pt}{1pt}`{=latex}", "`#box(width:20pt,height:1pt)`{=typst}")
+        return Latex.build(self, text, *args)
+
+    test_printed_widths_and_linewidth_are_cached = Latex.test_printed_widths_and_linewidth_are_cached
+
+    def test_relative_image_is_measured_from_its_document_folder(self):
+        import struct
+        import zlib
+        def chunk(kind, data):
+            return struct.pack("!I", len(data)) + kind + data + struct.pack("!I", zlib.crc32(kind + data) & 0xffffffff)
+        picture = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack("!2I5B", 1, 1, 8, 2, 0, 0, 0)) +
+                   chunk(b"IDAT", zlib.compress(b"\x00\x20\x80\xc0")) + chunk(b"IEND", b""))
+        (self.folder / "tiny.png").write_bytes(picture)
+        self.build(TEXT + "| ![tiny](tiny.png){width=10pt} | image |\n")
+        record = next((self.folder / "cache").rglob("column-measure/*.json"))
+        data = json.loads(record.read_text(encoding="utf-8"))
+        self.assertAlmostEqual(data["tables"]["1"]["cells"][-1][0]["width"], 10, places=3)
+
+    def test_count_keep_and_disabled_measure_leave_no_measurements(self):
+        for text, args in ((TEXT.replace("measure", "count"), ()),
+                           (TEXT.replace("column-estimate: measure", "column-estimate: measure\n  column-widths: keep"), ()),
+                           (TEXT, ("--no-auto", "tablewidth"))):
+            with self.subTest(args=args, text=text):
+                done, _ = self.build(text, *args)
+                self.assertEqual(list((self.folder / "cache").rglob("column-measure/*.json")), [])
+                self.assertNotIn("WARN  column-estimate", done.stderr)
+                self.assertNotIn("MEASURE  typst:", done.stderr)
+
+    def test_latex_cells_are_measured_after_office_conversion(self):
+        # A Typst build converts raw LaTeX only when the document asks (or when pdfmd falls back to Typst because no LaTeX
+        # engine works, as in a sandbox): ask, so the test does not depend on the machine's engines
+        text = (TEXT.replace("  stamp: off\n", "  stamp: off\n  office: {latex: auto}\n")
+                + r"| `\textbf{iiiiiiiiii}`{=latex} | `\textbf{WWWWWWWWWW}`{=latex} |" + "\n")
+        done, _ = self.build(text)
+        records = list((self.folder / "cache").rglob("column-measure/*.json"))
+        self.assertEqual(len(records), 1, done.stderr)
+        cells = json.loads(records[0].read_text(encoding="utf-8"))["tables"]["1"]["cells"]
+        left, right = cells[-1]
+        self.assertGreater(left["width"], 0)
+        self.assertGreater(right["width"], 2 * left["width"])
+
+    def test_page_and_table_gutter_are_measured(self):
+        text = TEXT.replace("pdfmd-options:", "papersize: a5\npdfmd-options:")
+        before = self.folder / "before.typ"
+        before.write_text("#set table(inset: 7pt, column-gutter: 3pt)", encoding="utf-8")
+        self.build(text, "--include-before-body", str(before))
+        records = list((self.folder / "cache").rglob("column-measure/*.json"))
+        self.assertEqual(len(records), 1)
+        data = json.loads(records[0].read_text(encoding="utf-8"))["tables"]["1"]
+        self.assertLess(data["line"], 300)
+        written = subprocess.run(["pandoc", "-f", "markdown", "-t", "typst"], input="| A | B |\n|---|---|\n| a | b |\n",
+                                 capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(written.returncode, 0, written.stderr)
+        # Older writers override #set table(inset: 7pt) in every table; measure the inset the writer actually uses.
+        explicit = re.search(r"\n[ ]*inset: ([0-9.]+)pt,", written.stdout)
+        inset = 2 * float(explicit[1]) if explicit else 14
+        self.assertAlmostEqual(data["sep"], inset + 1.5)
+        self.assertAlmostEqual(data["inset"], inset)
+        self.assertAlmostEqual(data["gutter"], 3)
 
 
 if __name__ == "__main__":

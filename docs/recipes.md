@@ -523,6 +523,25 @@ The comment goes on the line above a table or `.csv` block, or under its caption
 A pipe table with plain `---` separators gets the column widths that give the fewest lines within the text width.
 Unequal dashes (`|:--|----------|`) are your choice and are kept; equal dashes with long rows count as "not chosen".
 
+### 4.5 Measured column widths
+
+When character counts misjudge a table's maths, formatting or wide letters, opt in to engine measurements:
+
+```yaml
+pdfmd-options:
+  column-estimate: measure
+```
+
+Build with a LaTeX engine or Typst (`pdfmd report -e typst --verbose`). pdfmd measures the cells and words with
+that engine, using the document's fonts and page setup, then balances columns in points. The verbose output says
+whether measurements were made or cached and shows the available line width and column padding/gaps.
+Unchanged input reuses the measurements; an extra Pandoc pass is still needed. A failed measurement warns with
+its cause and keeps the usual counts. Exports keep counts with a NOTE; `count` remains the default.
+
+The setting is also in `--setup`. With Pandoc 3.8.2 or later a caption can carry `{column-estimate=measure}`
+(or `{column-estimate=count}` to override the document). `column-widths: keep`, fixed CSV widths and
+`--no-auto tablewidth` still win. See [the reference](reference.md) for the character-based limits.
+
 ---
 
 ## 5. Code, images and pieces that are not Markdown

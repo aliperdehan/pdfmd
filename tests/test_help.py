@@ -67,6 +67,8 @@ class TieredHelp(unittest.TestCase):
     def test_tables_help_explains_column_estimate(self):
         text = run("--help", "tables").stdout
         self.assertIn("column-estimate", text)
+        self.assertIn("Typst", text)
+        self.assertIn("measured/cached", text)
         self.assertIn("measure", text)
         self.assertIn("count (default)", " ".join(text.split()))
 

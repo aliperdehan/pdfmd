@@ -32,7 +32,7 @@ def requested(sources: list[Path], metadata: list[Path]) -> bool:
     return any(pattern.search(core.read_text_best_effort(source)) for source in sources)
 
 
-def dump_command(command: list[str], output: Path, filter_path: Path) -> list[str]:
+def dump_command(command: list[str], output: Path, filter_path: Path, writer: str = "latex") -> list[str]:
     """Keep the build's arguments, except the writer, output and engine; the width filter dumps in its original place."""
     result = []
     i = 0
@@ -49,7 +49,7 @@ def dump_command(command: list[str], output: Path, filter_path: Path) -> list[st
         i += 1
     if str(filter_path) not in result and "--lua-filter=" + str(filter_path) not in result:
         result += ["--lua-filter", str(filter_path)]
-    return [*result, "-t", "latex", "-s", "-o", str(output), "-M", "pdfmd-measure-role=dump"]
+    return [*result, "-t", writer, "-s", "-o", str(output), "-M", "pdfmd-measure-role=dump"]
 
 
 def engine_options(command: list[str]) -> list[str]:
@@ -95,12 +95,46 @@ def parse_latex(text: str) -> dict:
     return data
 
 
+def parse_typst(text: str) -> dict:
+    """The labelled metadata produced by Typst's contextual measure calls, in typographic points."""
+    tables = {}
+    for record in json.loads(text):
+        table = str(record["table"])
+        if record["kind"] == "T":
+            tables[table] = {key: record[key] for key in ("line", "sep", "inset", "gutter")}
+            tables[table]["cells"] = []
+        else:
+            cells = tables[table]["cells"]
+            r, c = record["row"], record["col"]
+            if not isinstance(r, int) or not isinstance(c, int) or r < 1 or c < 1:
+                raise ValueError("invalid measured cell position")
+            while len(cells) < r:
+                cells.append([])
+            while len(cells[r - 1]) < c:
+                cells[r - 1].append({"width": 0, "word": 0})
+            key = {"C": "width", "W": "word"}[record["kind"]]
+            width = record["width"]
+            if not math.isfinite(width) or width < 0:
+                raise ValueError("invalid measured cell width")
+            cells[r - 1][c - 1][key] = max(cells[r - 1][c - 1][key], width)
+    data = {"tables": tables}
+    validate(data)
+    return data
+
+
 def validate(data: dict) -> None:
     if not data["tables"]:
         raise ValueError("no table measurements")
     for table in data["tables"].values():
         if not math.isfinite(table["line"]) or table["line"] <= 0 or not math.isfinite(table["sep"]) or table["sep"] < 0:
             raise ValueError("invalid measured line width")
+        if not table["cells"] or any(not row for row in table["cells"]):
+            raise ValueError("missing measured cells")
+        for key in ("inset", "gutter"):
+            if key in table and not math.isfinite(table[key]):
+                raise ValueError("invalid measured column separation")
+        if table["line"] <= table["sep"] * max(map(len, table["cells"])):
+            raise ValueError("column separation leaves no text width")
         for row in table["cells"]:
             for cell in row:
                 if any(not math.isfinite(cell[key]) or cell[key] < 0 for key in ("width", "word")):
@@ -115,7 +149,7 @@ def run(command: list[str], cwd: Path, env: dict, verbose: bool) -> subprocess.C
 def check(result: subprocess.CompletedProcess, stage: str) -> None:
     if result.returncode:
         # Keep a useful cause without dumping a full TeX log on an otherwise successful build.
-        lines = (result.stderr or result.stdout or "no diagnostic").strip().splitlines()
+        lines = (result.stderr or result.stdout or "").strip().splitlines() or ["no diagnostic"]
         cause = next((line for line in lines if line.startswith("!")), None)
         cause = cause or next((line for line in lines if line.startswith("error:")), lines[-1])
         raise ValueError(f"{stage}: {cause}")
@@ -127,7 +161,7 @@ def prepare(command: list[str], engine: str, sources: list[Path], metadata: list
     state = state if state is not None else {}
     if state.get("failed") or not enabled or not requested(sources, metadata):
         return command
-    if export or engine not in LATEX:
+    if export or engine not in (*LATEX, "typst"):
         if not state.get("noted"):
             print(f"NOTE  column-estimate: measure is unavailable for {engine}{' exports' if export else ''}; using count", file=sys.stderr)
             state["noted"] = True
@@ -148,11 +182,15 @@ def prepare(command: list[str], engine: str, sources: list[Path], metadata: list
         env = core.tex_search_env(sources[0].parent, cwd, sources[0])
         with tempfile.TemporaryDirectory(prefix="pdfmd-column-measure-") as folder:
             scratch = Path(folder)
-            source = scratch / "measure.tex"
-            dump = core.headers_as_metadata(dump_command(command, source, filter_path))
+            writer = "typst" if engine == "typst" else "latex"
+            source = scratch / ("measure.typ" if engine == "typst" else "measure.tex")
+            assets = core.cache_root() / "column-measure" / "assets"
+            assets.mkdir(parents=True, exist_ok=True)
+            dump = core.headers_as_metadata(dump_command(command, source, filter_path, writer))
+            dump += ["-M", "pdfmd-measure-assets=" + str(assets)]
             check(run(dump, cwd, env, verbose), "measurement Pandoc")
             text = source.read_text(encoding="utf-8")
-            if "\\pdfmdmeasure{" not in text:
+            if ("<pdfmd-measure>" if engine == "typst" else "\\pdfmdmeasure{") not in text:
                 return command                      # there were no tables requesting measurement
             identity = str(Path(executable).resolve()) + str(Path(executable).stat().st_mtime_ns)
             digest = hashlib.sha256((text + identity + repr(options)).encode("utf-8")).hexdigest()
@@ -163,14 +201,20 @@ def prepare(command: list[str], engine: str, sources: list[Path], metadata: list
                 validate(data)
             except (OSError, ValueError, KeyError, TypeError, AttributeError):
                 data = None
+            cached = data is not None
             if data is None:
-                if engine == "tectonic":
+                if engine == "typst":
+                    root = [] if any(item == "--root" or item.startswith("--root=") for item in options) else ["--root", str(Path.cwd().anchor)]
+                    compile_command = [executable, "query", *options, *root, str(source), "<pdfmd-measure>", "--field", "value"]
+                elif engine == "tectonic":
                     compile_command = [executable, *options, "--outfmt=xdv", "--keep-logs", "--keep-intermediates", "--outdir", str(scratch), str(source)]
                 else:
                     compile_command = [executable, *options, "-interaction=nonstopmode", "-halt-on-error",
                                        "-output-directory=" + str(scratch), str(source)]
-                check(run(compile_command, cwd, env, verbose), f"measurement {engine}")
-                data = parse_latex((scratch / "measure.pdfmdwidths").read_text(encoding="utf-8"))
+                result = run(compile_command, cwd, env, verbose)
+                check(result, f"measurement {engine}")
+                data = (parse_typst(result.stdout) if engine == "typst" else
+                        parse_latex((scratch / "measure.pdfmdwidths").read_text(encoding="utf-8")))
                 cache.parent.mkdir(parents=True, exist_ok=True)
                 # A failed/parallel write can never leave a partial cache entry.
                 with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=cache.parent, delete=False) as handle:
@@ -180,6 +224,11 @@ def prepare(command: list[str], engine: str, sources: list[Path], metadata: list
                     os.replace(temporary, cache)
                 finally:
                     temporary.unlink(missing_ok=True)
+            core.vprint(verbose, f"MEASURE  {engine}: {'cached' if cached else 'measured'} widths for "
+                        f"{len(data['tables'])} table(s)", file=sys.stderr)
+            for number, table in data["tables"].items():
+                core.vprint(verbose, f"      table {number}: line {table['line']:.2f} pt, "
+                            f"padding/gaps {table['sep']:.2f} pt per column", file=sys.stderr)
             return [*command, "-M", "pdfmd-column-measurements=" + str(cache)]
     except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError) as exc:
         state["failed"] = True

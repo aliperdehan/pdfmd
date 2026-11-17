@@ -466,6 +466,10 @@ def run(core, *,
                         cmd += ["--lua-filter", str(report_fonts_filter)]
                     if report_tablewidth_auto and engine in LATEX_ENGINES:
                         cmd += width_filter_args(width_filter)
+                    if report_tablewidth_auto and engine == "typst":
+                        from pdfmd_tables.measure import requested
+                        if requested(list(files), metadata_files):
+                            cmd += width_filter_args(width_filter)
                     cmd += cellalign_args(files, metadata_files)
                     if engine in LATEX_ENGINES:
                         cmd += code_filter_args(report_no_auto, list(files), metadata_files) + image_filter_args(report_no_auto, list(files), metadata_files)
@@ -479,10 +483,13 @@ def run(core, *,
                         args.font or document_font_setting("mainfont", list(files), metadata_files, variables),
                         report_no_auto)
 
-                    def run_report_pandoc(command: list[str], target: Path):
+                    def measure_command(command):
                         from pdfmd_tables.measure import prepare
-                        command = prepare(command, engine, list(files), metadata_files, pandoc_cwd,
-                                          args.verbose, enabled=report_tablewidth_auto, state=measurement_state)
+                        return prepare(command, engine, list(files), metadata_files, pandoc_cwd,
+                                       args.verbose, enabled=report_tablewidth_auto, state=measurement_state)
+
+                    def run_report_pandoc(command: list[str], target: Path):
+                        command = measure_command(command)
                         log_cmd(command, pandoc_cwd, args.verbose)
                         return pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                               env=tex_search_env(files[0].parent, pandoc_cwd, files[0]))
@@ -499,7 +506,7 @@ def run(core, *,
                                               force_filter=True) as office_arguments:
                             cmd += office_arguments.filter_arguments + report_last
                             runner = ((lambda command, target: run_office_pandoc(
-                                          command, target, office_arguments, pandoc_cwd, args.verbose))
+                                          command, target, office_arguments, pandoc_cwd, args.verbose, prepare_command=measure_command))
                                       if office_arguments.filter_arguments else run_report_pandoc)
                             result = run_engine_command(cmd, engine, output, runner, report_page, args.verbose)
                             office_finish(office_arguments, files[0], args.verbose)

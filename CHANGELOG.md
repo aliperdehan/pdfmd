@@ -19,6 +19,30 @@ same commit as the change.
 
 ---
 
+## v3.33.333 — 2026-11-17
+
+Pre-edit state: commit `7b20054`. [tables] `column-estimate: measure` kept counts for Typst PDFs. Add a standalone
+Typst pass with the build's template, fonts and page setup; contextual measurements of cells, words, line width,
+inset and gutters become labelled metadata read by `typst query`. Cache by generated source and engine identity/options,
+then allocate in points, reserving the measured inset and gutters. Relative images use content-addressed cache copies.
+Pandoc 3.1.3 ignores column widths and overrides the inset: probe the writer's inset and apply measured percentages to
+its table source in the final Typst filter, preserving captions and lists of tables. Count output stays unchanged.
+Measure only the final office-conversion pass, after LaTeX fragments have their Typst form. `--verbose` reports fresh
+or cached measurements and the available line width and padding/gaps in points. Failures retain count with one
+cause-naming WARN, including missing diagnostics or invalid dimensions. Update the reference, guide, setup/help text
+and add recipe 4.5, “Measured column widths”; no new setting. Regression tests fail before for absent Typst records,
+ignored writer percentages and invalid records; coverage includes cache reuse, A5, custom inset/gutter, images,
+count/keep/off, fallback and office-pass order. Both Pandoc versions and required module checks are recorded in the
+batch report, including existing sandbox office failures. pdfmd.py stays at 785 lines (version only). Reviewer (Claude): an earlier run started this and stopped at its usage limit; this run finished it and stopped at its own limit before committing, so the reviewer committed it after re-running the tests outside the sandbox. test_latex_cells_are_measured_after_office_conversion now asks for the conversion (`office: {latex: auto}`): a Typst build converts raw LaTeX only when asked or when no LaTeX engine works, so it passed in the sandbox and failed on a machine with LaTeX. `count` checked byte-identical against main for Typst and LaTeX, Pandoc 3.13 and 3.1.3.
+
+The last version of the 3.33 line. The line opened on 2026-11-09 with the split: pdfmd.py became a 785-line
+launchpad and the code moved, callers first and proved build for build, into 75 packages under lib/. Over 334 versions
+and 115 test or documentation commits it then closed the queue the author had set for it: hidden blocks and comment
+stripping, kits, the office and Word routes, one SVG converter chain that works without Homebrew (Typst, then resvg),
+`--install` checked for real in a fresh environment, Typst parity with Pandoc 3.1.3, measured table widths as an
+option, and three operating systems in CI for every test. It is released only after the full suite, a green CI on
+Windows, macOS and Linux, and a comparison of real documents against 3.33.191: meant as the most stable pdfmd so far.
+
 ## v3.33.332a — 2026-11-17
 
 Pre-edit state: commit `31f91ea`. docs/agents.md still said that `indent: true` "stays 1.5em", the wording the

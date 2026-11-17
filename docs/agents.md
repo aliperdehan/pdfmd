@@ -122,6 +122,6 @@ Document `indent:` (front matter or pdfmd-options) accepts lengths such as 0.5in
 CSL bibliography line-spacing (for example 2 for double spacing) applies locally in LaTeX, Typst, Word and HTML; native writer spacing is retained. A style without it keeps its output unchanged.
 
 Table width estimation: `pdfmd-options: {column-estimate: measure}` opts in to measured cell and word widths
-for LaTeX PDF builds with their selected engine. The default `count` is unchanged. `--setup` offers the key;
+for LaTeX and Typst PDF builds with their selected engine. The default `count` is unchanged. `--setup` offers the key;
 a table caption can carry `{column-estimate=measure}` (recent Pandoc). Exports keep count with a NOTE;
 measurement failures keep count with a cause-naming WARN. See the reference for caching and character limits.

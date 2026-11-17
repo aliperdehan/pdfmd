@@ -163,8 +163,8 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
     parser.description = f"{topic}: {summary}"
     if topic == "tables":
         parser.description += (". pdfmd-options: column-estimate: count (default) | measure; "
-                               "measure uses the selected LaTeX PDF engine and caches widths. "
-                               "Exports keep count; --setup also offers this setting.")
+                               "measure uses the selected LaTeX or Typst PDF engine and caches widths. "
+                               "Exports keep count; --verbose reports measured/cached widths; --setup also offers this setting.")
     try:
         text = parser.format_help()
         if topic == "output":
