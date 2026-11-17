@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.308a — 2026-11-17
+
+Pre-edit state: commit `5a24443`. The review outside the sandbox found tests/test_diagram_timeout.py `test_the_filter_is_told_which_svg_converters_are_installed` failing on a machine with LibreOffice: since 3.33.307 the filter's tool list comes from the shared SVG chain, which also finds `soffice` outside PATH and the Python converters cairosvg and svglib, and the test pinned only `which`. It now pins the LibreOffice lookup and the Python modules too, so the answer does not depend on what the machine has. Test only.
+
 ## v3.33.308 — 2026-11-17
 
 Pre-edit state: commit `4411272`. The --show-hidden flag was absent from the help topic table, so topic

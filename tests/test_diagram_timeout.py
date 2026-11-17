@@ -65,7 +65,11 @@ class Metadata(unittest.TestCase):
     DOCUMENT = "---\npdfmd-options:\n  diagram-timeout: {value}\n---\n\n```dot\ndigraph { a -> b }\n```\n"
 
     def test_the_filter_is_told_which_svg_converters_are_installed(self):
-        with mock.patch.object(pdfmd, "which", lambda name: "/tools/" + name if name in ("dot", "inkscape") else None):
+        # Every converter lookup is pinned: LibreOffice is found outside PATH and two converters are Python modules,
+        # so a machine that has any of them must not change the answer.
+        with mock.patch.object(pdfmd, "which", lambda name: "/tools/" + name if name in ("dot", "inkscape") else None), \
+                mock.patch.object(pdfmd, "resolve_soffice", lambda: None), \
+                mock.patch("pdfmd_images.svg._python_module", lambda name: False):
             config = self.map_for(self.DOCUMENT.replace("{value}", "7"))
         self.assertEqual(config["pdfmd-diagram-tools"], ["dot", "inkscape"])
 
