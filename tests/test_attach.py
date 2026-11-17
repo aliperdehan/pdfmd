@@ -637,7 +637,9 @@ class CommentKinds(unittest.TestCase):
 
     def test_policy(self):
         policy = pdfmd.parse_comment_policy
-        self.assertEqual(policy(None, True).kinds(), frozenset(pdfmd.COMMENT_KINDS))
+        self.assertEqual(policy(None, True).kinds(), frozenset({"markdown", "preamble", "bibliography", "csl", "metadata"}))
+        self.assertFalse(policy(True, True).strips("hidden"))
+        self.assertTrue(policy({"hidden": True}, True).strips("hidden"))
         self.assertEqual(policy("tex, bib", True).kinds(), {"preamble", "bibliography"})
         self.assertEqual(policy({"bibliography": False, "markdown": False}, True).kinds(), {"csl", "metadata", "preamble"})
         self.assertEqual(policy({"preamble": True}, False).kinds(), {"preamble"})
@@ -1100,3 +1102,123 @@ class RawLatexPictures(unittest.TestCase):
             pdfmd.restore_from_pdf(pdf, out)
         self.assertEqual(png_rows((out / "fig" / "p.png").read_bytes()), ((2, 2, 8, 2), pixels))
         self.assertTrue((out / "logo.png").is_file())
+
+
+@unittest.skipUnless(pypdf, "needs pypdf")
+class HiddenSource(unittest.TestCase):
+    BODY = ("::: hide\nSecretblock\n\n`x = 42`{=}\n:::\n\n[Secretspan]{.hidden}\n\n"
+            "::: {.calc .hide}\ny = 3\n:::\n\nValue `x`{=}.\n")
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory(prefix="pdfmd-hidden-source-")
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        self.document = self.root / "doc.md"
+        self.saved = {name: getattr(pdfmd, name) for name in
+                      ("SHOW_HIDDEN_CLI", "STRIP_COMMENTS_CLI", "STRIP_KINDS_CLI", "KEEP_KINDS_CLI", "BUNDLE_CLI")}
+        self.addCleanup(self.restore_flags)
+        pdfmd.SHOW_HIDDEN_CLI = pdfmd.STRIP_COMMENTS_CLI = None
+        pdfmd.STRIP_KINDS_CLI = pdfmd.KEEP_KINDS_CLI = frozenset()
+
+    def restore_flags(self):
+        for name, value in self.saved.items():
+            setattr(pdfmd, name, value)
+
+    def attach(self, options="", body=None):
+        self.document.write_text("---\ntitle: T\n" + options + "---\n\n" + (self.BODY if body is None else body))
+        pdf = blank_pdf(self.root / "out.pdf")
+        said = io.StringIO()
+        with contextlib.redirect_stdout(said), contextlib.redirect_stderr(said):
+            pdfmd.attach_source_after_success(self.document, pdf, [], [], [], None, False)
+        data = pdfmd.read_pdf_attachments(pdf)
+        return data[pdfmd.ATTACH_SOURCE].decode(), json.loads(data[pdfmd.ATTACH_MANIFEST]), said.getvalue()
+
+    def test_hidden_content_in_an_attachment_warns_once_and_names_the_stripper(self):
+        text, _, said = self.attach()
+        self.assertIn("Secretblock", text)
+        self.assertEqual(said.count("WARN  hidden:"), 1, said)
+        self.assertIn("attached source", said)
+        self.assertIn("--strip-comments-in hidden", said)
+
+    def test_named_hidden_is_stripped_and_manifest_and_restore_agree(self):
+        for value in ("[markdown, hidden]", "{hidden: true}"):
+            with self.subTest(value=value):
+                text, manifest, said = self.attach("pdfmd-options:\n  strip-comments: " + value + "\n")
+                self.assertNotIn("Secret", text)
+                self.assertIn("y = 3", text)
+                self.assertIn("hidden", manifest["comments_stripped"])
+                self.assertNotIn("WARN  hidden:", said)
+                out = self.root / ("restored-list" if value.startswith("[") else "restored-map")
+                done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "--restore", str(self.root / "out.pdf"),
+                                       "-o", str(out)], capture_output=True, text=True)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertNotIn("Secret", (out / "doc.md").read_text())
+
+    def test_true_keeps_hidden_and_show_hidden_suppresses_the_warning(self):
+        text, manifest, said = self.attach("pdfmd-options: {strip-comments: true}\n")
+        self.assertIn("Secret", text)
+        self.assertNotIn("hidden", manifest["comments_stripped"])
+        self.assertEqual(said.count("WARN  hidden:"), 1)
+        _, _, said = self.attach("pdfmd-options: {show-hidden: true}\n")
+        self.assertNotIn("WARN  hidden:", said)
+        pdfmd.SHOW_HIDDEN_CLI = True
+        _, _, said = self.attach()
+        self.assertNotIn("WARN  hidden:", said)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_stripped_definitions_used_outside_produce_one_note(self):
+        _, _, said = self.attach("pdfmd-options: {strip-comments: [hidden]}\n")
+        self.assertEqual(said.count("NOTE  hidden:"), 1, said)
+        self.assertIn("x", said)
+        self.assertIn("restored source will not define", said)
+        _, _, unused = self.attach("pdfmd-options: {strip-comments: [hidden]}\n", self.BODY.replace("Value `x`{=}", "Value"))
+        self.assertNotIn("NOTE  hidden:", unused)
+
+    def test_cli_strip_and_keep_override_the_document(self):
+        pdfmd.STRIP_KINDS_CLI = pdfmd.comment_kind_set("hidden")
+        text, _, _ = self.attach("pdfmd-options: {strip-comments: true}\n")
+        self.assertNotIn("Secret", text)
+        pdfmd.STRIP_KINDS_CLI = frozenset()
+        pdfmd.KEEP_KINDS_CLI = pdfmd.comment_kind_set("hidden")
+        text, _, _ = self.attach("pdfmd-options: {strip-comments: [hidden]}\n")
+        self.assertIn("Secret", text)
+
+    def test_silent_calc_alone_never_warns(self):
+        _, _, said = self.attach(body="::: {.calc .hide}\nx = 42\n:::\n\nValue `x`{=}.\n")
+        self.assertNotIn("WARN  hidden:", said)
+
+    def test_hidden_kind_through_assembly_cli_metadata_and_config(self):
+        for setting in ("cli", "metadata", "config"):
+            with self.subTest(setting=setting):
+                case = self.root / setting
+                case.mkdir()
+                document = case / "doc.md"
+                document.write_text("---\ntitle: T\n---\n\n" + self.BODY)
+                output = case / "assembled.md"
+                extra, environment = [], {**os.environ}
+                if setting == "cli":
+                    extra = ["--strip-comments-in", "hidden"]
+                elif setting == "metadata":
+                    meta = case / "chosen.yaml"
+                    meta.write_text("pdfmd-options: {strip-comments: [hidden]}\n")
+                    extra = ["--metadata-file", str(meta)]
+                else:
+                    config = self.root / "settings" / "config.yaml"
+                    config.parent.mkdir()
+                    config.write_text("options: {strip-comments: [hidden]}\n")
+                    environment["PDFMD_CONFIG"] = str(config)
+                done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), str(document),
+                                       "--assemble-only", "--no-backup", "-o", str(output), *extra],
+                                      capture_output=True, text=True, env=environment)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertNotIn("Secret", output.read_text())
+                self.assertIn("y = 3", output.read_text())
+
+    def test_bundled_markdown_also_loses_hidden_content(self):
+        pdfmd.BUNDLE_CLI = "all"
+        (self.root / "extra.md").write_text("::: hidden\nSecretbundle\n:::\n\nKeptbundle\n")
+        text, manifest, _ = self.attach("pdfmd-options: {strip-comments: [hidden]}\n")
+        self.assertNotIn("Secret", text)
+        self.assertTrue(any(item["path"] == "extra.md" for item in manifest.get("extras", [])))
+        data = pdfmd.read_pdf_attachments(self.root / "out.pdf")
+        self.assertFalse(any(b"Secretbundle" in value for value in data.values()))

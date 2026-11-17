@@ -212,7 +212,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "strip them")
     parser.add_argument("--strip-comments-in", default="", metavar="KINDS",
                         help="strip comments from just these kinds of source (comma-separated: markdown, "
-                             "preamble, bibliography, csl, metadata), whatever the rest do. Kept, the YAML "
+                             "preamble, bibliography, csl, metadata, hidden), whatever the rest do. Hidden blocks/spans "
+                             "are stripped only when named, never by --strip-comments alone. Kept, the YAML "
                              "files come back as written; Lua filters are never touched")
     parser.add_argument("--keep-comments-in", default="", metavar="KINDS",
                         help="keep the comments of these kinds of source (comma-separated, as "

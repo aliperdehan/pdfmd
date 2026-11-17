@@ -177,7 +177,8 @@ read them, for every writer and the native tier. HTML drops the content from the
 available outside (calculations require Pandoc). A referenced hidden label produces one WARN naming it, for links,
 Pandoc cross-references and LaTeX reference commands. `--show-hidden`, `pdfmd-options.show-hidden` and its `--setup` row
 print plain hidden content as ordinary content (default off), while `::: {.calc .hide}` remains calc's silent statement
-form. The source attachment retains the original blocks and spans.
+form. The source attachment retains the original blocks and spans and warns that the hidden content travels in it,
+with `--strip-comments-in hidden` as the remedy. No warning with `show-hidden` on or the `hidden` kind stripped.
 
 ## Typst's line spacing (v3.33.73)
 
@@ -703,7 +704,12 @@ metadata (YAML `#` comments and the file's own quoting and layout: the merged
 text cannot hold them, so the attachment stores each metadata file and the
 document's front matter as written and --restore writes them back byte for
 byte; v3.25.13). --strip-comments-in KINDS / --keep-comments-in KINDS do the
-same per run. Lua filters are never touched. The data files of `.csv`
+same per run. The additional kind `hidden` removes plain hide/hidden divs and spans from the assembled or attached
+copy, keeping calc-hide statement blocks. It is off by default, including with `strip-comments: true` and
+`--strip-comments`: name it explicitly (`[markdown, hidden]`, `{hidden: true}`, `--strip-comments-in hidden`);
+`--keep-comments-in hidden` keeps it. The existing setup row offers hidden alone or Markdown plus hidden.
+If stripped definitions supply calculator names used outside the hidden content, one NOTE names the names the restored
+source will not define. Lua filters are never touched. The data files of `.csv`
 blocks are stored with every attached source (small, and the text needs them).
 
 --attach-source / --no-attach-source, `pdfmd-options: {attach-source: true}`

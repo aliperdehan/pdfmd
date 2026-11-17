@@ -1217,7 +1217,12 @@ Plain `::: hide` / `::: hidden` blocks and `[text]{.hide}` / `[text]{.hidden}` s
 then removed from every output, including HTML's file contents and the built-in renderer. Calc definitions inside still
 work in later calculations (calc needs Pandoc). A reference to a hidden label warns. `--show-hidden` or
 `pdfmd-options: {show-hidden: true}` prints them as ordinary content (default off; also in `--setup`), so the same source
-can make a student copy and an answer key. Calc's `::: {.calc .hide}` remains silent. The attached source keeps the blocks.
+can make a student copy and an answer key. Calc's `::: {.calc .hide}` remains silent. The attached source keeps the blocks and warns that the hidden answers travel with it. Choose
+`strip-comments: [markdown, hidden]` or `{hidden: true}` (`--strip-comments-in hidden`, also in `--setup`) to remove them
+from the attached or assembled copy. `strip-comments: true` keeps hidden content; the `hidden` kind is opt-in.
+`--keep-comments-in hidden` keeps it for a run. Calc-hide statement blocks stay. No warning with `show-hidden` on or
+`hidden` stripped. If stripping loses calculator names used outside, a NOTE names them: the restored source will not
+define them.
 
 
 To keep the values in one citable file, `calc: {constants: tables/constants.csv}` (or `--calc-constants FILE`) loads a CSV before the

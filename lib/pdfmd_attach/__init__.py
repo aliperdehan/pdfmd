@@ -622,6 +622,8 @@ def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path]
         raw = core.strip_location_markers(source.read_text(encoding="utf-8-sig"))
         text = core.strip_part_front_matter(raw) if index and not report else raw
         head = raw[:len(raw) - len(text)] if index and raw.endswith(text) else ""
+        if "hidden" in strip:
+            text = core.deferred("pdfmd_filters.hidden", "strip_hidden")(text)
         if "markdown" in strip:
             text = core.strip_markdown_comments(text)
         chunk = text.rstrip("\n") + "\n"
@@ -826,9 +828,12 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
             stripping = "markdown" in manifest["comments_stripped"]
             for item in found:
                 data = item.read_bytes()
-                if stripping and item.suffix.lower() in (".md", ".markdown"):
+                if (stripping or "hidden" in manifest["comments_stripped"]) and item.suffix.lower() in (".md", ".markdown"):
                     try:
-                        data = core.strip_markdown_comments(data.decode("utf-8-sig")).encode("utf-8")
+                        text = data.decode("utf-8-sig")
+                        if "hidden" in manifest["comments_stripped"]:
+                            text = core.deferred("pdfmd_filters.hidden", "strip_hidden")(text)
+                        data = (core.strip_markdown_comments(text) if stripping else text).encode("utf-8")
                     except UnicodeDecodeError:
                         pass
                 extras[core.relative_posix(base, item)] = data
@@ -851,6 +856,14 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
             for place in block_places(block):
                 if place not in extras and place in inline_candidates({place: block["bytes"]}):
                     extras[place] = block["bytes"]
+    if "hidden" in manifest["comments_stripped"]:
+        # Include source files already embedded in an edited/assembled input.
+        for name, data in extras.items():
+            if Path(name).suffix.lower() in (".md", ".markdown", ".qmd"):
+                try:
+                    extras[name] = core.deferred("pdfmd_filters.hidden", "strip_hidden")(data.decode("utf-8-sig")).encode("utf-8")
+                except UnicodeDecodeError:
+                    pass
     inline = inline_candidates(extras)
     merged = drop_blocks(merged, lambda fields: fields.get("type") == "file" and fields.get("path", fields.get("name")) in inline)
     merged = drop_duplicate_blocks(merged)
@@ -902,6 +915,8 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
         print(f"WARN  attach-source: could not attach the source to {core.display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
         return
+    core.deferred("pdfmd_filters.hidden", "attachment_warning")([md_path, *parts], metadata_files,
+                                                                manifest["comments_stripped"])
     note = held_comments_note(manifest, merged)
     kept = manifest.get("extras") or []
     print(f"ATTACHED  {core.display_path(pdf_path)}: source of {core.display_path(md_path)}"

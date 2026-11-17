@@ -113,3 +113,60 @@ def finish_args():
 
     path = pdfmd_lua.path("hidden")
     return ["--lua-filter", str(path)] if path else []
+
+
+def attachment_warning(files, metadata_files, stripped):
+    import sys
+
+    if "hidden" in stripped or show_hidden(files[0], metadata_files):
+        return
+    if any(ranges(core.read_text_best_effort(path)) for path in files):
+        print("WARN  hidden: hidden content travels in the attached source; strip it with "
+              "--strip-comments-in hidden (pdfmd-options: {strip-comments: [hidden]})", file=sys.stderr)
+
+
+def stripped_calc_note(files, metadata_files):
+    """Compare the calculator's own undefined-name reports, without evaluating a second parser."""
+    import os
+    import subprocess
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    text = "\n\n".join(core.read_text_best_effort(path) for path in files)
+    if not ranges(text) or not core.CALC_SPAN_RE.search(text) or core.calc_is_off(files[0], metadata_files):
+        return
+    pandoc = core.which("pandoc")
+    if not pandoc:
+        return
+    arguments = core.calc_filter_args(files, metadata_files)
+    if not arguments:
+        return
+    # Read the actual source, without partial-build seeds or exported-name side effects.
+    clean = []
+    index = 0
+    while index < len(arguments):
+        if arguments[index] in ("-M", "-V") and arguments[index + 1].startswith(
+                ("pdfmd-calc-seed=", "pdfmd-calc-below=", "pdfmd-calc-dump=")):
+            index += 2
+        else:
+            clean.append(arguments[index])
+            index += 1
+    with tempfile.TemporaryDirectory(prefix="pdfmd-hidden-calc-") as scratch:
+        report = Path(scratch) / "names.tsv"
+
+        def undefined(source):
+            done = subprocess.run([pandoc, "-f", "markdown", "-t", "native", "-o", os.devnull,
+                                   *clean, "-V", "pdfmd-calc-check=" + str(report)], input=source,
+                                  capture_output=True, text=True, encoding="utf-8", cwd=files[0].parent)
+            if done.returncode or not report.is_file():
+                return None
+            return {line.split("\t")[1] for line in report.read_text().splitlines() if line.startswith("U\t")}
+
+        try:
+            before, after = undefined(text), undefined(strip_hidden(text))
+        except OSError:
+            return
+    if before is not None and after is not None and after - before:
+        print("NOTE  hidden: the restored source will not define calculator names used outside stripped hidden content: "
+              + ", ".join(sorted(after - before)), file=sys.stderr)

@@ -176,7 +176,8 @@ def strip_markdown_comments(text: str) -> str:
 # and false per kind (the rest follow the default: all where a PDF is being
 # attached, none for --assemble-only). Kinds: markdown (<!-- -->), preamble
 # (LaTeX `%`), bibliography (what a .bib holds outside its entries), csl (XML
-# comments), metadata (a YAML file's `#` comments, v3.25.13). The YAML metadata is
+# comments), metadata (a YAML file's `#` comments, v3.25.13). Plain hidden content
+# is an additional opt-in kind: a blanket true never strips it. The YAML metadata is
 # merged and written again whenever it is embedded, so the merged text never has
 # them; with the metadata kind kept, an attached source also stores each metadata
 # file's own text, and --restore writes that back byte for byte (when it still reads
@@ -189,6 +190,7 @@ COMMENT_KIND_NAMES = {
     "preamble": "preamble", "tex": "preamble", "latex": "preamble",
     "bibliography": "bibliography", "bib": "bibliography", "bibtex": "bibliography",
     "references": "bibliography", "csl": "csl", "style": "csl",
+    "hidden": "hidden",
     "metadata": "metadata", "yaml": "metadata", "yml": "metadata", "lua": "lua",
 }
 TEX_VERBATIM_BEGIN_RE = re.compile(r"\\begin\{(verbatim\*?|Verbatim\*?|lstlisting|minted|alltt|filecontents\*?|comment)\}")
@@ -207,7 +209,7 @@ class CommentPolicy:
     def strips(self, kind: str) -> bool:
         if kind in self.keep:
             return False
-        return kind in self.strip or self.default
+        return kind in self.strip or (self.default and kind != "hidden")
 
     def kinds(self) -> frozenset[str]:
         return frozenset(kind for kind in core.COMMENT_KINDS if self.strips(kind))
@@ -331,4 +333,4 @@ def fence_after(fence: str, line: str) -> str:
 FENCE_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<rest>.*)$")
 
 
-COMMENT_KINDS = ("markdown", "preamble", "bibliography", "csl", "metadata")
+COMMENT_KINDS = ("markdown", "preamble", "bibliography", "csl", "metadata", "hidden")

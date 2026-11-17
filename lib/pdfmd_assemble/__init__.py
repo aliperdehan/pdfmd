@@ -145,16 +145,20 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
     Pandoc reads it too. ``strip_comments`` is True (the Markdown's comments
     go), or the set of comment kinds that do (see COMMENT_KINDS).
     """
-    kinds = (frozenset(core.COMMENT_KINDS) if strip_comments is True else
+    kinds = (core.CommentPolicy(True).kinds() if strip_comments is True else
              frozenset() if not strip_comments else frozenset(strip_comments))
     if plan is not None:
         plan.strip_kinds = kinds
         plan.sources = list(sources)
+    if "hidden" in kinds:
+        core.deferred("pdfmd_filters.hidden", "stripped_calc_note")(sources, list(plan.metadata_files) if plan else [])
     chunks = []
     for index, source in enumerate(sources):
         text = core.strip_location_markers(source.read_text(encoding="utf-8-sig"))
         if index and drop_later_front_matter:
             text = core.strip_part_front_matter(text)
+        if "hidden" in kinds:
+            text = core.deferred("pdfmd_filters.hidden", "strip_hidden")(text)
         if "markdown" in kinds:
             text = core.strip_markdown_comments(text)
         chunks.append(text.rstrip("\n") + "\n")

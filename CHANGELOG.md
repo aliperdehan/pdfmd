@@ -19,6 +19,22 @@ same commit as the change.
 
 ---
 
+## v3.33.291 — 2026-11-17
+
+Pre-edit state: commit `76b85c1`. An attached source can disclose answers removed from the printed document. After a
+successful attachment, warn once with `--strip-comments-in hidden` as the remedy, unless show-hidden is on or hidden
+content is stripped. Add the explicitly named strip-comments kind `hidden` at every existing level and in the setup
+row; blanket true still means comment kinds only. Remove plain hidden blocks/spans from assembled and attached source
+and bundled Markdown, preserving independent calc-hide statement blocks. Chunk hashes and the manifest describe the
+stripped copy, so restore agrees. Compare the calculator's own undefined-name reports before and after stripping and
+emit one NOTE naming definitions that the restored source will lack. No additional expression parser or setting.
+
+Six attachment regressions failed before, then passed: the warning and suppressions, true keeping hidden content,
+explicit list/mapping/CLI stripping, restoration and the lost-name NOTE. Tests also cover assembly through metadata and
+config, and bundled Markdown. Full attach, embedding, keep-source, attach-layers and the five required safety modules
+were run; both Pandoc versions exercise the attachment tests. Ruff F and whitespace checks pass. pdfmd.py stays at 784
+lines (version only); no TODO changes.
+
 ## v3.33.290 — 2026-11-17
 
 Pre-edit state: commit `cc43d34`. Plain hide/hidden divs and spans travelled into every output. Mark them before calc
