@@ -83,8 +83,8 @@ class Install(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+@unittest.skipIf(sys.version_info < (3, 11), "pymd2pdf needs Python 3.11")
 class MathLauncher(unittest.TestCase):
-    @unittest.skipIf(sys.version_info < (3, 11), "pymd2pdf needs Python 3.11")
     def test_math_install_restores_pdfmd_launchers_even_when_pip_fails(self):
         # RECORD includes the launcher outside site-packages; Windows wheels use
         # an exe, older installers can also leave an md2pdf-script.py companion.
