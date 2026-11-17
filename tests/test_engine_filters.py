@@ -286,6 +286,14 @@ class CommandLine(unittest.TestCase):
         done = self.run_pdfmd("doc.md", "-e", "typst", "--no-stamp")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
+    def test_default_template_applies_pitch_before_the_title(self):
+        (self.directory / "doc.md").write_text(
+            "---\nfontsize: 12pt\nlinestretch: 2\ntitle: Titlefirst\n---\n\nBodyfirst.\n", encoding="utf-8")
+        done = self.run_pdfmd("doc.md", "--to", "typst", "--standalone", "-o", "doc.typ")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = (self.directory / "doc.typ").read_text(encoding="utf-8")
+        self.assertLess(text.index("leading: 1.7076em"), text.index("title: [Titlefirst]"))
+
     def test_a_link_to_a_missing_anchor_does_not_stop_the_pdf(self):
         (self.directory / "doc.md").write_text(DOCUMENT, encoding="utf-8")
         done = self.run_pdfmd("doc.md", "-e", "typst")

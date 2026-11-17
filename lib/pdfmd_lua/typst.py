@@ -151,9 +151,15 @@ def template_args(writer: str, command: list[str], directory: Path | None = None
                                          timeout=core.PROBE_TIMEOUT).stdout.decode("utf-8", errors="replace")
                 template = template.replace("$template.typst()$", partial)
             original = "leading: linestretch * 0.65em"
-            if original not in template:
+            if original in template:
+                template = template.replace(original, "leading: $pdfmd-typst-leading$, spacing: $pdfmd-typst-spacing$")
+            elif "set par(justify: true)" in template:
+                # Pandoc 3.1.3's conf has no linestretch parameter or leading rule.
+                template = template.replace("set par(justify: true)",
+                                            "set par(justify: true, leading: $pdfmd-typst-leading$, "
+                                            "spacing: $pdfmd-typst-spacing$)")
+            else:
                 return []
-            template = template.replace(original, "leading: $pdfmd-typst-leading$, spacing: $pdfmd-typst-spacing$")
         template = ('#set text(top-edge: $pdfmd-typst-top-edge$, bottom-edge: "baseline")\n'
                     '#set par(leading: $pdfmd-typst-leading$, spacing: $pdfmd-typst-spacing$)\n' + template)
         target = folder / (hashlib.sha256(template.encode()).hexdigest() + ".typ")
