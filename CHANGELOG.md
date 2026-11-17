@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.316a — 2026-11-17
+
+Pre-edit state: commit `cfce3a6`. The title/abstract pitch test searched only each line's first word, but Pandoc 3.1.3 prints its Abstract label on the same line as Abstractfirst. Locate the marker anywhere on its line without changing any pitch assertion. A separate Typst-only measured regression checks the title, abstract and body at the expected LaTeX pitch, and passes with both Pandoc 3.1.3 and 3.13; the LuaLaTeX comparison cannot complete with this sandbox's protected font cache. Test only.
+
 ## v3.33.316 — 2026-11-17
 
 Pre-edit state: commit `11c28b4`. Pandoc 3.1.3's Typst writer wraps a long heading over several source lines like

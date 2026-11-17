@@ -413,6 +413,24 @@ class CommandLine(unittest.TestCase):
         second = [first for _, first in tops].index("Second")
         self.assertAlmostEqual(tops[second + 1][0] - tops[second][0], 12 * 2.7, delta=0.05)    # 2em + the 0.7em box
 
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_title_and_abstract_pitch_with_either_abstract_label_layout(self):
+        (self.directory / "doc.md").write_text(
+            "---\ntitle: Titlefirst " + "title " * 20 +
+            "\nfontsize: 12pt\nlinestretch: 2\nabstract: Abstractfirst " + "abstractword " * 30 +
+            "\n---\n\nBodyfirst " + "bodyword " * 80 + "\n", encoding="utf-8")
+        done = self.run_pdfmd("doc.md", "-e", "typst", "--no-stamp")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        layout = subprocess.check_output(["pdftotext", "-bbox-layout", str(self.directory / "doc.pdf"), "-"],
+                                         text=True, encoding="utf-8")
+        lines = [(float(top), re.findall(r"<word[^>]*>([^<]*)", content)) for top, content in re.findall(
+            r'<line xMin="[^"]+" yMin="([^"]+)"[^>]*>(.*?)</line>', layout, re.S)]
+        for word, ratio in (("Titlefirst", 1.5), ("Abstractfirst", 1), ("Bodyfirst", 1)):
+            with self.subTest(region=word):
+                index = next(i for i, (_, words) in enumerate(lines) if word in words)
+                self.assertAlmostEqual((lines[index + 1][0] - lines[index][0]) / ratio,
+                                       2 * 14.5 * 72 / 72.27, delta=0.05)
+
     @unittest.skipUnless(shutil.which("pdftotext") and shutil.which("lualatex"), "needs pdftotext and LuaLaTeX")
     def test_title_abstract_and_toc_use_the_body_pitch(self):
         source = self.directory / "doc.md"
@@ -431,12 +449,13 @@ class CommandLine(unittest.TestCase):
                                   env=environment, stdin=subprocess.DEVNULL, capture_output=True, text=True)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             layout = subprocess.check_output(["pdftotext", "-bbox-layout", str(output), "-"], text=True)
-            lines[engine] = [(float(top), first) for top, first in re.findall(
-                r'<line xMin="[^"]+" yMin="([^"]+)".*?<word[^>]*>([^<]*)', layout, re.S)]
+            lines[engine] = [(float(top), " ".join(re.findall(r"<word[^>]*>([^<]*)", content)))
+                             for top, content in re.findall(
+                                 r'<line xMin="[^"]+" yMin="([^"]+)"[^>]*>(.*?)</line>', layout, re.S)]
 
         def pitch(engine, word):
             found = lines[engine]
-            index = next(i for i, (_, first) in enumerate(found) if first == word)
+            index = next(i for i, (_, text) in enumerate(found) if word in text.split())
             return found[index + 1][0] - found[index][0]
 
         body = pitch("lualatex", "Bodyfirst")
