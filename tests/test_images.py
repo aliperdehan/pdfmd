@@ -136,6 +136,37 @@ class Converting(unittest.TestCase):
             pdf, why = images.convert_svg(self.svg, self.cache, self.which)
         self.assertIsNotNone(pdf, why)
 
+    def test_cached_raster_does_not_hide_a_new_vector_converter(self):
+        from pdfmd_images import svg
+        self.cache.mkdir()
+        pdf = self.cache / svg.cache_name(self.svg)
+        png = pdf.with_name(pdf.stem + "-192.png")
+        png.write_bytes(PNG_BYTES)
+        def convert(name, source, produced, *args, **kwargs):
+            produced.write_bytes(b"%PDF-vector")
+            return True, ""
+        with mock.patch.object(svg, "available_converters", return_value=["typst", "resvg"]), \
+                mock.patch.object(svg, "_run", side_effect=convert) as run:
+            self.assertEqual(svg.convert_svg(self.svg, self.cache), (pdf, ""))
+            self.assertEqual(run.call_args.args[0], "typst")
+        with mock.patch.object(svg, "available_converters") as available, mock.patch.object(svg, "_run") as run:
+            self.assertEqual(svg.convert_svg(self.svg, self.cache), (pdf, ""))
+            available.assert_not_called()
+            run.assert_not_called()
+
+    def test_cached_raster_is_reused_without_vector_success(self):
+        from pdfmd_images import svg
+        self.cache.mkdir()
+        pdf = self.cache / svg.cache_name(self.svg)
+        png = pdf.with_name(pdf.stem + "-192.png")
+        png.write_bytes(PNG_BYTES)
+        for converters in ([], ["resvg"], ["typst", "resvg"]):
+            with self.subTest(converters=converters), \
+                    mock.patch.object(svg, "available_converters", return_value=converters), \
+                    mock.patch.object(svg, "_run", return_value=(False, "bad SVG")) as run:
+                self.assertEqual(svg.convert_svg(self.svg, self.cache), (png, ""))
+                self.assertEqual(run.call_count, int("typst" in converters))
+
     def test_nothing_installed_says_what_to_install(self):
         with mock.patch("pdfmd_images.svg._python_module", return_value=False):
             pdf, why = images.convert_svg(self.svg, self.cache, self.which)

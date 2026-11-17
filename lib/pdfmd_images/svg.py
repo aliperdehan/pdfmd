@@ -61,9 +61,13 @@ def convert_svg(svg: Path, cache: Path, which: Callable[[str], str | None] = shu
     if target.is_file() and target.stat().st_size > 0:
         return target, ""
     fallback = target.with_name(target.stem + f"-{dpi:g}.png") if format == "pdf" else target
-    if fallback.is_file() and fallback.stat().st_size > 0:
-        return fallback, ""
+    cached_fallback = fallback.is_file() and fallback.stat().st_size > 0
     converters = available_converters(which, soffice)
+    if cached_fallback:
+        # resvg can only remake the raster we already have; try only PDF-capable tools.
+        converters = [name for name in converters if name != "resvg"]
+        if not converters:
+            return fallback, ""
     if not converters:
         return None, "no SVG converter found (" + HINTS + ")"
     cache.mkdir(parents=True, exist_ok=True)
@@ -81,6 +85,8 @@ def convert_svg(svg: Path, cache: Path, which: Callable[[str], str | None] = shu
             reasons.append(f"{name}: {reason}")
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
+    if cached_fallback:
+        return fallback, ""
     return None, "; ".join(reasons)
 
 

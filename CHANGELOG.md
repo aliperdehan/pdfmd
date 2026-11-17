@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.313 — 2026-11-17
+
+Pre-edit state: commit `d054f6e`. A cached SVG raster fallback hid newly installed vector converters for PDF requests. Cached PDFs still return immediately; cached PNGs now wait for every available PDF-capable converter to fail, and are reused without running resvg again. Two regressions fail before and pass after, covering a new vector converter, unavailable and failing converters, and immediate PDF reuse. Full image-module results are in the batch report. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.312 — 2026-11-17
 
 Pre-edit state: commit `acedb61`. Older Pandoc Typst writers left a literal opening bracket after an inline call executable, so italic journal volumes followed by issues stopped Typst with "expected function, found content". The last Typst filter probes the writer and escapes these delimiters after non-text inlines, including citeproc's output, spans and nested calls. Already-correct writers are unchanged. Two PDF regressions fail before and pass with Pandoc 3.1.3; Pandoc 3.13 builds and a byte comparison pass. Full engine-filter and safety-module results are recorded in the batch report. pdfmd.py stays at 785 lines (version only).

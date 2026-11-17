@@ -264,7 +264,8 @@ Pandoc's Typst writer labels headings, divs, spans, figures and tables; a link t
 LaTeX reads PDF, PNG and JPEG, not SVG. In a LaTeX build pdfmd converts each SVG a document names -- a Markdown
 image, a raw `\includegraphics{a.svg}` or `\includesvg{a}` -- once, with the first working converter (rsvg-convert,
 Inkscape, cairosvg, svglib, LibreOffice, Typst, resvg), keeps the PDF (a PNG from resvg) in ~/.cache/pdfmd/images by the file's content, and the
-Lua filter pdfmd_lua/images.lua puts it where the document wrote the SVG. A Markdown SVG is left to Pandoc when
+Lua filter pdfmd_lua/images.lua puts it where the document wrote the SVG. A cached PDF is reused immediately;
+a cached PNG fallback is reused only after the currently available vector converters fail (or none is installed). A Markdown SVG is left to Pandoc when
 rsvg-convert is installed (Pandoc converts it itself). A raw `\includegraphics` also gets graphicx, which Pandoc
 only loads for a Markdown image (a PNG in one failed with "undefined control sequence"). Word builds use the
 same chain for PNG, leaving Pandoc’s own conversion in place when rsvg-convert is installed. Without any
