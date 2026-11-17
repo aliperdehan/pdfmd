@@ -83,6 +83,53 @@ class Install(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+class MathLauncher(unittest.TestCase):
+    @unittest.skipIf(sys.version_info < (3, 11), "pymd2pdf needs Python 3.11")
+    def test_math_install_restores_pdfmd_launchers_even_when_pip_fails(self):
+        # RECORD includes the launcher outside site-packages; Windows wheels use
+        # an exe, older installers can also leave an md2pdf-script.py companion.
+        import importlib.metadata
+        for status in (0, 1):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                names = ('md2pdf', 'md2pdf.exe', 'md2pdf-script.py')
+                originals = {}
+                for name in names:
+                    target = root / name
+                    data = b'#!/usr/bin/env python3\nfrom pdfmd import md2pdf_main\n' if name != 'md2pdf.exe' else b'MZ\x00pdfmd launcher'
+                    target.write_bytes(data)
+                    target.chmod(0o751)
+                    originals[target] = (data, target.stat().st_mode)
+                other = root / 'other'
+                other.write_bytes(b'unrelated')
+                dist = mock.Mock(files=[Path('../bin') / name for name in (*names, 'other')])
+                dist.locate_file.side_effect = lambda file: root / file.name
+
+                def pip(command, **kwargs):
+                    self.assertIn('pymd2pdf>=0.6,<0.7', command)
+                    for target in originals:
+                        target.write_bytes(b'competing pymd2pdf launcher')
+                        target.chmod(0o644)
+                    return subprocess.CompletedProcess(command, status, stderr='')
+
+                with mock.patch.object(importlib.metadata, 'distribution', return_value=dist), \
+                        mock.patch.object(pdfmd.subprocess, 'run', side_effect=pip) as installer, \
+                        contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(pdfmd.install_extra('math'), status == 0)
+                installer.assert_called_once()
+                for target, (data, mode) in originals.items():
+                    self.assertEqual(target.read_bytes(), data)
+                    self.assertEqual(target.stat().st_mode, mode)
+                self.assertEqual(other.read_bytes(), b'unrelated')
+
+    def test_a_checkout_without_distribution_records_does_not_guess_a_scripts_folder(self):
+        import importlib.metadata
+        with mock.patch.object(importlib.metadata, 'distribution', side_effect=importlib.metadata.PackageNotFoundError), \
+                mock.patch.object(pdfmd.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stderr='')), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertTrue(pdfmd.install_extra('math'))
+
+
 class Doctor(unittest.TestCase):
     def test_packs_that_are_installed_are_said_to_be_ready(self):
         module = pdfmd.unicode_module()

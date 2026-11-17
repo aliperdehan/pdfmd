@@ -18,13 +18,14 @@ with, and the line that says the one found is older. `KATEX_PACKAGE` and `KATEX_
 `download_file`, `github_latest_release`, `github_release_asset`, `install_extra`, `install_tectonic`, `install_typst`,
 `typst_asset_name` and `d2_asset_name` of this package as `pdfmd.X` (and `config_options`, `data_root`, `resolve_calibre`, `run_probe`
 and `which`): every use of them here is `core.X`, so a patch reaches it. `urllib.request` is imported inside the functions that
-fetch (start-up time, v3.32.55); `tarfile` and `zipfile` are imported at the top, as they were in `pdfmd.py` (which still imports
-`zipfile` itself and no longer imports `tarfile`; both load at start, as before).
+fetch (start-up time, v3.32.55); `tarfile` and `zipfile` are imported here at the top and load through this package,
+not through imports in `pdfmd.py` (wave 5, step 5b).
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import importlib
 import json
@@ -1070,6 +1071,34 @@ def install_fonts(names: str) -> bool:
     return not failed
 
 
+
+@contextlib.contextmanager
+def preserve_md2pdf_launcher():
+    """pymd2pdf owns the same console-script name: keep pdfmd's installed bytes
+    and mode, including Windows' exe launcher, across pip (even a failed pip).
+    RECORD supplies the actual paths for venv, user and other install schemes;
+    a source checkout with no installed distribution has no launcher to restore.
+    """
+    from importlib.metadata import PackageNotFoundError, distribution
+
+    saved = []
+    try:
+        installed = distribution("pdfmd-cli")
+    except PackageNotFoundError:
+        installed = None
+    for entry in (installed.files or []) if installed is not None else []:
+        if Path(str(entry)).name in ("md2pdf", "md2pdf.exe", "md2pdf-script.py"):
+            path = Path(installed.locate_file(entry))
+            if path.is_file():
+                saved.append((path, path.read_bytes(), path.stat().st_mode))
+    try:
+        yield
+    finally:
+        for path, content, mode in saved:
+            path.write_bytes(content)
+            path.chmod(mode)
+
+
 def install_extra(kind: str, assume_yes: bool = False) -> bool:
     """Install an optional piece: pip packages into the Python environment pdfmd runs
     from (math, emoji, pandoc), or Typst's own binary into pdfmd's tools folder."""
@@ -1108,20 +1137,21 @@ def install_extra(kind: str, assume_yes: bool = False) -> bool:
     command = [sys.executable, "-m", "pip", "install", *specs]
     print(f"INSTALL  {kind} ({core.INSTALL_SIZES[kind]}): " + " ".join(shlex.quote(part) for part in command))
     try:
-        completed = subprocess.run(command, stderr=subprocess.PIPE, encoding="utf-8", errors="replace")
-        if completed.stderr:
-            print(completed.stderr, end="", file=sys.stderr)
-        if completed.returncode != 0 and "externally-managed-environment" in (completed.stderr or ""):
-            # PEP 668 (Homebrew's or Debian's Python): not the system's packages, pdfmd's own folder (v3.28.26)
-            folder = core.own_python_folder()
-            command = [sys.executable, "-m", "pip", "install", "--upgrade", "--target", str(folder), *specs]
-            print(f"NOTE  this Python is managed by the system (PEP 668); installing into pdfmd's own folder {core.display_path(folder)}: "
-                  + " ".join(shlex.quote(part) for part in command))
-            folder.mkdir(parents=True, exist_ok=True)
-            completed = subprocess.run(command)
-            if completed.returncode == 0 and str(folder) not in sys.path:
-                sys.path.append(str(folder))
-                importlib.invalidate_caches()
+        with preserve_md2pdf_launcher() if kind == "math" else contextlib.nullcontext():
+            completed = subprocess.run(command, stderr=subprocess.PIPE, encoding="utf-8", errors="replace")
+            if completed.stderr:
+                print(completed.stderr, end="", file=sys.stderr)
+            if completed.returncode != 0 and "externally-managed-environment" in (completed.stderr or ""):
+                # PEP 668 (Homebrew's or Debian's Python): not the system's packages, pdfmd's own folder (v3.28.26)
+                folder = core.own_python_folder()
+                command = [sys.executable, "-m", "pip", "install", "--upgrade", "--target", str(folder), *specs]
+                print(f"NOTE  this Python is managed by the system (PEP 668); installing into pdfmd's own folder {core.display_path(folder)}: "
+                      + " ".join(shlex.quote(part) for part in command))
+                folder.mkdir(parents=True, exist_ok=True)
+                completed = subprocess.run(command)
+                if completed.returncode == 0 and str(folder) not in sys.path:
+                    sys.path.append(str(folder))
+                    importlib.invalidate_caches()
     except OSError as error:
         print(f"Could not run pip ({error}).", file=sys.stderr)
         return False

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.286 — 2026-11-17
+
+Pre-edit state: commit `bba1555`. Installing the math extra let pymd2pdf overwrite pdfmd-cli's md2pdf console script in the shared scripts folder. Preserve the launcher bytes and permissions at the paths in pdfmd-cli's distribution RECORD and restore them after pip, including failed installs and Windows exe/script launchers. A checkout without an installed distribution does not guess paths. Correct the stale comment: tarfile and zipfile load through this package, not imports in pdfmd.py. Offline fake-pip tests overwrite the launchers and fail before the fix on both success and failure paths, then pass after; no packages are installed. Proof: 124 cases pass with Pandoc 3.13 (the full installer module and six safety modules; one existing skip), and all eight installer cases pass with Pandoc 3.1.3; the new regression also fails on eea2b90 with 3.1.3. Ruff F passes. Startup imports are unchanged (no modules added or removed); three-run --version medians were 0.345 s at eea2b90 and 0.193 s after, an observation rather than a performance claim. pdfmd.py stays at 783 lines (version only).
+
 ## v3.33.285f — 2026-11-17
 
 Pre-edit state: commit `7594b0e`. Chocolatey could report success after installing zero Poppler packages; a later version echo could then run xpdf and fail under pipefail with status 99. Retry three times and verify the explicit Chocolatey pdftotext shim identifies Poppler; otherwise fail with a clear error. Make the version echo non-fatal, and use printf for the Windows path. Offline shell probes reproduce both old failures, reject missing and xpdf executables after three attempts, and accept Poppler on the third attempt; an exit-99 version echo now succeeds. Vendored YAML parse and shellcheck of both changed shell blocks pass. All six safety modules pass (116 cases, one existing skip). Ruff is inapplicable to YAML; no Python changed. Windows/Chocolatey itself cannot run on this Mac, and no network or install was attempted. pdfmd.py stays at 783 lines.
