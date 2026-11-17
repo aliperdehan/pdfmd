@@ -50,6 +50,8 @@ class Commands(CommandFixture, unittest.TestCase):
         added = self.command("add", "--key", "glass", "--page", "24", "--text", "An invented passage.")
         self.assertEqual(added["id"], 1)
         self.assertEqual(added["markers"], ["[@x:1]", "[@glass#1]"])
+        # the project folder holds the record file alone: the writers' lock lives in pdfmd's cache
+        self.assertEqual(sorted(path.name for path in self.root.iterdir()), ["excerpts.json"])
         self.assertEqual(self.command("show", "1")["parts"][0]["text"], "An invented passage.")
         self.command("remove", "1")
         self.assertEqual(self.command("add", "--remark", "Check this inference.")["id"], 2)

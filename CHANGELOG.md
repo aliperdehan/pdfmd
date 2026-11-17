@@ -46,7 +46,7 @@ optional skip because prompt_toolkit is installed); the help-wrap and raw-HTML s
 development were corrected. Ruff F and diff whitespace checks pass. Startup stays at 182 modules with no excerpt
 module loaded; the timed checkout --version takes 0.13 s on this run. Windows locking is not exercised on this Mac.
 `pdfmd.py`: 785 lines before and after; only the version changes. The 0.1-point rounding is the approved record-format
-rule; the process lock uses the operating system’s blocking lock, with no new behaviour threshold or dependency.
+rule; the process lock uses the operating system’s blocking lock, with no new behaviour threshold or dependency. Reviewer (Claude): the writers' lock was a sibling `excerpts.json.lock`, left in the project folder after every command (where it would be committed with the project); it now lives in pdfmd's cache, named by the record's path (still never unlinked), and `test_add_show_and_delete_never_reuses_id` checks the folder holds excerpts.json alone.
 
 ## v3.34.0 — 2026-11-18
 

@@ -163,13 +163,18 @@ def canonical(data):
 
 @contextmanager
 def locked(path):
-    """Lock a stable sibling inode, not the JSON inode replaced by atomic_write_text.
+    """Lock a stable file of its own, not the JSON inode replaced by atomic_write_text.
 
-    The lock file stays: unlinking it would let a waiting writer lock an old inode.
+    The lock file stays: unlinking it would let a waiting writer lock an old inode. It lives in pdfmd's cache, named by
+    the record's path, so the project folder holds excerpts.json alone (a sibling `.lock` was left beside it, v3.34.1).
     OS locks are released on process exit, including an interrupted writer.
     """
+    import hashlib
     path = path.resolve()
-    with open(path.with_name(path.name + ".lock"), "a+b") as handle:
+    folder = core.cache_root() / "excerpts-locks"
+    folder.mkdir(parents=True, exist_ok=True)
+    lock = folder / (hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:24] + ".lock")
+    with open(lock, "a+b") as handle:
         if os.name == "nt":
             import msvcrt
             handle.seek(0, 2)
