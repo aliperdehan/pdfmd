@@ -198,6 +198,10 @@ paragraph-spacing or `indent: true` a paragraph break adds Typst's own 0.55em. A
 adds that many line pitches between entries, including fractions such as 2.5 and 0.5; zero adds no extra line.
 Without that attribute, paragraph spacing is kept. docs/recipes.md 1.9.
 
+Typst calls immediately followed by literal `(` or `[` are escaped for older Pandoc writers,
+including calls introduced by citeproc (an italic volume followed by an issue). Writers that already
+escape them keep their output unchanged.
+
 ## Page breaks (v3.27.13, off unless asked since v3.27.15)
 
 `pdfmd-options.pagebreak` (true, or a list of families: comment, tex, html, div, typst, word; also the config and

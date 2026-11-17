@@ -70,6 +70,29 @@
 
 if not FORMAT:match("^typst") then return {} end
 
+-- Probe the writer, rather than guessing which Pandoc release repaired call adjacency.
+-- Older writers leave `#emph[x](y)` executable. Escape a leading delimiter after any
+-- non-text inline, including spans and nested content produced by citeproc.
+local probe = pandoc.write(pandoc.Pandoc({pandoc.Plain({pandoc.Emph("x"), pandoc.Str("(y)")})}), "typst")
+local function call_delimiters(doc)
+  if not probe:find("[x](y)", 1, true) then return doc end
+  return doc:walk({Inlines = function(items)
+    local out = pandoc.List()
+    for index, item in ipairs(items) do
+      local previous = items[index - 1]
+      if item.t == "Str" and item.text:match("^[%(%[]") and previous
+          and previous.t ~= "Str" and previous.t ~= "Space" and previous.t ~= "SoftBreak"
+          and previous.t ~= "LineBreak" then
+        out:insert(pandoc.RawInline("typst", "\\" .. item.text:sub(1, 1)))
+        if #item.text > 1 then out:insert(pandoc.Str(item.text:sub(2))) end
+      else
+        out:insert(item)
+      end
+    end
+    return out
+  end})
+end
+
 local LABELLED = {Header = true, Div = true, Span = true, Figure = true, Table = true}
 
 local function decoded(text)
@@ -390,5 +413,5 @@ end
 
 return {{Meta = meta_rules, Pandoc = function(doc)
   doc = doc:walk({Div = function(div) return entry_spacing(div, doc.meta) end})
-  return line_spacing(absolute_pictures(plain_missing_links(doc)))
+  return line_spacing(absolute_pictures(call_delimiters(plain_missing_links(doc))))
 end}}

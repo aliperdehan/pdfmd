@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.312 — 2026-11-17
+
+Pre-edit state: commit `acedb61`. Older Pandoc Typst writers left a literal opening bracket after an inline call executable, so italic journal volumes followed by issues stopped Typst with "expected function, found content". The last Typst filter probes the writer and escapes these delimiters after non-text inlines, including citeproc's output, spans and nested calls. Already-correct writers are unchanged. Two PDF regressions fail before and pass with Pandoc 3.1.3; Pandoc 3.13 builds and a byte comparison pass. Full engine-filter and safety-module results are recorded in the batch report. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.311b — 2026-11-17
 
 Pre-edit state: commit `95bbd03`. CI's Windows jobs failed test_install_diagram `test_resvg_download_checks_the_actual_digest_before_installing` (3.33.306): on Windows install_resvg extracts `resvg.exe`, and the test's archive held a file named `resvg`. The archive and the check now use the platform's executable name. Test only.

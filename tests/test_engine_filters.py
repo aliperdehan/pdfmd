@@ -256,6 +256,36 @@ class CommandLine(unittest.TestCase):
                               encoding="utf-8", cwd=self.directory,
                               env={**os.environ, "PDFMD_NO_PROMPT": "1"})
 
+    def test_inline_calls_followed_by_brackets_build_and_modern_output_is_unchanged(self):
+        text = ('A *378*(6552), ~~s~~(z), [l](https://example.org)(y), **bold**(b), '
+                '[caps]{.smallcaps}(c), [under]{.underline}[d], [span]{.foo}(e), '
+                '*nested **bold***[f].\n')
+        source = self.directory / "doc.md"
+        source.write_text(text, encoding="utf-8")
+        done = self.run_pdfmd("doc.md", "-e", "typst", "--no-stamp")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        done = self.run_pdfmd("doc.md", "--to", "typst", "-o", "doc.typ")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        plain = subprocess.run([PANDOC, str(source), "-t", "typst"], capture_output=True,
+                               text=True, encoding="utf-8", check=True).stdout
+        if r"#emph[378]\(6552)" in plain:
+            filtered = subprocess.run([PANDOC, str(source), "-t", "typst", "--lua-filter", str(TYPST_LUA)],
+                                      capture_output=True, text=True, encoding="utf-8", check=True).stdout
+            self.assertEqual(filtered, plain)
+
+    def test_citeproc_volume_followed_by_issue_builds(self):
+        (self.directory / "refs.bib").write_text(
+            '@article{k, title={Title}, volume={378}, number={6552}}', encoding="utf-8")
+        (self.directory / "style.csl").write_text(
+            '<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0">'
+            '<info><title>T</title><id>t</id></info><citation><layout><text variable="title"/>'
+            '</layout></citation><bibliography><layout><text variable="volume" font-style="italic"/>'
+            '<text variable="issue" prefix="(" suffix=")"/></layout></bibliography></style>', encoding="utf-8")
+        (self.directory / "doc.md").write_text(
+            "---\nbibliography: refs.bib\ncsl: style.csl\n---\n\nCite @k.\n", encoding="utf-8")
+        done = self.run_pdfmd("doc.md", "-e", "typst", "--no-stamp")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
     def test_a_link_to_a_missing_anchor_does_not_stop_the_pdf(self):
         (self.directory / "doc.md").write_text(DOCUMENT, encoding="utf-8")
         done = self.run_pdfmd("doc.md", "-e", "typst")
