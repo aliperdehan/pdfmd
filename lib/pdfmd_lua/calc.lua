@@ -623,6 +623,7 @@ local NAMED = {}               -- name -> its statements, in order
 local OCCURRENCES = {}         -- the n-th place in the document that holds statements -> its statements and text
 local BUILT_NOW = false        -- between the marks `pdfmd-calc-mark-in` and `-out` (a names-only pass over a whole document, see halves)
 local BUILT_SLOT = 0           -- selected runs seen so far; unbuilt statements between runs belong to that gap
+local CONTEXTS = {}             -- original hidden expressions at each selected run
 local LAST_IN, LAST_OUT        -- how many statements stood above the last part built, and up to its end (nil: no marks in the text)
 local pass = 1
 local occurrence = 0
@@ -871,7 +872,8 @@ local function register(text, default)
     clean, styles, removed = statements, found, edits
     ok, statements, found, edits, nosubs = pcall(read_statements, clean, default)
   end
-  local record = {text = clean, original = text, styles = styles, removed = removed, found = found}
+  local record = {text = clean, original = text, styles = styles, removed = removed, found = found,
+    built = BUILT_NOW, slot = BUILT_SLOT, default = default}
   if ok then
     record.statements, record.edits, record.nosubs = statements, edits, nosubs
     for _, statement in ipairs(statements) do
@@ -1542,11 +1544,11 @@ local function block_lines(text)
 end
 
 -- pass 1: register each line (returns nothing); pass 2: the paragraphs to print, none for a hidden block
-local function statement_block(lines, hidden)
+local function statement_block(lines, hidden, default)
   local out = pandoc.Blocks({})
   for _, line in ipairs(lines) do
     if pass == 1 then
-      register(line, nil)
+      register(line, default)
     else
       local record, problem = fetch(line)
       local ok, result
@@ -1925,14 +1927,21 @@ end
 -- a paragraph that is only `pdfmd-calc-mark-in` or `pdfmd-calc-mark-out` (see dump_halves): where a part pdfmd builds begins and ends
 local function mark_of(block)
   if block.t ~= "Para" or #block.content ~= 1 or block.content[1].t ~= "Str" then return false end
+  local slot = block.content[1].text:match("^pdfmd%-calc%-context%-(%d+)$")
+  if slot then
+    for _, record in ipairs(CONTEXTS[slot] or {}) do
+      statement_block({record.text}, true, record.default and parse_fmt(record.default) or nil)
+    end
+    return true
+  end
   local which = block.content[1].text:match("^pdfmd%-calc%-mark%-(%a+)$")
-  if which ~= "in" and which ~= "out" then return false end
+  if which ~= "in" and which ~= "out" and which ~= "base" then return false end
   if pass == 1 then
-    BUILT_NOW = which == "in"
-    if BUILT_NOW then
+    BUILT_NOW = which ~= "out"
+    if which == "in" then
       BUILT_SLOT = BUILT_SLOT + 1
       LAST_IN = #STATEMENTS
-    else
+    elseif which == "out" then
       LAST_OUT = #STATEMENTS
     end
   end
@@ -2009,13 +2018,11 @@ local function dump_names(path)
   file:close()
 end
 
--- A part built alone, any part of the document (3.31.44). pdfmd reads the WHOLE document with this filter and nothing else, with
--- `pdfmd-calc-mark-in` / `-out` paragraphs around each part it is going to build, and `-V pdfmd-calc-halves=FILE`: the file holds
--- A lines, the last definition of each name in the text left out ABOVE the last part built (it counts as defined above everything,
--- as the dump does), and B lines, the first definition of each name in the text left out BELOW it (the real pass reads those
--- with `-M pdfmd-calc-below=FILE`: they stand after everything, so a name is taken from there only when nothing above or inside the
--- part defines it). Every value is the one of the full build, because it was evaluated in its own place in the whole document.
-local function dump_halves(path)
+-- The whole-document scan keeps summary values in A/B records. Only B values are loaded by new partial builds:
+-- they retain the first-definition-below rule. Its JSON companion keeps each skipped defining occurrence once,
+-- with its original expression and default span format, in the slot before the next selected run. The real build
+-- replays these as hidden statements where that run starts; gap definitions cannot move above earlier selections.
+local function dump_halves(path, constants_end)
   if not LAST_IN then return end
   local names = {}
   for name in pairs(NAMED) do names[#names + 1] = name end
@@ -2031,25 +2038,33 @@ local function dump_halves(path)
   end
   for _, name in ipairs(names) do
     local above, below
-    local gaps = {}
     for _, statement in ipairs(NAMED[name]) do
       if not statement.built and not statement.below then
         if statement.id <= LAST_IN then above = statement end
         if statement.id > LAST_OUT and not below then below = statement end
-        if statement.slot and statement.slot > 0 and statement.slot < BUILT_SLOT then
-          gaps[statement.slot] = true
-        end
       end
     end
     if above then write("A", name, above) end
     if below then write("B", name, below) end
-    -- Definitions in an internal gap currently join the one shared above seed.
-    -- Report them even if unused: calc-table selectors can read names indirectly.
-    for slot = 1, BUILT_SLOT - 1 do
-      if gaps[slot] then file:write("G\t", slot, "\t", name, "\n") end
-    end
   end
   file:close()
+  local contexts = {}
+  for _, record in ipairs(OCCURRENCES) do
+    if not record.built and record.slot < BUILT_SLOT then
+      local defines = false
+      for _, statement in ipairs(record.statements or {}) do
+        if statement.id > constants_end and #statement.names > 0 then defines = true end
+      end
+      if defines then
+        local key = tostring(record.slot)
+        contexts[key] = contexts[key] or {}
+        table.insert(contexts[key], {text = record.original,
+          default = record.default and (record.default.n .. record.default.kind) or nil})
+      end
+    end
+  end
+  file = io.open(path .. ".json", "w")
+  if file then file:write(pandoc.json.encode(contexts)); file:close() end
 end
 
 -- pdfmd --check (3.30.22): `-V pdfmd-calc-check=FILE` writes what the check reports, after the first pass has read every place of
@@ -2152,19 +2167,24 @@ return {{Pandoc = function(doc)
   local constant_lines = constants and block_lines(pandoc.utils.stringify(constants)) or {}
   local seed = doc.meta["pdfmd-calc-seed"]
   seed = seed and pandoc.utils.stringify(seed) or nil
+  if seed and seed:match("%.json$") then
+    local file = io.open(seed, "r")
+    if file then CONTEXTS = pandoc.json.decode(file:read("a")); file:close() end
+  end
   local below = doc.meta["pdfmd-calc-below"]
   below = below and pandoc.utils.stringify(below) or nil
   local constants_end = 0
   for _, which in ipairs({1, 2}) do
     pass, occurrence, fence_cursor, table_count = which, 0, 1, 0
     statement_block(constant_lines, true)                 -- from `calc: {constants: file.csv}`: first in the document
-    if which == 1 then constants_end = #STATEMENTS end    if which == 1 and seed then load_seed(seed) end      -- the names of the parts before this one (see load_seed)
+    if which == 1 then constants_end = #STATEMENTS end
+    if which == 1 and seed and not seed:match("%.json$") then load_seed(seed) end -- legacy value seeds
     doc = doc:walk({traverse = "topdown", Div = function(div)
         local out, descend = calc_div(div)               -- two results: `x or y` would drop the second (do not walk into the output)
         if out ~= nil then return out, descend end
         return calc_table_div(div)
       end,
-      Para = function(block) if mark_of(block) then return nil end misspelt_table(block); return fence_handler(block) end, RawBlock = raw_block, CodeBlock = code_block,
+      Para = function(block) if mark_of(block) then return which == 2 and pandoc.Blocks({}) or nil end misspelt_table(block); return fence_handler(block) end, RawBlock = raw_block, CodeBlock = code_block,
       Inlines = process_inlines})
     if which == 1 and below then load_seed(below, true) end   -- after everything of this build: only a name nothing above or inside defines comes from here
   end
@@ -2175,7 +2195,7 @@ return {{Pandoc = function(doc)
   local dump = PANDOC_WRITER_OPTIONS.variables["pdfmd-calc-dump"]
   if dump then dump_names(tostring(dump)) end
   local halves = PANDOC_WRITER_OPTIONS.variables["pdfmd-calc-halves"]
-  if halves then dump_halves(tostring(halves)) end
+  if halves then dump_halves(tostring(halves), constants_end) end
   local check = PANDOC_WRITER_OPTIONS.variables["pdfmd-calc-check"]
   if check then check_report(tostring(check), constants_end) end
   return doc

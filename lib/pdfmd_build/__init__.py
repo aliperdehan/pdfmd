@@ -1116,6 +1116,12 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
             seed_file, calc_names, below_file, calc_below_names = core.build_calc_seed(
                 md_path, metadata_list, [md_path, *(extra_inputs or [])], inputs, Path(calc_scratch.name), from_format, verbose)
             core.CALC_SEED, core.CALC_BELOW = seed_file, below_file
+            if seed_file is not None and seed_file.suffix == ".json":
+                calc = core.load_package("pdfmd_calc")
+                if calc_text_override is not None and source_override is not None:
+                    source_override = (calc.context_sections(calc_text_override), source_override[1])
+                elif extra_inputs:
+                    pandoc_inputs = calc.context_inputs(list(extra_inputs), Path(calc_scratch.name))
     export_target = core.calc_export_file(md_path, metadata_list) if target_format != core.ASSEMBLED_FORMAT else None
     export_scratch = None
     if export_target is not None:

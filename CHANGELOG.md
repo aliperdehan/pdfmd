@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.297 — 2026-11-17
+
+Pre-edit state: commit `c999102`. The shared calc seed moved definitions from gaps above every selected part, silently changing earlier values (DECISION 93b). Replay original defining occurrences and their formats as hidden statements before each selected run; keep the first-definition-below seed and document-level constants. Scan parts with the same front-matter stripping as a full build, without adding per-part constants. Remove the obsolete gap warning and its tests; replace the documented workaround and delete the approved TODO item. Regression coverage includes each defining form, dependencies, multiple gaps, sections, constants, the scaffold and calc off. pdfmd.py remains 784 lines (version only). Sixteen focused tests failed in fifteen subcases before and pass after. Full calc, parts filters and the five required safety modules: 240 tests, zero failures/errors, one skip; the runner guard observed a concurrent manual build in the same scratch cache, and a separately isolated check passes. Pandoc 3.1.3 first found the same empty-seed export regression as 3.13; after its correction all 23 NamesBelow/export cases pass. Ruff F and whitespace checks pass.
+
 ## v3.33.296 — 2026-11-17
 
 Pre-edit state: commit `d927a9a`. v3.33.232's accumulated bibliography files can be absolute paths outside Typst's

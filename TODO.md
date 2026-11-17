@@ -34,7 +34,6 @@ wait for an answer before any code.
 - [ ] `lua-filter-before-citeproc:`, a layered list of filters run before `--citeproc`; built with excerpts (5b) [3fp D84]
 - [ ] `strip-comments` also drops `<!-- -->` from the build's own text; README: `%%` private, unclosed `%%` kept as text, `<!-- -->` reaches HTML/EPUB [3ft D84]
 - [ ] Logo: a README header (a `<picture>` with absolute raw URLs, light and dark wordmark) and the social preview uploaded in the repository settings, before the next push [3ew]
-- [ ] BUG, silent wrong numbers: parts built together that are not next to each other (`report#20+40`) read what the parts between them define as defined above both (calc names); WARN shipped; fix with a slot per gap or hidden gap blocks [3eg]
 - [ ] `\md{...}`: nulabreport's macros taking `\md{}`; native tier; text-level pre-passes (table-ascii, includes, embed blocks) inside the macro, unchecked [3dc]
 - [ ] Citation key aliases, resolved before citeproc [3bo]
 - [ ] Mixed-format parts: docx, tex, odt, html parts inside a `parts: auto` build [3cl]

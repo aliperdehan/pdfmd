@@ -1322,9 +1322,10 @@ A name the part defines itself always wins over the other parts. The same holds 
 with the sections above and below. Nothing is stored between builds, so editing part 50 and building part 60 shows the new number at
 once. The build says `NOTE  calc: 128 names taken from parts 10-50, 3 from parts 70-90 (defined below) (evaluated, not typeset)`.
 `pdfmd-options: {seed-calc: off}` or `--seed-calc off` gives both up (a name defined in a part left out is then undefined, with the WARN
-above); `auto` (the default) and `scan` are the same. **Known bug (queued, 3eg):** when you build two parts that are not next to each
-other (`report#20+40`), what the parts between them define counts as defined above both, so a number in part 20 can be the value a
-name gets only in part 30, and nothing says so. Build parts that are next to each other, or the whole document, until it is fixed.
+above); `auto` (the default) and `scan` are the same. Non-adjacent selections (`report#20+40`) replay skipped
+parts' defining calc statements as hidden content at their original positions. Part 20 therefore sees `x = 2`, and part 40
+sees `x = 3`, just as in a full build. Skipped prose, tables and answers print nothing. Document-level `calc:` constants
+keep their usual place before the text; a part's own leading front matter is discarded, as in a full build.
 
 **A table of names** (3.30.20). The shortest form is a div that holds the names: `::: calc-table`, a line `t# tinf`, and `:::`. It makes a real
 table of the names (`*` any run of characters, `?` one character, `#` a run of digits, so `t#` is t1, t2, t10 and not `t_welch`; a pattern

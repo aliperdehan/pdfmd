@@ -1414,57 +1414,94 @@ class NamesBelow(unittest.TestCase):
         self.assertIn("x is 2.0, y is 4.0.", self.tex())
         self.assertIn("Here 4.0.", self.tex())
 
-    def test_a_gap_warns_once_about_names_that_can_change_the_selected_parts(self):
-        full = self.build()
-        self.assertEqual(full.returncode, 0, full.stdout + full.stderr)
-        self.assertIn("x is 2.0, y is 4.0.", self.tex())
-        partial = self.build("#20+40")
-        self.assertEqual(partial.returncode, 0, partial.stdout + partial.stderr)
-        warnings = [line for line in (partial.stdout + partial.stderr).splitlines() if line.startswith("WARN  calc: gap")]
-        self.assertEqual(len(warnings), 1, partial.stdout + partial.stderr)
-        for text in ("part 30", "part 20", "part 40", "x", "y", "may differ from a full build"):
-            self.assertIn(text, warnings[0])
-        strict = self.build("#20+40", "--strict")
-        self.assertEqual(strict.returncode, 1, strict.stdout + strict.stderr)
-        self.assertEqual(sum(line.startswith("WARN  calc: gap") for line in
-                             (strict.stdout + strict.stderr).splitlines()), 1)
+    def test_gaps_replay_each_definition_form_in_document_order(self):
+        forms = (
+            "::: calc\nx = VALUE = {ans}\n:::\n",
+            "::: {.calc .hide}\nx = VALUE\n:::\n",
+            "```{=calc}\nx = VALUE\n```\n",
+            "```{=}\nx = VALUE\n```\n",
+            "Prose `x = VALUE`{=} remains hidden.\n",
+            "Prose `x = VALUE`{=calc} remains hidden.\n",
+            "- List `x = VALUE`{=}\n",
+            "Prose `a = x = VALUE`{=} remains hidden.\n",
+            "::: calc\nx = VALUE = {ans}, so y = x * 2 = {ans}\n:::\n",
+            "| Name | Value |\n| --- | --- |\n| x | `x = VALUE`{=} |\n",
+            "::: calc\nx = VALUE = {ans:2dp}\n:::\n\n::: {.calc-table names=\"x\"}\n:::\n",
+        )
+        for form in forms:
+            with self.subTest(form=form):
+                for number, title, value in ((10, "introduction", 2), (30, "calculations", 3)):
+                    (self.directory / f"parts/{number}-{title}.md").write_text(
+                        f"# {title}\n\n" + form.replace("VALUE", str(value)), encoding="utf-8")
+                for number, title in ((20, "procedure"), (40, "discussion")):
+                    (self.directory / f"parts/{number}-{title}.md").write_text(
+                        f"# {title}\n\nValue{number}: `x`{{=1dp}}.\n", encoding="utf-8")
+                done = self.build("#20+40")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertIn("Value20: 2.0.", self.tex())
+                self.assertIn("Value40: 3.0.", self.tex())
+                self.assertNotIn("Prose", self.tex())
+                self.assertNotIn("x =", self.tex())
+                self.assertNotIn("WARN  calc", done.stdout + done.stderr)
 
-    def test_a_gap_without_definitions_does_not_warn(self):
-        (self.directory / "parts/30-calculations.md").write_text("# Calculations\n\nNo definitions here.\n")
-        for number, title in ((20, "procedure"), (40, "discussion")):
-            (self.directory / f"parts/{number}-{title}.md").write_text(f"# {title}\n\n`x`{{=}}\n")
+    def test_gap_expressions_keep_dependencies_and_formatted_span_defaults(self):
+        (self.directory / "parts/10-introduction.md").write_text("# Intro\n\n`x = 2`{=2dp}\n")
+        (self.directory / "parts/20-procedure.md").write_text("# Procedure\n\nBefore `x`{=}. `y = x * 5`{=}\n")
+        (self.directory / "parts/30-calculations.md").write_text("# Calc\n\n`x = y + 1`{=3dp}\n")
+        (self.directory / "parts/40-discussion.md").write_text("# Discussion\n\nAfter `x`{=}.\n")
         done = self.build("#20+40")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertNotIn("WARN", done.stdout + done.stderr)
+        self.assertIn("Before 2.00.", self.tex())
+        self.assertIn("After 11.000.", self.tex())
 
-    def test_the_gap_warning_conservatively_includes_unused_definitions(self):
-        (self.directory / "parts/30-calculations.md").write_text("# Calculations\n\n`unused = 7`{=}\n")
-        for number, title in ((20, "procedure"), (40, "discussion")):
-            (self.directory / f"parts/{number}-{title}.md").write_text(f"# {title}\n\n`x`{{=}}\n")
-        done = self.build("#20+40")
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertEqual((done.stdout + done.stderr).count("WARN  calc: gap"), 1)
-        self.assertIn("unused", done.stdout + done.stderr)
-
-    def test_multiple_gaps_still_print_one_warning(self):
-        (self.directory / "parts/50-more.md").write_text("# More\n\n`z = 9`{=}\n")
-        (self.directory / "parts/60-end.md").write_text("# End\n\n`x`{=}\n")
+    def test_multiple_gaps_replay_at_each_boundary(self):
+        (self.directory / "parts/50-more.md").write_text("# More\n\n`x = 9`{=}\n")
+        (self.directory / "parts/60-end.md").write_text("# End\n\nEnd `x`{=}.\n")
         done = self.build("#20+40+60")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        warnings = [line for line in (done.stdout + done.stderr).splitlines() if line.startswith("WARN  calc: gap")]
-        self.assertEqual(len(warnings), 1, done.stdout + done.stderr)
-        for text in ("part 30", "part 50", "part 60", "z"):
-            self.assertIn(text, warnings[0])
+        for expected in ("x is 2.0, y is 4.0.", "Now x=3.0 and y=4.0.", "End 9.0."):
+            self.assertIn(expected, self.tex())
+        self.assertNotIn("WARN  calc", done.stdout + done.stderr)
 
-    def test_selected_sections_with_a_defining_gap_warn_too(self):
+    def test_selected_sections_with_a_gap_match_the_full_build(self):
         text = "\n".join(part.read_text() for part in sorted((self.directory / "parts").iterdir()))
-        (self.directory / "doc.md").write_text("---\ntitle: T\n---\n\n" + text)
+        (self.directory / "doc.md").write_text("---\ntitle: T\npdfmd-options:\n  calc: {digits: 1dp}\n---\n\n" + text)
         done = self.build("#procedure+discussion", source="doc")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        warnings = [line for line in (done.stdout + done.stderr).splitlines() if line.startswith("WARN  calc: gap")]
-        self.assertEqual(len(warnings), 1, done.stdout + done.stderr)
-        for text in ("section calculations", "section procedure", "section discussion", "x", "y"):
-            self.assertIn(text, warnings[0])
+        self.assertIn("x is 2.0, y is 4.0.", self.tex())
+        self.assertIn("Now x=3.0 and y=4.0.", self.tex())
+        self.assertNotIn("WARN  calc", done.stdout + done.stderr)
+
+    def test_scaffold_definitions_are_not_replayed_after_the_selected_part(self):
+        source = self.directory / "report.md"
+        source.write_text(source.read_text() + "\n`start = 7`{=}\n")
+        (self.directory / "parts/20-procedure.md").write_text("# Procedure\n\n`start = 9`{=}\n")
+        (self.directory / "parts/30-calculations.md").write_text("# Calc\n\n`x = start + 1`{=}\n")
+        (self.directory / "parts/40-discussion.md").write_text("# Discussion\n\nEnd `x`{=} and `start`{=}.\n")
+        done = self.build("#20+40")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("End 10.0 and 9.0.", self.tex())
+
+    def test_document_constants_keep_their_place_before_replayed_gaps(self):
+        source = self.directory / "report.md"
+        source.write_text(source.read_text().replace("digits: 1dp", "digits: 1dp\n    constants: constants.csv"))
+        (self.directory / "constants.csv").write_text("name,value\nbase,1\n")
+        (self.directory / "parts/10-introduction.md").write_text("# Intro\n\n`x = base + 1`{=}\n")
+        (self.directory / "parts/30-calculations.md").write_text("# Calc\n\n`x = base + 2`{=}\n")
+        for number, title in ((20, "procedure"), (40, "discussion")):
+            (self.directory / f"parts/{number}-{title}.md").write_text(f"# {title}\n\nValue{number}: `x`{{=}}.\n")
+        for selection in ("", "#20+40", "#20"):
+            with self.subTest(selection=selection):
+                done = self.build(selection)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertIn("Value20: 2.0.", self.tex())
+                if selection != "#20":
+                    self.assertIn("Value40: 3.0.", self.tex())
+
+    def test_no_calc_does_not_insert_context_markers(self):
+        done = self.build("#20+40", "--no-calc")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("pdfmd-calc-context", self.tex())
 
     def test_seed_calc_off_gives_up_both_halves(self):
         done = self.build("#procedure", "--seed-calc", "off")

@@ -264,16 +264,12 @@ def parts_range_text(parts: list[Path]) -> str:
 @timed("calc seed")
 def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Path], inputs: list[Path],
                     scratch: Path, from_format: str | None, verbose: bool) -> tuple[Path | None, int, Path | None, int]:
-    """The names a part built alone needs from the rest of the document (v3.30.19 for the parts above it, v3.31.44 for the parts
-    below it; `pdfmd-options: {seed-calc: auto|scan|off}`). Pandoc reads ``inputs`` (the whole document in order, with a
-    `pdfmd-calc-mark-in` / `-out` paragraph around each part built, see ``calc_marked_inputs``) with only calc.lua, to nowhere;
-    calc.lua writes, at full precision and with its digits, each name's last definition above the part and its first definition
-    below it, each evaluated in its own place in the whole document, and the build reads the two files back: the first as
-    definitions above the document, the second as definitions after it, so a name counts from there only when nothing above or
-    inside the part defines it (the full build's rule: the nearest definition above, else the first below). Nothing is stored
-    between builds, so nothing can be stale.
-    (the names above and how many, the names below and how many); a file is None when it has no names or cannot be made: the
-    build goes on without."""
+    """Read the whole document with calc.lua, retaining skipped definitions in source order per selected run.
+
+    The JSON companion holds original expressions and span formats, replayed as hidden calc content at each real
+    boundary. The below seed retains the existing full-build values for names first defined after the last selection.
+    Return (context file, number of names replayed, below seed, number of names below); absent scans return no files.
+    """
     nothing = (None, 0, None, 0)
     arguments = core.calc_filter_args(selected, metadata_files)       # [] when calc is off or the part holds no span or div
     if not arguments:
@@ -288,7 +284,9 @@ def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Pa
     core.log_cmd(cmd, cwd, verbose)
     started = time.time()
     try:
-        done = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
+        with core.scaffold_inputs(inputs, True) as prepared:
+            cmd[1:1 + len(inputs)] = [str(path.resolve()) for path in prepared]
+            done = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
     except OSError as error:
         core.vprint(verbose, f"CALC      the names of the parts left out could not be evaluated ({error})")
         return nothing
@@ -296,17 +294,10 @@ def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Pa
         core.vprint(verbose, "CALC      the names of the parts left out could not be evaluated; the build goes on without them")
         return nothing
     lines = {"A": [], "B": []}
-    gaps = {}
     for line in halves.read_text(encoding="utf-8", errors="replace").splitlines():
         kind, _, rest = line.partition("\t")
         if kind in lines and rest.strip():
             lines[kind].append(rest)
-        elif kind == "G":
-            slot, _, name = rest.partition("\t")
-            if slot.isdigit() and name:
-                gaps.setdefault(int(slot), set()).add(name)
-    if gaps:
-        core.load_package("pdfmd_calc").warn_seed_gaps(gaps, inputs)
     files = []
     for kind, name in (("A", "calc-names.tsv"), ("B", "calc-names-below.tsv")):
         if lines[kind]:
@@ -316,7 +307,10 @@ def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Pa
         else:
             files.append((None, 0))
     core.vprint(verbose, f"CALC      {files[0][1]} names above and {files[1][1]} below the part evaluated in {time.time() - started:.1f} s")
-    return files[0][0], files[0][1], files[1][0], files[1][1]
+    contexts = Path(str(halves) + ".json")
+    if not contexts.is_file():
+        return nothing
+    return contexts if files[0][0] is not None else None, files[0][1], files[1][0], files[1][1]
 
 
 def calc_marked_inputs(scaffold: Path, parts: list[Path], built: list[Path], scratch: Path) -> list[Path]:
@@ -325,7 +319,13 @@ def calc_marked_inputs(scaffold: Path, parts: list[Path], built: list[Path], scr
     mark_in, mark_out = scratch / "pdfmd-calc-mark-in.md", scratch / "pdfmd-calc-mark-out.md"
     mark_in.write_text("pdfmd-calc-mark-in\n", encoding="utf-8")
     mark_out.write_text("pdfmd-calc-mark-out\n", encoding="utf-8")
-    inputs = [scaffold]
+    # The scaffold is already present in the real build; do not replay its definitions a second time.
+    text = core.read_text_best_effort(scaffold)
+    front = core.LEADING_FRONT_MATTER_RE.match(text)
+    end = front.end() if front else 0
+    base = scratch / "scaffold.md"
+    base.write_text(text[:end] + "\npdfmd-calc-mark-base\n\n" + text[end:] + "\npdfmd-calc-mark-out\n", encoding="utf-8")
+    inputs = [base]
     for part in parts:
         inputs += [mark_in, part, mark_out] if part in built else [part]
     return inputs
