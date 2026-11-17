@@ -1187,6 +1187,7 @@ class HiddenSource(unittest.TestCase):
         _, _, said = self.attach(body="::: {.calc .hide}\nx = 42\n:::\n\nValue `x`{=}.\n")
         self.assertNotIn("WARN  hidden:", said)
 
+    @unittest.skipUnless(shutil.which("pandoc"), "Pandoc is not installed")
     def test_hidden_kind_through_assembly_cli_metadata_and_config(self):
         for setting in ("cli", "metadata", "config"):
             with self.subTest(setting=setting):
