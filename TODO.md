@@ -10,8 +10,8 @@ wait for an answer before any code.
 
 ## The queue, paused after the 3.33.191 release (2026-11-12): resume in this order
 
-- [ ] 4. The biochem running head in Word (metadata in the office `replace:`, a header placeholder) [3fi D59]
 - [ ] 5b. After wave 5: excerpts (source tracking: `[@key#N]` markers, `excerpts.json`, pagecite), pdfmd first, then Colophon's Source pane; spec approved [3fq 3fr 3fs D79 D80 Q74]
+- [ ] Deeper Markdown dialect detection, opt-in `dialect-detect: deep` (front matter over a GFM-style body; TOML front matter, with a default WARN), with the Obsidian flavour (5c) [3gf D106]
 - [ ] 5c. Then the Obsidian flavour and its community plugins (the sections below), before Colophon: plugin support may be wanted before committing fully to it [3ee 3er D85]
 - [ ] 6. Colophon by hand (`--smoke-web`, Cmd-Q with an unsaved tab, `gui.yml` on main), the review's list below in its order, then the GUI decisions and build [D59 D60 D81]
 - [ ] 7. nulabreport last: the full smoke test; a biochem report as `.docx` beside its PDF [D59]
@@ -64,7 +64,7 @@ wait for an answer before any code.
 - [ ] Row legibility for long-cell tables: `table-style` (rules, zebra, spacing)
 - [ ] Reader: Pandoc's Markdown for a plain file that uses grid or simple tables
 - [ ] Width modes beyond auto/keep/force: combinations, more per-table spellings (per-column widths are in the attribute line, 3.32.33) [3dl]
-- [ ] A true width estimator for math, raw HTML and typography instead of character counts; then delete the raw-TeX kludge (`column-count-raw-tex`) [3dl]
+- [ ] Measured column widths beyond LaTeX and Typst (`column-estimate: measure`, 3.33.332-333): Word/ODT through LibreOffice, then measure as the default (4.0 at the earliest) and the raw-TeX kludge (`column-count-raw-tex`) retired [3dl 3ge]
 - [ ] Cache the balanced widths per table by content hash [3dl]
 
 ## Kits, carried inside 3.31 (no minor of its own); a report without a `metadata/` folder; started [3du]
