@@ -192,6 +192,8 @@ def doctor_report(deep: bool = False) -> bool:
         last = [engine for engine in core.automatic_engines() if engine in (*core.BROWSER_ENGINES, "calibre")]
         if last:
             print(f"      last resorts, after those: {', '.join(last)}")
+    if not deep:
+        print("NOTE  Run pdfmd --doctor --deep to test-compile a page with each engine.")
     if not pandoc or not engines:
         native = core.available_native_engines()
         line(bool(native), "built-in renderer: " + (", ".join(native) if native else "none"))

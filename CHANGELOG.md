@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.321 — 2026-11-17
+
+Pre-edit state: commit `2583b26`. The shallow doctor report named the first engine without saying it had only checked discovery. Add a short hint to --doctor --deep, which test-compiles a page with each engine; deep mode itself is unchanged. The hint regression fails before and passes after. Doctor and required safety-module results are in the batch report. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.320 — 2026-11-17
 
 Pre-edit state: commit `71701c2`. An unfetchable remote SVG or PNG remained in the AST, leaving Pandoc or the engine to fetch or convert it again. Record failed downloads in the image map and replace those image nodes with their descriptions before writing; offline builds fetch once and warn once. The four fake-fetch regressions fail before and pass after; a XeLaTeX build checks first-engine success for both image types. Full image and required safety-module results are in the batch report. pdfmd.py stays at 785 lines (version only).

@@ -1655,3 +1655,6 @@ to carry it through Pandoc's HTML reader (local and remote sources, with or with
 When a remote Markdown image cannot be fetched, pdfmd removes its image reference before the writer runs,
 leaves the description as text and warns with the URL. This includes SVG and PNG: a missing download cannot
 make the LaTeX engine try a missing converted file. `--no-auto remoteimages` disables this handling.
+
+Plain `--doctor` checks discovery and reports the engine order. Run `pdfmd --doctor --deep` to test-compile
+a page with each engine and check whether the installed engines can actually build.

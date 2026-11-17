@@ -51,6 +51,12 @@ class DoctorTests(unittest.TestCase):
             self.assertIn("thing(s) to fix", text)
             self.assertEqual(result.returncode, 0, result.stderr)   # a PDF can still be made
 
+    def test_shallow_report_names_the_test_compile_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            text = doctor(os.environ.get("PATH", ""), directory).stdout
+            self.assertIn("--doctor --deep", text)
+            self.assertIn("test-compile", text)
+
     def test_the_sections_are_there(self):
         with tempfile.TemporaryDirectory() as directory:
             text = doctor(os.environ.get("PATH", ""), directory).stdout
