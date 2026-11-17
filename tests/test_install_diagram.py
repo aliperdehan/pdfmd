@@ -4,6 +4,7 @@ lookup answered by a function), so no network is used; node, where there is one,
 from __future__ import annotations
 
 import io
+import hashlib
 import os
 import shutil
 import subprocess
@@ -55,7 +56,7 @@ class Names(unittest.TestCase):
         self.assertIsNone(name("v0.9.0", "Linux", "riscv64"))
 
     def test_the_kinds_are_accepted_and_a_wrong_one_is_refused(self):
-        for good in ("diagram", "diagram:d2", "diagram:dot"):
+        for good in ("diagram", "diagram:d2", "diagram:dot", "diagram:resvg"):
             self.assertEqual(pdfmd.install_kind(good), good)
         for bad in ("diagram:mermaid", "diagram:", "diagrams"):
             with self.assertRaises(Exception):
@@ -157,6 +158,60 @@ class Installs(unittest.TestCase):
         self.assertTrue((tools.parent / "graphviz" / pdfmd.GRAPHVIZ_VERSION / "graphviz.cjs").is_file())
         self.assertEqual((tools.parent / "graphviz" / pdfmd.GRAPHVIZ_VERSION / "graphviz.cjs").read_bytes(),
                          (pdfmd_lua.FILTERS / "graphviz.cjs").read_bytes())
+
+
+class Resvg(unittest.TestCase):
+    setUp = Installs.setUp
+    def test_resvg_assets_cover_supported_machines(self):
+        installer = pdfmd.pdfmd_install
+        cases = [("Darwin", "arm64", "aarch64-apple-darwin"), ("Darwin", "x86_64", "x86_64-apple-darwin"),
+                 ("Linux", "aarch64", "aarch64-unknown-linux-musl"), ("Linux", "AMD64", "x86_64-unknown-linux-musl"),
+                 ("Windows", "AMD64", "x86_64-pc-windows-msvc")]
+        for system, machine, target in cases:
+            with self.subTest(system=system, machine=machine):
+                suffix = ".zip" if system == "Windows" else ".tar.gz"
+                self.assertRegex("resvg-" + target + suffix, installer.resvg_asset_pattern(system, machine))
+        self.assertIsNone(installer.resvg_asset_pattern("Linux", "riscv64"))
+
+    def test_resvg_download_checks_the_actual_digest_before_installing(self):
+        installer = pdfmd.pdfmd_install
+        archive = self.root / "release.tar.gz"
+        tarball(archive, {"resvg": b"#!/bin/sh\necho 'resvg 9.9.9'\n"}, 0o755)
+        payload = archive.read_bytes()
+        for valid in (False, True):
+            with self.subTest(valid=valid):
+                digest = hashlib.sha256(payload).hexdigest() if valid else "0" * 64
+                release = {"assets": [{"name": "resvg-aarch64-apple-darwin.tar.gz",
+                           "browser_download_url": "https://example.invalid/resvg.tar.gz", "digest": "sha256:" + digest}]}
+                class Response(io.BytesIO):
+                    pass
+                with unittest.mock.patch.object(installer, "resvg_asset_pattern", return_value=r"resvg-.*[.]tar[.]gz"), \
+                        unittest.mock.patch.object(pdfmd, "open_url", side_effect=lambda *a: Response(payload)), \
+                        unittest.mock.patch.object(pdfmd, "release_asset_matching",
+                                                   side_effect=lambda repo, pattern: installer.release_asset_matching(repo, pattern, release)), \
+                        unittest.mock.patch.object(pdfmd, "run_probe", return_value=subprocess.CompletedProcess([], 0, "resvg 9.9.9", "")), \
+                        unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as out, \
+                        unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+                    self.assertEqual(pdfmd.install_extra("diagram:resvg"), valid)
+                self.assertEqual((pdfmd.tools_directory() / "resvg").exists(), valid)
+                self.assertIn("SHA-256 verified" if valid else "SHA-256 mismatch", out.getvalue() + err.getvalue())
+
+    def test_resvg_without_a_digest_downloads_nothing(self):
+        with unittest.mock.patch.object(pdfmd, "release_asset_matching", return_value=None), \
+                unittest.mock.patch.object(pdfmd, "download_file") as download, \
+                unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            self.assertFalse(pdfmd.pdfmd_install.install_resvg())
+        download.assert_not_called()
+        self.assertIn("SHA-256", err.getvalue())
+
+    def test_bare_diagram_installs_all_three_tools(self):
+        installer = pdfmd.pdfmd_install
+        with unittest.mock.patch.object(installer, "install_d2", return_value=True) as d2, \
+                unittest.mock.patch.object(installer, "install_graphviz", return_value=True) as dot, \
+                unittest.mock.patch.object(installer, "install_resvg", return_value=True) as resvg:
+            self.assertTrue(pdfmd.install_extra("diagram"))
+        for call in (d2, dot, resvg):
+            call.assert_called_once_with()
 
 
 @unittest.skipIf(NODE is None, "needs node")

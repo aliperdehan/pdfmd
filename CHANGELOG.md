@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.33.306 — 2026-11-17
+
+Pre-edit state: commit `da0bbff`. Diagram installation omitted an SVG raster converter, so the tools
+it fetched could leave LaTeX and Word diagrams as code without Homebrew. Add the resvg release executable
+for this OS/architecture to `--install diagram`, and `--install diagram:resvg` for it alone. Require GitHub's
+asset SHA-256 before downloading and refuse a mismatch before extraction. Use pdfmd's tools folder, last
+on PATH, as for D2; removal is by deleting its executable, also as for D2. Update sizes, help, README,
+reference and agent guide. No settings or TODO changes; pdfmd.py stays at 784 lines (version only).
+
+Regression proof: the new install kind and four resvg tests fail before the change (the missing kind and
+functions). Fake release downloads exercise matching and mismatching SHA-256, a missing digest and the
+three-tool installation. The installer and five required safety modules pass: 128 tests, zero failures/errors,
+one setup skip. Ruff F and whitespace checks pass. No real installs or network access were used. The SVG conversion chain follows
+in a separate patch.
+
 ## v3.33.305 — 2026-11-17
 
 Pre-edit state: commit `edba628`. Diagram warnings reused D2's successful stderr when SVG conversion failed,

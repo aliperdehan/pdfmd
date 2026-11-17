@@ -409,7 +409,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "when there is none, about 30 MB: WeasyPrint's PDFs then have their math typeset by MathJax), "
                              "'math:katex' (KaTeX, about 1.5 MB, and node when there is none, "
                              "about 30 MB: WeasyPrint's PDFs then typeset math, KaTeX alone or what MathJax cannot read), 'diagram' (D2's release binary, 17 MB, and Graphviz as "
-                             "WebAssembly run by node, 2 MB: ```d2 and ```dot blocks are drawn; diagram:d2 or diagram:dot "
+                             "WebAssembly run by node, 2 MB, plus resvg (about 3 MB, SVG to PNG); diagram:d2, diagram:dot or diagram:resvg "
                              "alone), 'core:tex' (also 'cortex': Pandoc and Tectonic, the self-contained LaTeX engine, "
                              "Pandoc 35 MB and Tectonic 10 to 22 MB download), 'calibre' (Calibre, 190 to 360 MB: ebooks as output and input; offers Homebrew or winget "
                              "in a terminal, else downloads the release checked against GitHub's SHA-256: a disk image into "

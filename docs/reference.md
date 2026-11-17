@@ -1194,6 +1194,10 @@ never closed, front matter that does not parse. The reading is in the pdfmd_chec
 error (a warning too with `--strict`); `--check-ignore`, `pdfmd-options.check-ignore` and
 `<!-- pdfmd-check: ignore CODE -->` turn checks off.
 
+`pdfmd --install diagram` fetches D2, Graphviz and resvg; `--install diagram:resvg` fetches only resvg
+(about 3 MB). Its release executable for this OS/architecture is checked against GitHub’s SHA-256
+and kept in pdfmd’s tools folder; delete that executable to remove it (as for D2).
+
 A fenced ```mermaid, ```d2 or ```dot block (v3.26.16) is drawn by mmdc, d2 or dot when installed and replaced by the
 picture in the format the output takes (pdfmd_lua/diagram.lua); `--no-auto diagrams` leaves the code.
 D2 and SVG-only Graphviz need rsvg-convert or inkscape for PDF/PNG (LaTeX/Word/OpenDocument).

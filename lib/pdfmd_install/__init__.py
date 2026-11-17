@@ -508,7 +508,7 @@ GRAPHVIZ_VERSION = "1.29.2"
 GRAPHVIZ_SHA256 = "fbabf5f7a085f37009477d3585b2da1e4960f99dda54004e69c20553c8d172df"
 GRAPHVIZ_PACKAGE = f"https://registry.npmjs.org/@hpcc-js/wasm-graphviz/-/wasm-graphviz-{GRAPHVIZ_VERSION}.tgz"
 GRAPHVIZ_COMMANDS = ("dot", "neato", "fdp", "sfdp", "circo", "twopi", "osage", "patchwork")
-DIAGRAM_INSTALLS = ("d2", "dot")
+DIAGRAM_INSTALLS = ("d2", "dot", "resvg")
 
 
 def d2_asset_name(tag: str, system: str | None = None, machine: str | None = None) -> str | None:
@@ -668,12 +668,61 @@ def install_graphviz() -> bool:
     return True
 
 
+RESVG_REPOSITORY = "linebender/resvg"
+
+
+def resvg_asset_pattern(system: str | None = None, machine: str | None = None) -> str | None:
+    """Match the resvg release archive for this OS and architecture (never a source archive)."""
+    system = (system or platform.system()).lower()
+    machine = (machine or platform.machine()).lower()
+    machine = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
+    targets = {("darwin", "aarch64"): "aarch64-apple-darwin", ("darwin", "x86_64"): "x86_64-apple-darwin",
+               ("linux", "aarch64"): "aarch64-unknown-linux-musl", ("linux", "x86_64"): "x86_64-unknown-linux-musl",
+               ("windows", "x86_64"): "x86_64-pc-windows-msvc"}
+    target = targets.get((system, machine))
+    if target is None:
+        return None
+    return r"resvg-(?:v?[0-9.]+-)?" + target + (r"\.zip" if system == "windows" else r"\.tar\.gz")
+
+
+def install_resvg() -> bool:
+    """Fetch only GitHub's SHA-256 checked resvg executable into pdfmd's tools folder."""
+    pattern = resvg_asset_pattern()
+    asset = core.release_asset_matching(RESVG_REPOSITORY, pattern) if pattern else None
+    if asset is None:
+        print("No resvg release with a SHA-256 is listed for this OS/architecture; "
+              "see https://github.com/linebender/resvg/releases", file=sys.stderr)
+        return False
+    name, url, sha256 = asset
+    executable = "resvg.exe" if platform.system().lower() == "windows" else "resvg"
+    try:
+        with NamedTemporaryFile(suffix=".zip" if name.endswith(".zip") else ".tar.gz", delete=False) as temporary:
+            archive = Path(temporary.name)
+        try:
+            core.download_file(url, archive, sha256)
+            print(f"SHA-256 verified ({sha256[:12]}..., as listed by GitHub for this release)")
+            target = extract_executable(archive, executable, core.tools_directory())
+        finally:
+            archive.unlink(missing_ok=True)
+    except (OSError, tarfile.TarError, zipfile.BadZipFile) as error:
+        print(f"Could not install resvg ({error}).", file=sys.stderr)
+        return False
+    core.use_managed_tools()
+    ran = core.run_probe([str(target), "--version"])
+    if ran is None or ran.returncode != 0:
+        print(f"resvg was downloaded to {target} but does not run here", file=sys.stderr)
+        return False
+    print(f"Installed {ran.stdout.strip()} in {core.tools_directory()} (used when no other resvg is on PATH; "
+          "delete the file to remove it). Converts SVG to PNG without Homebrew.")
+    return True
+
+
 def install_diagram(which_one: str = "") -> bool:
-    """`--install diagram` (both), `diagram:d2`, `diagram:dot`."""
+    """`--install diagram` (D2, Graphviz, resvg), or one named tool."""
     wanted = [which_one] if which_one else list(DIAGRAM_INSTALLS)
     done = True
     for name in wanted:
-        done = (install_d2() if name == "d2" else install_graphviz()) and done
+        done = {"d2": install_d2, "dot": install_graphviz, "resvg": install_resvg}[name]() and done
     return done
 
 
@@ -956,7 +1005,7 @@ def install_kind(value: str) -> str:
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(core.INSTALL_KINDS)}; "
                                          "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz; "
                                          "math:mathjax is MathJax and math:katex is KaTeX, for math in WeasyPrint's PDFs; diagram:d2 and "
-                                         "diagram:dot draw ```d2 and ```dot blocks; core:tex (also cortex) is Pandoc and Tectonic, "
+                                         "diagram:dot draw ```d2 and ```dot blocks; diagram:resvg converts SVG to PNG; core:tex (also cortex) is Pandoc and Tectonic, "
                                          "core (also core:typst and full) is Pandoc and Typst; "
                                          "kit:SOURCE installs the kits of a repository: kit:owner/repo, kit:owner/repo@v1#name, kit:apa7)")
     return value

@@ -16,6 +16,7 @@ pdfmd a.md b.md                     # several paths imply -b; -r still merges th
 pdfmd *                            # skip non-inputs (including PDFs and pictures) in one NOTE; deduplicate inputs
 pdfmd report.md -e typst            # a PDF engine by name (or a list: -e typst,lualatex)
 pdfmd report.md --kit apa7         # build with a kit (a house style); `pdfmd --kits apa7` describes it, builds nothing
+pdfmd --install diagram:resvg        # SVG to PNG tool, GitHub SHA-256 checked, in pdfmd’s tools folder
 pdfmd --doctor                      # tools, including diagram SVG converters, and what fixes each
 pdfmd --doctor --deep               # also builds a small page with every engine: "installed" is not "works"
 pdfmd report.md --check             # what would go wrong, without building (links, images, labels, citations ...)

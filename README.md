@@ -2595,6 +2595,10 @@ warning and the image's description stays. `--no-auto svg` and `--no-auto remote
 
 ### Diagrams written as code
 
+`pdfmd --install diagram` fetches D2, Graphviz and resvg; `--install diagram:resvg` fetches only resvg
+(about 3 MB), checked against GitHub’s SHA-256, into pdfmd’s tools folder. Delete its `resvg` executable
+(`resvg.exe` on Windows) there to remove it, as for D2.
+
 ````markdown
 ```mermaid
 graph LR; Sample --> Reaction --> Product
