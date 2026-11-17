@@ -2,8 +2,12 @@
 
 # The orchestrating agent
 
-AGENTS.md is the process every agent follows; this part is for the agent that works with the author directly and runs
-the work. (Its last section, "Working under a task brief", is for delegated agents, not for you.)
+AGENTS.md is the process every agent follows. **If you were started with a task brief (a delegated batch, whatever
+model you are), you are not the orchestrator: follow your brief and AGENTS.md's last section, "Working under a task
+brief", and skip the rest of this file.** Its permissions (pushing the CI branch, landing, settling a choice) are
+not yours.
+
+Otherwise you are the agent that works with the author directly and runs the work, and the sections below are yours.
 
 ## Who does what
 

@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.285c — 2026-11-17
+
+Pre-edit state: commit `68dc35b`.
+
+CLAUDE.md, a gap in 3.33.285b's split (found by a side agent, confirmed by the author): it told every reader that the
+orchestrator's part was theirs and that AGENTS.md's "Working under a task brief" section was "not for you". A Claude
+started as a helper with a task brief also reads CLAUDE.md, so it could have taken the orchestrator's permissions
+(pushing the CI branch, landing, settling a choice) and skipped the helper limits. The opening now makes it
+conditional on something the reader can check: an agent started with a task brief follows its brief and AGENTS.md's
+last section and skips the rest of CLAUDE.md; only the agent working with the author directly reads on. Docs only.
+
 ## v3.33.285b — 2026-11-17
 
 Pre-edit state: commit `a1343bb`.
