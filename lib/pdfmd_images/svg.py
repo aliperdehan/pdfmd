@@ -63,10 +63,24 @@ def convert_svg(svg: Path, cache: Path, which: Callable[[str], str | None] = shu
     fallback = target.with_name(target.stem + f"-{dpi:g}.png") if format == "pdf" else target
     cached_fallback = fallback.is_file() and fallback.stat().st_size > 0
     converters = available_converters(which, soffice)
+    record = fallback.with_suffix(".json")
+    seen = set()
     if cached_fallback:
-        # resvg can only remake the raster we already have; try only PDF-capable tools.
-        converters = [name for name in converters if name != "resvg"]
+        try:
+            previous = json.loads(record.read_text(encoding="utf-8"))["available"]
+            if isinstance(previous, list) and all(isinstance(name, str) for name in previous):
+                seen = set(previous)
+        except (OSError, ValueError, KeyError, TypeError):
+            pass  # a legacy or unreadable record: try the available vector converters once
+    available = set(converters) - {"resvg"}
+
+    def record_fallback():
+        write_cached(record, json.dumps({"available": sorted(seen | available)}).encode("utf-8"))
+
+    if cached_fallback:
+        converters = [name for name in converters if name != "resvg" and name not in seen]
         if not converters:
+            record_fallback()
             return fallback, ""
     if not converters:
         return None, "no SVG converter found (" + HINTS + ")"
@@ -81,11 +95,14 @@ def convert_svg(svg: Path, cache: Path, which: Callable[[str], str | None] = shu
             if ok and produced.is_file() and produced.stat().st_size > 0:
                 destination = target if suffix == format else target.with_name(target.stem + f"-{dpi:g}.png")
                 write_cached(destination, produced.read_bytes())
+                if format == "pdf" and suffix == "png":
+                    record_fallback()
                 return destination, ""
             reasons.append(f"{name}: {reason}")
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
     if cached_fallback:
+        record_fallback()
         return fallback, ""
     return None, "; ".join(reasons)
 

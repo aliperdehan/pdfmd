@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.323 — 2026-11-17
+
+Pre-edit state: commit `f7d54b6`. Cached SVG raster fallbacks retried every installed PDF converter on every build, including known failures such as a timed-out LibreOffice. Store available vector-converter names beside the PNG and retry only newly available converters; legacy or invalid records get one attempt and are then recorded. A PDF still returns immediately. Two regressions fail before (four subcases) and pass after, covering failed converters, a new vector converter and PDF reuse. Full image and required safety-module results are in the batch report. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.322 — 2026-11-17
 
 Pre-edit state: commit `d53d4ae`. Bare --install required an argument, and bare diagram fetched every tool. Add a read-only catalogue for every INSTALL_SIZES kind, naming size, source, target and removal; bare diagram lists its tools, diagram:d2|dot|resvg install one, and diagram:all follows fonts:all. Full/core remain Pandoc plus Typst, as before. Fake-installer regressions fail before and pass after; help, install modules and required safety checks are in the batch report. No new setting; setup does not list install kinds. pdfmd.py stays at 785 lines (version only).

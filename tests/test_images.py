@@ -167,6 +167,50 @@ class Converting(unittest.TestCase):
                 self.assertEqual(svg.convert_svg(self.svg, self.cache), (png, ""))
                 self.assertEqual(run.call_count, int("typst" in converters))
 
+    def test_raster_fallback_records_failed_vector_converters(self):
+        from pdfmd_images import svg
+        def convert(name, source, produced, *args, **kwargs):
+            if name == "resvg":
+                produced.write_bytes(PNG_BYTES)
+                return True, ""
+            return False, "bad SVG"
+        with mock.patch.object(svg, "available_converters", return_value=["soffice", "resvg"]), \
+                mock.patch.object(svg, "_run", side_effect=convert) as run:
+            png, why = svg.convert_svg(self.svg, self.cache)
+            self.assertEqual(png.suffix, ".png", why)
+            self.assertEqual(run.call_count, 2)
+            run.reset_mock()
+            self.assertEqual(svg.convert_svg(self.svg, self.cache), (png, ""))
+            run.assert_not_called()
+        def vector(name, source, produced, *args, **kwargs):
+            produced.write_bytes(b"%PDF-vector")
+            return True, ""
+        with mock.patch.object(svg, "available_converters", return_value=["inkscape", "soffice", "resvg"]), \
+                mock.patch.object(svg, "_run", side_effect=vector) as run:
+            pdf, why = svg.convert_svg(self.svg, self.cache)
+            self.assertEqual(pdf.suffix, ".pdf", why)
+            self.assertEqual([call.args[0] for call in run.call_args_list], ["inkscape"])
+            run.reset_mock()
+            self.assertEqual(svg.convert_svg(self.svg, self.cache), (pdf, ""))
+            run.assert_not_called()
+
+    def test_legacy_or_invalid_raster_record_retries_available_tools_only_once(self):
+        from pdfmd_images import svg
+        self.cache.mkdir()
+        pdf = self.cache / svg.cache_name(self.svg)
+        png = pdf.with_name(pdf.stem + "-192.png")
+        png.write_bytes(PNG_BYTES)
+        record = png.with_suffix(".json")
+        for content in (None, "broken JSON", '{"available": "typst"}'):
+            if content is not None:
+                record.write_text(content, encoding="utf-8")
+            with self.subTest(content=content), \
+                    mock.patch.object(svg, "available_converters", return_value=["typst", "resvg"]), \
+                    mock.patch.object(svg, "_run", return_value=(False, "bad SVG")) as run:
+                self.assertEqual(svg.convert_svg(self.svg, self.cache), (png, ""))
+                self.assertEqual(svg.convert_svg(self.svg, self.cache), (png, ""))
+                self.assertEqual(run.call_count, 1)
+
     def test_nothing_installed_says_what_to_install(self):
         with mock.patch("pdfmd_images.svg._python_module", return_value=False):
             pdf, why = images.convert_svg(self.svg, self.cache, self.which)
