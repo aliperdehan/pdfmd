@@ -264,6 +264,17 @@ class Latex(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         return done, target.read_bytes()
 
+    def test_a_temporary_folder_with_a_tilde_is_measured(self):
+        # Windows' short folder names (C:\\Users\\RUNNER~1\\...) put `~` in the temporary folder. The engine was given the
+        # measuring file's absolute path, which TeX reads with `~` active: "I can't find file", and the build fell back
+        # to the count (the branch CI's windows-latex job, v3.33.333)
+        tilde = self.folder / "a~b"
+        tilde.mkdir()
+        with mock.patch.dict(os.environ, {"TMPDIR": str(tilde), "TEMP": str(tilde), "TMP": str(tilde)}):
+            done, _ = self.build()
+        self.assertNotIn("measurement failed", done.stderr)
+        self.assertEqual(len(list((self.folder / "cache").rglob("column-measure/*.json"))), 1, done.stderr)
+
     def test_printed_widths_and_linewidth_are_cached(self):
         done, measured = self.build(TEXT, "--verbose")
         engine = getattr(self, "engine", "xelatex")

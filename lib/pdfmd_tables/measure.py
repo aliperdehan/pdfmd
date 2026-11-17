@@ -148,10 +148,13 @@ def run(command: list[str], cwd: Path, env: dict, verbose: bool) -> subprocess.C
 
 def check(result: subprocess.CompletedProcess, stage: str) -> None:
     if result.returncode:
-        # Keep a useful cause without dumping a full TeX log on an otherwise successful build.
-        lines = (result.stderr or result.stdout or "").strip().splitlines() or ["no diagnostic"]
+        # Keep a useful cause without dumping a full TeX log on an otherwise successful build. TeX writes its "!" error
+        # to standard output, while MiKTeX puts notices such as "So far, no MiKTeX administrator has checked for
+        # updates" on standard error: look at both for the error first.
+        lines = [line for text in (result.stdout or "", result.stderr or "") for line in text.strip().splitlines()]
+        last = (result.stderr or result.stdout or "").strip().splitlines() or ["no diagnostic"]
         cause = next((line for line in lines if line.startswith("!")), None)
-        cause = cause or next((line for line in lines if line.startswith("error:")), lines[-1])
+        cause = cause or next((line for line in lines if line.startswith("error:")), last[-1])
         raise ValueError(f"{stage}: {cause}")
 
 
@@ -209,9 +212,17 @@ def prepare(command: list[str], engine: str, sources: list[Path], metadata: list
                 elif engine == "tectonic":
                     compile_command = [executable, *options, "--outfmt=xdv", "--keep-logs", "--keep-intermediates", "--outdir", str(scratch), str(source)]
                 else:
-                    compile_command = [executable, *options, "-interaction=nonstopmode", "-halt-on-error",
-                                       "-output-directory=" + str(scratch), str(source)]
-                result = run(compile_command, cwd, env, verbose)
+                    # By a relative name in the scratch folder, as Pandoc runs its engine: a path on the command line is
+                    # read by TeX, where `~` (Windows' short folder names, C:\Users\RUNNER~1\...) is an active character.
+                    # The document's own folders stay reachable through TEXINPUTS (a trailing separator keeps the rest).
+                    compile_command = [executable, *options, "-interaction=nonstopmode", "-halt-on-error", source.name]
+                    tex_env = dict(env if env is not None else os.environ)
+                    folders = dict.fromkeys([str(cwd), *(str(item.parent) for item in sources)])
+                    tex_env["TEXINPUTS"] = os.pathsep.join(folders) + os.pathsep + tex_env.get("TEXINPUTS", "")
+                if engine in ("typst", "tectonic"):
+                    result = run(compile_command, cwd, env, verbose)
+                else:
+                    result = run(compile_command, scratch, tex_env, verbose)
                 check(result, f"measurement {engine}")
                 data = (parse_typst(result.stdout) if engine == "typst" else
                         parse_latex((scratch / "measure.pdfmdwidths").read_text(encoding="utf-8")))
