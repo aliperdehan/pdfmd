@@ -237,8 +237,23 @@ jobs:
           "$miktex/lualatex" --version | head -1
       - name: poppler (the tests read PDFs with pdftotext and pdftoppm)
         run: |
-          choco install poppler -y --no-progress
-          echo 'C:\ProgramData\chocolatey\bin' >> "$GITHUB_PATH"     # in front of MiKTeX's own pdftotext, which has no -bbox
+          ok=
+          for try in 1 2 3; do
+            choco install poppler -y --no-progress || echo "WARN Chocolatey attempt $try failed"
+            # Chocolatey can return success after installing zero packages. Check the
+            # explicit shim, including its identity, before accepting the installation.
+            if [ -x /c/ProgramData/chocolatey/bin/pdftotext.exe ]; then
+              version=$(/c/ProgramData/chocolatey/bin/pdftotext.exe -v 2>&1 || true)
+              if [[ "$version" == *Poppler* ]]; then ok=1; break; fi
+            fi
+            echo "WARN Poppler's pdftotext is still missing after attempt $try"
+            if [ "$try" -lt 3 ]; then sleep 15; fi
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::Poppler's pdftotext is unavailable after 3 Chocolatey attempts (zero packages or wrong executable)." >&2
+            exit 1
+          fi
+          printf '%s\n' 'C:\ProgramData\chocolatey\bin' >> "$GITHUB_PATH"     # in front of MiKTeX's own pdftotext, which has no -bbox
       - run: pip install .
       - name: The fonts the tests name (pdfmd's own default main font, its code font, DejaVu for missing glyphs)
         run: |
@@ -250,5 +265,5 @@ jobs:
         # Git Bash puts Git's own ucrt64/bin first on PATH, and its pdftotext is xpdf's (no -bbox, Latin-1 output): poppler's goes in front
         run: |
           export PATH="/c/ProgramData/chocolatey/bin:$PATH"
-          pdftotext -v 2>&1 | head -1
+          pdftotext -v 2>&1 | head -1 || true
           python -m unittest discover -s tests -v
