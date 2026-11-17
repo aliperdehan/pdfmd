@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.301c — 2026-11-17
+
+Pre-edit state: commit `8bd4e98`. The LibreOffice profile test's docstring used a Windows backslash in a normal string, producing an invalid-escape SyntaxWarning. Make the docstring raw. Before the edit, compiling tests/*.py with SyntaxWarnings treated as errors fails at test_svg_profile.py; afterwards every test file compiles. The profile, doctor and build-time modules plus the five required safety modules pass: 148 tests, zero failures/errors, one skip. Ruff F and whitespace checks pass. Tests only: PDFMD_VERSION stays 3.33.301; pdfmd.py stays at 784 lines; no TODO changes.
+
 ## v3.33.301b — 2026-11-17
 
 Pre-edit state: commit `07268ea`. Four remaining calc tests rejected every WARN, including unrelated runner font warnings. Narrow their absence checks to WARN  calc; the batch’s other new tests already name their warning families, and item 2 replaced the gap warning tests. An injected STIX font warning makes the existing typesetting build test fail before this edit. No other test behaviour changes. Tests only: PDFMD_VERSION stays 3.33.301 and pdfmd.py stays at 784 lines; no TODO changes. The injected-font regression passes with Pandoc 3.13 and 3.1.3; full calc plus the five required safety modules: 239 tests, zero failures/errors, one skip. Ruff F and whitespace checks pass.

@@ -1,4 +1,4 @@
-"""LibreOffice's throwaway profile is named by a real file URL (file:///C:/...); file://C:\... makes it fail on Windows."""
+r"""LibreOffice's throwaway profile is named by a real file URL (file:///C:/...); file://C:\... makes it fail on Windows."""
 
 from __future__ import annotations
 
