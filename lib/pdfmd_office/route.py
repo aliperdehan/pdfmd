@@ -254,9 +254,9 @@ def office_reference(md_path: Path, metadata_files: list[Path], variables: list[
                 note("OFFICE", f"{md_path}: profile {core.display_path(profile)}")
             arguments.filter_arguments = ["-M", f"pdfmd-office-latex={'images' if latex == 'images' else 'auto'}",
                                           "-M", f"pdfmd-office-report={arguments.report}"]
-            if target == "typst" and core.typst_version() >= (0, 12):
+            if target == "typst":
                 # a title a house style's cover took out goes back into the PDF's properties by a `set document` in
-                # the body, which Typst takes there from 0.12 on (before, only at the very start: the build would stop)
+                # the body; engine selection already requires Typst 0.12 or newer
                 arguments.filter_arguments += ["-M", "pdfmd-office-typst-document=true"]
             if labels is not None:
                 arguments.filter_arguments += ["-M", f"pdfmd-office-labels={labels}"]

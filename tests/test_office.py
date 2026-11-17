@@ -484,3 +484,17 @@ class PackagePick(unittest.TestCase):
         chosen = self.options("\\usepackage{mypkg}\n\\Scheme{dark}\n\\labsetup{x=1, scheme=light}\n")
         self.assertEqual(chosen["fonts"], "Serif")
         self.assertNotIn("replace", chosen)
+
+
+class TypstOfficeGate(unittest.TestCase):
+    def test_the_office_route_does_not_probe_typsts_version_again(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            document = root / "doc.md"
+            document.write_text("---\ntitle: T\n---\n\nText.\n")
+            with mock.patch.object(pdfmd, "typst_version", side_effect=AssertionError("redundant version probe")):
+                with pdfmd.office_reference(document, [], [], "typst", root / "out.typ", [], None,
+                                            lambda *args: None, force_filter=True) as arguments:
+                    self.assertIn("pdfmd-office-typst-document=true", arguments.filter_arguments)

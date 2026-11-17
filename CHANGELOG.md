@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.294 — 2026-11-17
+
+Pre-edit state: commit `5b66313`. The office route probed Typst's version again before preserving PDF document
+properties. Since v3.33.62 engine selection refuses versions below 0.12; the second gate is redundant. Always enable
+the document-properties filter for Typst. The saved regression fails before with "redundant version probe" and passes
+afterwards. Office, engine-chain and the five required safety modules: 167 cases with each of Pandoc 3.13 and 3.1.3,
+zero failures or errors, two skips each. Ruff F and whitespace checks pass. pdfmd.py stays at 784 lines (version
+only). No settings or TODO changes.
+
 ## v3.33.293 — 2026-11-17
 
 Pre-edit state: commit `bcd9fef`. The v3.33.59 Typst bibliography rule explicitly rejected fractional entry-spacing, so
