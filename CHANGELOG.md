@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.33.332a — 2026-11-17
+
+Pre-edit state: commit `31f91ea`. docs/agents.md still said that `indent: true` "stays 1.5em", the wording the
+correction of v3.33.326 replaced in the README, the reference and the help: `true` keeps each writer's standard indent
+(LaTeX the class's own, Typst 1.5em, Word 0.25in, HTML none). Documentation only.
+
 ## v3.33.332 — 2026-11-17
 
 Pre-edit state: commit `385d41b`. [tables] Character counts misjudge formatted cells and unusual pages. Add opt-in `column-estimate: measure` for LaTeX PDF builds (pdflatex, xelatex, lualatex, tectonic): an extra Pandoc pass retains the build's arguments and the selected engine measures cells, unbreakable words, linewidth and column padding. Cache by generated source and engine identity/options; the allocator works in points. The outlier minimum remains characters; the chosen-width word-floor cap is the character limit times each column's measured points per character. Exports keep count with one NOTE; a failed measurement warns with its cause and keeps count. Add the setup row, inventory, help, guide and reference. Regressions fail before for the missing setting and cache; algorithm, character-limit, fallback and filter-order tests cover the new path. Existing count-width tests and scratch .tex/.typ comparisons retain the old result. Engine and required safety checks are in the batch report. pdfmd.py stays at 785 lines (version only).

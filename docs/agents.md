@@ -117,7 +117,7 @@ To cap Pandoc's heap, set `pdfmd-options: {pandoc-memory: 512m}` (or `2g`; whole
 
 Use `--strip-comments` or `pdfmd-options: {strip-comments: true}` to remove HTML comments from the build itself as well as assembled/attached source. Code examples and pdfmd marker comments survive. This also removes comments before `--show-comments` draws them.
 
-Document `indent:` (front matter or pdfmd-options) accepts lengths such as 0.5in, 3em and 1cm in LaTeX, Typst, Word and HTML. True stays 1.5em; false/unset keeps defaults. Invalid lengths stop the build; indent divs still override a stretch.
+Document `indent:` (front matter or pdfmd-options) accepts lengths such as 0.5in, 3em and 1cm in LaTeX, Typst, Word and HTML. True keeps each writer's standard indent (LaTeX the class's own, Typst 1.5em, Word 0.25in, HTML none); false/unset keeps defaults. Invalid lengths stop the build; indent divs still override a stretch.
 
 CSL bibliography line-spacing (for example 2 for double spacing) applies locally in LaTeX, Typst, Word and HTML; native writer spacing is retained. A style without it keeps its output unchanged.
 
