@@ -10,7 +10,7 @@ Only a style that asks for a hanging indent has one (citeproc's `hanging-indent`
 
 `pdfmd_lua/bibliography_indent.lua` does the list after `--citeproc`, per writer: `\\cslhangindent` for LaTeX, `#set par(hanging-indent:)`
 around the list for Typst, a style on each entry for HTML, and a paragraph style `pdfmd-hang-<length>` for Word and OpenDocument
-(`pdfmd_office` writes its indent afterwards). It goes in only when the setting is set, or for Typst (the default). The entries of
+(`pdfmd_office` writes its indent afterwards). The indent filter goes in only when the setting is set, or for Typst (the default). A separate post-citeproc filter applies CSL line-spacing locally where writers need it; absent the attribute it changes nothing. The entries of
 `fullcite` take the same value (`pdfmd_fullcite`).
 
 `core` is the `pdfmd` module (`from pdfmd_base import core`); the names used (`first_pdfmd_option`, `display_path`) are read as
@@ -76,24 +76,23 @@ def setting(md_path: Path, metadata_files: list[Path]) -> str | None:
 
 def bibliography_indent_args(sources: Path | list[Path], metadata_files: list[Path], cmd: list[str], pandoc_options: list[str],
                              writer: str) -> list[str]:
-    """The filter for the combined list, after `--citeproc`: with the value when one is set, and for Typst (`writer`, Pandoc's
-    name or the engine's) with the default when not; [] without citeproc, and for any other writer when nothing is set."""
+    """Combined-list filters after citeproc: hanging indent when set (or Typst's default), then CSL line spacing."""
     files = sources if isinstance(sources, list) else [sources]
     if not files or ("--citeproc" not in cmd and "--citeproc" not in pandoc_options):
         return []
     value = setting(files[0], metadata_files)
-    if value is None and writer not in ("typst", "typ"):
-        return []
     try:
         import pdfmd_lua
     except ImportError:
         core.pdfmd_lua_missing()
         return []
+    args = []
     shipped = pdfmd_lua.path("bibliography_indent")
-    if shipped is None:
-        return []
-    return ["-M", f"pdfmd-bibliography-indent={value}" if value else f"pdfmd-bibliography-indent-default={DEFAULT}",
-            "--lua-filter", str(shipped)]
+    if shipped is not None and (value is not None or writer in ("typst", "typ")):
+        args = ["-M", f"pdfmd-bibliography-indent={value}" if value else f"pdfmd-bibliography-indent-default={DEFAULT}",
+                "--lua-filter", str(shipped)]
+    spacing = pdfmd_lua.path("bibliography_spacing")
+    return args + (["--lua-filter", str(spacing)] if spacing is not None else [])
 
 
 def native_path_args(command: list[str], writer: str | None = None) -> list[str]:

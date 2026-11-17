@@ -235,11 +235,11 @@ local function em(value)
 end
 
 -- the leading that puts lines LaTeX's linestretch x \baselineskip apart with a TOP_EDGE_EM line box (see the top)
-local function leading(meta)
+local function leading(meta, stretch)
   local size = fontsize(meta)
   local skip = size and BASELINESKIP[size]
   local ratio = skip and skip / size or BASELINESKIP_RATIO
-  return linestretch(meta) * ratio * TEX_POINT - TOP_EDGE_EM
+  return (stretch or linestretch(meta)) * ratio * TEX_POINT - TOP_EDGE_EM
 end
 
 -- the space between paragraphs: the leading for `indent: true`, plus paragraph-spacing when set, else plus Typst's own
@@ -358,40 +358,34 @@ end
 -- only something to measure (a format fact)
 local LINE_HEIGHT = "measure[X].height"
 
--- Citeproc omits fractional entry-spacing from the refs Attr. Recover it from the selected local style;
--- Pandoc's resource and user-data folders are the same fallbacks used by its style reader.
-local function csl_entry_spacing(meta)
-  if meta.csl == nil then return nil end
-  local style = pandoc.utils.stringify(meta.csl)
-  if style:match("^https?://") then return nil end  -- pdfmd's remote-style resolver normally supplies a local file
-  local names = {style}
-  for _, folder in ipairs(PANDOC_STATE.resource_path or {}) do names[#names + 1] = folder .. "/" .. style end
-  local data = PANDOC_STATE.user_data_dir
-  if data then
-    names[#names + 1] = tostring(data) .. "/csl/" .. style
-    names[#names + 1] = tostring(data) .. "/" .. style
-  end
-  for _, name in ipairs(names) do
-    local file = io.open(name, "rb")
-    if file then
-      local text = file:read("*a"); file:close()
-      text = text:gsub("<!%-%-.-%-%->", "")
-      local attrs = text:match("<[%w_:%-]*bibliography%s+([^>]*)>")
-      return attrs and tonumber(attrs:match([=[entry%-spacing%s*=%s*['"]([^'"]+)['"]]=]) or "") or nil
-    end
-  end
-  return nil
-end
+local csl_here = (PANDOC_SCRIPT_FILE or ""):gsub("[^/\\]*$", "")
+local csl_spacing = dofile(csl_here .. "csl_spacing.lua")
 
--- the `refs` div: its entries N lines apart (CSL entry-spacing), as LaTeX's \itemsep; nil leaves it to Pandoc's template
+-- The refs div: CSL line-spacing sets its pitch locally; entry-spacing adds N pitches between entries.
+-- Without either attribute, leave spacing to the document/template.
 local function entry_spacing(div, meta)
   if div.identifier ~= "refs" then return nil end
   local lines = tonumber(div.attributes["entry-spacing"] or "")
-  if lines == nil and div.attributes["entry-spacing"] == nil then lines = csl_entry_spacing(meta) end
-  if lines == nil or lines < 0 or lines ~= lines or lines == math.huge then return nil end
-  local value = "par.leading"
-  if lines > 0 then value = string.format("par.leading + %s * (par.leading + %s)", tostring(lines), LINE_HEIGHT) end
-  div.content:insert(1, pandoc.RawBlock("typst", "#show: body => context { set par(spacing: " .. value .. "); body }"))
+  if lines == nil and div.attributes["entry-spacing"] == nil then lines = csl_spacing.attribute(meta, "entry-spacing") end
+  local stretch = tonumber(div.attributes["line-spacing"] or "")
+  if stretch and (stretch <= 0 or stretch ~= stretch or stretch == math.huge) then stretch = nil end
+  local entry = lines ~= nil and lines >= 0 and lines == lines and lines ~= math.huge
+  if not entry and not stretch then return nil end
+  if entry then
+    local value = "par.leading"
+    if lines > 0 then value = string.format("par.leading + %s * (par.leading + %s)", tostring(lines), LINE_HEIGHT) end
+    div.content:insert(1, pandoc.RawBlock("typst", "#show: body => context { set par(spacing: " .. value .. "); body }"))
+  end
+  if stretch then
+    local rule
+    if meta["pdfmd-typst-line-spacing"] and pandoc.utils.stringify(meta["pdfmd-typst-line-spacing"]) == "pandoc" then
+      rule = "#show: body => context { set par(leading: " .. tostring(stretch)
+        .. " * (" .. em(TYPST_LEADING_EM) .. " + " .. LINE_HEIGHT .. ") - " .. LINE_HEIGHT .. "); body }"
+    else
+      rule = "#set par(leading: " .. em(leading(meta, stretch)) .. ")"
+    end
+    div.content:insert(1, pandoc.RawBlock("typst", rule))
+  end
   return div
 end
 

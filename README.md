@@ -3299,6 +3299,11 @@ The same key works in metadata files, folder settings, the config and `--setup`.
 A CSL bibliography's `entry-spacing` adds that many line pitches between entries, including 2.5 and 0.5; zero adds no
 extra line. Without the attribute, the entries keep the document's paragraph spacing.
 
+A CSL style's bibliography `line-spacing="2"` gives a double-spaced reference list in LaTeX, Typst,
+Word and HTML. The rule stays inside the bibliography; `entry-spacing` still controls the gap between entries.
+pdfmd fills gaps in writer support (Pandoc 3.13 already applies it in Word; 3.1.3 needs the fallback).
+Without `line-spacing` the output is unchanged.
+
 ### Your own defaults: the config file
 
 `pdfmd --init-config` writes a commented `~/.config/pdfmd/config.yaml`

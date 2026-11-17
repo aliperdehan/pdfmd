@@ -230,6 +230,11 @@ including calls introduced by citeproc (an italic volume followed by an issue). 
 escape them keep their output unchanged. A Pandoc whose Typst writer wraps a long heading over several
 source lines (3.1.3) gets `--wrap=none`, so the heading cannot spill into the following paragraph; Typst wraps it on the page.
 
+A CSL style's bibliography `line-spacing="2"` gives a double-spaced reference list in LaTeX, Typst,
+Word and HTML. The rule stays inside the bibliography; `entry-spacing` still controls the gap between entries.
+pdfmd fills gaps in writer support (Pandoc 3.13 already applies it in Word; 3.1.3 needs the fallback).
+Without `line-spacing` the output is unchanged.
+
 ## Page breaks (v3.27.13, off unless asked since v3.27.15)
 
 `pdfmd-options.pagebreak` (true, or a list of families: comment, tex, html, div, typst, word; also the config and

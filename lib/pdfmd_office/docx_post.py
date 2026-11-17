@@ -213,6 +213,41 @@ def style_hangs(styles: str) -> tuple[str, int]:
     return styles, changed
 
 
+
+def bibliography_line_spacing(document: str) -> tuple[str, int]:
+    """Fill missing Word line spacing inside refs, preserving native writer properties (240 = one line, Word's format)."""
+    changed = 0
+
+    def bibliography(match):
+        nonlocal changed
+        twips = round(float(match.group(1)) * 240)
+        changed += 1  # remove the two private delimiters even when the writer supplied every property
+
+        def paragraph(found):
+            text = found.group(0)
+            properties = re.search(r"<w:pPr\b[^>]*>.*?</w:pPr>", text, re.S)
+            spacing = re.search(r"<w:spacing\b[^>]*/>", properties.group(0)) if properties else None
+            if spacing and re.search(r"\bw:line=", spacing.group(0)):
+                return text
+            attrs = f'w:line="{twips}" w:lineRule="auto"'
+            if spacing:
+                old = spacing.group(0)
+                replacement = re.sub(r'\s+w:lineRule="[^"]*"', "", old)
+                replacement = replacement[:-2] + " " + attrs + "/>"
+                inner = properties.group(0).replace(old, replacement, 1)
+            elif properties:
+                inner = properties.group(0).replace("</w:pPr>", f"<w:spacing {attrs}/></w:pPr>", 1)
+            else:
+                return re.sub(r"(<w:p\b[^>]*>)", rf"\1<w:pPr><w:spacing {attrs}/></w:pPr>", text, count=1)
+            return text[:properties.start()] + inner + text[properties.end():]
+
+        return re.sub(r"<w:p\b[^>]*>.*?</w:p>", paragraph, match.group(2), flags=re.S)
+
+    document = re.sub(r"<!--pdfmd-csl-line-spacing:([0-9.]+)-->\s*(.*?)<!--/pdfmd-csl-line-spacing-->\s*",
+                      bibliography, document, flags=re.S)
+    return document, changed
+
+
 def final_section(document: str) -> re.Match | None:
     """The `<w:sectPr>` of the whole body: the last one, after every paragraph."""
     found = None
@@ -305,7 +340,8 @@ def finish_markup(path: Path) -> int:
     styles, hung = style_hangs(styles) if "pdfmd-hang-" in styles else (styles, 0)
     styled += hung
     document, sections = sections_markup(document)
-    if not styled and not sections:
+    document, spaced = bibliography_line_spacing(document)
+    if not styled and not sections and not spaced:
         return 0
     entries["word/document.xml"] = document.encode("utf-8")
     if styled:
@@ -315,4 +351,4 @@ def finish_markup(path: Path) -> int:
         for name, data in entries.items():
             target.writestr(infos[name] if name in infos else name, data)
     temporary.replace(path)
-    return styled + sections
+    return styled + sections + spaced

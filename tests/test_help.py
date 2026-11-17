@@ -61,6 +61,9 @@ class TieredHelp(unittest.TestCase):
         for topic in ("output", "all"):
             self.assertIn("pdfmd-options.indent", run("--help", topic).stdout)
 
+    def test_csl_line_spacing_is_in_output_help(self):
+        self.assertIn("CSL line-spacing", run("--help", "output").stdout)
+
     def test_every_topic_prints(self):
         for topic in [*pdfmd_help.TOPICS, "other"]:
             done = run("--help", topic)

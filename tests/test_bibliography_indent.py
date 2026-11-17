@@ -85,10 +85,11 @@ class Values(unittest.TestCase):
             document.write_text("---\ntitle: T\n---\n\nx\n", encoding="utf-8")
             args = pdfmd.bibliography_indent_args
             self.assertEqual(args(document, [], [], [], "typst"), [])                     # no citeproc, nothing to change
-            self.assertEqual(args(document, [], ["--citeproc"], [], "latex"), [])         # nothing set: the writer's own
-            self.assertEqual(args(document, [], ["--citeproc"], [], "docx"), [])
+            spacing = ["--lua-filter", str(LUA / "bibliography_spacing.lua")]
+            self.assertEqual(args(document, [], ["--citeproc"], [], "latex"), spacing)    # no indent override
+            self.assertEqual(args(document, [], ["--citeproc"], [], "docx"), spacing)
             typst = args(document, [], ["--citeproc"], [], "typst")
-            self.assertEqual(typst, ["-M", "pdfmd-bibliography-indent-default=1.5em", "--lua-filter", str(LUA / "bibliography_indent.lua")])
+            self.assertEqual(typst, ["-M", "pdfmd-bibliography-indent-default=1.5em", "--lua-filter", str(LUA / "bibliography_indent.lua"), *spacing])
             document.write_text("---\npdfmd-options:\n  bibliography-indent: 0.5in\n---\n\nx\n", encoding="utf-8")
             self.assertEqual(args(document, [], ["--citeproc"], [], "docx")[:2], ["-M", "pdfmd-bibliography-indent=0.5in"])
             self.assertEqual(args(document, [], [], ["--citeproc"], "html")[:2], ["-M", "pdfmd-bibliography-indent=0.5in"])
@@ -286,6 +287,129 @@ class Builds(unittest.TestCase):
         docx = self.build("docx", "bibliography-indent: 0.5in", body=body)
         with zipfile.ZipFile(docx) as archive:
             self.assertIn('w:val="pdfmd-hang-0p5in"', archive.read("word/document.xml").decode("utf-8"))
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class CSLLineSpacing(unittest.TestCase):
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory(prefix="pdfmd-csl-line-spacing-")
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name)
+        (self.root / "refs.bib").write_text(BIB, encoding="utf-8")
+
+    def build(self, writer, spacing="2", bypass=False, options=""):
+        attrs = ' line-spacing="' + spacing + '"' if spacing else ""
+        style = ('<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0">'
+                 '<info><title>Spacing</title><id>spacing</id></info>'
+                 '<citation><layout><text variable="title"/></layout></citation>'
+                 '<bibliography entry-spacing="1" hanging-indent="true"' + attrs + '>'
+                 '<layout><text variable="title"/></layout></bibliography></style>')
+        (self.root / "style.csl").write_text(style, encoding="utf-8")
+        source = self.root / "doc.md"
+        source.write_text("---\ntitle: Spacing\nbibliography: refs.bib\ncsl: style.csl\n"
+                          + options + "---\n\nBefore.\n\n" + BODY + "\nAfter.\n", encoding="utf-8")
+        output = self.root / ("doc." + writer)
+        launch = [sys.executable, str(ROOT / "scripts/pdfmd")]
+        if bypass:
+            # Compare the complete pipeline with just the new fallback disabled.
+            code = ("import sys; sys.path.insert(0, " + repr(str(ROOT)) + "); import pdfmd\n"
+                    "original = pdfmd.bibliography_indent_args\n"
+                    "def args(*a, **kw):\n"
+                    "    result = original(*a, **kw)\n"
+                    "    return [word for i, word in enumerate(result) if not "
+                    "(word.endswith('bibliography_spacing.lua') or "
+                    "(word == '--lua-filter' and i + 1 < len(result) and "
+                    "result[i + 1].endswith('bibliography_spacing.lua')))]\n"
+                    "pdfmd.bibliography_indent_args = args\n"
+                    "pdfmd.main()\n")
+            launch = [sys.executable, "-c", code]
+        done = subprocess.run([*launch, str(source), "-t", writer, "-s", "-o", str(output),
+                               "--no-stamp", "--no-backup"], cwd=self.root, capture_output=True, text=True,
+                              encoding="utf-8", env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                                                    "SOURCE_DATE_EPOCH": "1577836800"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        if writer == "docx":
+            with zipfile.ZipFile(output) as archive:
+                return {name: archive.read(name) for name in archive.namelist()}
+        return output.read_bytes()
+
+    def test_double_spaced_bibliography_in_each_writer(self):
+        for writer in ("latex", "typst", "html", "docx"):
+            with self.subTest(writer=writer):
+                out = self.build(writer)
+                if writer == "docx":
+                    from xml.etree import ElementTree as ET
+                    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+                    root = ET.fromstring(out["word/document.xml"])
+                    entries = [p for p in root.findall(".//w:p", ns)
+                               if "book" in "".join(p.itertext()).lower() and
+                               p.find("w:pPr/w:pStyle", ns) is not None and
+                               p.find("w:pPr/w:pStyle", ns).get("{" + ns["w"] + "}val") == "Bibliography"]
+                    self.assertEqual(len(entries), 2)
+                    for entry in entries:
+                        spacing = entry.find("w:pPr/w:spacing", ns)
+                        self.assertIsNotNone(spacing)
+                        self.assertEqual(spacing.get("{" + ns["w"] + "}line"), "480")
+                    self.assertNotIn(b"pdfmd-csl-line-spacing", out["word/document.xml"])
+                else:
+                    text = out.decode("utf-8")
+                    if writer == "latex":
+                        self.assertIn("\\begingroup\\linespread{2}\\selectfont", text)
+                        self.assertLess(text.index("\\linespread{2}"), text.index("\\begin{CSLReferences}"))
+                        self.assertIn("\\par\\endgroup", text)
+                    elif writer == "html":
+                        self.assertRegex(text, r'id="refs"[^>]*style="line-height: 2;"')
+                    else:
+                        self.assertIn("#[ // pdfmd CSL line-spacing", text)
+                        self.assertIn("#set par(leading: 1.7635em)", text)
+
+    def test_without_attribute_is_byte_identical(self):
+        for writer in ("latex", "typst", "html", "docx"):
+            with self.subTest(writer=writer):
+                normal = self.build(writer, spacing="")
+                before = (self.root / ("doc." + writer)).read_bytes()
+                self.assertEqual(normal, self.build(writer, spacing="", bypass=True))
+                self.assertEqual(before, (self.root / ("doc." + writer)).read_bytes())
+
+    @unittest.skipUnless(shutil.which("typst") and shutil.which("pdftotext"), "needs Typst and pdftotext")
+    def test_typst_line_pitch_doubles_inside_the_bibliography_only(self):
+        words = " ".join(["word"] * 65)
+        (self.root / "refs.bib").write_text(
+            "@book{a, title={Entry " + words + "}, year={2020}}\n"
+            "@book{b, title={Second entry}, year={2021}}\n", encoding="utf-8")
+        for mode in ("latex", "pandoc"):
+            pitches = []
+            for lines in ("1", "2"):
+                typ = self.root / "render.typ"
+                typ.write_bytes(self.build("typst", spacing=lines, options="mainfont: Libertinus Serif\nlinestretch: 1.5\npdfmd-options: {typst-line-spacing: " + mode + "}\n"))
+                # Add two body lines after the closed bibliography scope.
+                with typ.open("a", encoding="utf-8") as output:
+                    output.write("\nOutsideone\\\nOutsidetwo\n")
+                pdf = self.root / "render.pdf"
+                done = subprocess.run(["typst", "compile", str(typ), str(pdf)], cwd=self.root,
+                                      capture_output=True, text=True, encoding="utf-8", env={**os.environ})
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                xml = subprocess.run(["pdftotext", "-bbox-layout", str(pdf), "-"], capture_output=True,
+                                     text=True, encoding="utf-8", check=True).stdout
+                layout = [(float(top), word) for top, word in re.findall(
+                    r'<line xMin="[^"]+" yMin="([^"]+)".*?<word[^>]*>([^<]*)', xml, re.S)]
+                start = next(i for i, (_, word) in enumerate(layout) if word == "Entry")
+                outside = next(i for i, (_, word) in enumerate(layout) if word == "Outsideone")
+                pitches.append((layout[start + 1][0] - layout[start][0], layout[outside + 1][0] - layout[outside][0]))
+            self.assertAlmostEqual(pitches[1][0], 2 * pitches[0][0], delta=0.2)
+            self.assertAlmostEqual(pitches[1][1], pitches[0][1], delta=0.2)
+
+    def test_word_native_spacing_is_retained(self):
+        native = self.build("docx", bypass=True)
+        if b'w:line="480"' not in native["word/document.xml"]:
+            self.skipTest("this Pandoc needs the Word line-spacing fallback")
+        self.assertEqual(self.build("docx"), native)
+
+    def test_word_hanging_indent_override_and_spacing_coexist(self):
+        out = self.build("docx", options="pdfmd-options: {bibliography-indent: 0.5in}\n")
+        document = out["word/document.xml"].decode("utf-8")
+        self.assertEqual(document.count('w:val="pdfmd-hang-0p5in"'), 2)
+        self.assertEqual(document.count('w:line="480"'), 2)
+        self.assertIn(b'w:hanging="720"', out["word/styles.xml"])
 
 
 if __name__ == "__main__":
