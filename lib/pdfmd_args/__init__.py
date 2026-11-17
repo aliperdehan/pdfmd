@@ -295,7 +295,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--paragraph-spacing", metavar="LENGTH", default=None,
                         help="the space between paragraphs, added to the line spacing: a length (6pt, 1em, 2mm; pt mm cm in "
                              "em), 0 for none, or auto (the default: each engine's own; with `indent: true` none). LaTeX and "
-                             "Typst; the HTML engines take it from a style sheet. Also "
+                             "Typst (typst-line-spacing: pandoc keeps the template’s own spacing); the HTML engines take it from a style sheet. Also "
                              "`pdfmd-options: {paragraph-spacing: 6pt}`, or --setup")
     parser.add_argument("--bibliography-indent", metavar="LENGTH", default=None,
                         help="how far the lines of a reference after its first are set in, in the reference list and in the entries "

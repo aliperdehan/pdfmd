@@ -67,6 +67,32 @@ def tiny_png() -> bytes:
             + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00")) + chunk(b"IEND", b""))
 
 
+class TypstLineSpacing(unittest.TestCase):
+    def test_values_are_normalised_and_bad_values_stop(self):
+        for value, expected in ((None, []), ("latex", []), (" LATEX ", []),
+                                (" PaNdOc ", ["-M", "pdfmd-typst-line-spacing=pandoc"])):
+            with self.subTest(value=value), mock.patch.object(pdfmd, "first_pdfmd_option",
+                                                                  side_effect=lambda source, metadata, key: value if key == "typst-line-spacing" else None):
+                self.assertEqual(pdfmd.paragraph_spacing_typst_args(Path("doc.md"), [], "typst"), expected)
+        for value in ("moon", True, ""):
+            with self.subTest(value=value), mock.patch.object(pdfmd, "first_pdfmd_option",
+                                                                  side_effect=lambda source, metadata, key: value if key == "typst-line-spacing" else None):
+                with self.assertRaisesRegex(SystemExit, "typst-line-spacing must be latex or pandoc"):
+                    pdfmd.paragraph_spacing_typst_args(Path("doc.md"), [], "typst")
+                self.assertEqual(pdfmd.paragraph_spacing_typst_args(Path("doc.md"), [], "latex"), [])
+
+    def test_document_over_metadata_over_config(self):
+        with tempfile.TemporaryDirectory() as folder:
+            doc, meta = Path(folder) / "doc.md", Path(folder) / "metadata.yaml"
+            doc.write_text("Text.\n", encoding="utf-8")
+            with mock.patch.object(pdfmd, "config_options", return_value={"typst-line-spacing": "pandoc"}):
+                self.assertIn("pdfmd-typst-line-spacing=pandoc", pdfmd.paragraph_spacing_typst_args(doc, [], "typst"))
+                meta.write_text("pdfmd-options: {typst-line-spacing: latex}\n", encoding="utf-8")
+                self.assertEqual(pdfmd.paragraph_spacing_typst_args(doc, [meta], "typst"), [])
+                doc.write_text("---\npdfmd-options: {typst-line-spacing: pandoc}\n---\n\nText.\n", encoding="utf-8")
+                self.assertIn("pdfmd-typst-line-spacing=pandoc", pdfmd.paragraph_spacing_typst_args(doc, [meta], "typst"))
+
+
 @unittest.skipUnless(PANDOC, "needs Pandoc")
 class Filter(unittest.TestCase):
     def setUp(self):
@@ -434,6 +460,49 @@ class CommandLine(unittest.TestCase):
         page = layout.split("</page>")[0]
         return [(float(top), first) for top, first in re.findall(
             r'<line xMin="[^"]+" yMin="([^"]+)".*?<word[^>]*>([^<]*)', page, re.S)]
+
+    def test_typst_line_spacing_defaults_are_byte_identical_and_pandoc_opts_out(self):
+        source = self.directory / "doc.md"
+        front = "fontsize: 12pt\nmainfont: Libertinus Serif\nlinestretch: 2\n"
+        source.write_text("---\n" + front + "---\n\nFirst.\n", encoding="utf-8")
+        done = self.run_pdfmd("doc.md", "--to", "typst", "--standalone", "--no-stamp", "-o", "doc.typ")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        default = (self.directory / "doc.typ").read_bytes()
+        for mode in ("latex", " LATEX "):
+            source.write_text("---\n" + front + 'pdfmd-options: {typst-line-spacing: "' + mode + '"}\n---\n\nFirst.\n', encoding="utf-8")
+            done = self.run_pdfmd("doc.md", "--to", "typst", "--standalone", "--no-stamp", "-o", "doc.typ")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertEqual((self.directory / "doc.typ").read_bytes(), default)
+        source.write_text("---\n" + front + "pdfmd-options: {typst-line-spacing: pandoc}\n---\n\nFirst.\n", encoding="utf-8")
+        done = self.run_pdfmd("doc.md", "--to", "typst", "--standalone", "--no-stamp", "-o", "doc.typ")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        text = (self.directory / "doc.typ").read_text(encoding="utf-8")
+        self.assertNotIn('#set text(top-edge: 0.7em, bottom-edge: "baseline")', text)
+        self.assertNotIn("#set par(leading:", text)
+        plain = subprocess.run([PANDOC, str(source), "-t", "typst", "--standalone"],
+                               cwd=self.directory, env={**os.environ}, capture_output=True, text=True)
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertEqual(text, plain.stdout)
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_pandoc_line_spacing_matches_pandocs_measured_pdf(self):
+        source = self.directory / "doc.md"
+        source.write_text("---\nfontsize: 12pt\nmainfont: Libertinus Serif\nlinestretch: 2\n"
+                          "pdfmd-options: {typst-line-spacing: pandoc}\n---\n\nFirst  \nline\n\nSecond  \nline\n", encoding="utf-8")
+        done = subprocess.run([PANDOC, "doc.md", "--pdf-engine=typst", "--pdf-engine-opt=--root=/", "-o", "doc.pdf"],
+                              cwd=self.directory, env={**os.environ}, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        baseline = self.line_tops()
+        done = self.run_pdfmd("doc.md", "-e", "typst", "--no-stamp", "--no-backup")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        built = self.line_tops()
+        self.assertGreaterEqual(len(baseline), 4, baseline)
+        self.assertGreaterEqual(len(built), 4, built)
+        for index in range(3):
+            expected = baseline[index + 1][0] - baseline[index][0]
+            actual = built[index + 1][0] - built[index][0]
+            self.assertAlmostEqual(actual, expected, delta=0.05, msg=(baseline, built))
+        self.assertGreater(abs((built[1][0] - built[0][0]) - 2 * 14.5 * 72 / 72.27), 1)
 
     def test_the_filter_is_given_only_to_typst(self):
         self.assertEqual(pdfmd.typst_filter_args("latex"), [])

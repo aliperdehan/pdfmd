@@ -15,6 +15,15 @@ from pathlib import Path
 from pdfmd_base import core
 
 
+def line_spacing_mode(md_path: Path, metadata_files: list[Path]) -> str:
+    """LaTeX's line pitch by default, or Pandoc's unmodified Typst template (DECISION 96)."""
+    value = core.first_pdfmd_option(md_path, metadata_files, "typst-line-spacing")
+    mode = "latex" if value is None else str(value).strip().casefold()
+    if mode not in ("latex", "pandoc"):
+        raise SystemExit(f"{core.display_path(md_path)}: pdfmd-options.typst-line-spacing must be latex or pandoc, not {value!r}")
+    return mode
+
+
 def option_values(command: list[str], long: str, short: str = "") -> list[str]:
     """Values of a Pandoc option, including equals and attached short forms."""
     values = []
@@ -119,6 +128,8 @@ def copy_partials(text: str, origin: Path, command: list[str], target: Path, sta
 def template_args(writer: str, command: list[str], directory: Path | None = None) -> list[str]:
     """A cached template whose default rules yield separately to every custom setting."""
     if writer != "typst" or not command:
+        return []
+    if "pdfmd-typst-line-spacing=pandoc" in option_values(command, "--metadata", "-M"):
         return []
     directory = directory or Path.cwd()
     try:

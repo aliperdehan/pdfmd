@@ -3256,6 +3256,9 @@ alone is now ambiguous and stops the run.
 `linestretch:` and `fontsize:` give Typst the line spacing LaTeX has (since 3.33.73): lines `linestretch` x the LaTeX class's
 line distance apart (12, 13.6 and 14.5 pt at 10, 11 and 12 pt; 1.2 x any other size), in any font, so a page holds as many
 lines in both. Pandoc's own Typst template puts them closer (23.5 pt at `linestretch: 2`, 12 pt, where LaTeX has 28.9).
+`pdfmd-options: {typst-line-spacing: latex}` is the default and keeps this output unchanged. Set it to `pandoc` to keep
+Pandoc's own Typst text edges, leading and paragraph spacing, without pdfmd's line rules (including `paragraph-spacing`).
+The same key works in metadata files, folder settings, the config and `--setup`.
 A CSL bibliography's `entry-spacing` adds that many line pitches between entries, including 2.5 and 0.5; zero adds no
 extra line. Without the attribute, the entries keep the document's paragraph spacing.
 

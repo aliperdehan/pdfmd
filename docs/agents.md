@@ -31,6 +31,9 @@ formats; special single-file routes such as PDF-to-Markdown, Quarto and non-Pand
 Use `-o DIR` for batch output; a filename is refused, as are single-document options such as `--watch` and `--section`.
 With two paths, a skipped PDF beside a selected input adds `to name the output, use -o NAME.pdf`.
 
+Typst uses LaTeX’s line pitch by default. `pdfmd-options: {typst-line-spacing: pandoc}` (also `--setup`) keeps
+Pandoc’s own Typst spacing without pdfmd’s line rules.
+
 ## Reading what pdfmd says
 
 - Every line begins with a word: `OK`, `FAIL`, `WARN`, `NOTE`, `NATIVE`, `FOUND`, `DEFAULTS`, `AUTO`. A document built is

@@ -153,6 +153,8 @@ The line spacing is LaTeX's in Typst as well (3.33.73): `linestretch` x the clas
 and 14.5 pt at 10, 11 and 12 pt, 1.2 x another size; Pandoc's Typst template's 11 pt when none is set), whatever the font.
 Typst's line box is made the same for every font (`top-edge: 0.7em`, `bottom-edge: "baseline"`) and its leading is that
 distance less the box, set at the top of the body; a raw `#set par(leading: ...)` further down still wins.
+`pdfmd-options: {typst-line-spacing: pandoc}` opts into Pandoc’s own text edges, leading and paragraph spacing;
+`latex` is the unchanged default. The key is also in `--setup`.
 
 The space between paragraphs is `pdfmd-options: {paragraph-spacing: 6pt}` (or `--paragraph-spacing 6pt` for one run): what a
 paragraph break adds to the line spacing, a length (pt, mm, cm, in, em), `0` for none, or `auto`, the default (each engine's

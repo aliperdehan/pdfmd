@@ -228,6 +228,7 @@ end
 
 -- the line box, the leading and the paragraph spacing, for the top of a standalone document's body (see the top)
 local function line_rules(meta)
+  if meta["pdfmd-typst-line-spacing"] and pandoc.utils.stringify(meta["pdfmd-typst-line-spacing"]) == "pandoc" then return nil end
   if not (PANDOC_WRITER_OPTIONS and PANDOC_WRITER_OPTIONS.template ~= nil) then return nil end
   local lead = em(leading(meta))
   return string.format('#set text(top-edge: %s, bottom-edge: "baseline")\n#set par(leading: %s, spacing: %s)',

@@ -97,5 +97,7 @@ def typst_args(md_path: Path, metadata_files: list[Path], writer: str) -> list[s
     """What typst.lua needs to set the space between paragraphs: the value."""
     if writer != "typst":
         return []
+    mode = core.deferred("pdfmd_lua.typst", "line_spacing_mode")(md_path, metadata_files)
+    args = ["-M", "pdfmd-typst-line-spacing=pandoc"] if mode == "pandoc" else []
     value = paragraph_spacing(md_path, metadata_files)
-    return ["-M", f"pdfmd-paragraph-spacing={value}"] if value is not None else []
+    return args + (["-M", f"pdfmd-paragraph-spacing={value}"] if value is not None else [])

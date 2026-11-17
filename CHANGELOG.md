@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.300 — 2026-11-17
+
+Pre-edit state: commit `d60de4b`. DECISION 96 keeps LaTeX’s Typst line pitch as the default and adds typst-line-spacing: latex | pandoc. The opt-in pandoc mode bypasses template rewriting and the Lua text-edge, leading and paragraph-spacing rules; all other Typst fixes remain active. Register the setting and setup row with its default, document both modes and update help and the agent guide. Two pipeline regressions fail before, including a measured 28.89 pt pitch where Pandoc gives 23.50 pt. pdfmd.py stays at 784 lines (version only); no TODO changes. Engine filters, paragraph spacing and the five safety modules: 163 cases, zero failures/errors, five skips after correcting a setting-test mock; the 39-case engine-filter rerun passes. Five focused spacing cases pass with Pandoc 3.1.3, including both measured PDFs. The pandoc export matches that installed Pandoc’s entire output; a separately saved default export is byte-identical before/after. Ruff F and whitespace checks pass.
+
 ## v3.33.299 — 2026-11-17
 
 Pre-edit state: commit `a0c3120`. HTML output does not use the cache, but --cache or cache.aux suppressed the unused-location check, silently accepting bad words and folder paths. Treat the HTML route as having the cache off for that check, retaining the existing warning and the error on routes that use the cache. Four HTML regression subcases fail before. Document the behaviour; pdfmd.py stays at 784 lines (version only); no settings or TODO changes. Cache-location and the five required safety modules: 129 tests, zero failures/errors, one skip. Ruff F and whitespace checks pass.

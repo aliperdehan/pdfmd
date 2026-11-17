@@ -188,7 +188,11 @@ with `--strip-comments-in hidden` as the remedy. No warning with `show-hidden` o
 
 ## Typst's line spacing (v3.33.73)
 
-pdfmd_lua/typst.lua puts lines `linestretch` x LaTeX's \baselineskip for the `fontsize` apart in Typst, in any font
+`pdfmd-options.typst-line-spacing: latex | pandoc` (also metadata files, folder settings, config and `--setup`) selects
+LaTeX's line pitch (`latex`, the unchanged default) or Pandoc's own Typst spacing (`pandoc`, opt-in). With `pandoc`, pdfmd
+adds no text-edge, leading or paragraph-spacing rules; the template controls them.
+
+In the default `latex` mode, pdfmd_lua/typst.lua puts lines `linestretch` x LaTeX's \baselineskip for the `fontsize` apart in Typst, in any font
 (`#set text(top-edge: 0.7em, bottom-edge: "baseline")` and `#set par(leading: ...)` at the top of the body); without
 paragraph-spacing or `indent: true` a paragraph break adds Typst's own 0.55em. A CSL bibliography's `entry-spacing`
 adds that many line pitches between entries, including fractions such as 2.5 and 0.5; zero adds no extra line.
