@@ -728,7 +728,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     break
                 failed_families.add(family)
                 failed_engines.append(engine)
-                remaining = [e for e in engines[engine_index + 1:] if core.ENGINE_FAMILY.get(e, e) not in failed_families]
+                remaining = [e for e in engines[engine_index + 1:] if core.ENGINE_FAMILY.get(e, e) not in failed_families
+                             and not (e == "typst" and pdfmd_install.typst_too_old())]
                 core.report_engine_failure(str(md_path), engine, result, remaining, debug)
                 continue
             with core.prepared_latex_inputs([title_source, *core.pandoc_metadata_order(metadata_files)], engine in core.LATEX_ENGINES,
@@ -937,7 +938,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             failed_engines.append(engine)
             if core.pandoc_refused_command(result):      # an option Pandoc does not take: every engine would fail on it (v3.33.44)
                 break
-            remaining = [e for e in engines[engine_index + 1:] if core.ENGINE_FAMILY.get(e, e) not in failed_families]
+            remaining = [e for e in engines[engine_index + 1:] if core.ENGINE_FAMILY.get(e, e) not in failed_families
+                         and not (e == "typst" and pdfmd_install.typst_too_old())]
             if core.chain_engine_failed(str(md_path), engine, result, remaining, debug):     # engine-fallback stops here
                 break
         if result is None:

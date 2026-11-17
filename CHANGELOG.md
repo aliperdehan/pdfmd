@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.298 — 2026-11-17
+
+Pre-edit state: commit `3b732f8`. The failure message announced Typst before the build loop rejected its old version. Exclude an unusable Typst from the candidates named in the failure message, retaining the loop’s single SKIP line and its reason. The regression reproduces trying typst immediately followed by SKIP before the fix. pdfmd.py stays at 784 lines (version only); no settings or TODO changes. Engine-chain and the five required safety modules: 135 tests, zero failures/errors, one skip. Ruff F and whitespace checks pass.
+
 ## v3.33.297 — 2026-11-17
 
 Pre-edit state: commit `c999102`. The shared calc seed moved definitions from gaps above every selected part, silently changing earlier values (DECISION 93b). Replay original defining occurrences and their formats as hidden statements before each selected run; keep the first-definition-below seed and document-level constants. Scan parts with the same front-matter stripping as a full build, without adding per-part constants. Remove the obsolete gap warning and its tests; replace the documented workaround and delete the approved TODO item. Regression coverage includes each defining form, dependencies, multiple gaps, sections, constants, the scaffold and calc off. pdfmd.py remains 784 lines (version only). Sixteen focused tests failed in fifteen subcases before and pass after. Full calc, parts filters and the five required safety modules: 240 tests, zero failures/errors, one skip; the runner guard observed a concurrent manual build in the same scratch cache, and a separately isolated check passes. Pandoc 3.1.3 first found the same empty-seed export regression as 3.13; after its correction all 23 NamesBelow/export cases pass. Ruff F and whitespace checks pass.

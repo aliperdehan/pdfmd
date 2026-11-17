@@ -115,6 +115,21 @@ class OldTypst(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform != "win32" and pdfmd.which("pandoc"), "needs Pandoc and a shell script as a program")
 class OldTypstThroughPdfmd(unittest.TestCase):
+    def test_an_automatic_old_typst_is_skipped_without_announcing_a_try(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "d.md"
+            source.write_text("---\ntitle: T\n---\n\nText.\n", encoding="utf-8")
+            shown = io.StringIO()
+            with mock.patch.object(pdfmd, "typst_version", return_value=(0, 11, 1)), \
+                    mock.patch.object(pdfmd, "convert_via_soffice_bridge", return_value=(False, "cannot run")), \
+                    mock.patch.dict(pdfmd.BUILD), contextlib.redirect_stderr(shown):
+                result = pdfmd._convert_one_core(source, None, False, "", ["soffice", "typst"], [], None, [],
+                                                no_auto=["font"], cache_cli=False, skip_stamp=True)
+            self.assertFalse(result[1])
+            self.assertIn("SKIP  ", shown.getvalue())
+            self.assertIn("Typst 0.11.1 is older than 0.12", shown.getvalue())
+            self.assertNotIn("trying typst", shown.getvalue())
+
     def test_a_typst_that_says_0_11_stops_the_build_before_it_runs(self):
         import os
         import subprocess
