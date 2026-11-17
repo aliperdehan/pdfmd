@@ -1207,6 +1207,7 @@ same folder name when only one fits; a copy never takes the original's. document
 is a `.cache/pdfmd` folder beside the document (CACHEDIR.TAG, .gitignore) that
 travels with it. Plot-cache entries record the folders they were made in and
 are re-pointed at the new ones after a move. --clear-cache clears both.
+HTML output has no cache: a bad location warns even when `--cache` or metadata requests caching.
 The same location words work in metadata, config and `--cache-location`: global (also root, user, home, central),
 document (also local, folder, here, doc, self-contained). Case and surrounding spaces are ignored.
 

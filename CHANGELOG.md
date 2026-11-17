@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.299 — 2026-11-17
+
+Pre-edit state: commit `a0c3120`. HTML output does not use the cache, but --cache or cache.aux suppressed the unused-location check, silently accepting bad words and folder paths. Treat the HTML route as having the cache off for that check, retaining the existing warning and the error on routes that use the cache. Four HTML regression subcases fail before. Document the behaviour; pdfmd.py stays at 784 lines (version only); no settings or TODO changes. Cache-location and the five required safety modules: 129 tests, zero failures/errors, one skip. Ruff F and whitespace checks pass.
+
 ## v3.33.298 — 2026-11-17
 
 Pre-edit state: commit `3b732f8`. The failure message announced Typst before the build loop rejected its old version. Exclude an unusable Typst from the candidates named in the failure message, retaining the loop’s single SKIP line and its reason. The regression reproduces trying typst immediately followed by SKIP before the fix. pdfmd.py stays at 784 lines (version only); no settings or TODO changes. Engine-chain and the five required safety modules: 135 tests, zero failures/errors, one skip. Ruff F and whitespace checks pass.

@@ -2142,7 +2142,7 @@ yours to choose per document, in the config file for everything, or with
 `--cache-location`. Every level accepts the same aliases: root/user/home/central for global;
 local/folder/here/doc/self-contained for document, ignoring case and surrounding spaces. `--clear-cache` clears both places. (The colour-emoji pictures
 LaTeX uses are in the same cache.) A word other than `global` or `document` stops a build
-that uses the cache; with the cache off it is a warning.
+that uses the cache; with the cache off it is a warning. HTML output has no cache, so a bad location warns even with `--cache`.
 
 `pdfmd --cache-info` shows the cache folder and the size of each part: the documents' own caches (`<hash>-<name>/`), the
 build records (`builds/`), the folders every document shares (`tex/`, `office/`, `images/`, ...) and the loose files, and how

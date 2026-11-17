@@ -989,7 +989,8 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
     recorder = core.load_package("pdfmd_buildinfo.build").BuildRecorder.start(md_path, metadata_files)
     try:
         with core.warning_capture() as seen:
-            pdfmd_cache.check_location(md_path, metadata_files, bound.get("cache_cli"))
+            pdfmd_cache.check_location(md_path, metadata_files,
+                                       False if bound.get("target_format") in core.HTML_TARGETS else bound.get("cache_cli"))
             pdfmd_native.warn_nameless_authors(md_path, metadata_files)
             result = _convert_one_recorded(md_path, *args, **kwargs)
             if result[1]:

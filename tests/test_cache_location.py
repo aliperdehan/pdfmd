@@ -123,6 +123,24 @@ class Location(CacheCase):
             self.assertIn("cache location 'moon' is not one of global, document", done.stderr)
             self.assertNotIn("WARN  ", done.stderr)
 
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_html_warns_about_a_bad_location_even_with_the_cache_requested(self):
+        import subprocess
+        blocked = self.root / "blocked"
+        blocked.write_text("not a folder", encoding="utf-8")
+        for location in ("moon", str(blocked / "cache")):
+            for flags in ((), ("--cache",)):
+                with self.subTest(location=location, flags=flags):
+                    doc = self.document("a", text="Text.\n", front="title: T\npdfmd-options:\n  cache: {aux: true, location: " + json.dumps(location) + "}\n")
+                    done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), str(doc), "--to", "html",
+                                           "--no-stamp", "--no-backup", *flags], capture_output=True, text=True,
+                                          env={**os.environ, "PDFMD_NO_PROMPT": "1"}, stdin=subprocess.DEVNULL)
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    warnings = [line for line in done.stderr.splitlines() if line.startswith("WARN  ")
+                                and "pdfmd-options.cache.location" in line]
+                    self.assertEqual(len(warnings), 1, done.stderr)
+                    self.assertIn(repr(location) + " is not one of global, document", warnings[0])
+
     def test_the_local_folder_is_marked_as_a_cache_and_ignored_by_git(self):
         doc = self.document("a")
         local = self.root / "a" / ".cache" / "pdfmd"
