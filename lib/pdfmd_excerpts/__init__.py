@@ -1,1 +1,1 @@
-"""Excerpt features, loaded on demand. P1a supplies only the standalone pagecite shorthand."""
+"""Excerpt features, loaded on demand: pagecite and the local P1b record commands."""

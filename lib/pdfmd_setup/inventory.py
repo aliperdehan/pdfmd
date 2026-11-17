@@ -39,6 +39,7 @@ WORD_ONLY = Omitted("document", "a Word/ODT-only override of the metadata rows; 
 
 # argparse dest -> the row that sets the same thing for every document, or why there is none
 FLAGS: dict[str, str | Omitted] = {
+    "excerpts": CMD,
     "pagecite": "options.pagecite",
     "help": CMD, "version": CMD, "path": RUN,
     "presentation": Omitted("run", "slides are asked for per run"),
@@ -142,6 +143,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "css": "options.css", "css-scope": "options.css-scope",
     "typst-line-spacing": "options.typst-line-spacing",
     "indent": "options.indent",
+    "excerpts": Omitted("document", "the project's record file path, relative to its naming layer; off disables discovery"),
     "pagecite": "options.pagecite", "pagecite-terms": "options.pagecite-terms",
     "paragraph-spacing": "options.paragraph-spacing", "fullcite-list": "options.fullcite-list", "bibliography-indent": "options.bibliography-indent",
     "cover": Omitted("document", "per document: a title page, or a picture for the first page / an EPUB's cover"),

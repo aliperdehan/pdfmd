@@ -940,6 +940,95 @@ layers and cached copies holding clash winners. Citeproc and LaTeX's natbib/bibl
 export keeps absolute resource names; compile it with `typst compile --root=/ file.typ file.pdf`. Direct `.typ` inputs
 keep Typst's own project root.
 
+**Local excerpt records** (`--excerpts`, P1b). Keep source passages, page pointers,
+area selections and private notes in one `excerpts.json` per project. These commands
+work without Pandoc or Colophon. This phase only manages records: builds do not
+read the file or resolve its markers yet. Source PDFs are never written.
+
+```sh
+pdfmd --excerpts add --key glass --page 41 --text "An invented passage."
+pdfmd --excerpts add --key glass --page iv --label abstract
+pdfmd --excerpts add --remark "Check this inference."
+pdfmd --excerpts list --key glass --json
+pdfmd --excerpts show 1
+pdfmd --excerpts edit 1 --note "Compare the second table."
+pdfmd --excerpts where 1
+pdfmd --excerpts list --unused
+pdfmd --excerpts remove 1 --force
+pdfmd --excerpts sources add glass sources/glass.pdf --pages '[[2,"41"]]'
+pdfmd --excerpts sources match sources/
+pdfmd --excerpts export -o review.md
+```
+
+`--excerpts` takes the rest of the command line. Every action accepts `--json`,
+`--in PATH` (document or folder; default the working folder) and `--verbose`.
+Use `pdfmd --excerpts ACTION --help` for its options. Success exits 0, a problem
+or file failure 1, invalid usage 2. JSON answers are arrays for `list`, `where`,
+`sources` and matching proposals, a record for `show`/`edit`, `{id, markers}` for
+`add`, `{removed}` for `remove`, `{markdown}` for `export`, and `{error}` on failure.
+Plain `add` prints the id and `[@x:ID]`, `[@KEY#ID]` (a remark has only the short
+form). Other plain answers are indented JSON; plain `export` prints Markdown.
+
+Discovery uses `pdfmd-options: {excerpts: PATH}` first, relative to the file
+that names it (document, metadata, folder config, global config in that order).
+`excerpts: off` disables it. Otherwise the nearest `excerpts.json` beside the
+document wins, then `metadata/excerpts.json`, then parent and `.pdfmd` layers,
+using the existing `metadata-parents` depth (default 1) and folder inheritance
+boundaries. Files never accumulate. `--verbose` names further files ignored.
+The path key is a document/project setting, deliberately omitted from `--setup`;
+`--excerpts` is omitted as a one-off command. A missing file is created by `add`
+or `sources add`; `sources match` can propose matches before a file exists.
+
+`add` and `edit` accept `--key`, `--page` (including an empty string for no page),
+`--locator` (a complete locator, e.g. `ch. 3`), `--label`, `--kind text|area`,
+`--note`, `--quoting` (secondary quotation) and repeated `--text`. A record with
+no parts is a valid pointer. To place pieces, start each with `--pdf-page N`,
+then repeat `--box x0,y0,x1,y1` for its lines or area and add `--text` if wanted.
+Coordinates are points in PDF default user space, not crop-relative or rotated;
+PDF pages are 1-based. Each further `--text` starts another part if the current
+part already has text. Command-entered text is marked `typed`; line breaks become
+spaces. `edit` keeps unspecified fields; supplying parts replaces the parts list.
+`--remark TEXT` makes a source-free note. `--file si` selects a supplement named
+in the source’s `more` mapping; a second file is named there by hand in this phase.
+
+`where` scans project Markdown and QMD files recursively, preserving source line
+numbers, excluding hidden folders, code, comments, math, raw blocks and other
+record-file namespaces. It recognises `@x:ID`, `@x#ID`, `@KEY#ID` in bracketed,
+narrative, author-suppressed and mixed citations. `@KEY:ID` is an ordinary key;
+reference prefixes `fig`, `tbl`, `eq`, `sec`, `lst` remain cross-references. An
+actual bibliography key wins over a marker of the same spelling. The prefix `x`
+is fixed. This is a location scanner, not the forthcoming citation resolver.
+A cited record cannot be removed without `--force`; its markers then remain.
+`remove --detach` awaits P1c; `list --problems` awaits the P1d checks (both exit 2
+in this phase). `export` groups records by source, with notes and citing places.
+It deliberately contains passages: keep this local review sheet private.
+
+`sources` lists file hints and hash states (`ok`, `changed`, `missing`, `unknown`).
+`sources add KEY FILE` records the relative file hint, SHA-256 and size; `--pages`
+is a JSON list of `[PDF-page, "printed"]` anchors, or `labels`. Anchors count up
+in arabic, roman (retaining case) or a trailing number such as `S1`; pages before
+the first anchor are covers with no printed number. `labels` requires the
+optional pypdf dependency and rejects trivial 1, 2, 3 labels. A page map only fills
+an omitted `--page` on a new record; it never overwrites a typed page or an edit.
+Without a map the page is typed. `sources match [DIR]` reads local PDFs (pypdf)
+and proposes keys by bibliography file fields, DOI, title, then filename likeness,
+plus a map when the bibliography’s page range and page count agree (one extra
+PDF page is a cover). `--apply` writes unique matches by file, DOI, title or exact
+name; ambiguous or merely similar names need a choice with `sources add`.
+Existing different source files are never silently replaced.
+
+The record format is version 1: top-level `pdfmd-excerpts: 1`, `next-id`, `sources`
+and `excerpts`. Records have `id`, `key`, `page`, `kind`, `parts` and optional
+`locator`, `label`, `file`, `quoting`, `note`, `created` (UTC). Remarks need no key,
+page or parts. Parts carry optional `pdf-page`, `boxes`, `text`, `text-from`
+(`pdf`, `ocr`, `typed`); empty parts are valid. Source entries hold `file`,
+`sha256`, `size`, `pages` and optional `more` supplements. Unknown fields survive
+rewriting. A higher format version warns and can be read but never written.
+Canonical writes use UTF-8, LF, literal non-ASCII, a final newline, sources sorted
+by key and records by id, one source/record per line, fixed field order and boxes
+rounded to 0.1 point. A stable sibling `.lock` file serialises atomic writes;
+records are reread inside the lock. `next-id` only rises, even after deletion.
+
 **Page markers after citations** (`markup: pagecite`). Off by default. With
 `pdfmd-options: {pagecite: auto}`, `Claim [@alpha, p. 2]. Next [p. 5].` uses the last
 source in that paragraph for the second claim. `--pagecite MODE` wins over the

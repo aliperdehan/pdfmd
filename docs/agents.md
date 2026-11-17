@@ -86,6 +86,25 @@ set it under `pdfmd-options` or in `--setup` (as for `pagecite`). It needs the
 `pagecite` markup kind; `--no-auto pagecite` disables it. Escaped markers, code
 and links stay literal; the native tier leaves markers with one NOTE.
 
+`pdfmd --excerpts ACTION` manages local source records: `list`, `show ID`,
+`add`, `edit ID`, `remove ID`, `sources`, `where ID`, `export`. It consumes the
+rest of the command line; each action accepts `--json` and `--in PATH` (document
+or folder). Exit codes: 0 success, 1 problems/file failure, 2 usage. JSON failures
+answer `{error}`. `add --key glass --page 41 --text "Invented evidence."` prints
+an id and marker forms; `add --remark "Check this inference."` needs no source.
+`remove` refuses a cited record without `--force`; `--detach` and `--problems`
+await later phases. `sources add KEY FILE --pages '[[2,"41"]]'` records a source;
+`sources match [DIR]` proposes matches (`--apply` only for unambiguous exact
+evidence). PDF reading needs optional pypdf. `export [-o FILE]` is a private
+Markdown review sheet containing passages and notes.
+
+`pdfmd-options.excerpts` names the record file relative to the file setting it;
+`off` disables discovery. Otherwise it is the nearest `excerpts.json` beside the
+document, in `metadata/`, then parent/folder layers. Records keep unknown fields,
+use monotonically increasing ids and are written atomically under a lock. This
+phase changes no build: markers are only located by `where`, not resolved.
+Source PDFs are never written. Keep passages and review exports local.
+
 ## When a build fails
 
 With `.hst` history enabled, a change of the automatic Pandoc reader prints one WARN naming the old and new readers

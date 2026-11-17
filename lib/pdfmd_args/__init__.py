@@ -149,6 +149,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--last-build", action="store_true",
                         help="print the newest record of FILE's build (see --build-log)")
     parser.add_argument("--failed", action="store_true", help="with --last-build: the newest record of a build that failed")
+    parser.add_argument("--excerpts", nargs=argparse.REMAINDER, metavar="ACTION ...",
+                        help="manage the project's local excerpt records: list, show, add, edit, remove, sources, where, export; "
+                             "takes the rest of the command line. --json on every action; --in PATH selects a document or folder. "
+                             "pdfmd-options.excerpts names the record file relative to its naming file; off disables discovery. "
+                             "Default: nearest excerpts.json beside the document, in metadata/, then parent/folder layers. "
+                             "No build changes yet. `pdfmd --excerpts --help` lists command options")
     parser.add_argument("--serve", nargs="?", const="", metavar="FOLDER",
                         help="the web UI's local server for the project FOLDER (default: the working folder): 127.0.0.1, a random port, "
                              "a token. Prints one JSON line {api, url, port, token, root}; open the url. Stops with Ctrl-C")
@@ -1099,6 +1105,9 @@ def normalise_metadata_options(arguments: list[str]) -> list[str]:
     """Preserve Pandoc's --metadata spelling despite pdfmd's similarly named options."""
     from .metadata import command_aliases
 
+    if "--excerpts" in arguments:
+        index = arguments.index("--excerpts")
+        return normalise_metadata_options(arguments[:index]) + arguments[index:]
     arguments = command_aliases(arguments)
     before, separator, after = arguments, [], []
     if "--" in arguments:

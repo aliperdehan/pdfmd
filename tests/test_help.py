@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -66,6 +67,14 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("--pagecite", text)
         self.assertIn("pdfmd-options.pagecite-terms", text)
         self.assertIn("off (default)", text)
+
+    def test_excerpts_command_and_path_have_a_help_topic(self):
+        text = re.sub(r"pdfmd-\s+options", "pdfmd-options", run("--help", "excerpts").stdout)
+        text = " ".join(text.split())
+        self.assertIn("--excerpts", text)
+        self.assertIn("pdfmd-options.excerpts", text)
+        self.assertIn("--json", text)
+        self.assertIn("--in PATH", text)
 
     def test_csl_line_spacing_is_in_output_help(self):
         self.assertIn("CSL line-spacing", run("--help", "output").stdout)

@@ -19,6 +19,35 @@ same commit as the change.
 
 ---
 
+## v3.34.1 — 2026-11-18
+
+Pre-edit state: commit `e07cf95`.
+
+Excerpts P1b (DECISIONS 79, 80, 81): source records previously had no file implementation or commands.
+`--excerpts` now owns list, show, add, edit, remove, sources, where and export, with JSON answers and usage/problem
+exit codes. Version 1 records preserve unknown fields, allocate ids under a process lock after rereading, never reuse
+an id after deletion, and write canonical UTF-8 JSON atomically (one source/record per line, boxes to 0.1 point).
+The project path follows its naming layer; off disables discovery, implicit files use existing parent/folder bounds.
+Page maps cover roman front matter, covers, supplements and non-trivial PDF labels; only a new record’s omitted page
+is filled. Sources keep file hints and hashes; local matching proposes bibliography file/DOI/title/name evidence and
+page maps. Similar names and competing matches require the author’s choice; they are not applied automatically.
+`where` recognises the approved fixed-x marker grammar outside protected text, with real bibliography keys winning.
+Cited removal needs force; detach awaits P1c and the problems filter awaits P1d. Review exports explicitly contain
+passages and notes. Source PDFs are never written. No build path reads records in P1b. Help, setup omissions,
+reference, README and the agent guide describe the phase boundary. TODO.md is unchanged.
+
+Regression: the add/show/remove checkout test failed before with an ambiguous --page option and passes after.
+Synthetic records and test-made PDFs cover canonical round trips, unknown fields, deletion, concurrent writers,
+page maps and labels, multipart areas, pointers, remarks, matching, hash states, marker locations and cited removal.
+Build equality checks use fixed synthetic metadata and no record versus a canary-bearing record across HTML,
+LaTeX, Typst, Word, EPUB and Markdown. The excerpt module passes all 20 tests with Pandoc 3.13 and 3.1.3;
+pagecite also passes its 20 tests with both. Required and adjacent modules pass after reruns (182 tests, one
+optional skip because prompt_toolkit is installed); the help-wrap and raw-HTML scanner failures found during
+development were corrected. Ruff F and diff whitespace checks pass. Startup stays at 182 modules with no excerpt
+module loaded; the timed checkout --version takes 0.13 s on this run. Windows locking is not exercised on this Mac.
+`pdfmd.py`: 785 lines before and after; only the version changes. The 0.1-point rounding is the approved record-format
+rule; the process lock uses the operating system’s blocking lock, with no new behaviour threshold or dependency.
+
 ## v3.34.0 — 2026-11-18
 
 Pre-edit state: commit `cff11fa`.

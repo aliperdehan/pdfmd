@@ -81,6 +81,8 @@ def run_main() -> None:
     parser, hidden = command_line_parser()
     args, pandoc_options = parser.parse_known_args(core.load_package("pdfmd_args").normalise_metadata_options(sys.argv[1:]))
     refuse_disabled(args, hidden, parser)
+    if args.excerpts is not None:
+        raise SystemExit(core.load_package("pdfmd_excerpts.cli").command(list(args.excerpts)))
     if args.bopen is not None:
         try:
             core.parse_bopen(args.bopen)
