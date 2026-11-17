@@ -204,7 +204,7 @@ class Filter(unittest.TestCase):
     @unittest.skipUnless(TYPST, "needs Typst")
     def test_the_spacing_rule_compiles(self):
         source = self.directory / "spaced.md"
-        source.write_text("---\nindent: true\n---\n\nOne.\n\nTwo.\n", encoding="utf-8")
+        source.write_text("---\nindent: true\nmainfont: Libertinus Serif\n---\n\nOne.\n\nTwo.\n", encoding="utf-8")
         done = subprocess.run([PANDOC, str(source), "-o", str(self.directory / "spaced.pdf"), "--pdf-engine=typst",
                                "-M", "pdfmd-paragraph-spacing=6pt", "--lua-filter", str(TYPST_LUA)],
                               capture_output=True, text=True, encoding="utf-8")
@@ -466,8 +466,6 @@ class CommandLine(unittest.TestCase):
     @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
     def test_defaults_relative_template_and_parent_paths(self):
         version = subprocess.check_output([PANDOC, "--version"], text=True).splitlines()[0]
-        if version == "pandoc 3.1.3":
-            self.skipTest("Pandoc 3.1.3 does not expand ${.} in defaults-file template or parent paths")
         (self.directory / "doc.md").write_text(
             "---\nfontsize: 12pt\nlinestretch: 2\n---\n\nFirst  \nline\n\nSecond  \nline\n", encoding="utf-8")
         folder = self.directory / "custom templates"
@@ -480,6 +478,8 @@ class CommandLine(unittest.TestCase):
         defaults = folder / "defaults.yaml"
         defaults.write_text('template: "${.}/own.typ"\n', encoding="utf-8")
         self.check_template_pitch(environment, ["--defaults", str(defaults)], 32.4, 38.4)
+        if version == "pandoc 3.1.3":
+            self.skipTest("Pandoc 3.1.3 does not expand ${.} in parent-default paths; template path checked above")
         defaults_folder = Path(environment["XDG_DATA_HOME"]) / "pandoc" / "defaults"
         defaults_folder.mkdir(parents=True)
         (defaults_folder / "base.yaml").write_text("template: " + str(template) + "\n", encoding="utf-8")

@@ -19,13 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.315a — 2026-11-17
+
+Pre-edit state: commit `d78970b`. A filter-only spacing fixture invoked bare Pandoc 3.1.3 without a main font; its template passes an empty font list, which current Typst rejects. Name Typst's bundled Libertinus Serif explicitly: the spacing assertion is unchanged and now passes with 3.1.3. Also narrow the preceding defaults-path skip to the unsupported parent path, exercising the supported template path first; the original failure is `${.}/base.yaml`, not the template path. Test only; CI's old-Pandoc job has no Typst.
+
 ## v3.33.315 — 2026-11-17
 
 Pre-edit state: commit `ba90b17`. Pandoc 3.1.3's default Typst template has no linestretch parameter or leading rule, so pdfmd's rewrite declined it and title, abstract and outline retained Typst's pitch. Recognise its existing paragraph rule and supply the same resolved leading and spacing inside conf. A regression fails before (the first leading rule followed the title) and passes on 3.1.3 and 3.13; the four bibliography entry-spacing cases pass with 3.1.3. CI had skipped these checks because its 3.1.3 job has no Typst. pdfmd.py stays at 785 lines (version only).
 
 ## v3.33.314a — 2026-11-17
 
-Pre-edit state: commit `6ccc0fa`. The Typst defaults-path test assumed Pandoc 3.1.3 expands `${.}` in template and parent-default paths; bare Pandoc rejects that spelling before pdfmd can replace its template. Split that capability check from the custom-template spacing checks and skip only the former on 3.1.3, with the reason. The retained spacing test passes there; the defaults-path test passes on 3.13. CI's 3.1.3 job has no Typst, so previously skipped both. Test only.
+Pre-edit state: commit `6ccc0fa`. The Typst defaults-path test assumed Pandoc 3.1.3 expands `${.}` in parent-default paths; Pandoc rejects that spelling before pdfmd can replace its template. Split that capability check from the custom-template spacing checks and skip only the former on 3.1.3, with the reason. The retained spacing test passes there; the defaults-path test passes on 3.13. CI's 3.1.3 job has no Typst, so previously skipped both. Test only.
 
 ## v3.33.314 — 2026-11-17
 
