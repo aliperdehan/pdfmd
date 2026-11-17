@@ -143,7 +143,7 @@ of a `::: calc` line is copied as it is (`ppm Ca^2+^`); `x = a * b = {subs} = {a
 names replaced by their values (the digits each was defined with; the computation keeps the full value), and
 `calc: {subs: true}` does that before every {ans} ({nosubs} on a line turns it off). A ```{=calc} block (``` ```{=} ``` is read again
 from the source), a `::: {.calc .hide}` div and `calc: {constants: file.csv}` hold statements, one per line, that print nothing
-unless they carry an {ans}; `code`{=calc} is `code`{=}. In a `::: calc` div the paragraphs
+unless they carry an {ans}; both fence spellings work with or without YAML front matter and in every writer. `code`{=calc} is `code`{=}. In a `::: calc` div the paragraphs
 that hold a calculation line have no first-line indent and its prose keeps the document's (`calc: {noindent: lines}`, the
 default since 3.33.18; true takes it off every paragraph of the div, false gives the whole div the document's own; an `indent=`
 on the div, or a nested `::: indent` / `::: noindent` div, wins). Added by

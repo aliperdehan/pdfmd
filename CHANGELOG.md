@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.33.289 — 2026-11-17
+
+Pre-edit state: commit `44b8c39`. Statement fences without YAML front matter used the GFM reader, which makes
+```{=calc} and ```{=} CodeBlocks with the literal fence spelling as their language. The calculator handled only
+Markdown's RawBlock/paragraph shapes, so definitions vanished and later uses were undefined. Handle both GFM
+CodeBlocks through the existing statement parser, including inside calc divs. The regression builds both spellings
+through scripts/pdfmd for HTML, LaTeX, Word, OpenDocument, Typst, GFM and plain text; all 14 cases failed before.
+Existing Markdown block tests retain their coverage. Calc and the five required safety modules pass (237 tests,
+one existing skip); the new writer regression also passes with Pandoc 3.1.3 and 3.13. Ruff F passes. No new setting; pdfmd.py stays at 783 lines (version only).
+
 ## v3.33.288b — 2026-11-17
 
 Pre-edit state: commit `5704967`. CI found the second `--install math` launcher test (`test_a_checkout_without_distribution_records_does_not_guess_a_scripts_folder`, 3.33.286) failing on Python 3.9 and 3.10, where `install_extra('math')` refuses before pip because pymd2pdf needs Python 3.11. The 3.11 skip moves from the first test to the `MathLauncher` class, so it covers both. Test only.

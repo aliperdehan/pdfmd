@@ -1571,6 +1571,13 @@ local function raw_block(block)
   return out
 end
 
+-- GFM keeps the raw fence's spelling as its code language, including the braces. Unlike Markdown's empty-format
+-- paragraph, this AST node still holds the original line breaks, so neither spelling needs a source-file lookup.
+local function code_block(block)
+  if #block.classes ~= 1 or (block.classes[1] ~= "{=calc}" and block.classes[1] ~= "{=}") then return nil end
+  return statement_block(block_lines(block.text), false)
+end
+
 -- ```{=} is no block for Pandoc (an empty raw format): the fence becomes a paragraph holding one code span whose line
 -- breaks are gone. The lines are read again from the source file(s) Pandoc was given, matched by their text, so
 -- ```{=} works as ```{=calc} does. (A document read from standard input has no file to read: write ```{=calc}.)
@@ -2095,13 +2102,13 @@ end
 calc_div = function(div)
   if not div.classes:includes("calc") then return nil end
   if div.classes:includes("hide") or div.classes:includes("hidden") then      -- `::: {.calc .hide}`: statements, nothing printed
-    div.content:walk({traverse = "topdown", Para = hidden_paragraph, Plain = hidden_paragraph, RawBlock = raw_block})
+    div.content:walk({traverse = "topdown", Para = hidden_paragraph, Plain = hidden_paragraph, RawBlock = raw_block, CodeBlock = code_block})
     if pass == 1 then return div, false end
     return pandoc.Blocks({}), false
   end
   local own = pass == 2 and lines_without_indent(div) or div.content
   local content = own:walk({traverse = "topdown", Para = paragraph, Plain = paragraph, Inlines = process_inlines,
-    Div = inner_div, RawBlock = raw_block})
+    Div = inner_div, RawBlock = raw_block, CodeBlock = code_block})
   if pass == 1 then return div, false end
   local classes = pandoc.List({})
   for _, class in ipairs(div.classes) do if class ~= "calc" then classes:insert(class) end end
@@ -2157,7 +2164,7 @@ return {{Pandoc = function(doc)
         if out ~= nil then return out, descend end
         return calc_table_div(div)
       end,
-      Para = function(block) if mark_of(block) then return nil end misspelt_table(block); return fence_handler(block) end, RawBlock = raw_block,
+      Para = function(block) if mark_of(block) then return nil end misspelt_table(block); return fence_handler(block) end, RawBlock = raw_block, CodeBlock = code_block,
       Inlines = process_inlines})
     if which == 1 and below then load_seed(below, true) end   -- after everything of this build: only a name nothing above or inside defines comes from here
   end

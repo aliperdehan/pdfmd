@@ -948,6 +948,30 @@ class Blocks(unittest.TestCase):
         self.assertEqual(done.stderr, "")
         self.assertEqual(done.stdout.split(), "k = t1 * 2 = 25.4 So 17.".split())
 
+    def test_statement_fences_without_front_matter_through_every_writer(self):
+        for spelling in ("=calc", "="):
+            (self.directory / "bare.md").write_text(
+                "# Bare\n\n```{" + spelling + "}\nz = 5\nw = z + 1 = {ans}\n```\n\nResult: `w`{=}.\n",
+                encoding="utf-8")
+            for writer in ("html", "latex", "docx", "odt", "typst", "gfm", "plain"):
+                with self.subTest(spelling=spelling, writer=writer):
+                    target = self.directory / ("out." + writer)
+                    done = subprocess.run(
+                        [sys.executable, str(ROOT / "scripts/pdfmd"), "bare.md", "--to", writer,
+                         "--no-backup", "-o", str(target)], cwd=self.directory,
+                        capture_output=True, text=True, encoding="utf-8")
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    self.assertNotIn("WARN  calc", done.stdout + done.stderr)
+                    if writer in ("docx", "odt"):
+                        read = subprocess.run([PANDOC, str(target), "-t", "plain"],
+                                              capture_output=True, text=True, encoding="utf-8", check=True)
+                        text = read.stdout
+                    else:
+                        text = target.read_text(encoding="utf-8")
+                    self.assertIn("Result: 6.", text)
+                    self.assertNotIn("z = 5", text)
+                    self.assertIn("w = z + 1 = 6", text.replace("\\=", "="))
+
     def test_a_fence_with_an_empty_format_is_the_same_block(self):
         done = self.convert("```{=}\nt1 = 12.7\nt2 = 4.3\nk = t1 * 2 = {ans:3sf}\n```\n\nSo `t1 + t2`{=}.\n")
         self.assertEqual(done.stderr, "")
