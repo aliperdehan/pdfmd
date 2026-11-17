@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.333b — 2026-11-18
+
+Pre-edit state: commit `ca82f2f`. The branch CI's windows-latex job on v3.33.333a: (1) two tests of test_table_measure
+gave pdfmd a cache folder through `XDG_CACHE_HOME` only, but pdfmd's cache is under `LOCALAPPDATA` on Windows, so the
+tests shared one cache: the first build of the second test found the first test's measurement ("cached widths" where
+the test expects "measured widths") and the test's own cache folder stayed empty. The measuring itself works there (the
+build printed the cached record, no WARN). The tests now set both. (2) test_code_blocks
+`test_long_code_lines_stay_inside_the_margin_unless_told_not_to` found a code block past the margin on Windows in this
+run only (it passed on the same code in the two runs before); its builds shared pdfmd's Windows cache with every other
+test, the one state that differed, so they get their own cache folder too (and so does the module's other built test).
+If it fails again with its own cache, the cause is elsewhere and is looked for. Tests only.
+
 ## v3.33.333a — 2026-11-18
 
 Pre-edit state: commit `b7ecac4`. The two interrupt tests of tests/test_parallel_runner.py failed again in the full

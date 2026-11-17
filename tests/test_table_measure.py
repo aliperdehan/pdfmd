@@ -260,7 +260,8 @@ class Latex(unittest.TestCase):
                                "-e", getattr(self, "engine", "xelatex"), "-o", str(target), *args],
                               capture_output=True, text=True, encoding="utf-8",
                               env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
-                                   "XDG_CACHE_HOME": str(self.folder / "cache")})
+                                   # pdfmd's cache is under LOCALAPPDATA on Windows, XDG_CACHE_HOME elsewhere
+                                   "XDG_CACHE_HOME": str(self.folder / "cache"), "LOCALAPPDATA": str(self.folder / "cache")})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         return done, target.read_bytes()
 
