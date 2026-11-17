@@ -1,4 +1,9 @@
-# pdfmd
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/aliperdehan/pdfmd/main/docs/brand/wordmark-dark.svg">
+    <img alt="pdfmd" src="https://raw.githubusercontent.com/aliperdehan/pdfmd/main/docs/brand/wordmark.svg" height="64">
+  </picture>
+</h1>
 
 [![Test](https://github.com/aliperdehan/pdfmd/actions/workflows/publish.yml/badge.svg)](https://github.com/aliperdehan/pdfmd/actions/workflows/publish.yml) [![PyPI](https://img.shields.io/pypi/v/pdfmd-cli)](https://pypi.org/project/pdfmd-cli/)
 

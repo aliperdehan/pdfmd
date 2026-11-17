@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.330a — 2026-11-17
+
+Pre-edit state: commit `25e233d`. The README opens with the pdfmd wordmark instead of the plain `# pdfmd` heading
+(3ew, "before the next push"): a `<picture>` in the `<h1>` with docs/brand/wordmark.svg and, for a dark page,
+wordmark-dark.svg, linked by absolute raw.githubusercontent.com addresses so that PyPI's page shows it as well; the alt
+text is "pdfmd". Documentation only.
+
 ## v3.33.330 — 2026-11-17
 
 Pre-edit state: commit `ee6d7bf`. `pdfmd --install batchocr` installed batchocr from the tag `BATCHOCR_TAG`, still
