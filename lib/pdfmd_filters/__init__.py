@@ -648,6 +648,16 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     return args
 
 
+def strip_build_comments_args(sources: Path | list[Path], metadata_files: list[Path]) -> list[str]:
+    """Strip the build's HTML comments before markup draws them; marker comments remain meaningful."""
+    files = sources if isinstance(sources, list) else [sources]
+    if not files or "markdown" not in core.resolve_strip_comments(files[0], metadata_files):
+        return []
+    import pdfmd_lua
+    shipped = pdfmd_lua.path("strip_comments")
+    return ["--lua-filter", str(shipped)] if shipped is not None else []
+
+
 def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], metadata_files: list[Path], no_auto: list[str] | None,
                          csv_filter: Path, pandoc_options: list[str], crossref_sources: Path | list[Path] | None = None,
                          flat_pictures: Path | None = None, preamble: list[Path] | None = None, flat_text: bool = False,
@@ -666,6 +676,7 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     args += core.calc_filter_args(inputs, metadata_files)
     args += core.csv_table_filter_args(inputs, no_auto, csv_filter, metadata_files)
     args += pagebreak_filter_args(md_path, metadata_files)
+    args += strip_build_comments_args(md_path, metadata_files)
     args += indent_filter_args(inputs, metadata_files)
     args += core.markup_filter_args(md_path, metadata_files)
     args += core.table_caption_args(inputs, metadata_files)

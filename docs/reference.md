@@ -738,12 +738,12 @@ status 1 if a hash does not match. With the recorded origin, the metadata
 comes back as the files it was made from (`01-metadata.yaml`, ...).
 
 --strip-comments / --keep-comments, `pdfmd-options: {strip-comments: true}`
-(v3.22.0) drop every `<!-- -->` comment from the assembled file (and, from
+(v3.22.0) drop every `<!-- -->` comment from the build’s own text as well as the assembled file (and, from
 the next releases, from the source attached to a PDF), for notes to oneself
 that should not travel: reviewer remarks, drafts, the BUILD NOTES block. A
 comment inside a fenced or indented code block or an inline code span is
 text and stays, YAML front matter is not touched, and pdfmd's own markers
-stay (`<!-- pdfmd-... -->`, `<!-- pagebreak -->`). A comment alone on its
+stay (`<!-- pdfmd-... -->`, `<!-- pagebreak -->`, `<!-- toc -->`, `<!-- appendix -->`). A comment alone on its
 line takes the line (and a blank line it leaves doubled) with it; one in a
 sentence takes one of the spaces around it. The command line wins over the
 document, then its metadata files.

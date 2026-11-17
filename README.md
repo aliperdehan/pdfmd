@@ -2831,7 +2831,11 @@ off in `pandoc`, `gfm` and `commonmark`, and `markup: [callouts]` or `--no-marku
 paragraphs (about one per 12 pt) in Word and OpenDocument; the Markdown family keeps what was written. A `<br>` inside a line
 of text is a line break as before.
 
-**Showing the comments of the text** (v3.29, `show-comments`). An `<!-- HTML comment -->` is invisible in every output. With
+**Showing the comments of the text** (v3.29, `show-comments`). `%% a private note %%` is hidden in every output,
+also with the gfm reader; an unclosed `%%` is kept as text with a WARN in the pdfmd flavour (Obsidian’s default hides the rest).
+An `<!-- HTML comment -->` is invisible on the page but reaches the HTML/EPUB source unless
+`strip-comments: true` or `--strip-comments` is on. Stripping also applies to the build’s own text, before comments are drawn;
+code examples and pdfmd’s marker comments survive. `--show-comments` turns `%%` into `<!-- -->`. With
 `pdfmd-options: {show-comments: true}` (or `--show-comments` for one run, `--no-show-comments` to switch it off; also a row in
 `pdfmd --setup`) each one is shown: a box labelled *Comment* in LaTeX, Typst, HTML, EPUB and the HTML engines' PDFs, a real Word
 comment in a `.docx` (anchored on the paragraph after it, so Word's review pane lists them), `[comment: ...]` in italics for one

@@ -28,7 +28,6 @@ wait for an answer before any code.
 - [ ] Images and display math in `--view` through the kitty graphics protocol, after the queue: first a spike of Unicode placeholders in Ghostty (they survive the pager), else no pager when images are drawn [3dm D84]
 - [ ] Document-level `indent:` takes a length (`indent: 0.5in`) in LaTeX, Typst, Word and HTML; `true` stays 1.5em [3fp D84]
 - [ ] `lua-filter-before-citeproc:`, a layered list of filters run before `--citeproc`; built with excerpts (5b) [3fp D84]
-- [ ] `strip-comments` also drops `<!-- -->` from the build's own text; README: `%%` private, unclosed `%%` kept as text, `<!-- -->` reaches HTML/EPUB [3ft D84]
 - [ ] Logo: a README header (a `<picture>` with absolute raw URLs, light and dark wordmark) and the social preview uploaded in the repository settings, before the next push [3ew]
 - [ ] `\md{...}`: nulabreport's macros taking `\md{}`; native tier; text-level pre-passes (table-ascii, includes, embed blocks) inside the macro, unchecked [3dc]
 - [ ] Citation key aliases, resolved before citeproc [3bo]

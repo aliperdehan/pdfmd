@@ -203,7 +203,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "filter that checks FORMAT is embedded instead); 'off' -- not carried")
     parser.add_argument("--strip-comments", dest="strip_comments", action="store_true", default=None,
                         help="remove every <!-- --> comment from the Markdown that leaves your hands: "
-                             "the assembled file (--stop-at markdown) and the source attached to a PDF. "
+                             "the build, the assembled file (--stop-at markdown) and the source attached to a PDF. "
                              "Comments inside code blocks and code spans are text and stay, and so do "
                              "pdfmd's own markers (<!-- pdfmd-... -->, <!-- pagebreak -->). A document "
                              "sets it with pdfmd-options.strip-comments")

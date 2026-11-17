@@ -106,3 +106,5 @@ raster SVG resolution (default 192; exported pages still default to 300). `--no-
 With the default LaTeX, Typst or HTML template, give a `title:` if `author:` or `date:` should print; pdfmd notes their omission without one. Word, ODT and EPUB print the byline without a title.
 
 To cap Pandoc's heap, set `pdfmd-options: {pandoc-memory: 512m}` (or `2g`; whole k/m/g units). Unset or null means off. On heap overflow, raise or unset `pandoc-memory`; PDF engines have separate memory use.
+
+Use `--strip-comments` or `pdfmd-options: {strip-comments: true}` to remove HTML comments from the build itself as well as assembled/attached source. Code examples and pdfmd marker comments survive. This also removes comments before `--show-comments` draws them.

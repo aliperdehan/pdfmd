@@ -23,7 +23,7 @@ from pdfmd_base import core
 # for pdfmd itself and stay (KEEP_COMMENT_RE). A comment alone on its line takes
 # the line with it, and a blank line left doubled by that goes too, so the text
 # does not look gapped; one inside a sentence takes one of the spaces around it.
-KEEP_COMMENT_RE = re.compile(r"\s*(?:pdfmd\b|page-?break\b|new-?page\b)", re.IGNORECASE)
+KEEP_COMMENT_RE = re.compile(r"\s*(?:pdfmd\b|page-?break\b|new-?page\b|(?:toc|appendix)\s*$)", re.IGNORECASE)
 LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])[ \t]")
 
 

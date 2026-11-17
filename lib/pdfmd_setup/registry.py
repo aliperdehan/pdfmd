@@ -565,7 +565,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "The .sty/.cls files the build used that are not in TeX Live.", "Source inside the PDF"),
         text("options.bundle-max-mb", "Size limit of the attached bundle (MB)", "Default 100.", "Source inside the PDF",
              "config", "number"),
-        choice("options.strip-comments", "Drop comments or hidden content from assembled/attached source",
+        choice("options.strip-comments", "Drop comments from build/assembled/attached source (hidden: assembled/attached only)",
                (("true", "strip comment kinds"), ("false", "keep comments"),
                 ("hidden", "only plain hide blocks and spans"),
                 ("markdown,hidden", "Markdown comments and plain hide content")), "",

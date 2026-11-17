@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.325 — 2026-11-17
+
+Pre-edit state: commit `2d659c8`. Strip-comments previously removed HTML comments only from assembled and attached source, so private notes still reached a build's HTML/EPUB source. Apply the saved comment filter before markup draws comments, honouring the existing layered policy and command-line overrides, with the default unchanged. Preserve code examples and every marker family used by discovery, page breaks, contents and appendices; preserve contents/appendix markers in assembled source too. Correct README's account of private percent comments, unclosed comments and HTML comments, and update reference/help/setup/agent guidance. Four pipeline regressions cover HTML/EPUB on/off, metadata/CLI policy, parts and markers, show-comments in four writers, and gfm private/unclosed comments. Six subcases failed in the baseline run (the saved patch's original run recorded eight); results with Pandoc 3.1.3/3.13 and full module checks are in the batch report. pdfmd.py remains 785 lines (version only).
+
 ## v3.33.324 — 2026-11-17
 
 Pre-edit state: commit `ecc68d9`. Pandoc Typst templates ignored lof/lot, so captioned figures and tables never acquired lists. The final Typst filter now inserts native figure/table outlines at the start of the body, after the template contents or at that position without toc, and reads titles from Pandoc's bundled translations for lang. Pandoc 3.1.3 writes table captions outside figures; wrap its captioned tables in Typst figures when lot is requested so the table outline can find them. Without the keys output is unchanged. Correct recipe 3.5: LaTeX lists work through pdfmd with or without toc; retain Word limitations. Two regressions (seven failing subcases before) cover both lists, each alone, neither, contents order and English/Russian/French titles. Both Pandoc results and full module checks are in the batch report. pdfmd.py stays at 785 lines (version only).
