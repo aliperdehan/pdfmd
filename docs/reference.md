@@ -157,6 +157,13 @@ positions, including gaps in `report#20+40`. Each selected part sees the same ne
 as the full build; document-level constants retain their place before the text. `seed-calc: off` disables that context.
 A part's own leading front matter remains discarded.
 
+## Lists of figures and tables
+
+Pandoc metadata `lof: true` and `lot: true` requests lists of captioned figures and tables.
+LaTeX prints captions with page numbers; add `toc: true` for reliable pdfLaTeX passes with Pandoc 3.13.
+Pandoc 3.13's Word writer inserts fields to update in Word; 3.1.3 inserts none. Neither tested Typst
+writer prints these lists. See docs/recipes.md 3.5 for a recipe and the writer limitations.
+
 ## Paragraph indent for a stretch of text (v3.30.0)
 
 a fenced div `::: {indent=false}` (also `indent=true`, `indent=2em`; `::: noindent`, `::: {.noindent}`, `.indent`;

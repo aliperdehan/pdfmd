@@ -43,7 +43,6 @@ wait for an answer before any code.
 - [ ] `--to ansi`: stacked math (levels b and c) [3ci]
 - [ ] `table-keep` limits: grid tables, height-based rule, the Pandoc floor for caption attributes [3cf]
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
-- [ ] Check that `lof` / `lot` (lists of figures and tables) work through pdfmd; then a recipe [3en, 3dg]
 - [ ] Agent-friendly pdfmd, low priority (when there is spare time): stale PDF after a failed build, `--explain CODE`, `--help agent`, a `--json` result shared with `--api` and `--doctor --json`, `--profile agent` (no guessing, no fallback, per-code `--strict`, tiny output), `--fix`, raw TeX and front matter under `--security`, a tool schema or MCP front-end last; exit code 3 for "degraded" is the author's call [3ff, 3fk]
 - [ ] Pandoc-gap audit: the user guide's "does not" sentences and closed won't-fix requests, each marked done / worth doing / refused; before the Eisvogel line [3dk]
 - [ ] Eisvogel LaTeX template: a bundled pinned copy with its licence, `--install eisvogel` for the latest, a `template` key; LaTeX only [3dk]

@@ -430,6 +430,34 @@ pdfmd report.assembled.md --unpack --slim            # strip what was unpacked f
 An embedded Lua filter only runs if this machine's pdfmd embedded it (a filter can run any command);
 `--trust-embedded` overrides.
 
+### 3.5 Lists of figures and tables
+
+Put Pandoc's variables in the front matter:
+
+```yaml
+---
+lof: true
+lot: true
+toc: true
+---
+```
+
+Give figures and tables captions (`![A figure caption](plot.png)` alone in a paragraph; a table's
+`: A table caption` on the line after it, separated by a blank line). Then build normally, for example
+`pdfmd report -e xelatex`, or `pdfmd report --to docx`.
+
+- LaTeX (`pdflatex`, `xelatex`, `lualatex`, `tectonic`) prints separate lists of caption texts and page
+  numbers before the body. `toc: true` also prints the contents. Keep it for pdfLaTeX with Pandoc 3.13:
+  without the extra passes it triggers, Pandoc can leave the figure/table lists empty; bare Pandoc
+  does the same. XeLaTeX and Tectonic also print the lists without `toc`.
+- Word with Pandoc 3.13 gets List of Figures and List of Tables fields. Update the fields in Word to
+  fill in captions and page numbers; Pandoc does not fill them itself. Pandoc 3.1.3 ignores these keys
+  for Word and writes no list fields.
+- Typst with Pandoc 3.1.3 or 3.13 ignores these keys: captions print, but neither list appears.
+
+The front-matter keys work with both tested Pandocs. Pandoc 3.13 also accepts `--lof` / `--lot`, passed
+through by pdfmd; 3.1.3 has neither option. These options alone do not cure 3.13's pdfLaTeX rerun issue.
+
 ---
 
 ## 4. Tables

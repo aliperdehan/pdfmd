@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.316b — 2026-11-17
+
+Pre-edit state: commit `688aac6`. Verify lists of figures and tables through pdfmd with Pandoc 3.1.3 and 3.13, then add recipe 3.5 and remove the agreed TODO line. XeLaTeX and Tectonic print both caption entries in both lists; pdfLaTeX 3.13 needs the extra passes from toc=true (bare Pandoc reproduces the empty lists without it). Typst prints no lists; Word 3.13 inserts updateable fields and 3.1.3 inserts none. LuaLaTeX builds are blocked by the sandbox's TeX cache. The shared LaTeX template supports its list commands too. Documentation only: no pdfmd defect found, no version bump. Documentation consistency: ten tests pass; Word fields were inspected in document.xml, not updated in Word.
+
 ## v3.33.316a — 2026-11-17
 
 Pre-edit state: commit `cfce3a6`. The title/abstract pitch test searched only each line's first word, but Pandoc 3.1.3 prints its Abstract label on the same line as Abstractfirst. Locate the marker anywhere on its line without changing any pitch assertion. A separate Typst-only measured regression checks the title, abstract and body at the expected LaTeX pitch, and passes with both Pandoc 3.1.3 and 3.13; the LuaLaTeX comparison cannot complete with this sandbox's protected font cache. Test only.
