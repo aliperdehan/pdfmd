@@ -15,6 +15,8 @@ from typing import Iterator
 from pdfmd_base import core
 from pdfmd_base import timed
 
+from pdfmd_base import pandoc_run
+
 
 def timing_module():
     """pdfmd_buildinfo.timing, or None in a lone pdfmd.py (no time is shown then)."""
@@ -228,7 +230,7 @@ def nonmath_dollars(md_path: Path, reader: str | None) -> list[tuple[int, str, s
                 _NONMATH_DOLLARS[key] = found                   # nothing that could be one: no Pandoc pass for it
                 return found
             text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(raw, md_path, show=False))
-            done = subprocess.run([pandoc, "-f", reader or "markdown", "-t", "json"], input=text, capture_output=True,
+            done = pandoc_run([pandoc, "-f", reader or "markdown", "-t", "json"], input=text, capture_output=True,
                                   text=True, encoding="utf-8", timeout=120)
             if done.returncode == 0:
                 seen: set[str] = set()

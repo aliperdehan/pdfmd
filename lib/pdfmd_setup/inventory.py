@@ -170,7 +170,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "origin": Omitted("internal", "an assembled file's record of where its pieces came from"),
     "applied-lua": Omitted("internal", "an assembled file's record of the filters already run"),
     "engine": "options.pdf-engine", "pdf-engine": "options.pdf-engine", "engine-fallback": "options.engine-fallback",
-    "tex-repair": "options.tex-repair",
+    "tex-repair": "options.tex-repair", "pandoc-memory": "options.pandoc-memory",
     "fallback": "options.fallback", "missing": "options.missing",
     "header": "options.header", "footer": "options.footer",
     "smiles.engine": "options.smiles.engine", "smiles.format": "options.smiles.format", "smiles.office-format": "options.smiles.office-format", "smiles.palette": "options.smiles.palette",

@@ -6,7 +6,6 @@ import csv
 import io
 import json
 import re
-import subprocess
 import unicodedata
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -14,6 +13,8 @@ from pathlib import Path
 
 from . import sheets
 from .scan import CsvBlock, FoundTable, caption_parts, find_csv_blocks, find_tables
+
+from pdfmd_base import pandoc_run
 
 DEFAULT_ROWS, DEFAULT_COLUMNS = 10, 7                   # the caps a `.csv` block applies unless `rows=`/`cols=` say
 SEPARATOR_CELL_RE = re.compile(r"^\s*:?-+:?\s*$")
@@ -39,7 +40,7 @@ class Extracted:
 # ---- Pandoc reads the three table kinds that are not pipe tables ------------------------------------------------
 
 def _run(command: list[str], text: str) -> str:
-    done = subprocess.run(command, input=text, capture_output=True, text=True, encoding="utf-8")
+    done = pandoc_run(command, input=text, capture_output=True, text=True, encoding="utf-8")
     if done.returncode != 0:
         raise TablesError(done.stderr.strip() or f"{command[0]} failed")
     return done.stdout

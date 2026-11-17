@@ -35,6 +35,8 @@ from tempfile import mkdtemp
 from pdfmd_base import core
 from pdfmd_base import timed
 
+from pdfmd_base import pandoc_run
+
 
 @timed("soffice")
 def run_soffice_convert(input_path: Path, output: Path, verbose: bool, target: str = "pdf") -> tuple[bool, str]:
@@ -145,7 +147,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                     result = core.run_office_pandoc(cmd, odt, office_arguments, pandoc_cwd, verbose)
                 else:
                     core.log_cmd(cmd, pandoc_cwd, verbose)
-                    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
+                    result = pandoc_run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
                 core.office_finish(office_arguments, md_path, verbose)
         if result.returncode != 0 or not odt.exists():
             return False, result.stderr.strip() or "pandoc failed to produce an intermediate .docx"
@@ -234,7 +236,7 @@ def plain_author_names(names: list[str]) -> list[str]:
 
     source = "---\nauthor: " + json.dumps(names, ensure_ascii=False) + "\n---\n"
     try:
-        result = subprocess.run(["pandoc", "-f", "markdown", "-t", "html", "-s"], input=source.encode("utf-8"),
+        result = pandoc_run(["pandoc", "-f", "markdown", "-t", "html", "-s"], input=source.encode("utf-8"),
                                 capture_output=True, check=True)
         parser = Authors()
         parser.feed(result.stdout.decode("utf-8", errors="replace"))
@@ -280,7 +282,7 @@ def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool
     if sys.platform != "win32":
         environment.setdefault("QT_QPA_PLATFORM", "offscreen")
     core.log_cmd(cmd, html.parent, verbose)
-    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=html.parent, env=environment)
+    result = pandoc_run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=html.parent, env=environment)
     if result.returncode != 0 or not produced.is_file():
         said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
         return subprocess.CompletedProcess(cmd, result.returncode or 1, "",
@@ -373,7 +375,7 @@ def run_calibre_convert(source: Path, output: Path, verbose: bool, extra: list[s
         if sys.platform != "win32":
             environment.setdefault("QT_QPA_PLATFORM", "offscreen")
         core.log_cmd(cmd, source.parent, verbose)
-        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=scratch, env=environment)
+        result = pandoc_run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=scratch, env=environment)
         if result.returncode != 0 or not produced.is_file():
             said = [line for line in (result.stderr + "\n" + result.stdout).splitlines() if line.strip()]
             return subprocess.CompletedProcess(cmd, result.returncode or 1, "",

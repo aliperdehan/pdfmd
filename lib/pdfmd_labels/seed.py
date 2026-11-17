@@ -14,6 +14,8 @@ from pathlib import Path
 from pdfmd_base import core
 from pdfmd_base import timed
 
+from pdfmd_base import pandoc_run
+
 
 # LaTeX side of the counter seeding: \pdfmdpart{key}, at the start of each part
 # of a cache build, writes the counters' values into the .aux as
@@ -286,7 +288,7 @@ def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Pa
     try:
         with core.scaffold_inputs(inputs, True) as prepared:
             cmd[1:1 + len(inputs)] = [str(path.resolve()) for path in prepared]
-            done = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
+            done = pandoc_run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
     except OSError as error:
         core.vprint(verbose, f"CALC      the names of the parts left out could not be evaluated ({error})")
         return nothing
@@ -436,7 +438,7 @@ def build_label_scan(md_path: Path, scratch: Path, font: str, engines: list[str]
         def draft_pass(text: str) -> None:
             tex_path.write_text(text, encoding="utf-8")
             try:
-                last_run["done"] = subprocess.run(command, cwd=pandoc_cwd,
+                last_run["done"] = pandoc_run(command, cwd=pandoc_cwd,
                                                   env={**os.environ, **(core.tex_search_env(md_path.parent, pandoc_cwd, md_path) or {})},
                                                   capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
             except (OSError, subprocess.SubprocessError) as error:

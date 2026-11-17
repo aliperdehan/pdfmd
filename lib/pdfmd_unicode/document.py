@@ -9,6 +9,8 @@ from pathlib import Path
 
 from pdfmd_base import core
 
+from pdfmd_base import pandoc_run
+
 
 OWN_SCRIPT_SETUP_RE = re.compile(r"ucharclasses|\\newfontfamily|\\babelfont|xeCJK|luatexja|CJKutf8|\\setCJK"
                                  r"|add_fallback|\\setTransition|\\setmainfontfallback")
@@ -70,7 +72,7 @@ def template_has_variable(writer: str, variable: str) -> bool:
     key = (writer, variable)
     if key not in _TEMPLATE_VARIABLES:
         try:
-            done = subprocess.run(["pandoc", "-D", writer], capture_output=True, encoding="utf-8", errors="replace", timeout=60)
+            done = pandoc_run(["pandoc", "-D", writer], capture_output=True, encoding="utf-8", errors="replace", timeout=60)
             _TEMPLATE_VARIABLES[key] = done.returncode == 0 and f"$if({variable})$" in done.stdout
         except (OSError, subprocess.SubprocessError):
             _TEMPLATE_VARIABLES[key] = False

@@ -53,6 +53,10 @@ class TieredHelp(unittest.TestCase):
         self.assertNotIn("--stamp-mode", tables)
         self.assertLess(len(tables.splitlines()), 80)
 
+    def test_pandoc_memory_key_has_a_help_topic(self):
+        for topic in ("output", "all"):
+            self.assertIn("pdfmd-options.pandoc-memory", run("--help", topic).stdout)
+
     def test_every_topic_prints(self):
         for topic in [*pdfmd_help.TOPICS, "other"]:
             done = run("--help", topic)

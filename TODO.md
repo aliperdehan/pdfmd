@@ -26,7 +26,6 @@ wait for an answer before any code.
 
 - [ ] Multi-path builds (3.33.140): replace the guesses (non-inputs, earlier outputs, same-output clashes) with a record of what pdfmd wrote, with the build record [3fi D33 3dn D84]
 - [ ] Images and display math in `--view` through the kitty graphics protocol, after the queue: first a spike of Unicode placeholders in Ghostty (they survive the pager), else no pager when images are drawn [3dm D84]
-- [ ] A Pandoc memory cap: a `pdfmd-options` key and `--setup` row passing `+RTS -M<n> -RTS`, default off [3en D84]
 - [ ] Document-level `indent:` takes a length (`indent: 0.5in`) in LaTeX, Typst, Word and HTML; `true` stays 1.5em [3fp D84]
 - [ ] `lua-filter-before-citeproc:`, a layered list of filters run before `--citeproc`; built with excerpts (5b) [3fp D84]
 - [ ] `strip-comments` also drops `<!-- -->` from the build's own text; README: `%%` private, unclosed `%%` kept as text, `<!-- -->` reaches HTML/EPUB [3ft D84]

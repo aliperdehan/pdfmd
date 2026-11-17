@@ -30,6 +30,8 @@ from tempfile import mkdtemp
 
 from pdfmd_base import core
 
+from pdfmd_base import pandoc_run
+
 
 def quarto_input(args) -> bool:
     """Select the dedicated Quarto route before enforcing standalone Pandoc dependencies."""
@@ -194,7 +196,7 @@ def route_ebook_input(args) -> None:
     except ImportError:
         pass
     core.log_cmd(command, scratch, args.verbose)
-    made = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=scratch)
+    made = pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=scratch)
     if made.returncode != 0 or not markdown.is_file():
         raise SystemExit(f"{book.name}: Pandoc could not read it ({(made.stderr.strip().splitlines() or ['no output'])[-1]})")
     print(f"BOOK      {book.name} read as Markdown ({markdown.stat().st_size // 1024 or 1} KB"

@@ -266,3 +266,9 @@ def sha1_file(path: Path) -> str | None:
         return hashlib.sha1(path.read_bytes()).hexdigest()
     except OSError:
         return None
+
+
+def pandoc_run(command, **kwargs):
+    """Load the optional heap-cap machinery only when a Pandoc invocation is needed."""
+    from pdfmd_engines.memory import run
+    return run(command, **kwargs)

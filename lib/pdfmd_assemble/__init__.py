@@ -38,7 +38,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -49,6 +48,8 @@ from .paths import confined_destination
 
 from pdfmd_base import core
 from pdfmd_base import timed
+
+from pdfmd_base import pandoc_run
 
 
 PARTIAL_KEY = "pdfmd-partial"
@@ -772,7 +773,7 @@ def apply_lua_filters(front_text: str, body: str, filters: list[Path], first: Pa
             cmd += ["--metadata-file", str(metadata_file)]
         for lua_filter in filters:
             cmd += ["--lua-filter", str(lua_filter)]
-        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=first.parent)
+        result = pandoc_run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=first.parent)
         if result.returncode != 0:
             print(f"WARN  --lua-mode apply: Pandoc failed ({result.stderr.strip().splitlines()[-1:] or ['?']}); "
                   "the filters are embedded instead", file=sys.stderr)

@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import contextlib
 import re
-import subprocess
 import sys
 from pathlib import Path
 
 from pdfmd_report import route, titles
 
+from pdfmd_base import pandoc_run
+from pdfmd_engines.memory import scoped
 
+
+@scoped
 def run(core, *,
         args, default_target, embed_request, engines,
         need_engines, pandoc_options, paths, stamp_overrides,
@@ -107,6 +110,7 @@ def run(core, *,
         raise SystemExit(str(error))
     metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
                       (metadata if isinstance(metadata, list) else ([metadata] if metadata else [])))
+    core.deferred("pdfmd_engines.memory", "set_limit")(files[0], metadata_files)
     report_kit_kinds = kit_no_auto_kinds(files[0], metadata_files, report_no_auto)
     if report_kit_kinds:
         report_no_auto = effective_no_auto(files[0], args.no_auto, report_kit_kinds)
@@ -329,7 +333,7 @@ def run(core, *,
                                                args.verbose, args.debug)
                 else:
                     log_cmd(cmd, pandoc_cwd, args.verbose)
-                    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
+                    result = pandoc_run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
                 office_finish(report_office_arguments, files[0], args.verbose)
         else:
             preambles = document_preambles(files[0], pandoc_options, report_no_auto, metadata_files)
@@ -469,7 +473,7 @@ def run(core, *,
 
                     def run_report_pandoc(command: list[str], target: Path):
                         log_cmd(command, pandoc_cwd, args.verbose)
-                        return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
+                        return pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                               env=tex_search_env(files[0].parent, pandoc_cwd, files[0]))
                     report_page = lambda: (browser_page_css(files[0], metadata_files, variables) if engine in BROWSER_ENGINES
                                          else calibre_page_options(files[0], metadata_files, variables))

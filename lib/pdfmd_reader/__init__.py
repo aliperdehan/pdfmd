@@ -15,6 +15,8 @@ from typing import Iterator
 
 from pdfmd_base import core
 
+from pdfmd_base import pandoc_run
+
 
 # What a Markdown document really contains, asked of Pandoc's own reader: a `@key` in a code span, an e-mail
 # address or an escaped `\\@` is no citation, and the reader is the judge of that, not a pattern (the README of
@@ -44,7 +46,7 @@ def markdown_features(md_path: Path) -> tuple[bool, bool] | None:
                 shipped = pdfmd_lua.path("md_macro")
                 if shipped is not None:
                     command += ["--lua-filter", str(shipped)]
-            done = subprocess.run(command, input=text, capture_output=True,
+            done = pandoc_run(command, input=text, capture_output=True,
                                   text=True, encoding="utf-8", timeout=120)
             if done.returncode == 0:
                 found = ast_features(json.loads(done.stdout))

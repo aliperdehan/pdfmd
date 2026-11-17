@@ -34,6 +34,9 @@ from tempfile import mkdtemp, NamedTemporaryFile
 from pdfmd_base import core
 from pdfmd_base import noted, timed
 
+from pdfmd_base import pandoc_run
+from pdfmd_engines.memory import scoped
+
 
 
 
@@ -627,7 +630,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     else:
                         cmd = core.headers_as_metadata(cmd)
                         core.log_cmd(cmd, pandoc_cwd, verbose)
-                        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
+                        result = pandoc_run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                                 env=core.tex_search_env(md_path.parent, pandoc_cwd, md_path) if flat_markdown else None)
                     ascii_problem = (core.ascii_finish(output, Path(ascii_scratch.name), ascii_missing_mode, md_path)
                                      if ascii_scratch is not None and result.returncode == 0 else None)
@@ -900,7 +903,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     def run_pandoc(command: list[str], target: Path):
                         command = core.headers_as_metadata(command)
                         core.log_cmd(command, pandoc_cwd, verbose)
-                        return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
+                        return pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                               env=core.tex_search_env(md_path.parent, pandoc_cwd, md_path))
                     return run_engine_command(cmd, engine, output, run_pandoc, page_options, verbose)
 
@@ -977,6 +980,7 @@ def set_soffice_limit(md_path: Path, metadata_files: list[Path]) -> None:
     core.SOFFICE_TIMEOUT_NOW = core.soffice_timeout_from(value)
 
 
+@scoped
 def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quoted, never evaluated: pdfmd.py's Built
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
     core.BUILD["engine"], core.BUILD["failed"], core.BUILD["output"], core.BUILD["sources"], core.BUILD["partial"], core.BUILD["root"] = None, [], None, [], None, None
@@ -987,6 +991,7 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
+    core.deferred("pdfmd_engines.memory", "set_limit")(md_path, metadata_files)
     set_soffice_limit(md_path, metadata_files)
     recorder = core.load_package("pdfmd_buildinfo.build").BuildRecorder.start(md_path, metadata_files)
     try:

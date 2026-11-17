@@ -14,6 +14,8 @@ from pathlib import Path
 
 from pdfmd_base import core
 
+from pdfmd_base import pandoc_run
+
 
 _HEADING_WRAP: dict[tuple[int, ...], bool] = {}
 
@@ -73,7 +75,7 @@ def template_source(name: str, directory: Path, command: list[str], suffix: str 
                 return path.read_text(encoding="utf-8"), path.resolve()
     for item in names:
         data_args = [word for path in option_values(command, "--data-dir") for word in ("--data-dir", path)]
-        done = subprocess.run(["pandoc", *data_args,
+        done = pandoc_run(["pandoc", *data_args,
                                "--print-default-data-file", kind + "/" + item.as_posix()],
                               capture_output=True, cwd=directory, timeout=core.PROBE_TIMEOUT)
         if done.returncode == 0:
@@ -159,10 +161,10 @@ def template_args(writer: str, command: list[str], directory: Path | None = None
             template, origin = template_source(custom, directory, command)
             template = copy_partials(template, origin, command, folder, frozenset({origin}))
         else:
-            template = subprocess.run(["pandoc", "-D", "typst"], capture_output=True, check=True,
+            template = pandoc_run(["pandoc", "-D", "typst"], capture_output=True, check=True,
                                       timeout=core.PROBE_TIMEOUT).stdout.decode("utf-8", errors="replace")
             if "$template.typst()$" in template:
-                partial = subprocess.run(["pandoc", "--print-default-data-file", "templates/template.typst"],
+                partial = pandoc_run(["pandoc", "--print-default-data-file", "templates/template.typst"],
                                          capture_output=True, check=True,
                                          timeout=core.PROBE_TIMEOUT).stdout.decode("utf-8", errors="replace")
                 template = template.replace("$template.typst()$", partial)

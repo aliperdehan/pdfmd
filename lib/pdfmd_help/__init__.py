@@ -143,7 +143,7 @@ def uncovered(parser: argparse.ArgumentParser) -> list[str]:
 
 
 def _full(parser: argparse.ArgumentParser) -> str:
-    return parser.format_help()
+    return parser.format_help() + "\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
 
 
 def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
@@ -161,7 +161,10 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
     previous = parser.description
     parser.description = f"{topic}: {summary}"
     try:
-        return parser.format_help()
+        text = parser.format_help()
+        if topic == "output":
+            text += "\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
+        return text
     finally:
         parser.description = previous
         for action, text in hidden:

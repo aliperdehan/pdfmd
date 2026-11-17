@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 from pdfmd_base import core
+
+from pdfmd_base import pandoc_run
 
 
 # --- pdfmd --check: a linter (v3.26.15) ---------------------------------------------------------------------
@@ -111,7 +112,7 @@ def calc_check_records(files: list[Path], metadata_files: list[Path]) -> "tuple[
         command = [pandoc, *(str(file.resolve()) for file in files), "-t", "native", "-o", str(Path(scratch) / "out.native"),
                    *arguments, "-V", "pdfmd-calc-check=" + str(report)]
         try:
-            done = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            done = pandoc_run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                   cwd=core.pandoc_working_directory(files[0].parent))
         except OSError:
             return None

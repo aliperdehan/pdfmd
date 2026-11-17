@@ -15,6 +15,8 @@ from tempfile import mkstemp
 
 from pdfmd_base import core
 
+from pdfmd_base import pandoc_run
+
 
 # pdfmd-options.citation-engine: "citeproc" (the default -- a document only
 # needs this key at all to opt into something else), "natbib", or
@@ -162,7 +164,7 @@ def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | No
     default = folder / "pandoc-default.csl"
     if not default.is_file():
         try:
-            done = subprocess.run(["pandoc", "--print-default-data-file", "default.csl"], capture_output=True,
+            done = pandoc_run(["pandoc", "--print-default-data-file", "default.csl"], capture_output=True,
                                   encoding="utf-8", errors="replace", timeout=60)
         except (OSError, subprocess.SubprocessError):
             done = None
@@ -377,7 +379,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             cmd += core.deferred("pdfmd_bibliography", "native_path_args")(cmd)
             cmd = core.headers_as_metadata(cmd)
             core.log_cmd(cmd, pandoc_cwd, verbose)
-            result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
+            result = pandoc_run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
         if result.returncode != 0 or not tex_path.exists():
             return False, result.stderr.strip() or "pandoc failed to produce an intermediate .tex"
         where = f"kept at {tex_path} (--keep-aux)" if keep_aux else "discarded after compiling"

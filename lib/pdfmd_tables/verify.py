@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from pathlib import Path
 
 from .convert import TablesError
+
+from pdfmd_base import pandoc_run
 
 
 def _tables(node, found: list) -> None:
@@ -38,7 +39,7 @@ def pandoc_tables(pandoc: str, text: str, directory: Path, *filters: Path, reade
         command = [pandoc, "-f", reader, "-t", "json"]
         for item in filters:
             command += ["--lua-filter", str(item)]
-        done = subprocess.run(command + [scratch.name], capture_output=True, text=True, encoding="utf-8", cwd=directory)
+        done = pandoc_run(command + [scratch.name], capture_output=True, text=True, encoding="utf-8", cwd=directory)
     finally:
         scratch.unlink(missing_ok=True)
     if done.returncode != 0:

@@ -33,6 +33,8 @@ from typing import Iterator
 
 from pdfmd_base import core
 
+from pdfmd_base import pandoc_run
+
 
 DEFAULT_FONT = "DejaVu Serif"
 
@@ -172,7 +174,7 @@ def unicode_code_text(md_paths: list[Path]) -> str:
         if pandoc:
             reader = core.flavour_reader(path)[0] or "markdown"
             try:
-                result = subprocess.run([pandoc, "-f", reader, "-t", "json"], input=text,
+                result = pandoc_run([pandoc, "-f", reader, "-t", "json"], input=text,
                                         capture_output=True, text=True, encoding="utf-8", check=True)
                 document = json.loads(result.stdout)
             except (OSError, subprocess.SubprocessError, ValueError):

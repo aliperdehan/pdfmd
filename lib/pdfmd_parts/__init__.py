@@ -18,7 +18,6 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import subprocess
 import sys
 import unicodedata
 from collections import namedtuple
@@ -32,6 +31,8 @@ from tempfile import NamedTemporaryFile
 from pdfmd_lookup import LOOKUP_TIERS, LookupAmbiguous, rank_lookup
 
 from pdfmd_base import core
+
+from pdfmd_base import pandoc_run
 
 
 HEADING_FIELD_WORDS = {"alias": "{#id}", "stem": "heading text"}
@@ -868,8 +869,8 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
                 shutil.copytree(entry, link)
             else:
                 shutil.copy2(entry, link)
-    original = subprocess.run(["pandoc", str(source), "-t", "native"], capture_output=True, encoding="utf-8", errors="replace")
-    split = subprocess.run(["pandoc", str(scaffold), *map(str, written), "-t", "native"],
+    original = pandoc_run(["pandoc", str(source), "-t", "native"], capture_output=True, encoding="utf-8", errors="replace")
+    split = pandoc_run(["pandoc", str(scaffold), *map(str, written), "-t", "native"],
                            capture_output=True, encoding="utf-8", errors="replace")
     print(f"SPLIT  {core.display_path(source)} -> {core.display_path(scaffold)} + {len(written)} parts in "
           f"{core.display_path(parts_dir)}")

@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 
 from pdfmd_base import core
+
+from pdfmd_base import pandoc_run
 
 DOCUMENTS = {
     "readme": ("README.md", "README.md", "the manual: every feature, with examples"),
@@ -138,7 +139,7 @@ def render_document(path: Path, title: str) -> Path | None:
                      encoding="utf-8")
     command = ["pandoc", str(path), "-f", "gfm", "-s", "--toc", "--toc-depth=2", "--metadata", f"title={title}", "--css",
                style.name, "-o", str(target)]
-    done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=target.parent)
+    done = pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=target.parent)
     return target if done.returncode == 0 and target.is_file() else None
 
 

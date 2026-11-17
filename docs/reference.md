@@ -164,6 +164,14 @@ LaTeX prints captions with page numbers; add `toc: true` for reliable pdfLaTeX p
 Pandoc 3.13's Word writer inserts fields to update in Word; 3.1.3 inserts none. Neither tested Typst
 writer prints these lists. See docs/recipes.md 3.5 for a recipe and the writer limitations.
 
+## Pandoc's memory cap
+
+`pdfmd-options.pandoc-memory` (also config, metadata files, folder settings and `--setup`) is unset by default: no cap.
+A positive whole size such as `512m` or `2g` (`k`, `m`, `g`, case insensitive) passes `+RTS -M<size> -RTS` to every
+Pandoc invocation, including helper conversions and probes. Empty/null switches it off. Invalid sizes stop the build;
+a heap overflow retains Pandoc's diagnostic and suggests raising or unsetting `pdfmd-options.pandoc-memory`.
+This caps the Haskell heap, not external engines or total process memory. `pdfmd --help output` lists the key.
+
 ## A byline without a title
 
 With Pandoc's default LaTeX, Typst and HTML templates, author/date are not printed without a title.

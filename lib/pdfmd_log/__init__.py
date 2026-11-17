@@ -351,6 +351,8 @@ def log_cmd(cmd: list, cwd: Path, verbose: bool) -> None:
     re-runnable even when an argument has spaces (a metadata file path
     under a directory with one, for instance).
     """
+    from pdfmd_engines.memory import command
+    cmd = command(cmd)
     line = "CMD  " + " ".join(cmd_part(str(part)) for part in cmd) + f"  (cwd={cmd_part(str(cwd), quote=False)})"
     if not verbose:
         core.record_note(line)             # the record has it whatever --verbose said

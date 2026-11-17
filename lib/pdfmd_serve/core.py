@@ -28,6 +28,8 @@ from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 from .contain import contained
 
+from pdfmd_base import pandoc_run
+
 API_VERSION = 1
 
 # Seconds one render may take. A live render is pandoc on a few pages (0.05 s measured); the limit only keeps a hung process from holding a
@@ -324,7 +326,7 @@ class Core:
                 command += [str(item) for item in (arguments or [])]
                 # the filters open only what is inside the project (and pdfmd's own places): a name in the text is not a way out of it
                 extra, environment = stack.enter_context(contained(self.root, command, list(self.places())))
-                done = subprocess.run(command + extra, input=text.encode("utf-8"), capture_output=True, cwd=str(folder),
+                done = pandoc_run(command + extra, input=text.encode("utf-8"), capture_output=True, cwd=str(folder),
                                       timeout=RENDER_TIMEOUT, env=environment)
         except subprocess.TimeoutExpired:
             raise ApiError(504, "timeout", f"pandoc did not answer in {RENDER_TIMEOUT} s") from None

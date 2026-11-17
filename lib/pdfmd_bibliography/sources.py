@@ -15,6 +15,8 @@ from pathlib import Path
 
 from pdfmd_base import core
 
+from pdfmd_base import pandoc_run
+
 
 def values(value):
     return value if isinstance(value, list) else [] if value is None else [value]
@@ -138,9 +140,8 @@ def cached(text, suffix):
 
 def native_references(references):
     """BibTeX/Biber read files, not Pandoc's inline reference metadata. Let Pandoc translate CSL fields losslessly."""
-    import subprocess
 
-    done = subprocess.run([core.which("pandoc"), "-f", "csljson", "-t", "biblatex"],
+    done = pandoc_run([core.which("pandoc"), "-f", "csljson", "-t", "biblatex"],
                           input=json.dumps(references, ensure_ascii=False), capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
     if done.returncode:

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.318 — 2026-11-17
+
+Pre-edit state: commit `68fd2e9`. Pandoc builds had no optional heap limit. `pdfmd-options.pandoc-memory` now accepts a positive whole size (512m, 2g; k/m/g units), defaults to off, and has a setup row and help topic. A shared invocation helper adds `+RTS -M<size> -RTS` to Pandoc builds, helper conversions and probes; each build scopes its resolved setting and restores its parent's. Invalid values stop clearly; heap overflow keeps Pandoc's error and names the setting. Regression tests fail before (two failures, two errors) and pass after, including an actual heap overflow. Verification and sandbox limits are recorded in the batch report. Startup stays at 182 modules; the helper loads lazily. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.317 — 2026-11-17
 
 Pre-edit state: commit `fa13b04`. Pandoc's default LaTeX, Typst and HTML title blocks silently omit the author and date when there is no title. A metadata filter now gives one NOTE naming the remedy, including command-line metadata and template variables; fragments, custom templates, defaults files, kits and project filters are excluded. Word, ODT and EPUB were checked and print the byline without a title. Regression: nine failing subcases before, passing with Pandoc 3.1.3 and 3.13 after; rendered Typst PDFs confirm the omission with both. The touched and required checks pass (148 tests, one skip). pdfmd.py stays at 785 lines (version only).

@@ -16,6 +16,8 @@ from pathlib import Path
 
 from pdfmd_base import core
 
+from pdfmd_base import pandoc_run
+
 
 # The tools pdfmd runs that Windows installers leave off PATH: tool -> (the `options:` key of the config that names it,
 # its programs, its folders below an install root, other roots as (variable, folder below it), whether its folder goes on
@@ -380,7 +382,7 @@ def run_probe(command: list, **options) -> "subprocess.CompletedProcess | None":
     options.setdefault("encoding", "utf-8")
     options.setdefault("errors", "replace")
     try:
-        return subprocess.run(command, timeout=core.PROBE_TIMEOUT, **options)
+        return pandoc_run(command, timeout=core.PROBE_TIMEOUT, **options)
     except subprocess.TimeoutExpired:
         if core.VERBOSE_OUTPUT:
             asked = " ".join(Path(str(command[0])).name if index == 0 else str(word) for index, word in enumerate(command[:3]))

@@ -35,6 +35,8 @@ except ImportError:                                # pragma: no cover -- incompl
 
 from pdfmd_base import core
 
+from pdfmd_base import pandoc_run
+
 
 def office_package_folders(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None
                            ) -> list[tuple[Path, str]]:
@@ -231,7 +233,7 @@ def build_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Pat
     pictures in; a `.docx` is then finished (SVG beside the PNG, baselines, widths)."""
     def run(command: list[str]):
         core.log_cmd(command, pandoc_cwd, verbose)    # each run, the plain one too (v3.33.60: --verbose missed it)
-        return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
+        return pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
 
     module = core.office_module()
     context = arguments.context if hasattr(arguments, "context") else {}

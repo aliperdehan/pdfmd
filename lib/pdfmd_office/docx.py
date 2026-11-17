@@ -16,6 +16,8 @@ import zipfile
 
 from .spec import OfficeSpec
 
+from pdfmd_base import pandoc_run
+
 W = "w"
 # Child order Word expects inside <w:rPr> and <w:pPr> and <w:sectPr> (ECMA-376); an element out of place
 # can make Word report the file as damaged.
@@ -40,7 +42,7 @@ _CHILD = re.compile(r"<w:(\w+)\b(?:[^>]*?/>|[^>]*>.*?</w:\1>)", re.S)
 def default_reference(kind: str = "docx") -> bytes:
     """Pandoc's own reference document (needs the `pandoc` on PATH)."""
     try:
-        done = subprocess.run(["pandoc", "--print-default-data-file", f"reference.{kind}"], capture_output=True,
+        done = pandoc_run(["pandoc", "--print-default-data-file", f"reference.{kind}"], capture_output=True,
                               timeout=PROBE_TIMEOUT)             # a probe: a Pandoc that does not answer is one that is not there
     except subprocess.TimeoutExpired:
         raise OSError(f"pandoc did not answer in {PROBE_TIMEOUT} s") from None
