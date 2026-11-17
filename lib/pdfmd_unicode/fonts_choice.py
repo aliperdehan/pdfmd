@@ -140,7 +140,7 @@ def preferred_font() -> str:
 CODE_FONTS_TYPST = ("DejaVu Sans Mono",)
 CODE_FONTS_HTML = ("Menlo", "Monaco", "Consolas", "Lucida Console", "DejaVu Sans Mono")
 EMOJI_FAMILIES = ("Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Twemoji Mozilla", "Noto Emoji")
-UNICODE_ENGINES = ("lualatex", "xelatex", "typst", "weasyprint")
+UNICODE_ENGINES = ("lualatex", "xelatex", "tectonic", "typst", "weasyprint")
 
 
 def font_args(kind: str, family: str, latex: bool = True) -> list[str]:
@@ -409,8 +409,10 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
             from pdfmd_unicode import install as installer
             wanted = installer.packages_for(undrawn, language)
             hint = (f"pdfmd --install fonts:{','.join(wanted)}" if wanted else "pdfmd --install fonts")
+            emoji_hint = (f"; {engine} needs extractable emoji pictures; try typst or md2pdf"
+                          if engine in ("xelatex", "tectonic") and (plan.emoji | code_emoji) & undrawn.keys() else "")
             print(f"WARN  {md_paths[0]}: no installed font draws {describe_code_points(undrawn)} "
-                  f"({hint}, or name a font that does; pdfmd-options: {{missing: box}} marks them)",
+                  f"({hint}, or name a font that does; pdfmd-options: {{missing: box}} marks them{emoji_hint})",
                   file=sys.stderr)
     if not plan:
         yield None, None

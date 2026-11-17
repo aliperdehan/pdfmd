@@ -442,7 +442,7 @@ A `$...$` whose closing `$` is directly followed by a digit (`$\geq$3`,
 pdfmd says so before the build, WARN `file:line`, and what to write
 instead (`$\geq 3$`). It is the usual cause of the retry above.
 
-## Text in other scripts (v3.23.0, lualatex/xelatex)
+## Text in other scripts (v3.23.0, lualatex/xelatex/tectonic)
 
 No main font draws everything a multilingual document says. pdfmd reads
 the character tables of the installed fonts (pdfmd_unicode/, no
@@ -474,11 +474,12 @@ LaTeX inline code and
 code blocks get their own missing characters set in a fallback font (a code
 block that needs one becomes a fancyvrb Verbatim, losing its syntax
 highlighting); math is left to unicode-math.
-Emoji under lualatex/xelatex, which cannot draw colour fonts, become
+Emoji under lualatex/xelatex/tectonic, which cannot draw colour fonts directly, become
 pictures: the PNG of each emoji sequence (flags, skin tones, ZWJ families,
 keycaps, found through the font's own ligatures) is read out of the colour
 emoji font (`--install emoji`, or a system Noto Color Emoji) into pdfmd's
-cache and included at text height.
+cache and included at text height. XeLaTeX and Tectonic warn with the emoji and engine name when
+no extractable picture is available, suggesting Typst or the native renderer (`--engine md2pdf`).
 Typst gets the same runs as `#text(font: ...)` (it does no per-script
 fallback of its own that finds CJK) and WeasyPrint styled spans. The
 fonts: `pdfmd --install fonts` lists what pdfmd can fetch (STIX Two,

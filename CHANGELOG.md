@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.314 — 2026-11-17
+
+Pre-edit state: commit `76cdeb0`. Tectonic was excluded from Unicode fallback even though it shares XeTeX's ability to include extracted emoji PNGs. It now uses the same fallback as XeLaTeX and LuaLaTeX. Where no PNG can be extracted, the XeTeX routes' warning names the emoji and engine and suggests Typst or the native renderer. Two regressions (three failing subcases before) cover both XeTeX engines with and without an extractable font; all 59 Unicode tests pass. Real-build results and limitations are in the batch report. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.313 — 2026-11-17
 
 Pre-edit state: commit `d054f6e`. A cached SVG raster fallback hid newly installed vector converters for PDF requests. Cached PDFs still return immediately; cached PNGs now wait for every available PDF-capable converter to fail, and are reused without running resvg again. Two regressions fail before and pass after, covering a new vector converter, unavailable and failing converters, and immediate PDF reuse. Full image-module results are in the batch report. pdfmd.py stays at 785 lines (version only).

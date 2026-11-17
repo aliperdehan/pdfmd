@@ -491,6 +491,41 @@ class ColourEmoji(unittest.TestCase):
         self.root = Path(self._directory.name)
         self.font = make_color_font(self.root / "emoji.ttf", {1: self.ROCKET, 5: self.MAN_AT_COMPUTER})
 
+    def test_xetex_engines_use_the_same_emoji_pictures_as_lualatex(self):
+        from unittest import mock
+        make_font(self.root / "main.ttf", "Main Test", [(0x20, 0x7E)])
+        index = pu.FontIndex(self.root, use_system=False)
+        face = pu.Face("Noto Color Emoji", "Regular", str(self.font))
+        doc = self.root / "d.md"
+        doc.write_text("go 🚀 now", encoding="utf-8")
+        for engine in ("lualatex", "xelatex", "tectonic"):
+            with self.subTest(engine=engine), mock.patch.object(pdfmd, "font_index", return_value=index), \
+                    mock.patch.object(pdfmd, "managed_face", return_value=face), \
+                    mock.patch.object(pdfmd, "document_cache_root", return_value=self.root / "cache"):
+                with pdfmd.script_fallback([doc], [], [], [], "Main Test", engine, None, lambda *a: None) as (header, lua):
+                    self.assertIsNotNone(header)
+                    self.assertIn(r"\providecommand{\pdfmdemoji}", header.read_text(encoding="utf-8"))
+                    self.assertIn("1f680.png", lua.read_text(encoding="utf-8"))
+
+    def test_xetex_without_an_extractable_font_names_the_engine_and_emoji(self):
+        import contextlib
+        import io
+        from unittest import mock
+        make_font(self.root / "main.ttf", "Main Test", [(0x20, 0x7E)])
+        index = pu.FontIndex(self.root, use_system=False)
+        doc = self.root / "d.md"
+        doc.write_text("go 🚀 now", encoding="utf-8")
+        for engine in ("xelatex", "tectonic"):
+            error = io.StringIO()
+            with self.subTest(engine=engine), mock.patch.object(pdfmd, "font_index", return_value=index), \
+                    mock.patch.object(pdfmd, "managed_face", return_value=None), contextlib.redirect_stderr(error):
+                with pdfmd.script_fallback([doc], [], [], [], "Main Test", engine, None, lambda *a: None) as (header, lua):
+                    self.assertIsNone(header)
+                    self.assertIsNone(lua)
+                self.assertIn("🚀", error.getvalue())
+                self.assertIn(engine, error.getvalue())
+                self.assertIn("typst", error.getvalue())
+
     def test_sequences_in_text(self):
         found = self.colorfont.emoji_sequences("a \U0001F680 b \U0001F468\u200D\U0001F4BB c \U0001F1F0\U0001F1FF 1\uFE0F\u20E3 \u2764\uFE0F \u2764")
         self.assertEqual(set(found), {"\U0001F680", "\U0001F468\u200D\U0001F4BB", "\U0001F1F0\U0001F1FF",
