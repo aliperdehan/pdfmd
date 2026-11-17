@@ -81,6 +81,27 @@ class Environment(unittest.TestCase):
             self.assertEqual((one["PDFMD_CONFIG"], one["PDFMD_NO_PROMPT"]), ("", "1"))
 
 
+# The runner kills at once (SIGKILL, no grace period). These bounds only keep a heavily loaded machine (the full
+# suite beside other jobs: 3 s and 2 s were missed there, 2026-11-17) from being read as a hang: a runner that does not
+# stop still fails after STOP_WITHIN seconds, and a detached child that is not killed marks itself after SURVIVAL_DELAY.
+STOP_WITHIN = 20
+SURVIVAL_DELAY = 8
+
+
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    try:                                   # a killed child the system has not reaped yet is not alive
+        done, _ = os.waitpid(pid, os.WNOHANG)
+        return done == 0
+    except ChildProcessError:
+        return subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()[:1] not in ("Z", "")
+
+
 @unittest.skipIf(os.name == "nt", "SIGINT delivery differs on Windows")
 class Interrupt(unittest.TestCase):
     def test_interrupt_stops_blocked_worker(self):
@@ -106,7 +127,7 @@ class Interrupt(unittest.TestCase):
                 self.assertTrue(marker.exists(), "worker did not start")
                 proc.send_signal(signal.SIGINT)
                 try:
-                    _, stderr = proc.communicate(timeout=3)
+                    _, stderr = proc.communicate(timeout=STOP_WITHIN)
                 except subprocess.TimeoutExpired:
                     self.fail("runner did not stop the blocked worker promptly")
                 self.assertEqual(proc.returncode, 130, stderr.decode())
@@ -129,7 +150,7 @@ class Interrupt(unittest.TestCase):
             (base / "tests" / "test_detached.py").write_text(
                 "import os, subprocess, sys, time, unittest\nfrom pathlib import Path\n"
                 f"class Detached(unittest.TestCase):\n def test_wait(self):\n"
-                f"  child = subprocess.Popen([sys.executable, '-c', {('import time; from pathlib import Path; time.sleep(2); Path(' + repr(str(survived)) + ').touch(); time.sleep(60)')!r}], start_new_session=True)\n"
+                f"  child = subprocess.Popen([sys.executable, '-c', {('import time; from pathlib import Path; time.sleep(' + str(SURVIVAL_DELAY) + '); Path(' + repr(str(survived)) + ').touch(); time.sleep(60)')!r}], start_new_session=True)\n"
                 f"  Path({str(marker)!r}).write_text(str(os.getpid()) + ' ' + str(child.pid))\n"
                 "  time.sleep(60)\n")
             # This sandbox may deny ps; supply its process snapshot while using real processes and signals.
@@ -153,10 +174,12 @@ class Interrupt(unittest.TestCase):
                 self.assertTrue(marker.exists(), "worker did not start")
                 pids = [int(pid) for pid in marker.read_text().split()]
                 proc.send_signal(signal.SIGINT)
-                _, stderr = proc.communicate(timeout=3)
+                _, stderr = proc.communicate(timeout=STOP_WITHIN)
                 self.assertEqual(proc.returncode, 130, stderr.decode())
-                time.sleep(2.2)
-                self.assertFalse(survived.exists(), "detached child survived interruption")
+                deadline = time.monotonic() + SURVIVAL_DELAY - 1
+                while alive(pids[1]) and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                self.assertFalse(alive(pids[1]) or survived.exists(), "detached child survived interruption")
             finally:
                 if proc.poll() is None:
                     os.killpg(proc.pid, signal.SIGKILL)

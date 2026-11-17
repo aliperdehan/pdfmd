@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.330b — 2026-11-17
+
+Pre-edit state: commit `1468448`. tests/test_parallel_runner.py's two interrupt tests failed in a full-suite run on a
+heavily loaded Mac (the suite with three workers beside other jobs) and passed alone, three times out of three: they
+gave the runner 3 s to stop after SIGINT and a detached grandchild 2 s before it marked itself as having survived. The
+runner kills at once (SIGKILL, no grace period), so the bounds measured the machine's load, not the runner. A runner
+that does not stop now fails after 20 s, and the detached child marks itself after 8 s while the test waits only until
+it is gone (it no longer sleeps a fixed 2.2 s, so the module runs in 0.4 s instead of 2.6 s). Tests only.
+
 ## v3.33.330a — 2026-11-17
 
 Pre-edit state: commit `25e233d`. The README opens with the pdfmd wordmark instead of the plain `# pdfmd` heading
