@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.285e — 2026-11-17
+
+Pre-edit state: commit `942747b`. The Colophon watcher-match probe could run before its sleeping stand-in had started, and a fixed probe window depended on load. Use a real unbuffered checkout watcher and wait for its existing WATCH / watching signal, then retry positive discovery as soon as needed, with a 120 s ceiling; the namesake rejection remains immediate. Cleanup stops the watcher process group, including an initial build. At eea2b90 (the watcher code is unchanged), scripts/pdfmd --watch announced readiness after 0.390 s in this sandbox: start-up was not slow in this measurement. The original Swift probe compiled and passed; no sandbox skip was needed. Proof: revised module passes with Pandoc 3.1.3 and 3.13; six safety modules pass (117 cases including the watcher, one existing skip). Ruff F passes; pdfmd.py stays at 783 lines. This removes the launch-order race rather than depending on a fixed sleep.
+
 ## v3.33.285d — 2026-11-17
 
 Pre-edit state: commit `66b9061`. The hanging diagram stand-in could be stopped before its shell appended to ran.log, so requiring one logged start raced under load. Accept zero or one start, and require exactly one WARN containing "did not finish in 2 s" (the build summary repeats the reason without WARN). The elapsed-time, output, cache and strict checks stay intact. This cannot race on whether the shell reached its log write. Proof: all 20 diagram tests pass with Pandoc 3.13 and 3.1.3; the six required safety modules pass (136 cases including diagrams, one existing skip). Ruff F passes; pdfmd.py stays at 783 lines. An initial concurrent readiness measurement touched only the scratch cache watched by isolation_support; a clean rerun passes isolation.

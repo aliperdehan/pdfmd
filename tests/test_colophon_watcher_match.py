@@ -2,9 +2,11 @@
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -42,13 +44,34 @@ exit(PdfmdBuild.watcher(for: file, listing: other) == nil ? 0 : 1)
             project_b.mkdir()
             (project_a / "report.md").write_text("A")
             (project_b / "report.md").write_text("B")
-            script = root / 'pdfmd.py'
-            script.write_text('import time; time.sleep(30)')
-            watcher = subprocess.Popen([sys.executable, str(script), '--watch', 'report.md'], cwd=project_a, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
-            try:
-                for project, expected in [(project_a, 'yes'), (project_b, 'no')]:
-                    result = subprocess.run([str(root / 'test'), str(project / 'report.md'), expected], capture_output=True, text=True, timeout=10, env=env)
-                    self.assertEqual(result.returncode, 0, f"{project}: {expected}\n" + result.stdout + result.stderr)
-            finally:
-                watcher.terminate()
-                watcher.wait(timeout=10)
+            # Wait for the real watcher, not a sleeping stand-in: process discovery
+            # can run before Python has even received its --watch arguments under load.
+            with (root / 'watch.log').open('w+') as log:
+                watcher = subprocess.Popen([sys.executable, '-u', str(ROOT / 'scripts/pdfmd'), '--watch', 'report.md',
+                                            '--to', 'html', '--no-auto', 'font', '--no-backup'],
+                                           cwd=project_a, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                           env=env, start_new_session=True)
+                try:
+                    deadline = time.monotonic() + 120
+                    while True:
+                        log.seek(0)
+                        text = log.read()
+                        if any(line.startswith('WATCH  ') and ': watching ' in line for line in text.splitlines()):
+                            break
+                        self.assertIsNone(watcher.poll(), text)
+                        self.assertLess(time.monotonic(), deadline, 'watcher never became ready:\n' + text)
+                        time.sleep(0.05)
+                    for project, expected in [(project_a, 'yes'), (project_b, 'no')]:
+                        deadline = time.monotonic() + 120
+                        while True:
+                            result = subprocess.run([str(root / 'test'), str(project / 'report.md'), expected],
+                                                    capture_output=True, text=True, timeout=30, env=env)
+                            if result.returncode == 0 or expected == 'no' or time.monotonic() >= deadline:
+                                break
+                            self.assertIsNone(watcher.poll(), text)
+                            time.sleep(0.05)
+                        self.assertEqual(result.returncode, 0, f"{project}: {expected}\n" + result.stdout + result.stderr)
+                finally:
+                    # Stop any initial build too, even if the probe failed before it finished.
+                    os.killpg(watcher.pid, signal.SIGTERM)
+                    watcher.wait(timeout=30)
