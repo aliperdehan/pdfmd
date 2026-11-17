@@ -254,6 +254,8 @@ def run_main() -> None:
         core.paragraph_spacing_command_line(args.paragraph_spacing)
     if args.bibliography_indent is not None:
         core.bibliography_indent_command_line(args.bibliography_indent)
+    if args.pagecite is not None:
+        core.deferred("pdfmd_excerpts.pagecite", "command_line")(args.pagecite)
     if args.fullcite_list is not None:
         core.fullcite_command_line(args.fullcite_list)
     if args.calc_align is not None:

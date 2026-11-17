@@ -2832,6 +2832,37 @@ with an annotated bibliography); `none` has no combined list. One entry or one b
 `list=drop`, `::: {.fullcite list=keep}`. The word `fullcite` is in `markup:`, so it is on in the `pdfmd` and `obsidian` flavours and
 off in `pandoc`, `gfm` and `commonmark`, and `markup: [callouts]` or `--no-markup` switches it off. The indent width is `bibliography-indent` (1.5em, Pandoc's own, when it is not set).
 
+**Page markers after citations** (`markup: pagecite`). Off by default. With
+`pdfmd-options: {pagecite: auto}`, `Claim [@alpha, p. 2]. Next [p. 5].` uses the last
+source in that paragraph for the second claim. `--pagecite MODE` wins over the
+document, its metadata files, folder settings and global `--setup` settings.
+`pagecite: off | auto | style | page | drop` means leave the marker, choose by CSL,
+a real citation with its locator, just the typed page words in the CSL citation
+brackets (round brackets if unavailable), or remove the marker and its preceding
+space. `bare` and `full` are aliases for `page` and `style`.
+
+In `auto`, author-date and author styles use `page`; note styles use `style`
+(so the CSL can print ibid.). Numeric and label styles keep a real citation with
+its locator at each claim; if their citation never uses a locator, the marker is
+dropped with one NOTE. There is no merged citation at the end of a run. Without a
+named CSL, Pandoc’s default author-date style uses `page`; an unreadable CSL or
+natbib/biblatex uses `style`.
+
+`pdfmd-options: {pagecite-terms: [p., pp., S.]}` replaces the default `[p., pp.]`;
+`--setup` has a row for each setting. An unlinked `[TERM ...]` containing a digit
+or roman numeral is a marker. `\[p. 5]`, code and links stay literal; `--` in a
+page range becomes an en dash. Each paragraph or plain block (list item, table
+cell) has its own source, and a footnote has its own scope. Cross-references and
+comments between a citation and a marker do not change the source. A multi-source
+citation uses its last source with a WARN; no earlier citation gives a WARN and
+leaves the marker. The native tier leaves markers unchanged with one NOTE.
+
+The `pagecite` markup kind is available in the pdfmd and obsidian flavours;
+a named Pandoc reader needs `markup: [pagecite]` too. `--no-auto pagecite`,
+`--no-markup` or a markup list without `pagecite` switches it off. The built-in
+filter runs before citeproc and project filters, including a project’s own
+`pagecite.lua`; with the built-in off, the project filter keeps its behaviour.
+
 **Vertical space** (v3.29, `markup: space`). A line of its own that is `\vspace{1cm}` (or `\vspace*`), `\smallskip`, `\medskip`,
 `\bigskip` (3, 6 and 12 pt, as in LaTeX), one or more `<br>` (an em each) or a raw `#v(1cm)` becomes space in every format:
 `\vspace{..}` in LaTeX, `#v(..)` in Typst, an empty `div` of that height in HTML, EPUB and the HTML engines' PDFs, and a few empty
@@ -2936,7 +2967,8 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
 
 - **pdfmd's own syntax on** (v3.32.24, in `obsidian` and `pdfmd`, for a Markdown file). `markup` is on for callouts, `toc`, `center`,
   `highlight`, `underline`, `keep`, `landscape`, `appendix` and `fullcite` (`> [!note]`, `[TOC]`, `<center>`, `==text==`, `<u>text</u>`, `::: keep`, `::: landscape`,
-  `\appendix`, `[@key]{.fullcite}`), and `pagebreak` for every family, with no setting. `space` stays off (a lone `<br>` is often just a blank line), and
+  `\appendix`, `[@key]{.fullcite}`), and `pagebreak` for every family, with no setting. The `pagecite` kind is available too,
+  but its shorthand stays off until `pagecite: auto` or another mode is set. `space` stays off (a lone `<br>` is often just a blank line), and
   so do `linebreak` and `raw`: name them (`markup: [space]`, `linebreak: true`, `raw: true`) to turn them on. A `markup:` or
   `pagebreak:` setting of any kind, `false` included, replaces the flavour's list; `--markup` and `--no-markup` decide for one run.
 
@@ -3595,7 +3627,7 @@ ignores the key with a warning. `pdfmd --kits NAME` shows it.
 **A kit that does a markup's job itself** (v3.33.68). `markup-off: [landscape]` in the `.kit` takes those kinds of universal markup
 (the kinds `markup:` names) out of the list for documents that use the kit, so a house style with its own landscape pages
 need not list every other kind. It may name any kind of `markup:` (`callouts`, `toc`, `center`, `highlight`, `underline`, `keep`,
-`landscape`, `appendix`, `fullcite`, `space`; a list or one string with commas); any other word, `comments` among them (that is
+`landscape`, `appendix`, `fullcite`, `pagecite`, `space`; a list or one string with commas); any other word, `comments` among them (that is
 `show-comments`), is a warning naming the kit file. Like `no-auto:`, the kit's switch is weaker than `--markup` and `--no-markup`,
 the document, its own metadata files and the folders' files: a `markup:` set there is used as it is. It is stronger than the
 config file's, a preset's, the global metadata's, the kit's own metadata and the flavour's default list. An older pdfmd ignores the

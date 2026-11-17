@@ -684,7 +684,7 @@ def strip_build_comments_args(sources: Path | list[Path], metadata_files: list[P
 def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], metadata_files: list[Path], no_auto: list[str] | None,
                          csv_filter: Path, pandoc_options: list[str], crossref_sources: Path | list[Path] | None = None,
                          flat_pictures: Path | None = None, preamble: list[Path] | None = None, flat_text: bool = False,
-                         cellalign_early: bool = False, label: str | None = None) -> list[str]:
+                         cellalign_early: bool = False, label: str | None = None, citation_engine: str | None = None) -> list[str]:
     """The filters pdfmd puts on what a document SAYS (its own syntax: the metadata that appends, `\\md{}`, calc, the CSV tables, page
     breaks, indent, callouts and the other markup, table captions, line breaks, the title, the cover, raw pieces and diagrams, the
     cross-references), in the order they run. Every build writes this one list, whatever the writer is, and so does the live view of
@@ -709,6 +709,8 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     args += title_filter_args(md_path, metadata_files, pandoc_options, no_auto)
     args += cover_filter_args(md_path, metadata_files)
     args += raw_filter_args(inputs, no_auto, metadata_files, flat_pictures=flat_pictures, preamble=preamble, flat_text=flat_text)
+    pagecite_options = [*pandoc_options, f"--{citation_engine}"] if citation_engine in ("natbib", "biblatex") else pandoc_options
+    args += core.deferred("pdfmd_excerpts.pagecite", "filter_args")(inputs, metadata_files, pagecite_options, no_auto)
     args += core.crossref_filter_args(crossref_sources or inputs, pandoc_options, no_auto, label or str(md_path))
     return args + core.fullcite_pre_args(inputs, metadata_files, pandoc_options)
 

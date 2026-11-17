@@ -19,6 +19,34 @@ same commit as the change.
 
 ---
 
+## v3.34.0 — 2026-11-18
+
+Pre-edit state: commit `cff11fa`.
+
+3.34.0 opens the 3.34 line. From this version on, a commit written by one agent and reviewed and landed by
+another carries the writer's Co-authored-by line and then a Reviewed-by line for the reviewer (DECISION 90; AGENTS.md,
+'Versions and attribution').
+
+Pagecite (excerpts P1a; DECISIONS 79, 80): a bare `[p. 5]` after a citation previously needed a project filter. The
+built-in is off by default; `--pagecite` / `pdfmd-options.pagecite` selects `auto`, `style`, `page`, `drop` or `off`
+(`bare`/`full` are aliases). Auto reads the CSL: author-date/author prints the page words in its brackets; note and
+numeric/label styles get a real citation with its locator per claim, unless a numeric/label style never prints a
+locator, when markers are dropped with one NOTE. Unreadable CSL and natbib/biblatex use a real citation. Each block
+and footnote has its own source; cross-references and comments do not replace it. Missing and multiple sources warn.
+`pagecite-terms` defaults to `p.`, `pp.`; both settings have setup rows, inventory and help coverage. The markup kind
+`pagecite` and `--no-auto pagecite` gate it. The shared filter list runs it before crossref, citeproc and project
+filters; escaped brackets are guarded in Pandoc input copies. Code and links stay literal. Native output keeps the
+markers and gives one NOTE. No excerpt file, resolver, commands or later phase is built here. TODO.md is unchanged.
+
+Regression: the first checkout build failed before with `Unknown option --pagecite`. Synthetic fixtures cover every
+mode with author-date, author, note, numeric, label and locator-free styles, scope, comments, cross-references,
+footnotes, escapes, code, links, custom terms, roman locators, lists/cells, aliases, settings gates, same-name project
+filters, default-off byte equality against the pre-edit release, LaTeX/Typst/Word/HTML/Markdown exports and
+natbib/biblatex. The pagecite module passes all 20 tests with Pandoc 3.13 and 3.1.3, including pdfLaTeX and Typst
+PDFs. The required checks and adjacent filter modules pass (227 tests, five optional skips); earlier adjacent
+coverage passes too (166 tests, two optional skips). Ruff F checks pass. `pdfmd.py`: 785 lines before and after;
+only the version changes.
+
 ## v3.33.333c — 2026-11-18
 
 Pre-edit state: commit `3ef873d`. The release run of 3.33.333 built no container image: the `full` and `office` builds for

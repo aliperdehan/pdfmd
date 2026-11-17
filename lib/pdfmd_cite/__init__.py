@@ -359,7 +359,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             # docstring for the 2026-09-20 fix this is part of).
             if header_file is not None:
                 cmd += ["--include-in-header", str(header_file)]
-            cmd += core.document_filter_args(md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options)
+            cmd += core.document_filter_args(md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
+                                             citation_engine=citation_engine)
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
                 cmd.append(f"--{citation_engine}")
                 cmd += core.fullcite_pre_args(md_path, metadata_files, pandoc_options, citation_engine)    # `\\fullcite{}`, not citeproc

@@ -563,7 +563,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += core.document_filter_args(all_inputs or md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
                                             flat_pictures=output.parent / f"{output.stem}_files" if flat_markdown else None,
                                             preamble=list(preamble_files or []) if flat_markdown else None,
-                                            flat_text=target_format == "txt")
+                                            flat_text=target_format == "txt",
+                                            citation_engine=citation_engine if is_tex_target else None)
                 cmd += core.select_filter_args(selection)
                 if any_citations and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
                     if (is_tex_target and citation_engine in ("natbib", "biblatex")

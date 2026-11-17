@@ -489,6 +489,8 @@ def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
             if drop_embedded_preamble and index < doc_count:
                 # A target that is not LaTeX-family gets no embedded LaTeX preamble.
                 text = core.strip_embedded_preamble(text)
+            if index < doc_count and "\\[" in text:
+                text = core.deferred("pdfmd_excerpts.pagecite", "protect_escapes")(text, paths[0], paths[doc_count:])
             if latex_engine:
                 corrected = core.wrap_latex_header_includes(text)
             elif typst_engine:

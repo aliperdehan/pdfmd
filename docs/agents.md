@@ -78,6 +78,14 @@ Inline code in LaTeX builds can break after path and URL punctuation only to avo
 without a printed hyphen. Headings keep unsplit code for PDF bookmarks. `--no-code-wrap`, `pdfmd-options: {code-wrap: false}` or `--no-auto codewrap` turns off
 wrapping for both inline code and code blocks; `{wrap=false}` applies to one block.
 
+Pagecite is off by default: `--pagecite auto` or `pdfmd-options: {pagecite: auto}`
+lets `[p. 5]` after a citation refer to that paragraph’s last source. Modes are
+`off`, `auto`, `style` (a real citation), `page` (page words in the CSL brackets),
+`drop`; `bare`/`full` mean `page`/`style`. `pagecite-terms` defaults to `[p., pp.]`;
+set it under `pdfmd-options` or in `--setup` (as for `pagecite`). It needs the
+`pagecite` markup kind; `--no-auto pagecite` disables it. Escaped markers, code
+and links stay literal; the native tier leaves markers with one NOTE.
+
 ## When a build fails
 
 With `.hst` history enabled, a change of the automatic Pandoc reader prints one WARN naming the old and new readers

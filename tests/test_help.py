@@ -61,6 +61,12 @@ class TieredHelp(unittest.TestCase):
         for topic in ("output", "all"):
             self.assertIn("pdfmd-options.indent", run("--help", topic).stdout)
 
+    def test_pagecite_keys_have_a_help_topic(self):
+        text = run("--help", "output").stdout.replace("-\n                        ", "-")
+        self.assertIn("--pagecite", text)
+        self.assertIn("pdfmd-options.pagecite-terms", text)
+        self.assertIn("off (default)", text)
+
     def test_csl_line_spacing_is_in_output_help(self):
         self.assertIn("CSL line-spacing", run("--help", "output").stdout)
 

@@ -15,7 +15,7 @@ try:
 except ImportError:      # a copy of pdfmd.py without its packages: strict Pandoc and nothing else
     FLAVOUR_PRESETS, FLAVOUR_WORDS = {}, ("auto",)
 
-MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "underline", "keep", "landscape", "appendix", "fullcite", "space")
+MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "underline", "keep", "landscape", "appendix", "fullcite", "pagecite", "space")
 
 
 def markup_value(value) -> list[str]:

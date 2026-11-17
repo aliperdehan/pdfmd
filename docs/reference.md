@@ -940,6 +940,37 @@ layers and cached copies holding clash winners. Citeproc and LaTeX's natbib/bibl
 export keeps absolute resource names; compile it with `typst compile --root=/ file.typ file.pdf`. Direct `.typ` inputs
 keep Typst's own project root.
 
+**Page markers after citations** (`markup: pagecite`). Off by default. With
+`pdfmd-options: {pagecite: auto}`, `Claim [@alpha, p. 2]. Next [p. 5].` uses the last
+source in that paragraph for the second claim. `--pagecite MODE` wins over the
+document, its metadata files, folder settings and global `--setup` settings.
+`pagecite: off | auto | style | page | drop` means leave the marker, choose by CSL,
+a real citation with its locator, just the typed page words in the CSL citation
+brackets (round brackets if unavailable), or remove the marker and its preceding
+space. `bare` and `full` are aliases for `page` and `style`.
+
+In `auto`, author-date and author styles use `page`; note styles use `style`
+(so the CSL can print ibid.). Numeric and label styles keep a real citation with
+its locator at each claim; if their citation never uses a locator, the marker is
+dropped with one NOTE. There is no merged citation at the end of a run. Without a
+named CSL, Pandoc’s default author-date style uses `page`; an unreadable CSL or
+natbib/biblatex uses `style`.
+
+`pdfmd-options: {pagecite-terms: [p., pp., S.]}` replaces the default `[p., pp.]`;
+`--setup` has a row for each setting. An unlinked `[TERM ...]` containing a digit
+or roman numeral is a marker. `\[p. 5]`, code and links stay literal; `--` in a
+page range becomes an en dash. Each paragraph or plain block (list item, table
+cell) has its own source, and a footnote has its own scope. Cross-references and
+comments between a citation and a marker do not change the source. A multi-source
+citation uses its last source with a WARN; no earlier citation gives a WARN and
+leaves the marker. The native tier leaves markers unchanged with one NOTE.
+
+The `pagecite` markup kind is available in the pdfmd and obsidian flavours;
+a named Pandoc reader needs `markup: [pagecite]` too. `--no-auto pagecite`,
+`--no-markup` or a markup list without `pagecite` switches it off. The built-in
+filter runs before citeproc and project filters, including a project’s own
+`pagecite.lua`; with the built-in off, the project filter keeps its behaviour.
+
 ## Reader selection for a Markdown source
 
 A document with no `---` YAML front matter at all -- ordinary
@@ -1420,7 +1451,7 @@ section for why), typstdirect and htmldirect (the same for a .typ and an
 .html file: off, they go through Pandoc), svg and remoteimages (see "Images LaTeX cannot read" above), pdfimages (PDF images in HTML builds become SVG), diagrams (fenced mermaid/d2/dot blocks drawn by mmdc/d2/dot), smiles (smiles blocks drawn as chemical structures), crossref (the auto-detected `--filter pandoc-
 crossref` for `@fig:`/`@eq:`/`@tbl:`/`@sec:`/`@lst:` syntax or a
 `{#fig:...}`-style attribute -- see crossref_filter_args()),
-citationengine (a document's own `pdfmd-options.citation-engine`
+pagecite (bare page markers after citations), citationengine (a document's own `pdfmd-options.citation-engine`
 setting -- see "Output formats" below; disabling this KIND always
 means plain `--citeproc`, regardless of what the document's own front
 matter or metadata file requests), csvtable (the `.csv`-div table

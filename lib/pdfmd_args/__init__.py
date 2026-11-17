@@ -305,6 +305,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bibliography", action=PassThrough, dest="pandoc_bibliography", metavar="FILE", default=argparse.SUPPRESS,
                         help="Pandoc's own option, passed to it as written (both `--bibliography FILE` and `--bibliography=FILE`); "
                              "pdfmd names it so that it is never read as a shortened --bibliography-indent")
+    parser.add_argument("--pagecite", choices=("off", "auto", "style", "page", "drop", "bare", "full"), default=None, metavar="MODE",
+                        help="bare [p. 5] after a citation: off (default), auto (CSL chooses), style (real citation), "
+                             "page (pages in the style’s brackets), drop; bare/full mean page/style. "
+                             "pdfmd-options.pagecite at every layer; pdfmd-options.pagecite-terms: [p., pp.] "
+                             "sets the marker terms (e.g. add S.); --setup. Markup kind: pagecite")
     parser.add_argument("--fullcite-list", choices=("rest", "all", "none"), default=None, metavar="WHAT",
                         help="what becomes of the combined reference list when entries were placed in the text with "
                              "`[@key]{.fullcite}`: rest (the placed ones leave it; the default), all (it stays whole) or none "
@@ -574,7 +579,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "quote with a bold title (the rest); toc ([TOC], [[_TOC_]], <!-- toc -->) is the table "
                              "of contents where it stands; center (<center>, <div align=center>, ::: center) centres the "
                              "text; highlight (==text==) marks it; underline (<u>text</u>) underlines it; keep (::: keep) holds blocks on one page; landscape (::: landscape) puts them on landscape pages; appendix (\\appendix, <!-- appendix -->, "
-                             "{.appendix}) letters the sections after it; space (\\vspace{1cm}, \\bigskip, <br>) is vertical space; bare: all kinds. On, except space, in the pdfmd and obsidian flavours (off with flavour: pandoc); also "
+                             "{.appendix}) letters the sections after it; pagecite ([p. 5]) uses the previous citation (requires --pagecite MODE); space (\\vspace{1cm}, \\bigskip, <br>) is vertical space; bare: all kinds. On, except space, in the pdfmd and obsidian flavours (off with flavour: pandoc); also "
                              "pdfmd-options.markup (true, false or a list) and pdfmd --setup")
     parser.add_argument("--show-hidden", action="store_true", default=None,
                         help="print plain hide blocks and spans (off by default); calc hide stays silent. "

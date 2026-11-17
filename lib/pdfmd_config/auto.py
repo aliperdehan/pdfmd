@@ -36,7 +36,7 @@ NO_AUTO_KINDS = frozenset({
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
     "smiles", "draftpictures", "remotecsl", "mathfont", "css", "mathjax", "kit", "kpsewhich",
-    "priority", "bib",
+    "priority", "bib", "pagecite",
 })
 
 

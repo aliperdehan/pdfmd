@@ -39,6 +39,7 @@ WORD_ONLY = Omitted("document", "a Word/ODT-only override of the metadata rows; 
 
 # argparse dest -> the row that sets the same thing for every document, or why there is none
 FLAGS: dict[str, str | Omitted] = {
+    "pagecite": "options.pagecite",
     "help": CMD, "version": CMD, "path": RUN,
     "presentation": Omitted("run", "slides are asked for per run"),
     "slide_level": Omitted("document", "the document's own slide-level:"),
@@ -141,6 +142,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "css": "options.css", "css-scope": "options.css-scope",
     "typst-line-spacing": "options.typst-line-spacing",
     "indent": "options.indent",
+    "pagecite": "options.pagecite", "pagecite-terms": "options.pagecite-terms",
     "paragraph-spacing": "options.paragraph-spacing", "fullcite-list": "options.fullcite-list", "bibliography-indent": "options.bibliography-indent",
     "cover": Omitted("document", "per document: a title page, or a picture for the first page / an EPUB's cover"),
     "attach-links": "options.attach-links",
@@ -253,6 +255,7 @@ OPTIONS: dict[str, str | Omitted] = {
 # The feature (pdfmd_help topic) of the rows no flag sets, by key prefix; a row's flags give the rest. A row whose
 # features are all switched off (`disabled:`) leaves the setup screen.
 ROW_TOPICS = {
+    "options.pagecite": "output",
     "options.office.": "office", "options.gfm.": "markdown", "options.txt.": "markdown", "options.ascii.": "markdown",
     "options.csv.": "tables", "options.table-keep": "tables", "options.table-caption": "tables", "options.calc.": "markdown", "options.smiles.": "markdown", "options.pager": "view", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
     "options.bundle-max-mb": "source", "options.cache.": "cache", "options.unicode": "fonts",

@@ -204,6 +204,8 @@ def ascii_table_transform(md_path: Path, metadata_files: list[Path], parts: list
     mode = core.table_ascii_mode(md_path, list(metadata_files))
 
     def transform(text: str, part: Path) -> str:
+        if "\\[" in text:
+            text = core.deferred("pdfmd_excerpts.pagecite", "protect_escapes")(text, md_path, metadata_files)
         if mode != "off":
             text = core.repair_ascii_text(text, mode, core.display_path(part))
         return core.cell_tags_text(text, md_path, metadata_files, core.display_path(part))
