@@ -96,9 +96,10 @@ def bibliography_indent_args(sources: Path | list[Path], metadata_files: list[Pa
             "--lua-filter", str(shipped)]
 
 
-def native_path_args(command: list[str]) -> list[str]:
-    """Preserve BibTeX/Biber file names in LaTeX templates, after citeproc and the document's own filters."""
-    if not any(option in command for option in ("--natbib", "--biblatex")):
+def native_path_args(command: list[str], writer: str | None = None) -> list[str]:
+    """Literal resources for BibTeX/Biber and native Typst, after the document's own filters."""
+    typst = writer == "typst" and "--citeproc" not in command
+    if not typst and not any(option in command for option in ("--natbib", "--biblatex")):
         return []
     try:
         import pdfmd_lua
@@ -107,3 +108,40 @@ def native_path_args(command: list[str]) -> list[str]:
         return []
     shipped = pdfmd_lua.path("bibliography_paths")
     return ["--lua-filter", str(shipped)] if shipped is not None else []
+
+
+def native_csl_args(command: list[str]) -> list[str]:
+    """Keep a file's original CSL string before Pandoc smartens quotes in YAML metadata.
+
+    These internal commands start with their input paths, then -o; metadata files are in Pandoc's application order.
+    Command-line CSL selections remain Pandoc's; document filters still run after the --csl option is read.
+    """
+    from pdfmd_args import metadata_keys
+
+    if "csl" in metadata_keys(command) or any(option == "--csl" or option.startswith("--csl=") for option in command):
+        return []
+    if "-o" not in command:
+        return []
+    value = None
+    tokens = iter(command)
+    for token in tokens:
+        if token == "--metadata-file":
+            path = next(tokens, "")
+        elif token.startswith("--metadata-file="):
+            path = token.split("=", 1)[1]
+        else:
+            continue
+        if path:
+            value = core.metadata_file_yaml(Path(path)).get("csl", value)
+    for source in command[1:command.index("-o")]:
+        value = core.front_matter_dict(core.read_text_best_effort(Path(source))).get("csl", value)
+    return ["--csl", value] if isinstance(value, str) and value.strip() else []
+
+
+def typst_path_args(command: list[str]) -> list[str]:
+    """Native bibliography/style resources may lie outside Pandoc's temporary Typst project."""
+    root = []
+    if "--pdf-engine=typst" in command and not any("--root" in option for option in command):
+        root = ["--pdf-engine-opt=--root=/"]
+    style = native_csl_args(command) if "--citeproc" not in command else []
+    return root + style + native_path_args(command, "typst")

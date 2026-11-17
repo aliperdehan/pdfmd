@@ -101,7 +101,8 @@ Pandoc after the engines fail, with a WARN.
 
 The oldest Pandoc pdfmd is tested with is PANDOC_MIN, 3.1.3 (the claude.ai sandbox's); the suite runs against it, with
 a few tests skipped for what an older Pandoc lacks (PANDOC_FEATURES: Word equation tables, caption attributes).
-Typst pictures work with it since v3.27.10-11: Typst is given --root=/ as a newer Pandoc does, and pdfmd_lua/typst.lua
+Typst pictures work with it since v3.27.10-11: pdfmd gives Typst PDF builds --root=/ (unless an explicit root is
+passed through --pdf-engine-opt), and pdfmd_lua/typst.lua
 makes a picture's relative path absolute (that Pandoc runs Typst in its own working folder). The first compile with
 an older Pandoc warns once (per version, a marker in the config folder), and --doctor lists what the one installed
 does without. The Lua filters work without pandoc.Caption, pandoc.TableBody and
@@ -871,6 +872,11 @@ metadata.yaml's own relative `bibliography:`/`csl:` paths can live in that
 same `metadata/` folder and still resolve -- pdfmd adds `--resource-path`
 pointing back at the document's own directory in that case, so the
 document's own relative image paths keep resolving too.
+With `--no-citeproc`, native Typst bibliography and CSL names are resolved through that resource path and written
+literally. The PDF build's `--root=/` also reaches bibliography files from parent layers and cached copies holding
+clash winners. Citeproc and LaTeX's natbib/biblatex paths keep their existing behaviour. A standalone `--to typst`
+export keeps absolute resource names; compile it with `typst compile --root=/ file.typ file.pdf`. Direct `.typ` inputs
+keep Typst's own project root.
 
 ## Reader selection for a Markdown source
 

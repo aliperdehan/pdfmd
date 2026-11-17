@@ -19,6 +19,27 @@ same commit as the change.
 
 ---
 
+## v3.33.296 — 2026-11-17
+
+Pre-edit state: commit `d927a9a`. v3.33.232's accumulated bibliography files can be absolute paths outside Typst's
+project root. Pandoc also escapes underscores in the native writer's paths. Resolve native Typst bibliography and
+CSL names through the existing resource path and pass them as literal Typst string contents. Pass the original CSL
+filename as an option before Pandoc can smarten YAML quotes, preserving front-matter and command-line precedence; give every Pandoc Typst
+PDF route `--root=/` unless an explicit root is already present. This shared final-filter hook also covers reports;
+remove the single-document, old-Pandoc-only root gate. Probe the native writer and adapt Pandoc 3.1.3's string/list
+citation calls to current Typst's label API, retaining its existing key-only rendering and leaving modern writers
+alone. Source accumulation and clash precedence are unchanged.
+
+Regressions fail before with escaped underscores, missing files under the build root, and a missing default root;
+fixing path spelling alone reproduces the reported root error. Tests cover metadata and parent bibliographies,
+cached winners, names with spaces/quotes/Unicode, unchanged citeproc and LaTeX natbib/biblatex PDFs, a standalone
+Typst export compiled with its root, and a direct Typst input with its own local bibliography. Document exported
+Typst's root requirement; direct inputs keep their own project root. pdfmd.py stays at 784 lines (version only);
+no new settings or TODO changes. Eight of the ten new regressions failed before. Bibliography plus the five required
+safety modules: 144 tests with each Pandoc (3.13/3.1.3), zero failures/errors, one skip. The old standalone-export
+fixture needed an explicit font (its empty default font list is incompatible with current Typst); its full module
+rerun passes. Ruff F and whitespace checks pass.
+
 ## v3.33.295 — 2026-11-17
 
 Pre-edit state: commit `c87eb84`. Plain `.hidden` containers removed since v3.33.290 collided with Quarto's math-macro

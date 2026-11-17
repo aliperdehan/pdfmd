@@ -729,4 +729,5 @@ def typst_filter_args(writer: str, command: list[str] | None = None, directory: 
     # Pandoc 3.1.3 otherwise writes native #cite calls even after citeproc resolved the text.
     # Explicitly use that text; current Pandoc writes the same output with either extension setting.
     citations = ["-t", "typst-citations"] if "--citeproc" in (command or []) else []
-    return citations + core.typst_template_args(writer, command or [], directory) + ["--lua-filter", str(shipped)] if shipped is not None else []
+    paths = core.deferred("pdfmd_bibliography", "typst_path_args")(command or [])
+    return citations + core.typst_template_args(writer, command or [], directory) + paths + ["--lua-filter", str(shipped)] if shipped is not None else []

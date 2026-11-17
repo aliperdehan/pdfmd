@@ -274,3 +274,137 @@ class Native(Tree):
         done = self.run_pdfmd("-e", "inkmd", target="pdf")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("citation(s) left as written", done.stdout + done.stderr)
+
+
+@unittest.skipUnless(shutil.which("pandoc") and shutil.which("typst"), "needs Pandoc and Typst")
+class NativePaths(Tree):
+    def prepare(self, parent=False, clash=False):
+        self.bib("metadata/references.bib", "local", "Local Book")
+        style = subprocess.run(["pandoc", "--print-default-data-file", "default.csl"],
+                               env=self.env, capture_output=True, text=True, check=True).stdout
+        self.write("metadata/apa6.csl", style)
+        self.write("metadata/metadata.yaml", "bibliography: references.bib\ncsl: apa6.csl\n"
+                   "pdfmd-options: {engine: typst}\n")
+        front, citations = "", "@local"
+        if parent:
+            self.bib("../metadata/parent.bib", "parent", "Parent Book")
+            self.write("../metadata/metadata.yaml", "bibliography: parent.bib\n")
+            citations += "; @parent"
+        if clash:
+            with (self.doc / "metadata/references.bib").open("a", encoding="utf-8") as handle:
+                handle.write("@book{same, title={Losing Book}, author={Example, A.}, year={2020}}\n")
+            self.bib("SR/high.bib", "same", "Winning Book")
+            front = "bibliography: high.bib\n"
+            citations += "; @same"
+        self.write("SR/x.md", "---\ntitle: T\npdfmd-options: {metadata-parents: 2}\n" + front + "---\n\n[" + citations + "]\n")
+
+    def build(self, *flags, source="SR/x.md", output="out.pdf"):
+        done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), source, "-o", output,
+                               "--no-stamp", "--no-backup", "--engine-fallback", "missing", "--no-cache", *flags],
+                              cwd=self.doc, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        return done
+
+    def pdf_text(self, output="out.pdf"):
+        import pypdf
+        return "\n".join(page.extract_text() for page in pypdf.PdfReader(self.doc / output).pages)
+
+    def test_typst_without_citeproc_resolves_metadata_and_parent_bibliographies(self):
+        for parent in (False, True):
+            with self.subTest(parent=parent):
+                self.prepare(parent=parent)
+                self.build("--no-citeproc")
+                text = self.pdf_text()
+                self.assertIn("Local Book", text)
+                if parent:
+                    self.assertIn("Parent Book", text)
+
+    def test_typst_without_citeproc_reads_cached_winners_and_keeps_layers(self):
+        self.prepare(parent=True, clash=True)
+        self.build("--no-citeproc")
+        text = self.pdf_text()
+        for title in ("Local Book", "Parent Book", "Winning Book"):
+            self.assertIn(title, text)
+        self.assertNotIn("Losing Book", text)
+
+    def test_typst_citeproc_still_resolves_metadata_and_parent_layers(self):
+        self.prepare(parent=True, clash=True)
+        self.build()
+        text = self.pdf_text()
+        for title in ("Local Book", "Parent Book", "Winning Book"):
+            self.assertIn(title, text)
+        self.assertNotIn("Losing Book", text)
+
+    def test_typst_export_has_literal_names_and_compiles_with_its_root(self):
+        self.prepare(parent=True, clash=True)
+        self.build("--no-citeproc", "--to", "typst", "--standalone", "-V", "mainfont=Libertinus Serif", output="out.typ")
+        typ = (self.doc / "out.typ").read_text(encoding="utf-8")
+        self.assertNotIn(r"\_", next(line for line in typ.splitlines() if line.startswith("#bibliography(")))
+        done = subprocess.run(["typst", "compile", "--root=/", "out.typ", "export.pdf"], cwd=self.doc,
+                              env=self.env, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Parent Book", self.pdf_text("export.pdf"))
+
+    def test_direct_typst_with_a_local_bibliography_still_builds(self):
+        self.prepare()
+        self.write("metadata/direct.typ", 'Cite @local.\n#bibliography("references.bib")\n')
+        done = self.build("--verbose", source="metadata/direct.typ")
+        self.assertIn("TYPSTDIRECT", done.stdout + done.stderr)
+        self.assertIn("Local Book", self.pdf_text())
+
+    def test_latex_native_bibliography_tools_read_metadata_and_parent_layers(self):
+        for mode, tool in (("natbib", "bibtex"), ("biblatex", "biber")):
+            with self.subTest(mode=mode):
+                if not shutil.which("pdflatex") or not shutil.which(tool):
+                    self.skipTest("needs pdfLaTeX and " + tool)
+                self.prepare(parent=True, clash=True)
+                source = self.doc / "SR/x.md"
+                source.write_text(source.read_text().replace("metadata-parents: 2", "metadata-parents: 2, citation-engine: " + mode))
+                self.build("-e", "pdflatex", "--" + mode)
+                text = self.pdf_text()
+                for title in ("Local Book", "Parent Book", "Winning Book"):
+                    self.assertIn(title, text)
+                self.assertNotIn("Losing Book", text)
+
+
+    def test_typst_native_resource_names_keep_spaces_quotes_and_unicode(self):
+        self.prepare()
+        metadata = self.doc / "metadata/metadata.yaml"
+        text = metadata.read_text()
+        for old, new in (("references.bib", 'refs_é "quoted".bib'), ("apa6.csl", 'style_é "quoted".csl')):
+            (metadata.parent / old).rename(metadata.parent / new)
+            text = text.replace(old, "'" + new + "'")
+        metadata.write_text(text)
+        self.build("--no-citeproc")
+        self.assertIn("Local Book", self.pdf_text())
+
+    def test_typst_csl_front_matter_and_cli_precedence(self):
+        self.prepare()
+        metadata = self.doc / "metadata/metadata.yaml"
+        metadata.write_text(metadata.read_text().replace("apa6.csl", "missing.csl"))
+        source = self.doc / "SR/x.md"
+        source.write_text(source.read_text().replace("title: T", "title: T\ncsl: apa6.csl"))
+        self.build("--no-citeproc")
+        self.assertIn("Local Book", self.pdf_text())
+        source.write_text(source.read_text().replace("csl: apa6.csl", "csl: missing.csl"))
+        for flags in (("--csl", "metadata/apa6.csl"), ("-M", "csl=" + str(self.doc / "metadata/apa6.csl"))):
+            with self.subTest(flags=flags):
+                self.build("--no-citeproc", *flags)
+                self.assertIn("Local Book", self.pdf_text())
+
+    def test_typst_native_citation_forms_compile(self):
+        self.prepare()
+        source = self.doc / "SR/x.md"
+        source.write_text(source.read_text().replace("[@local]", "Author @local; [see @local, p. 2]; [-@local]."))
+        self.build("--no-citeproc")
+        self.assertIn("Local Book", self.pdf_text())
+        self.assertIn("Author", self.pdf_text())
+
+    def test_typst_root_defaults_and_explicit_root(self):
+        import pdfmd
+        command = ["pandoc", "--pdf-engine=typst"]
+        self.assertIn("--pdf-engine-opt=--root=/", pdfmd.typst_filter_args("typst", command))
+        for flags in (["--pdf-engine-opt=--root=/chosen"], ["--pdf-engine-opt", "--root=/chosen"]):
+            with self.subTest(flags=flags):
+                self.assertNotIn("--pdf-engine-opt=--root=/", pdfmd.typst_filter_args("typst", command + flags))
+        self.assertNotIn("--pdf-engine-opt=--root=/", pdfmd.typst_filter_args("typst", ["pandoc", "-t", "typst"]))

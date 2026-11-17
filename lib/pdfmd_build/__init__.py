@@ -754,11 +754,6 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += [f"--pdf-engine-opt=-Zsearch-path={folder}" for folder in core.tectonic_search_folders(md_path)]
                     if engine == "prince":                        # it names only the page's first author (v3.33.66)
                         cmd += core.prince_author_options(md_path, metadata_files, variables)
-                    if engine == "typst" and (0,) < core.pandoc_version() < (3, 2) and not any(
-                            "--root" in option for option in pandoc_options):
-                        # an older Pandoc runs typst with its root at the document, where an absolute picture path
-                        # (pdfmd's drawn diagrams, in the cache) is looked for under it; a newer one gives Typst /
-                        cmd.append("--pdf-engine-opt=--root=/")
                     if effective_from:
                         cmd += ["-f", effective_from]
                     for metadata in prepared_metadata:
