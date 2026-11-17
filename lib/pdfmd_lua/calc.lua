@@ -622,6 +622,7 @@ local STATEMENTS = {}          -- every statement, in document order (id = posit
 local NAMED = {}               -- name -> its statements, in order
 local OCCURRENCES = {}         -- the n-th place in the document that holds statements -> its statements and text
 local BUILT_NOW = false        -- between the marks `pdfmd-calc-mark-in` and `-out` (a names-only pass over a whole document, see halves)
+local BUILT_SLOT = 0           -- selected runs seen so far; unbuilt statements between runs belong to that gap
 local LAST_IN, LAST_OUT        -- how many statements stood above the last part built, and up to its end (nil: no marks in the text)
 local pass = 1
 local occurrence = 0
@@ -877,6 +878,7 @@ local function register(text, default)
       STATEMENTS[#STATEMENTS + 1] = statement
       statement.id = #STATEMENTS
       statement.built = BUILT_NOW
+      statement.slot = BUILT_SLOT
       statement.source = text                                    -- the text of the place that holds it (pdfmd --check finds its line by it)
       for _, name in ipairs(statement.names) do
         NAMED[name] = NAMED[name] or {}
@@ -1920,7 +1922,12 @@ local function mark_of(block)
   if which ~= "in" and which ~= "out" then return false end
   if pass == 1 then
     BUILT_NOW = which == "in"
-    if BUILT_NOW then LAST_IN = #STATEMENTS else LAST_OUT = #STATEMENTS end
+    if BUILT_NOW then
+      BUILT_SLOT = BUILT_SLOT + 1
+      LAST_IN = #STATEMENTS
+    else
+      LAST_OUT = #STATEMENTS
+    end
   end
   return true
 end
@@ -2017,14 +2024,23 @@ local function dump_halves(path)
   end
   for _, name in ipairs(names) do
     local above, below
+    local gaps = {}
     for _, statement in ipairs(NAMED[name]) do
       if not statement.built and not statement.below then
         if statement.id <= LAST_IN then above = statement end
         if statement.id > LAST_OUT and not below then below = statement end
+        if statement.slot and statement.slot > 0 and statement.slot < BUILT_SLOT then
+          gaps[statement.slot] = true
+        end
       end
     end
     if above then write("A", name, above) end
     if below then write("B", name, below) end
+    -- Definitions in an internal gap currently join the one shared above seed.
+    -- Report them even if unused: calc-table selectors can read names indirectly.
+    for slot = 1, BUILT_SLOT - 1 do
+      if gaps[slot] then file:write("G\t", slot, "\t", name, "\n") end
+    end
   end
   file:close()
 end

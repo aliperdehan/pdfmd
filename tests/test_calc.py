@@ -1390,6 +1390,58 @@ class NamesBelow(unittest.TestCase):
         self.assertIn("x is 2.0, y is 4.0.", self.tex())
         self.assertIn("Here 4.0.", self.tex())
 
+    def test_a_gap_warns_once_about_names_that_can_change_the_selected_parts(self):
+        full = self.build()
+        self.assertEqual(full.returncode, 0, full.stdout + full.stderr)
+        self.assertIn("x is 2.0, y is 4.0.", self.tex())
+        partial = self.build("#20+40")
+        self.assertEqual(partial.returncode, 0, partial.stdout + partial.stderr)
+        warnings = [line for line in (partial.stdout + partial.stderr).splitlines() if line.startswith("WARN  calc: gap")]
+        self.assertEqual(len(warnings), 1, partial.stdout + partial.stderr)
+        for text in ("part 30", "part 20", "part 40", "x", "y", "may differ from a full build"):
+            self.assertIn(text, warnings[0])
+        strict = self.build("#20+40", "--strict")
+        self.assertEqual(strict.returncode, 1, strict.stdout + strict.stderr)
+        self.assertEqual(sum(line.startswith("WARN  calc: gap") for line in
+                             (strict.stdout + strict.stderr).splitlines()), 1)
+
+    def test_a_gap_without_definitions_does_not_warn(self):
+        (self.directory / "parts/30-calculations.md").write_text("# Calculations\n\nNo definitions here.\n")
+        for number, title in ((20, "procedure"), (40, "discussion")):
+            (self.directory / f"parts/{number}-{title}.md").write_text(f"# {title}\n\n`x`{{=}}\n")
+        done = self.build("#20+40")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("WARN", done.stdout + done.stderr)
+
+    def test_the_gap_warning_conservatively_includes_unused_definitions(self):
+        (self.directory / "parts/30-calculations.md").write_text("# Calculations\n\n`unused = 7`{=}\n")
+        for number, title in ((20, "procedure"), (40, "discussion")):
+            (self.directory / f"parts/{number}-{title}.md").write_text(f"# {title}\n\n`x`{{=}}\n")
+        done = self.build("#20+40")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual((done.stdout + done.stderr).count("WARN  calc: gap"), 1)
+        self.assertIn("unused", done.stdout + done.stderr)
+
+    def test_multiple_gaps_still_print_one_warning(self):
+        (self.directory / "parts/50-more.md").write_text("# More\n\n`z = 9`{=}\n")
+        (self.directory / "parts/60-end.md").write_text("# End\n\n`x`{=}\n")
+        done = self.build("#20+40+60")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        warnings = [line for line in (done.stdout + done.stderr).splitlines() if line.startswith("WARN  calc: gap")]
+        self.assertEqual(len(warnings), 1, done.stdout + done.stderr)
+        for text in ("part 30", "part 50", "part 60", "z"):
+            self.assertIn(text, warnings[0])
+
+    def test_selected_sections_with_a_defining_gap_warn_too(self):
+        text = "\n".join(part.read_text() for part in sorted((self.directory / "parts").iterdir()))
+        (self.directory / "doc.md").write_text("---\ntitle: T\n---\n\n" + text)
+        done = self.build("#procedure+discussion", source="doc")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        warnings = [line for line in (done.stdout + done.stderr).splitlines() if line.startswith("WARN  calc: gap")]
+        self.assertEqual(len(warnings), 1, done.stdout + done.stderr)
+        for text in ("section calculations", "section procedure", "section discussion", "x", "y"):
+            self.assertIn(text, warnings[0])
+
     def test_seed_calc_off_gives_up_both_halves(self):
         done = self.build("#procedure", "--seed-calc", "off")
         self.assertNotIn("names taken from", done.stdout)

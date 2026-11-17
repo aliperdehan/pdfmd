@@ -401,6 +401,10 @@ rest resolves (raw LaTeX `\ref` does not outside LaTeX). `pdfmd-options: {seed-l
 part 50, used in part 60, or used in part 20 and defined in part 50) are taken the same way, in document order: pdfmd evaluates the whole
 document, nothing typeset, and says `NOTE  calc: 128 names taken from parts 10-50, 3 from parts 70-90 (defined below)`
 (`--seed-calc off` gives it up, [1.11](#111-compute-the-numbers-of-a-calculation)).
+A selection with gaps (`report#20+40`) warns once if a skipped part inside a gap defines calc names: the shared seed can make
+those definitions visible too early, so selected parts may print different values from a full build. The warning names the
+gaps and definitions, including unused names conservatively; `--strict` fails the build. Section selections follow the same
+rule. Build the whole document or adjacent parts for full-build values until seeds have a separate slot per gap.
 
 ### 3.3 Cut a single file into parts, or join parts back
 

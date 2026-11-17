@@ -296,10 +296,17 @@ def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Pa
         core.vprint(verbose, "CALC      the names of the parts left out could not be evaluated; the build goes on without them")
         return nothing
     lines = {"A": [], "B": []}
+    gaps = {}
     for line in halves.read_text(encoding="utf-8", errors="replace").splitlines():
         kind, _, rest = line.partition("\t")
         if kind in lines and rest.strip():
             lines[kind].append(rest)
+        elif kind == "G":
+            slot, _, name = rest.partition("\t")
+            if slot.isdigit() and name:
+                gaps.setdefault(int(slot), set()).add(name)
+    if gaps:
+        core.load_package("pdfmd_calc").warn_seed_gaps(gaps, inputs)
     files = []
     for kind, name in (("A", "calc-names.tsv"), ("B", "calc-names-below.tsv")):
         if lines[kind]:

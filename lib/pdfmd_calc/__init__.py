@@ -15,6 +15,44 @@ from pdfmd_base import core
 CALC_DIV_RE = re.compile(r"^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)", re.MULTILINE)
 
 
+def warn_seed_gaps(gaps: dict[int, set[str]], inputs: list[Path]) -> None:
+    """One conservative warning for definitions in internal gaps of a partial build.
+
+    calc.lua reports actual definitions in the existing names-only pass. We do
+    not restrict this to direct expression uses: calc-table selectors also read
+    names. The shared seed can move any such definition above earlier selections.
+    """
+    import sys
+
+    markers = {"pdfmd-calc-mark-in.md", "pdfmd-calc-mark-out.md"}
+    if any(path.name in markers for path in inputs):
+        runs = [[]]
+        for path in inputs:
+            if path.name in markers:
+                runs.append([])
+            else:
+                runs[-1].append(path)
+        labels = [core.parts_range_text(run) for run in runs]
+    else:
+        # SectionPlan.calc_text carries the same marks inside a single input.
+        text = "\n\n".join(core.read_text_best_effort(path) for path in inputs)
+        chunks = re.split(r"(?m)^pdfmd-calc-mark-(?:in|out)[ \t]*$", text)
+        labels = []
+        parts = core.load_package("pdfmd_parts")
+        for chunk in chunks:
+            items = parts.outermost_headings(parts.scan_items(chunk.splitlines()))
+            names = ", ".join(parts.item_label(item) for item in items)
+            labels.append(("section " if len(items) == 1 else "sections ") + names if names else "selected text")
+    details = []
+    for slot, names in sorted(gaps.items()):
+        index = slot * 2
+        details.append(f"{labels[index]} between {labels[index - 1]} and {labels[index + 1]} defines "
+                       + ", ".join(sorted(names)))
+    print("WARN  calc: gap: " + "; ".join(details)
+          + "; values in the selected parts may differ from a full build (calc seeds share one slot across gaps)",
+          file=sys.stderr)
+
+
 CALC_SPAN_RE = re.compile(r"`\{=(?:\d+[a-z]{2}|calc)?\}|^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)"
                          r"|^[ \t]*(?:`{3,}|~{3,})[ \t]*\{=(?:calc)?\}[ \t]*$", re.MULTILINE)
 
