@@ -36,7 +36,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--no-backup", "--backup-format", "--history-to-file", "--history-to-notes", "--history", "--history-all",
         "--history-diff", "--history-restore", "--no-restored-note", "--init-backups", "--backup-folder",
         "--global", "--merge-history", "--dry-run")),
-    "code": ("code blocks", ("--line-numbers", "--no-code-wrap")),
+    "code": ("code blocks and inline code", ("--line-numbers", "--no-code-wrap")),
     "raw": ("raw HTML, LaTeX, Typst and Word pieces inside Markdown, page breaks", (
         "--raw", "--no-raw", "--raw-for", "--pagebreak", "--no-pagebreak", "--linebreak", "--no-linebreak", "--markup", "--no-markup", "--show-hidden", "--show-comments", "--no-show-comments", "--calc", "--no-calc", "--calc-digits", "--calc-round", "--calc-subs", "--no-calc-subs", "--calc-typeset", "--no-calc-typeset", "--calc-typeset-upright", "--calc-typeset-italic", "--calc-noindent", "--no-calc-noindent", "--calc-space", "--calc-align", "--calc-constants", "--calc-export")),
     "markdown": ("plain Markdown, text and ASCII output (--to gfm, txt, ascii), and Markdown that carries its source", (

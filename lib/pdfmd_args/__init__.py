@@ -735,7 +735,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "Per block: {.numberLines startFrom=10 step=5}, {.noNumberLines}. Off unless asked; "
                              "`pdfmd-options: {line-numbers: true}` or --setup make it the default")
     parser.add_argument("--no-code-wrap", action="store_true",
-                        help="let long code lines run on (LaTeX builds wrap them by default); per block: {wrap=false}")
+                        help="let long code blocks and inline code run on (LaTeX builds wrap them by default); "
+                             "inline breaks avoid overflow without a hyphen; per block: {wrap=false}")
     parser.add_argument("--apply-defaults", action=argparse.BooleanOptionalAction, default=None,
                         help="for a .typ or .html file built directly (which gets none of pdfmd's defaults): give it "
                              "the title, author, date, language, font, font size, paper and margin of its metadata "

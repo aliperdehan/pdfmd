@@ -50,8 +50,8 @@ def has_code_block(text: str) -> bool:
 
 
 def code_filter_args(no_auto: list[str] | None, sources: list[Path], metadata_files=()) -> list[str]:
-    """What a LaTeX build needs for code blocks (pdfmd_lua/code.lua; wrapping and optional line numbers): the filter
-    and, when the document has code and wrapping is not off, the header that loads fvextra. The settings of the
+    """What a LaTeX build needs for inline code and blocks (pdfmd_lua/code.lua): the filter
+    and, when the document has code blocks and wrapping is not off, the header that loads fvextra. The settings of the
     command line and the global config reach the filter as metadata; a document's own `pdfmd-options` through the
     document. Nothing for `--no-auto codewrap`, a document without code, or a lone pdfmd.py."""
     if core.auto_disabled(no_auto, "codewrap"):
@@ -62,7 +62,9 @@ def code_filter_args(no_auto: list[str] | None, sources: list[Path], metadata_fi
     except ImportError:
         core.pdfmd_lua_missing()
         return []
-    if shipped is None or not any(has_code_block(core.read_text_best_effort(source)) for source in sources):
+    texts = [core.read_text_best_effort(source) for source in sources]
+    blocks = any(has_code_block(text) for text in texts)
+    if shipped is None or not (blocks or any(core.has_code_spans(text) for text in texts)):
         return []
     settings = {}
     for key in ("code-wrap", "line-numbers", "line-number-step"):
@@ -73,7 +75,7 @@ def code_filter_args(no_auto: list[str] | None, sources: list[Path], metadata_fi
     args = ["--lua-filter", str(shipped)]
     for key, value in settings.items():
         args += ["-M", f"pdfmd-{key}={str(value).lower() if isinstance(value, bool) else value}"]
-    if str(settings.get("code-wrap", True)).lower() != "false" and header.is_file():
+    if blocks and str(settings.get("code-wrap", True)).lower() != "false" and header.is_file():
         args += ["--include-in-header", str(header), "-M", "pdfmd-code-header=1"]
     return args
 

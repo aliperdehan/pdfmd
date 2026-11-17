@@ -147,7 +147,7 @@ AUTO_HELP = {
     "csvtable": "tables from CSV files", "papersize": "fix `pagesize:` to `papersize:`", "parts": "report/book parts",
     "lookup": "find a document by a name that is not exact", "unicode": "fonts for other scripts",
     "officeref": "a reference .docx/.odt found beside the document", "officestyle": "pdfmd's look in Word files",
-    "officelatex": "make LaTeX native (or a picture) in Word files", "codewrap": "wrapping and numbering of code lines (LaTeX)", "officeprofile": "a house style's Word profile",
+    "officelatex": "make LaTeX native (or a picture) in Word files", "codewrap": "wrapping inline code and code blocks, numbering block lines (LaTeX)", "officeprofile": "a house style's Word profile",
     "priority": "choose one of several documents by priority and by name (bare pdfmd)",
     "kit": "a package's pdfmd helper file from a kit", "kpsewhich": "a package's pdfmd helper file from the installed copy",
 }
@@ -458,8 +458,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("off", "raw TeX counts as nothing, as before 3.31.0")), "on",
                "One table: {count-raw-tex=off} after its caption.", "Tables"),
         # -- code
-        choice("options.code-wrap", "Long code lines (LaTeX)", (("true", "wrap at the margin"), ("false", "run on")), "true",
-               "Needs fvextra (in every full TeX Live). Per block: {wrap=false}.", "Code"),
+        choice("options.code-wrap", "Long code blocks and inline code (LaTeX)", (("true", "wrap at the margin"), ("false", "run on")), "true",
+               "Blocks need fvextra (in every full TeX Live). Inline code breaks at punctuation only to avoid overflow. "
+               "Per block: {wrap=false}.", "Code"),
         choice("options.line-numbers", "Number code lines (LaTeX)", on_off, "",
                "Off unless set. Per block: {.numberLines startFrom=10} or {.noNumberLines}.", "Code"),
         text("options.line-number-step", "Number every n-th code line", "1 is every line.", "Code", "config", "number"),

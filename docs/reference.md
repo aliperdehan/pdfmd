@@ -1027,7 +1027,7 @@ inside a fenced code block as a literal example is never mistaken for
 the real thing -- a raw-text approach keyed on some other character
 would not have that guarantee.
 
-## Code blocks (v3.25.3; pdfmd_lua/code.lua, LaTeX engines)
+## Code blocks and inline code (v3.25.3; pdfmd_lua/code.lua, LaTeX engines)
 
 Long code lines wrap at the margin (fvextra's breaklines, breaking anywhere when there is no space; a block with
 no language, which Pandoc makes `verbatim`, becomes a fancyvrb `Verbatim` so it wraps too) instead of running
@@ -1038,7 +1038,10 @@ line-number-step: 5}` / --setup for all of them (`{.noNumberLines}` exempts one)
 one block. Typst, WeasyPrint and HTML wrap code by themselves. (The header that loads fvextra,
 pdfmd_lua/code_wrap.tex, goes in with --include-in-header, and only for a document that has code: a header
 set from the Lua filter is lost whenever pdfmd passes its own, since Pandoc lets --include-in-header win
-over `header-includes`. Inline code is not wrapped.)
+over `header-includes`.) Inline code in backticks gets emergency break points after `/`, `.`, `_`, `-`, `\\`, `:`,
+`=`, `&`, `?` and `#`, with no printed hyphen. Their penalty of 9999 makes TeX use them only to avoid an overflow;
+code that fits keeps its layout. Headings keep unsplit code so PDF bookmarks keep their original text. This
+penalty is fixed by the layout-stability requirement, rather than a tuning setting. The document switches above turn inline wrapping off too; other writers are unchanged.
 
 ## Tables to CSV and back (v3.25.2; the package pdfmd_tables)
 

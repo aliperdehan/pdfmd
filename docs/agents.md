@@ -74,6 +74,10 @@ names the citeproc list.
   filter is said in a `NOTE`; `--strict` does not run one that is new). `--no-auto` turns the discovery off, one kind
   of it with `--no-auto lua` (or `preamble`, `yaml`, `margin` ...).
 
+Inline code in LaTeX builds can break after path and URL punctuation only to avoid overflowing the margin,
+without a printed hyphen. Headings keep unsplit code for PDF bookmarks. `--no-code-wrap`, `pdfmd-options: {code-wrap: false}` or `--no-auto codewrap` turns off
+wrapping for both inline code and code blocks; `{wrap=false}` applies to one block.
+
 ## When a build fails
 
 1. `pdfmd --doctor` says which engines exist. A missing one is not an error of the document.

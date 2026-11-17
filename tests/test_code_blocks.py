@@ -1,4 +1,4 @@
-"""Code blocks in LaTeX builds (pdfmd_lua/code.lua): long lines wrap, lines can be numbered."""
+"""Code blocks and inline code in LaTeX builds (pdfmd_lua/code.lua): long lines wrap, lines can be numbered."""
 
 from __future__ import annotations
 
@@ -120,6 +120,11 @@ class Arguments(unittest.TestCase):
             self.assertTrue(pdfmd.has_code_block(text), text)
         self.assertEqual(self.args("---\nreferences:\n  - id: a\n    type: book\n---\n\n```{=latex}\n\\x\n```\n"), [])
 
+    def test_inline_only_code_gets_the_filter_without_loading_fvextra(self):
+        args = self.args("Use `a/b` here.\n")
+        self.assertIn("code.lua", " ".join(args))
+        self.assertNotIn("code_wrap.tex", " ".join(args))
+
     def test_switches(self):
         self.assertEqual(self.args("```\nx\n```\n", ["codewrap"]), [])
         args = self.args("```\nx\n```\n", **{"code-wrap": False})
@@ -186,6 +191,116 @@ class WithAClassThatOverridesDisplayMath(unittest.TestCase):
                               env={**os.environ, "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": str(directory / "xdg"), "APPDATA": str(directory / "xdg")})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertNotIn("failed", done.stderr)
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class InlineCode(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory(prefix="pdfmd-inline-code-")
+        self.addCleanup(folder.cleanup)
+        self.directory = Path(folder.name)
+
+    def convert(self, text, *extra, writer="latex"):
+        (self.directory / "d.md").write_text(text, encoding="utf-8")
+        output = self.directory / ("out." + {"latex": "tex", "html": "html", "typst": "typ", "docx": "docx"}[writer])
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "d.md", "--to", writer, "-o", str(output),
+                               "--no-stamp", "--no-backup", *extra], cwd=self.directory, capture_output=True, text=True,
+                              encoding="utf-8", env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        return output
+
+    def test_inline_only_documents_get_emergency_breaks_after_every_separator(self):
+        separators = (("/", "/"), (".", "."), ("_", r"\_"), ("-", "-"), ("\\", r"\textbackslash{}"),
+                                   (":", ":"), ("=", "="), ("&", r"\&"), ("?", "?"), ("#", r"\#"))
+        source = " and ".join(f"`a{separator}b`" for separator, _ in separators) + "\n"
+        out = self.convert(source).read_text(encoding="utf-8")
+        for separator, escaped in separators:
+            with self.subTest(separator=separator):
+                self.assertIn(r"\texttt{a" + escaped + r"}\penalty9999{}\texttt{b}", out)
+
+    def test_all_document_switches_remove_inline_breaks(self):
+        for front, args in (("", ("--no-code-wrap",)), ("", ("--no-auto", "codewrap")),
+                            ("---\npdfmd-options: {code-wrap: false}\n---\n\n", ())):
+            with self.subTest(front=front, args=args):
+                out = self.convert(front + "Use `a/b` here.\n", *args).read_text(encoding="utf-8")
+                self.assertNotIn(r"\penalty9999", out)
+                self.assertIn(r"\texttt{a/b}", out)
+
+    def test_other_writers_and_raw_latex_are_unchanged(self):
+        for writer in ("html", "typst", "docx"):
+            with self.subTest(writer=writer):
+                output = self.convert("Use `a/b` here.\n", writer=writer)
+                if writer == "docx":
+                    import zipfile
+                    with zipfile.ZipFile(output) as archive:
+                        text = archive.read("word/document.xml").decode("utf-8")
+                else:
+                    text = output.read_text(encoding="utf-8")
+                self.assertIn("a/b", text)
+                self.assertNotIn("penalty9999", text)
+        out = self.convert(r"Use `\texttt{a/b}`{=latex} here." + "\n").read_text(encoding="utf-8")
+        self.assertIn(r"\texttt{a/b}", out)
+        self.assertNotIn(r"\penalty9999", out)
+
+    def test_nested_code_escaping_and_attributes_still_use_pandocs_writer(self):
+        out = self.convert("# `head/path`\n\n- Use `a/b $x % {c} ~ ^ |` here.\n\n"
+                           "A note[^n].\n\n[^n]: Use `a/b`{#example .python} there.\n").read_text(encoding="utf-8")
+        self.assertGreaterEqual(out.count(r"\penalty9999"), 2)
+        self.assertIn(r"\texttt{head/path}", out)
+        self.assertIn(r"\$x", out)
+        self.assertIn(r"\%", out)
+        self.assertIn(r"\{c\}", out)
+        self.assertIn(r"\NormalTok", out)                 # highlighted inline code still gets its macros
+
+    def test_headings_keep_unsplit_code_for_pdf_bookmarks(self):
+        out = self.convert("## The `config.yaml` file\n\nUse `body/path` here.\n").read_text(encoding="utf-8")
+        self.assertIn(r"The \texttt{config.yaml} file", " ".join(out.split()))
+        self.assertEqual(out.count(r"\penalty9999"), 1)
+
+    @unittest.skipUnless(shutil.which("pdflatex") and shutil.which("pdftotext"), "needs pdfLaTeX and pdftotext")
+    def test_pdf_outline_keeps_the_original_heading_text(self):
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            self.skipTest("needs pypdf")
+        source = "## The `config.yaml` file\n\nUse `body/path` here.\n"
+        self.pdf_text_and_log(source, "--no-code-wrap")
+        before = [entry.title for entry in PdfReader(self.directory / "out.pdf").outline]
+        self.pdf_text_and_log(source)
+        after = [entry.title for entry in PdfReader(self.directory / "out.pdf").outline]
+        self.assertEqual(before, ["The config.yaml file"])
+        self.assertEqual(after, before)
+
+    def pdf_text_and_log(self, text, *extra):
+        tex = self.convert(text, *extra)
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), str(tex), "-e", "pdflatex",
+                               "--engine-fallback", "off", "--keep-aux", "--no-stamp", "--no-backup"],
+                              cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
+                              env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        log = tex.with_suffix(".log").read_text(encoding="utf-8", errors="replace")
+        done = subprocess.run(["pdftotext", "-layout", str(tex.with_suffix(".pdf")), "-"], capture_output=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout, log
+
+    @unittest.skipUnless(shutil.which("pdflatex") and shutil.which("pdftotext"), "needs pdfLaTeX and pdftotext")
+    def test_long_inline_path_wraps_without_a_hyphen_and_the_switch_restores_overflow(self):
+        path = "/".join(["directory"] * 8) + "/file_name.txt"
+        source = f"A long path: `{path}` finishes here.\n"
+        text, log = self.pdf_text_and_log(source)
+        self.assertNotIn(r"Overfull \hbox", log)
+        self.assertIn(path, b"".join(text.split()).decode("utf-8"))
+        _, log = self.pdf_text_and_log(source, "--no-code-wrap")
+        self.assertIn(r"Overfull \hbox", log)
+
+    @unittest.skipUnless(shutil.which("pdflatex") and shutil.which("pdftotext"), "needs pdfLaTeX and pdftotext")
+    def test_code_that_fits_keeps_the_exact_pdf_text_layout(self):
+        source = ("A paragraph with `short/file_name.txt` in the middle of ordinary prose, and with enough words to fill "
+                  "several lines. Another `a/b.c_d-e\\f:g=h&i?j#k` fragment fits too, as does `a--b`. " * 3 + "\n")
+        before, _ = self.pdf_text_and_log(source, "--no-code-wrap")
+        after, log = self.pdf_text_and_log(source)
+        self.assertNotIn(r"Overfull \hbox", log)
+        self.assertEqual(after, before)
 
 
 if __name__ == "__main__":

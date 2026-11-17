@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.328 — 2026-11-17
+
+Pre-edit state: commit `0f47c0d`. Inline code was one unbreakable LaTeX box, so long paths and URLs overflowed the margin. Add emergency break points after path/URL punctuation with the agreed fixed penalty 9999 and no printed hyphen; fitting code keeps its layout. Keep Pandoc's escaping and highlighting, skip headings so moving arguments and PDF bookmarks keep their original text, and honour the existing code-wrap switches. Inline-only documents get the filter without fvextra. Regression coverage checks every separator, escaping, nested code, other writers, switches, fitting layout, overflow and PDF outline text. Both-Pandoc and engine measurements and required module results are in the batch report. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.327 — 2026-11-17
 
 Pre-edit state: commit `f51e56e`. CSL bibliography line-spacing reached citeproc's refs attributes but LaTeX, Typst, HTML and older Word writers ignored it. Apply a local LaTeX linespread group, a scoped Typst pitch using the existing line metrics, HTML line-height and a Word XML fallback that fills only missing line properties. Pandoc 3.13 already supplies Word spacing: retain its XML, including its whitespace; 3.1.3 needs the fallback. Bibliography hanging indents and entry spacing remain independent. Citeproc omits explicit line-spacing=1, so share the existing local CSL attribute reader with the fractional-entry-spacing fallback and recover that explicit value too; a style without it changes no output bytes. Word's 240 units per line is a file-format fact, not a new setting. Five pipeline regressions cover four writers, no-attribute byte identity, native Word preservation, hanging-indent coexistence and measured Typst single/double pitch in both line-spacing modes, with surrounding body spacing unchanged. Three subcases failed with Pandoc 3.13 before the change; the 3.1.3 baseline had five failing subcases. Full module checks and rendered PDF results with both Pandocs are in the batch report. Update README/reference/help/agent guidance. pdfmd.py remains 785 lines (version only); no TODO line applies.

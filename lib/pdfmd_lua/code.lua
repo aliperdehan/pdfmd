@@ -1,3 +1,4 @@
+-- Inline code gets emergency breaks after path/URL punctuation, without a hyphen.
 -- Code blocks in LaTeX builds: long lines wrap instead of running past the margin (fvextra's breaklines), and
 -- lines can be numbered. Per block: `.numberLines` / `startFrom="10"` (Pandoc's own), `.noNumberLines` (off when
 -- numbering is on for the document), `step="5"` (number every 5th line), `numbersep="8pt"`, `wrap="false"`.
@@ -39,6 +40,7 @@ local function without(classes, name)
 end
 
 function Pandoc(doc)
+  if FORMAT ~= "latex" and FORMAT ~= "beamer" then return nil end
   local meta = doc.meta
   local wrap = truthy(read(meta, "code-wrap"), true)
   local numbers = truthy(read(meta, "line-numbers"), false)
@@ -86,5 +88,31 @@ function Pandoc(doc)
             pandoc.RawBlock("latex", "\\endgroup")}
   end
 
-  return pandoc.Pandoc(doc.blocks:walk({CodeBlock = code}), meta)
+  local function inline(span)
+    if not wrap then return nil end
+    local pieces, first = {}, 1
+    local function part(last)
+      -- Keep Pandoc's escaping and font/highlighting machinery, including its template macros.
+      local attr = pandoc.Attr(#pieces == 0 and span.identifier or "", span.classes, span.attributes)
+      pieces[#pieces + 1] = pandoc.Code(span.text:sub(first, last), attr)
+    end
+    for index = 1, #span.text do
+      if ("/._-\\:=&?#"):find(span.text:sub(index, index), 1, true) then
+        part(index)
+        -- A fixed near-forbidden penalty: any fitting layout wins; no discretionary hyphen is printed.
+        pieces[#pieces + 1] = pandoc.RawInline("latex", "\\penalty9999{}")
+        first = index + 1
+      end
+    end
+    if #pieces == 0 then return nil end
+    if first <= #span.text then part(#span.text) end
+    return pieces
+  end
+
+  return pandoc.Pandoc(doc.blocks:walk({
+    traverse = "topdown",
+    -- hyperref drops \penalty but keeps its digits in PDF strings. Leave moving headings intact.
+    Header = function() return nil, false end,
+    CodeBlock = code, Code = inline
+  }), meta)
 end
