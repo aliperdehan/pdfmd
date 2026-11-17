@@ -48,7 +48,6 @@ wait for an answer before any code.
 - [ ] `table-keep` by height: keep a short table whole when it is under `table-keep-height` of a page (default 25%), plus orphan control; mechanics unspiked [3dl]
 - [ ] Fetch templates (pandoc-templates.org index, `owner/repo`, URL) and CSL styles by name or link, cached; generalises the Eisvogel line [3dl]
 - [ ] Install source: pdfmd records how it was installed; `pdfmd --upgrade`; `--version` says when a newer release exists [3dk]
-- [ ] Older audit leftovers: `\texttt` wrapping (all-engine layout proof blocked by the TeX cache sandbox), a dialect-change warning (reader state is not stored) [Audit]
 - [ ] Typst: warn when a figure and its caption are taller than the text area (they run into the footer) [3fp]
 
 ## Tables line, one feature line (3.31.0, full suite) [3dj]

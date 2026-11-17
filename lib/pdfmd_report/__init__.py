@@ -133,6 +133,8 @@ def run(core, *,
                     chapters=report_chapters, notes=title_notes)
         return
     BUILD["engine"], BUILD["failed"], BUILD["chain"] = None, [], None
+    history_record = core.load_package("pdfmd_history.record")
+    history_record.begin_history()
     begin_timer()
     report_capture = warning_capture()
     report_seen = report_capture.__enter__()       # --strict: the warnings of this build (closed before the OK lines)
@@ -140,6 +142,8 @@ def run(core, *,
         (args.from_format, None) if auto_disabled(report_no_auto, "reader")
         else resolve_from_format(files[0], args.from_format, metadata_files)
     )
+    history_record.set_reader(files[0], report_from, args.from_format, metadata_files,
+                              report_no_auto, report_reader_reason)
     if report_reader_reason:
         report_note("READER", report_reader_reason)
     output = route.output_path(core, args, target_format)
@@ -527,6 +531,9 @@ def run(core, *,
                 files[0], output, list(files[1:]), metadata_files, list(stamp_preambles), report_no_auto,
                 args.verbose, report=True,
                 base=report_common_folder(files))
+    report_problems.extend(history_record.reader_warnings())
+    report_strict_failed = bool(result.returncode == 0 and report_problems and resolve_strict(files[0], metadata_files))
+    history_record.finish_history(result.returncode == 0 and not report_strict_failed)
     for file in files:
         if not has_chapter_field(file):
             print(f"[WARNING] unnumbered Markdown included: {display_path(file)}")

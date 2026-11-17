@@ -318,6 +318,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         (from_format, None) if core.auto_disabled(no_auto, "reader")
         else core.resolve_from_format(md_path, from_format, metadata_files)
     )
+    core.load_package("pdfmd_history.record").set_reader(md_path, effective_from, from_format,
+                                                        metadata_files, no_auto, reader_reason)
     if reader_reason:
         note("READER", reader_reason)
     lua_filters = [] if core.discovery_disabled(no_auto, "lua") else core.find_lua_filters(md_path, metadata_files, no_auto)
@@ -986,6 +988,8 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
     core.BUILD["engine"], core.BUILD["failed"], core.BUILD["output"], core.BUILD["sources"], core.BUILD["partial"], core.BUILD["root"] = None, [], None, [], None, None
     core.BUILD.pop("bibliography-discovery", None)
     core.BUILD.pop("bibliography-warnings", None)
+    history_record = core.load_package("pdfmd_history.record")
+    history_record.begin_history()
     core.begin_timer()
     core.BUILD["tried"], core.BUILD["chain"], core.BUILD["repaired"] = [], None, []
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
@@ -1003,8 +1007,11 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
             if result[1]:
                 core.load_package("pdfmd_shrink").shrink_output(core.BUILD["output"], md_path, metadata_files, bool(bound.get("verbose")))
                 core.check_output_budget(core.BUILD["output"], core.BUILD["sources"] or [md_path], md_path, metadata_files)
+                history_record.reader_warnings()
         built = finish_build(result, seen, md_path, metadata_files)
+        history_record.finish_history(built[1])
     except BaseException as error:
+        history_record.finish_history(False)
         where = recorder.finish(None, core.failure_text(error)) if recorder else None
         if where:
             print(f"      full record: {core.under_home(where)}", file=sys.stderr)

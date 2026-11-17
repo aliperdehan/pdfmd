@@ -71,16 +71,107 @@ def record_history(md_path: Path, metadata_files: list[Path], line: str, output:
     entry = history.Entry(entry.when, entry.kind, entry.text, tuple(item for item in (
         ("sha", digest), ("out", output.name), ("git", (where[0] + ("+" if where[1] else "")) if where else ""),
         ("took", f"{core.BUILD['timer'].elapsed():.1f}" if core.BUILD.get("timer") is not None else ""),
-        ("shas", ",".join(f"{name}:{part}" for name, part in parts if part))) if item[1]))
+        ("shas", ",".join(f"{name}:{part}" for name, part in parts if part)),
+        ("reader", core.BUILD.get("history-reader", {}).get("name", ""))) if item[1]))
     path = history_file(md_path, metadata_files)
+    pending = core.BUILD.get("history-pending")
+    if pending is not None:
+        # Output provenance may embed this history before the final --strict result is known.
+        # Keep it available there, but restore the previous bytes if the build ultimately fails.
+        try:
+            before = path.read_bytes() if path.exists() else None
+        except OSError as error:
+            print(f"WARN  {core.display_path(md_path)}: cannot read {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
+            return True
+        if write_history(path, entry, md_path, metadata_files, verbose):
+            pending.append((path, entry, md_path, core.BUILD.get("history-reader", {}), before, path.read_bytes()))
+        return True
+    write_history(path, entry, md_path, metadata_files, verbose)
+    return True
+
+
+def write_history(path, entry, md_path, metadata_files, verbose) -> bool:
+    history = history_module()
     try:
-        history.add_entry(path, entry, md_path.name)
+        entries, other = history.read_file(path)
+        if entry.meta_dict().get("reader"):
+            # Prepend to break same-second ties; merging also refreshes a duplicate stamp's baseline.
+            history.write_file(path, [entry, *entries], md_path.name, other)
+        else:
+            history.add_entry(path, entry, md_path.name)
     except OSError as error:
         print(f"WARN  {core.display_path(md_path)}: cannot write {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
-        return True
+        return False
     backup_notice(path.parent, core.resolve_backup_options(md_path, list(metadata_files), None))
     core.vprint(verbose, f"AUTO HISTORY  {core.display_path(path)}: {entry.when} compiled")
     return True
+
+
+def begin_history() -> None:
+    core.BUILD.pop("history-reader", None)
+    core.BUILD["history-pending"] = []
+
+
+def set_reader(md_path: Path, reader: str | None, cli_from: str | None,
+               metadata_files: list[Path], no_auto, reason: str | None) -> None:
+    """Keep the reader actually passed to Pandoc, including an implicit Markdown default."""
+    if reader is None and md_path.suffix.lower() not in (".md", ".markdown"):
+        return
+    chosen = core.FLAVOUR_CLI["name"]
+    if chosen is None:
+        chosen = core.first_pdfmd_option(md_path, metadata_files, "flavour", "flavor", "reader")
+    word = str(chosen or "").strip().lower()
+    preset = core.FLAVOUR_PRESETS.get(word)
+    fixed = word not in ("", "auto") and (preset is None or preset.reader != "auto")
+    explicit = bool(cli_from or fixed
+                    or core.auto_disabled(no_auto, "reader"))
+    if reason:
+        reason = reason.removeprefix(f"{md_path}: ")
+    elif core.has_yaml_frontmatter(core.read_text_best_effort(md_path)) and (reader or "markdown").startswith("markdown"):
+        reason = "YAML front matter selects Pandoc's Markdown"
+    core.BUILD["history-reader"] = {"name": reader or "markdown", "explicit": explicit, "reason": reason}
+
+
+def reader_warnings() -> list[str]:
+    """Compare each queued successful full build with its latest compiled entry, never past a legacy entry."""
+    history = history_module()
+    warnings = []
+    for _, entry, md_path, state, before, _ in core.BUILD.get("history-pending", []):
+        if not state or state["explicit"]:
+            continue
+        try:
+            entries, _ = history.parse(before.decode("utf-8-sig")) if before is not None else ([], [])
+        except UnicodeDecodeError:
+            entries = []
+        old = next((old for old in history.merge(entries) if old.kind == "compiled"), None)
+        previous = old.meta_dict().get("reader") if old else None
+        current = entry.meta_dict().get("reader")
+        if previous and current and previous != current:
+            reason = f" ({state['reason']})" if state.get("reason") else ""
+            warning = f"WARN  {core.display_path(md_path)}: reader changed from {previous} to {current}{reason}"
+            warning = " ".join(warning.splitlines())
+            print(warning, file=sys.stderr)
+            warnings.append(warning)
+    return warnings
+
+
+def finish_history(success: bool) -> None:
+    pending = core.BUILD.pop("history-pending", [])
+    core.BUILD.pop("history-reader", None)
+    if not success:
+        for path, _, md_path, _, before, after in reversed(pending):
+            try:
+                # Do not overwrite a history another build or the author has changed meanwhile.
+                if path.read_bytes() != after:
+                    continue
+                if before is None:
+                    path.unlink()
+                else:
+                    partial = path.with_name(path.name + ".part")
+                    partial.write_bytes(before)
+                    partial.replace(path)
+            except OSError as error:
+                print(f"WARN  {core.display_path(md_path)}: cannot restore {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
 
 
 DEFAULT_BACKUP_OPTIONS = {

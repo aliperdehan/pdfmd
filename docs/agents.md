@@ -80,6 +80,10 @@ wrapping for both inline code and code blocks; `{wrap=false}` applies to one blo
 
 ## When a build fails
 
+With `.hst` history enabled, a change of the automatic Pandoc reader prints one WARN naming the old and new readers
+and the reason when known. Successful full builds record the reader; first builds and legacy entries are silent.
+An explicit `--from` or `pdfmd-options: {reader: ...}` suppresses this warning.
+
 1. `pdfmd --doctor` says which engines exist. A missing one is not an error of the document.
 2. `pdfmd report.md --verbose` shows the command. Run it by hand to see the engine's own message.
 3. A LaTeX error names the file and the line in the source (`FAIL ... line 12`); `--debug` keeps the log.

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.329 — 2026-11-17
+
+Pre-edit state: commit `0a556c8`. Build history kept no Pandoc reader, so a source changing dialect between builds went unnoticed. Successful full builds with file history now record the effective `reader=` and warn once when it differs from the latest compiled entry, naming the reason when known. First builds and legacy entries are silent; explicit readers and fixed flavours, disabled reader discovery and disabled history do not warn. Keep file history available to output provenance, restoring its previous bytes on a failed final result so strict failures also leave the reader baseline alone; partial entries carry no reader. Prepend the latest entry and refresh same-second duplicates so a timestamp collision cannot repeat the warning. Regression coverage includes output stability, front matter added/removed, unchanged and legacy entries, CLI/document/metadata/config overrides, batches, partial and failed builds, strict failures, both report routes and timestamp ties. Both Pandoc versions and required module results are in the batch report. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.328 — 2026-11-17
 
 Pre-edit state: commit `0f47c0d`. Inline code was one unbreakable LaTeX box, so long paths and URLs overflowed the margin. Add emergency break points after path/URL punctuation with the agreed fixed penalty 9999 and no printed hyphen; fitting code keeps its layout. Keep Pandoc's escaping and highlighting, skip headings so moving arguments and PDF bookmarks keep their original text, and honour the existing code-wrap switches. Inline-only documents get the filter without fvextra. Regression coverage checks every separator, escaping, nested code, other writers, switches, fitting layout, overflow and PDF outline text. Both-Pandoc and engine measurements and required module results are in the batch report. pdfmd.py stays at 785 lines (version only).

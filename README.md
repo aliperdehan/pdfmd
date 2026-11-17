@@ -3047,6 +3047,12 @@ missing a glyph, so the document was rebuilt with DejaVu Serif; a `WARN` line be
 glyphs (`lecture.md: STIX Two Text lacks U+2265; rebuilt in DejaVu Serif (set mainfont: to keep your own)`).
 (Temporary file paths are shortened here.)
 
+With `.hst` history on (`--stamp --stamp-store file` or `both`), a successful full build records its effective
+Pandoc reader as `reader=...`. When the next build chooses a different reader, one WARN names the old and new
+readers and the reason when known, such as YAML front matter selecting Pandoc's Markdown. The output is unchanged.
+First builds and old history entries without a reader are silent. Failed and partial builds leave the reader baseline alone.
+With history off, or an explicit `--from`, `reader:`/fixed `flavour:` setting or `--no-auto reader`, there is no warning.
+
 **When a PDF doesn't look the way the Markdown suggests, run `-v` first.**
 The cause is usually one of these automatic decisions, and `-v` names it.
 

@@ -217,5 +217,155 @@ class GlobalMetadataAndTheReader(unittest.TestCase):
         self.assertIn("\\section{Water}", tex)                                   # the heading was not promoted to the title
 
 
+@needs_pandoc(3, 1, 3)
+class ReaderHistory(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory(prefix="pdfmd-reader-history-")
+        self.addCleanup(folder.cleanup)
+        self.directory = Path(folder.name)
+        self.document = self.directory / "doc.md"
+        self.hst = self.directory / ".backups" / "doc.hst"
+        self.env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+
+    def write(self, text):
+        self.document.write_text(text, encoding="utf-8")
+
+    def build(self, *extra, source="doc.md", ok=True):
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), source, "--to", "html",
+                               *([] if "--no-stamp" in extra else ["--stamp"]),
+                               "--stamp-store", "file", "--no-backup", *extra],
+                              cwd=self.directory, env=self.env, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode == 0, ok, done.stdout + done.stderr)
+        return done.stdout + done.stderr
+
+    def entries(self):
+        import pdfmd_history
+        return pdfmd_history.read_file(self.hst)[0]
+
+    def test_front_matter_changes_the_reader_once_and_preserves_the_output(self):
+        self.write("Ordinary text.\n")
+        self.assertNotIn("reader changed from", self.build())
+        first = self.entries()[0].meta_dict()["reader"]
+        self.assertTrue(first.startswith("gfm"), first)
+        self.assertNotIn("reader changed from", self.build())
+        self.write("---\ntitle: Title\n---\n\nOrdinary text.\n")
+        said = self.build()
+        newest = self.entries()[0].meta_dict()["reader"]
+        self.assertTrue(newest.startswith("markdown"), newest)
+        self.assertEqual(said.count("reader changed from"), 1, said)
+        self.assertIn(f"reader changed from {first} to {newest}", said)
+        self.assertIn("front matter", said)
+        output = (self.directory / "doc.html").read_bytes()
+        self.assertNotIn("reader changed from", self.build())
+        self.assertEqual((self.directory / "doc.html").read_bytes(), output)
+
+    def test_latest_legacy_entry_without_a_reader_never_warns(self):
+        import pdfmd_history
+        self.write("---\ntitle: Title\n---\n\nOrdinary text.\n")
+        entries = [pdfmd_history.Entry("2000-01-02 00:00:00", "compiled", "legacy"),
+                   pdfmd_history.Entry("2000-01-01 00:00:00", "compiled", "older", (("reader", "commonmark_x"),))]
+        pdfmd_history.write_file(self.hst, entries, "doc.md")
+        self.assertNotIn("reader changed from", self.build())
+        self.assertTrue(self.entries()[0].meta_dict()["reader"].startswith("markdown"))
+
+    def test_disabled_history_and_failed_builds_leave_the_baseline_alone(self):
+        self.write("Ordinary text.\n")
+        self.build()
+        before = self.hst.read_bytes()
+        self.write("---\ntitle: Title\n---\n\nOrdinary text.\n")
+        self.assertNotIn("reader changed from", self.build("--no-stamp"))
+        self.assertEqual(self.hst.read_bytes(), before)
+        self.build("--from", "not_a_pandoc_reader", ok=False)
+        self.assertEqual(self.hst.read_bytes(), before)
+        self.assertIn("reader changed from", self.build())
+
+    def test_explicit_readers_are_recorded_without_warning(self):
+        self.write("Ordinary text.\n")
+        self.build()
+        self.assertNotIn("reader changed from", self.build("--from", "commonmark_x"))
+        self.assertEqual(self.entries()[0].meta_dict()["reader"], "commonmark_x")
+        self.write("---\npdfmd-options: {reader: gfm}\n---\n\nOrdinary text.\n")
+        self.assertNotIn("reader changed from", self.build())
+        self.assertEqual(self.entries()[0].meta_dict()["reader"], "gfm")
+        self.write("---\npdfmd-options: {reader: commonmark_x}\n---\n\nOrdinary text.\n")
+        self.assertNotIn("reader changed from", self.build())
+        self.assertEqual(self.entries()[0].meta_dict()["reader"], "commonmark_x")
+
+    def test_partial_history_entries_do_not_record_or_compare_a_reader(self):
+        self.write("Ordinary text.\n")
+        self.build()
+        baseline = self.entries()[0]
+        self.write("---\ntitle: Title\n---\n\n# One\n\nOne.\n\n# Two\n\nTwo.\n")
+        self.assertNotIn("reader changed from", self.build("--stamp-partial", source="doc#one"))
+        entries = self.entries()
+        partial = [entry for entry in entries if entry.kind == "partial"]
+        self.assertEqual(len(partial), 1)
+        self.assertNotIn("reader", partial[0].meta_dict())
+        compiled = [entry for entry in entries if entry.kind == "compiled"]
+        self.assertEqual(compiled[0].meta_dict()["reader"], baseline.meta_dict()["reader"])
+
+    def test_a_strict_failure_does_not_commit_the_new_reader(self):
+        self.write("Ordinary text.\n")
+        self.build()
+        before = self.hst.read_bytes()
+        self.write("---\ntitle: Title\n---\n\nOrdinary text.\n")
+        self.assertIn("reader changed from", self.build("--strict", ok=False))
+        self.assertEqual(self.hst.read_bytes(), before)
+        self.assertIn("reader changed from", self.build())
+
+    def test_metadata_reader_and_no_auto_reader_are_explicit_choices(self):
+        self.write("Ordinary text.\n")
+        self.build()
+        metadata = self.directory / "chosen.yaml"
+        metadata.write_text("pdfmd-options: {reader: commonmark_x}\n", encoding="utf-8")
+        self.assertNotIn("reader changed from", self.build("--metadata-file", str(metadata)))
+        self.assertEqual(self.entries()[0].meta_dict()["reader"], "commonmark_x")
+        self.assertNotIn("reader changed from", self.build("--no-auto", "reader"))
+        self.assertEqual(self.entries()[0].meta_dict()["reader"], "markdown")
+
+    def test_report_readers_are_compared_in_both_routes(self):
+        for route in ("route", "patch"):
+            with self.subTest(route=route):
+                self.write("Ordinary text.\n")
+                if self.hst.exists():
+                    self.hst.unlink()
+                self.build("--report")
+                self.write(f"---\ntitle: Title\npdfmd-options: {{report-build: {route}}}\n---\n\nOrdinary text.\n")
+                before = self.hst.read_bytes()
+                self.assertIn("reader changed from", self.build("--report", "--strict", ok=False))
+                self.assertEqual(self.hst.read_bytes(), before)
+                self.assertIn("reader changed from", self.build("--report"))
+                self.assertNotIn("reader changed from", self.build("--report"))
+
+    def test_config_reader_is_an_explicit_choice(self):
+        self.write("Ordinary text.\n")
+        self.build()
+        config = self.directory / "config.yaml"
+        config.write_text("options:\n  reader: commonmark_x\n", encoding="utf-8")
+        self.env["PDFMD_CONFIG"] = str(config)
+        self.assertNotIn("reader changed from", self.build())
+        self.assertEqual(self.entries()[0].meta_dict()["reader"], "commonmark_x")
+
+    def test_an_automatic_flavour_still_warns_and_removing_front_matter_warns(self):
+        self.write("Ordinary text.\n")
+        self.build("--flavour", "pdfmd")
+        self.write("---\ntitle: Title\n---\n\nOrdinary text.\n")
+        self.assertIn("reader changed from", self.build("--flavour", "pdfmd"))
+        self.write("Ordinary text.\n")
+        said = self.build("--flavour", "pdfmd")
+        self.assertIn("reader changed from markdown", said)
+        self.assertIn("no YAML front matter", said)
+
+    def test_a_batch_keeps_each_files_reader_and_override_separate(self):
+        self.write("Ordinary text.\n")
+        other = self.directory / "other.md"
+        other.write_text("---\npdfmd-options: {reader: commonmark_x}\n---\n\nOther.\n", encoding="utf-8")
+        self.build("other.md")
+        self.write("---\ntitle: Title\n---\n\nOrdinary text.\n")
+        said = self.build("other.md")
+        self.assertEqual(said.count("reader changed from"), 1, said)
+        self.assertIn("doc.md: reader changed from", said)
+
+
 if __name__ == "__main__":
     unittest.main()

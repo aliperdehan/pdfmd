@@ -399,7 +399,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--from", dest="from_format", default=None, metavar="FORMAT",
                         help="Pandoc source format override (no short flag: -f is --font). Only needed "
                              "when Pandoc's own extension-based guess is wrong, e.g. a .txt file that "
-                             "is actually reStructuredText: --from rst")
+                             "is actually reStructuredText: --from rst. With .hst history on, changes of the automatic "
+                             "reader warn; an explicit --from or pdfmd-options reader never warns")
     parser.add_argument("--install", nargs="?", const="", type=core.install_kind, metavar="KIND",
                         help="alone: list every kind, size, source, target and removal; with KIND, install an optional piece for pdfmd to use: 'pandoc' (the real Pandoc from "
                              "PyPI's pypandoc_binary, about 35 MB), 'typst' (Typst's release binary from "

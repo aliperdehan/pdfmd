@@ -958,6 +958,13 @@ explicitly via --from. Report mode decides this once, from the first
 file, same as its documentclass/pdf-engine front matter; batch and
 single-file modes decide it per file.
 
+With file history enabled (`--stamp --stamp-store file`, or `both`), each successful full build records its effective
+Pandoc reader as the optional `reader=` field in NAME.hst. If it differs from the latest compiled entry's reader,
+one WARN names both readers and the reason when known (for example, YAML front matter selects Pandoc's Markdown).
+The rendered output is unchanged. First builds and old entries without a reader are silent; failed builds, including
+`--strict` failures, and partial builds do not update the reader baseline. With history off there is no warning.
+An explicit `--from`, `pdfmd-options: {reader: ...}` or fixed flavour, or `--no-auto reader`, also suppresses it.
+
 A document with no front matter whose very first line is a bare `#
 Title` also gets that heading promoted into real Pandoc title metadata
 (rendered as an actual title page/`<title>`, instead of an extra,
@@ -1463,7 +1470,7 @@ both give a field, `stamp` wins):
 document's backup folder (see Backups), instead of into the document's BUILD NOTES: the document is not edited by
 a build. `both` does both. A .hst is one entry per line, newest first -- `WHEN | KIND | TEXT | key=value ...`,
 KIND being compiled, restored, partial or note, the key=value words holding the hash of the source at that moment (`sha`) and
-the output (`out`) -- so two files join with `cat`, diff cleanly, and `--merge-history A.hst B.hst [-o OUT]` keeps
+the output (`out`) and the effective Pandoc reader (`reader`, when known) -- so two files join with `cat`, diff cleanly, and `--merge-history A.hst B.hst [-o OUT]` keeps
 every entry once. `--history-to-file FILE` moves the whole BUILD NOTES block(s) pdfmd owns (the "Compiled ..." line, the "Compile
 History:" list, and any text written by hand inside, as one `note` entry with `block=1`) into the .hst, and
 `--history-to-notes FILE` builds the block again from it;

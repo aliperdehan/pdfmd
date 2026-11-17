@@ -31,6 +31,54 @@ DOCUMENT = f"---\ntitle: H\n---\n\n# H\n\nText.\n\n{OWN}\n{AGENT}"
 
 
 class Format(unittest.TestCase):
+    def test_reader_history_is_available_for_provenance_and_a_failed_build_restores_it(self):
+        from unittest import mock
+        from pdfmd_history import record
+
+        with tempfile.TemporaryDirectory(prefix="pdfmd-hst-rollback-") as folder:
+            document = Path(folder) / "doc.md"
+            document.write_text("Ordinary text.\n", encoding="utf-8")
+            path = pdfmd.history_file(document)
+            with mock.patch.dict(pdfmd.BUILD, {"sources": [document]}, clear=True):
+                for before in (None, b"# Preserve this comment and its spacing.  \r\n"):
+                    if before is not None:
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_bytes(before)
+                    record.begin_history()
+                    record.set_reader(document, "gfm", None, [], None, None)
+                    record.record_history(document, [], "Compiled with pdfmd v9 -- 2026-10-09 10:00:00",
+                                          Path(folder) / "doc.html", False)
+                    self.assertEqual(history.read_file(path)[0][0].meta_dict()["reader"], "gfm")
+                    record.finish_history(False)
+                    self.assertEqual(path.read_bytes() if path.exists() else None, before)
+
+    def test_same_second_reader_changes_refresh_the_baseline(self):
+        from unittest import mock
+        from pdfmd_history import record
+
+        with tempfile.TemporaryDirectory(prefix="pdfmd-hst-reader-") as folder:
+            document = Path(folder) / "doc.md"
+            document.write_text("Ordinary text.\n", encoding="utf-8")
+            output = Path(folder) / "doc.html"
+            line = "Compiled with pdfmd v9 -- 2026-10-09 10:00:00"
+            with mock.patch.dict(pdfmd.BUILD, {"sources": [document]}, clear=True):
+                for reader, expected in (("gfm", 0), ("markdown", 1), ("markdown", 0)):
+                    record.begin_history()
+                    record.set_reader(document, reader, None, [], None, None)
+                    record.record_history(document, [], line, output, False)
+                    self.assertEqual(len(record.reader_warnings()), expected)
+                    record.finish_history(True)
+                [entry] = history.read_file(pdfmd.history_file(document))[0]
+                self.assertEqual(entry.meta_dict()["reader"], "markdown")
+                # A different stamp text in the same second must also become the newest baseline.
+                record.begin_history()
+                record.set_reader(document, "commonmark_x", None, [], None, None)
+                record.record_history(document, [], line.replace("v9", "v10"), output, False)
+                self.assertEqual(len(record.reader_warnings()), 1)
+                record.finish_history(True)
+                entries, _ = history.read_file(pdfmd.history_file(document))
+                self.assertEqual(entries[0].meta_dict()["reader"], "commonmark_x")
+
     def test_an_entry_survives_a_pipe_a_line_break_and_extra_words(self):
         entry = history.Entry("2026-10-09 11:22:01", "compiled", "with a | pipe, a \\ backslash\nand a second line",
                               (("sha", "ab12"), ("out", "r.pdf")))
