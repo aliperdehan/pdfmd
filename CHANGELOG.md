@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.33.308 — 2026-11-17
+
+Pre-edit state: commit `4411272`. The --show-hidden flag was absent from the help topic table, so topic
+coverage failed and --help raw omitted it. Add it beside --show-comments in the raw topic. The existing
+coverage regression fails before the change (`['--show-hidden'] != []`). No setting or TODO changes;
+pdfmd.py stays at 785 lines (version only).
+
+The full help module and the five required safety modules pass: 121 tests, zero failures/errors, one
+existing setup skip (prompt_toolkit is installed). --help raw lists the flag. Ruff F and whitespace checks pass.
+
 ## v3.33.307 — 2026-11-17
 
 Pre-edit state: commit `df4453d`. SVG images and diagrams used different converter lists, and neither diagram
