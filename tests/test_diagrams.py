@@ -181,8 +181,11 @@ class Diagrams(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         text = done.stdout + done.stderr
         self.assertIn("diagram-timeout", text)
-        self.assertIn("did not finish in 2 s", text)
-        self.assertEqual(self.ran(), ["dot -Tsvg"])                              # the second fence did not start it again
+        self.assertEqual(sum("did not finish in 2 s" in line for line in text.splitlines()
+                             if line.startswith("WARN")), 1)
+        # Under load the timeout can stop the shell before it writes ran.log.
+        # Either way there is at most one start and exactly one timeout warning.
+        self.assertIn(self.ran(), [[], ["dot -Tsvg"]])
         html = (self.directory / "doc.html").read_text(encoding="utf-8")
         self.assertEqual(html.count("<pre"), 2)                                  # both stay as code
         self.assertFalse(list(self.cache.rglob("*.svg")))                        # a stopped run leaves nothing in the cache

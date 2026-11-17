@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.285d — 2026-11-17
+
+Pre-edit state: commit `66b9061`. The hanging diagram stand-in could be stopped before its shell appended to ran.log, so requiring one logged start raced under load. Accept zero or one start, and require exactly one WARN containing "did not finish in 2 s" (the build summary repeats the reason without WARN). The elapsed-time, output, cache and strict checks stay intact. This cannot race on whether the shell reached its log write. Proof: all 20 diagram tests pass with Pandoc 3.13 and 3.1.3; the six required safety modules pass (136 cases including diagrams, one existing skip). Ruff F passes; pdfmd.py stays at 783 lines. An initial concurrent readiness measurement touched only the scratch cache watched by isolation_support; a clean rerun passes isolation.
+
 ## v3.33.285c — 2026-11-17
 
 Pre-edit state: commit `68dc35b`.
