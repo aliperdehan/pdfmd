@@ -91,6 +91,7 @@ def run(path: Path, build: Callable[[Path], BuildResult] | None = None,
 
     state = {"mode": "edit", "saved": original, "message": "", "build": [], "output": None, "building": False,
              "clip": "", "find": "", "quit_asked": False}
+    build_worker = None
     editor = TextArea(text=original, scrollbar=True, line_numbers=True, wrap_lines=True, lexer=lexer,
                       focus_on_click=True)
     prompt_area = TextArea(height=1, multiline=False, prompt="", wrap_lines=False)
@@ -243,6 +244,7 @@ def run(path: Path, build: Callable[[Path], BuildResult] | None = None,
     @keys.add("c-b", filter=editing)
     @keys.add("f5", filter=editing)
     def _build(event):
+        nonlocal build_worker
         if state["building"]:
             return
         if build is None:
@@ -265,7 +267,8 @@ def run(path: Path, build: Callable[[Path], BuildResult] | None = None,
             state["message"] = "Built " + (made.name if made else path.name) if ok else "The build failed (see above)"
             app.invalidate()
 
-        threading.Thread(target=work, daemon=True).start()
+        build_worker = threading.Thread(target=work, daemon=True)
+        build_worker.start()
 
     @keys.add("c-p", filter=editing)
     def _open(event):
@@ -280,4 +283,9 @@ def run(path: Path, build: Callable[[Path], BuildResult] | None = None,
                       style=Style.from_dict({"bar": "reverse", "title": "bold reverse", "title2": "reverse",
                                              "foot": "", "keys": "reverse", "help": "", "build": "#888888",
                                              "warn": "#ffaf5f", "prompt": "bold"}))
-    return int(app.run() or 0)
+    try:
+        return int(app.run() or 0)
+    finally:
+        # Ctrl-B accepted this build; leaving the UI must not abandon it.
+        if build_worker is not None:
+            build_worker.join()

@@ -75,6 +75,27 @@ class Editing(unittest.TestCase):
         self.assertTrue(self.path.read_text(encoding="utf-8").startswith("abc# T"))
         self.assertEqual(len(self.built), 1)
 
+    def test_exit_waits_for_a_build_that_has_not_been_scheduled_yet(self):
+        from unittest import mock
+
+        class DeferredWorker:
+            # Model a loaded machine: start accepts the work but the worker
+            # receives no CPU until its caller waits for it. No timed sleeps.
+            def __init__(self, *, target, daemon):
+                self.target = target
+
+            def start(self):
+                pass
+
+            def join(self):
+                self.target()
+
+        # Patch only the editor's module reference, leaving prompt_toolkit's
+        # own threading intact. The existing save/build/exit test stays too.
+        with mock.patch.object(pdfmd_edit, "threading", mock.Mock(Thread=DeferredWorker)):
+            self.assertEqual(self.drive("abc" + CTRL["B"] + CTRL["X"]), 0)
+        self.assertEqual(self.built, ["abc# T\n\nline two\nline three\n"])
+
     def test_leaving_with_unsaved_changes_asks_once(self):
         self.drive("zzz" + CTRL["X"] + CTRL["X"])
         self.assertEqual(self.path.read_text(encoding="utf-8"), "# T\n\nline two\nline three\n")      # not saved
