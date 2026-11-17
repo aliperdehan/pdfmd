@@ -1,5 +1,7 @@
 # pdfmd for an agent
 
+(For agents developing pdfmd itself, the process is AGENTS.md at the root of the repository.)
+
 A short guide for a program or an AI assistant that runs `pdfmd`. The same text is in the README, the recipes and
 `pdfmd --help all`; this is the part you need first. `pdfmd --doc` lists the documents that came with your version.
 

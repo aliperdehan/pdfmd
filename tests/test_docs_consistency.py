@@ -49,9 +49,9 @@ class Version(unittest.TestCase):
 
     def test_the_changelog_header_says_what_the_numbering_rule_says(self):
         header = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n---\n", 1)[0]
-        self.assertNotIn("fixes a bug without changing what any flag does", header)    # CLAUDE.md: a patch may add anything
-        claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
-        self.assertIn("every commit after it in that line", claude)
+        self.assertNotIn("fixes a bug without changing what any flag does", header)    # AGENTS.md: a patch may add anything
+        process = (ROOT / "AGENTS.md").read_text(encoding="utf-8")     # the process every agent follows (CLAUDE.md imports it)
+        self.assertIn("every commit after it in that line", process)
         self.assertIn("(`3.N.x`)", header)
 
 

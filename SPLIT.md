@@ -895,7 +895,7 @@ Tests: none name it; the always-run set.
 | 5c (done in 3.33.280) | Removed phase 1's pointer comments and shortened state comments; some feature comment blocks remained, as the final source shows. |
 | 5d (done in 3.33.281–283) | Rechecked and removed dead constants in separate commits: PREAMBLE (281), FOLDER_METADATA (282), PAGE_WIDTHS (283). |
 | 5e (done in 3.33.284) | Moved the module reference to `docs/reference.md`, available as `pdfmd --doc reference` (D3); retained a 24-line introduction. This feature commit added a `--doc` name and repointed five help texts and the README. |
-| 5f (record: 3.33.285a) | This file records both phases. The whole CLAUDE.md rewrite is a separate draft for the author's review, including the shared core, table and callers-first method; it is not committed here. |
+| 5f (record: 3.33.285a; CLAUDE.md: 3.33.285b) | This file records both phases. CLAUDE.md was rewritten whole in 3.33.285b: AGENTS.md holds the process every agent follows (the shared core, the names table, callers first), CLAUDE.md imports it and adds the orchestrating agent's part. |
 | 5g (review outstanding) | The final full-suite run belongs to the reviewer; the code-split record does not mark it passed. |
 
 ### What stays in pdfmd.py

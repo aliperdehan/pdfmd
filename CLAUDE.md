@@ -1,206 +1,42 @@
-# pdfmd
+@AGENTS.md
 
-Converts Markdown (and other Pandoc-readable formats) to PDF or another
-output format via Pandoc. Started as `batchmd`, a twenty-line `pypandoc`
-batch script (see the changelog's v0.1.0); has since grown auto-discovery for metadata files,
-LaTeX preambles, Lua filters, and fonts, a multi-engine PDF fallback chain,
-a `pdfmd-options:` front-matter block, batch/report/book modes, and its
-own generic table-width-balancing Lua filter (`lib/pdfmd_lua/table_width.lua`) —
-see `docs/reference.md` (`pdfmd --doc reference`) for the
-current, authoritative feature list; don't rely on this file for feature
-details, only for process.
+# The orchestrating agent
 
-This repository is public. Don't commit personal details (absolute
-`/Users/...` home paths, names, anything local-only) into `pdfmd.py`,
-`CHANGELOG.md` or this file — use `~/` paths and "the author".
+AGENTS.md is the process every agent follows; this part is for the agent that works with the author directly and runs
+the work. (Its last section, "Working under a task brief", is for delegated agents, not for you.)
 
-## Before touching pdfmd.py
+## Who does what
 
-**Commit first.** Git replaces manual backup copies: before any edit,
-`git status` must be clean (commit or stash anything pending), so the
-last commit is the exact pre-edit state. Don't create `.bak` copies.
-Backups from before v3.9.2 live in `~/dev/python-projects/backups/`; the
-changelog's older "Backup reference" lines point there.
+The author decides design, behaviour and releases. You run the work: record the author's decisions, plan, write the code
+or delegate it, review every delegated batch yourself, land it, run CI and keep the maintainer's notes current. Decide
+what is mechanical on your own, record the choice and tell the author; anything that changes what pdfmd does or promises
+goes to the author with options and a recommendation.
 
-**Update the changelog in the same commit**, not after: the code change,
-its `CHANGELOG.md` entry and the `PDFMD_VERSION` bump go into one commit,
-and new changelog entries cite that commit instead of a backup file. See `CHANGELOG.md` for the format
-and why its numbering starts at 2.0.0 (the 1.x entries at the end of the
-changelog are an after-the-fact reconstruction and not reliable).
+## Decisions first
 
-**Verify before declaring a fix done — a synthetic test is not enough.**
-The table-width bug fixed in v2.0.0 is the concrete example: compiling the
-generated `.tex` directly with `lualatex` looked correct, and only running
-the FULL `pdfmd` pipeline on the same source revealed the bug (`pdfmd`
-inserts its own extra `--lua-filter` ahead of anything project-specific).
-If a fix touches how `pdfmd` builds its Pandoc command, test through
-`pdfmd` itself, not just through the Pandoc/LaTeX commands it constructs
-internally.
+Every decision of the author's (a choice between options, a wish, a design answer, a refusal) is recorded in the
+maintainer's working notes in the same turn and before any code: the question, the options, the answer verbatim, the
+reason, what it touches; a postponed one also gets its TODO.md line. Chat is lost at the next compaction; a decision
+that lives only there gets re-asked or never built. Code follows the record; a decision changed later is changed in the
+record too.
 
-## A new flag or a new pdfmd-options key
+## Delegating and reviewing
 
-Add it to `lib/pdfmd_setup/inventory.py` in the same commit: either the `--setup` row that sets it for
-every document (`lib/pdfmd_setup/registry.py`, with its `UNSET` words) or an `Omitted` entry with the
-reason. `tests/test_setup.py` (`Completeness`) fails until it is in one of them.
+Delegated agents (Codex and others) get narrow batches: related items, one commit per item with its own version, a brief
+that carries every rule they cannot read in AGENTS.md (the workspace, the trailer, what their sandbox cannot do, when to
+stop and report), and a worktree of their own when runs go in parallel.
 
-## Layout
+The review stays with you, every batch, never scripted away or handed to another agent: the report and the commits (one
+per item, its trailer, `git status` clean), the touched test modules re-run outside the agent's sandbox with the real
+cache and config folders listed before and after, `wc -l pdfmd.py`, each entry's "Pre-edit state" equal to the commit's
+parent, ruff, `split_check` for a move or refactor, and the diff wherever the report shows a design choice, a kept
+constant or a skipped item. A stop for a choice no decision covers is yours to settle only when it is mechanical
+(recorded, the author told); otherwise it goes to the author.
 
-The `pdfmd_*` packages live in `lib/` (names unchanged, so `import pdfmd_lua` is as it always was); `pdfmd.py`, `tests/`,
-`scripts/` and the docs stay in the root. A checkout works because `pdfmd.py` puts `lib/` on `sys.path` itself; the wheel
-and the zipapp get the packages from `[tool.setuptools.package-dir]` in `pyproject.toml` and `PACKAGES` in
-`scripts/build_zipapp.py`. A new package goes into all three (`packages`, `package-dir`, `PACKAGES`);
-`tests/test_packaging.py` fails until it does. A test that reads a shipped file builds the path as `ROOT / "lib" / "pdfmd_x" / ...`.
+Landing: a branch that starts at `main` lands by fast-forward; one that does not is cherry-picked with its versions and
+"Pre-edit state" lines renumbered. The checkout may be someone's live pdfmd: land when no build from it is running.
+From 3.34.0 the landed commits carry your `Reviewed-by` line (AGENTS.md, "Versions and attribution").
 
-## pdfmd.py holds only the core
-
-The author's rule (2026-11-09): `pdfmd.py` keeps only its imports and the very core, "like just shelling out to pandoc with
-some basic stuff so pdfmd.py can work like in its early days"; everything else lives in packages under `lib/`. New code goes
-into a package, never into `pdfmd.py`, even when the feature it belongs to still sits there: put the new part in a package and
-call it. The split of what is in `pdfmd.py` today is planned in `SPLIT.md`. A package that needs pdfmd's own helpers or state
-gets the module as its `core` (a module global that `bind_core()` sets when `pdfmd.py` loads, as `pdfmd_comments`
-has; `pdfmd_report` and `pdfmd_batch` take it as an argument; a package that does not load at start is reached through `deferred()`, SPLIT.md step 6) and reads `core.X` when it runs, never
-`import pdfmd` (run as a script, the file is `__main__`, and a second import is a second copy with its own state).
-
-The split cost a great deal of careful work; keep `pdfmd.py` from growing back (the author, 2026-11-10). It is a launchpad: its
-imports, the binding block, state that must stay a module global, and the dispatch of a run. So:
-- A fix to code that still sits in `pdfmd.py` may change it in place, but anything new (a helper, a constant, a branch beyond a
-  few lines, docstring prose) goes into the package of its feature and is called from there. A commit that makes `pdfmd.py` longer
-  says why in its changelog entry; `wc -l pdfmd.py` before and after is part of every review.
-- Load only what the run needs. A package is imported at start only when every run uses it; everything else is reached through
-  `deferred()` and loads on first use. Heavy standard-library modules (`urllib.request`, `ssl`, `http.server`, `tarfile` ...) are
-  imported inside the package that uses them, never at start. Check a change with
-  `python3 -c "import sys; sys.argv=['pdfmd','--version']; sys.path.insert(0,'.'); import pdfmd; print(sorted(sys.modules))"`
-  and a timed `python3 scripts/pdfmd --version`.
-- What still sits in `pdfmd.py` moves out in phase 2 (`SPLIT.md`), not piecemeal inside unrelated commits.
-
-## Debugging
-
-`pdfmd --version` prints the current version. `--verbose` prints pdfmd's
-own auto-discovery decisions AND the exact Pandoc/Quarto command line about
-to run, via `log_cmd()` — reach for this FIRST when a document's rendered
-output doesn't match what the source and project files alone would
-predict; it is very often pdfmd's own auto-applied defaults (a discovered
-metadata file, an auto-included preamble, its own table-width filter)
-doing something the project-specific files don't show at all.
-
-## Vendored inkmd and the native tier
-
-`lib/pdfmd_inkmd/` is a generated copy of the PyPI package `inkmd` (the built-in
-PDF renderer used when there is no Pandoc or PDF engine). Never edit it by
-hand: change `scripts/vendor_inkmd.py` and re-run it
-(`python3 scripts/vendor_inkmd.py --version X.Y.Z`; `--check` reports drift),
-then `PDFMD_GOLDEN=1 python3 -m unittest discover -s tests` and read what
-changed in inkmd's output. The native tier's rendering code is in `lib/pdfmd_native/`
-(`normalise_gfm()`, the math-as-text converter, `convert_native()`). Its selection helpers
-(`native_possible()`, `NATIVE_ENGINES`, `native_run_note()`) and lost-features prompt live in
-`lib/pdfmd_engines/native.py`. `NATIVE_LOST` stays in `pdfmd.py` as state; `math_lines()`,
-which `lib/pdfmd_ansi` reads too, lives in `lib/pdfmd_native/` with the native paper tables. md2pdf (`pymd2pdf`) is an optional dependency, not vendored.
-`python3 -m unittest discover -s tests` runs everything; the end-to-end tests run
-`pdfmd` with an empty PATH, which is how to test "no Pandoc" without removing it.
-The serial run takes an hour or more: `python3 scripts/test_parallel.py [-j N] [--failed-only] [PATTERN ...]` runs the test modules
-in parallel worker processes, each with its own scratch config, cache, data and temporary folders (`--help` says more).
-
-`lib/pdfmd_yaml/` is a generated pure-Python copy of PyYAML, with its MIT
-licence. Never edit it by hand: change `scripts/vendor_pyyaml.py` and re-run
-it against the installed PyYAML (`--version X.Y.Z`; `--check` reports drift).
-It is private and never shadows an installed `yaml`; C extensions are omitted.
-
-## This is a shared dependency
-
-`pdfmd` is used across multiple, unrelated Markdown-to-PDF pipelines (the
-`nulabreport` chemistry lab-report package at `~/dev/tex/nulabreport/` is
-one real, current user, but not the only one). A change made to fix one
-project's document can affect every other document `pdfmd` builds — the
-v2.0.0 table-width fix had to be checked against BOTH the table that
-motivated it (should now render at natural width) AND a deliberately-
-overflowing synthetic table (should still get rescued, unchanged) before
-being considered safe. Never assume a fix here is scoped to whichever
-project you were looking at when you found the bug.
-
-## Location
-
-The real file is `~/dev/py/pdfmd/pdfmd.py`. `~/dev/python-projects/pdfmd.py`
-is a symlink to it, kept because shell aliases and other projects' docs
-invoke that path; don't remove it.
-
-`pyproject.toml` makes it pip-installable (`pipx install
-git+https://github.com/aliperdehan/pdfmd`; distribution name `pdfmd-cli`).
-A pipx-installed `pdfmd` is a separate copy: edits here don't reach it until
-`pipx install --force .` (or install with `pipx install -e .` to link it).
-When testing an edit, run `python3 pdfmd.py` from this folder so you know
-which copy ran.
-
-`scripts/pdfmd` runs the same checkout copy, but imports `pdfmd.py` instead of running it as a script, so
-Python caches its bytecode: about 0.25 s less per run (a script is compiled from source every time). It is meant
-for the author's shell alias (`alias pdfmd='python3 ~/dev/py/pdfmd/scripts/pdfmd'`); `tests/test_launcher.py`
-covers it, including the `__main__` guard that `-b -j` worker processes need.
-
-## Releasing to PyPI
-
-Automatic. Every push to `main` runs `.github/workflows/publish.yml`: the
-Windows/macOS/Linux tests (`test.yml`) and then, only if they pass and
-`PDFMD_VERSION` isn't on PyPI yet, a build, an upload to PyPI as
-`pdfmd-cli`, and a `vX.Y.Z` tag. So releasing = the usual version bump +
-changelog commit, pushed. A push without a version bump publishes nothing.
-Don't rename `publish.yml` or the repo's `pypi` environment: PyPI's trusted
-publisher is registered to exactly those names.
-
-The same push builds the container images (`.github/workflows/docker.yml`, called from `publish.yml` after the upload): four
-variants, two architectures, smoke-tested before they are pushed to `ghcr.io/aliperdehan/pdfmd`. A change to `docker/` is tested by
-running `docker.yml` by hand with the push off (or locally with Docker: `docker/smoke.sh IMAGE`).
-
-**After a release, pull before the next push.** The `homebrew` job of `publish.yml` commits the formula bump
-(`Formula/pdfmd.rb`) to `main` as `github-actions[bot]`, and so does the `scoop` job, so GitHub's `main` is then one or two commits
-ahead of the local one. Run
-`git pull --ff-only` (`--rebase` when local commits exist) before every push, or the push is rejected. The bot touches only
-that file (and the `scoop` job `bucket/pdfmd.json`), so there is never a conflict. The formula and the Scoop manifest live in this
-repository; there is no separate tap or bucket repository.
-
-## Decisions are recorded first
-
-Every decision the author makes in chat (a choice between options, a wish, a design answer, a refusal) is written into the
-maintainer's working notes (the master queue) at full context, in the same turn and before any code: the question, the
-options, the answer, the reason, what it touches. It also gets a short line in `TODO.md` with the entry id, when the work is put off. Chat is lost at
-the next compaction; a decision that exists only there gets re-asked, re-derived or never built. Code follows the record,
-never the other way round, and a decision changed later is edited in the notes, not only in the code.
-
-## No hardcoded thresholds
-
-A number that changes behaviour (a ratio, a limit, a minimum length, a margin, a cap) is a setting: a `pdfmd-options` key,
-a `--setup` row, per table where a table can carry it, its default written in the docs. A constant stays in the code only
-when the author says so or the situation presses (a file-format fact, a speed limit, a case with no sensible knob), and then
-the author is told in the same reply and the constant is recorded in the maintainer's notes with the reason.
-
-## TODO.md
-
-`TODO.md` lists the open work that is postponed, one line per item; work done in the same session as its decision gets no line
-(the author, 2026-11-03: a line written for work in progress is stale within the hour). When a commit finishes an item, delete its line in
-that same commit (the changelog is the record of what shipped); when a plan adds or changes an item,
-edit the line. Keep it free of personal paths and names, like every file here.
-
-Keep it lean: one short line per item, never a paragraph. Design, decisions, wishes and measured facts go in the
-maintainer's working notes (the master queue), and the line carries only the bracketed entry id that points there. When a
-line grows past one sentence or two, move the rest to the notes.
-
-## Version numbers
-
-One minor bump (`3.N.0`) per feature line, however large; every commit after it in that line that changes code, a feature,
-a setting or behaviour is a patch (`3.N.x`, +0.0.1) with a changelog entry of its own, in the same commit as the change and
-the `PDFMD_VERSION` bump. One commit, one version, one entry: never grouped by feature, never folded into the previous
-entry, even while the minor is unreleased.
-
-**The kits, tables and smiles lines are the exception.** They get no minor of their own: every commit of any of them is a 3.31.x patch
-(the next free number) with its own changelog entry, tagged `[kits]`, `[tables]` or `[smiles]`, so the rules below apply to each of them
-unchanged. (`[smiles]`, chemical structures, was approved by the author on 2026-10-31.)
-
-**No bump for a commit that changes no shipped code.**
-- A test, a workflow or a docs file (README, this file) that is the commit's whole change keeps a changelog entry under the
-  previous version with a letter: `## v3.30.30b — date`, then `c`, and so on. `PDFMD_VERSION` stays as it is, so
-  `publish.yml` releases nothing. The letter lives only in `CHANGELOG.md`: as a version it would be a PEP 440 pre-release
-  (`3.30.30a0`), which sorts before 3.30.30. The tests that read the changelog match `## v<digits>.<digits>.<digits>`
-  followed by a word boundary, so a lettered heading is skipped by them.
-- A commit that changes only `TODO.md` has no changelog entry at all, only its commit message, and a TODO line is never
-  listed in another commit's entry.
-
-**Only a fix to a bug that the unreleased version itself introduced** (the version is not on PyPI) goes into that
-version's entry with no new heading. A new feature or setting in a later commit does not: it is a patch of its own.
+CI runs on a branch pushed for that purpose (never `main`; pushing it is a standing permission), at the end of a batch or
+wave, not per commit; a job that fails before any test (a runner or package-feed outage) is re-run, not fixed in code.
+A release (a push to `main`) waits for the author's go at push time, after the full suite and a green CI.

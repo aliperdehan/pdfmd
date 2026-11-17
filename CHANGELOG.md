@@ -19,6 +19,36 @@ same commit as the change.
 
 ---
 
+## v3.33.285b — 2026-11-17
+
+Pre-edit state: commit `a1343bb`.
+
+Phase 2, step 5f, second part: CLAUDE.md rewritten whole, as two files. No shipped code changes, so `PDFMD_VERSION`
+stays 3.33.285.
+
+- **AGENTS.md** (new, at the root) is the process every agent developing pdfmd follows: the public-repository rules,
+  TODO.md, changing code, versions and attribution, the layout and the core after the split (the shared `core`, the
+  names table, the nine `deferred` stand-ins, loading only what a run needs), verifying, the generated code and the
+  native tier's new homes, Colophon and the web UI, releases and reporting. Its last section, "Working under a task
+  brief", holds the rules of a delegated agent (its worktree only, commits on its own branch, no push, stop and report a
+  choice nothing settles, a short report).
+- **CLAUDE.md** imports AGENTS.md and adds the orchestrating agent's part: who does what (the author decides design,
+  behaviour and releases; the agent records decisions, plans, writes or delegates, reviews every delegated batch itself,
+  lands it and runs CI), decisions first, delegating and reviewing (briefs, the review outside the agent's sandbox,
+  landing, CI on a branch, a release only on the author's go).
+- What went: the old file's description of a split still to come, the module docstring as the feature list
+  (`docs/reference.md` is), the native tier's functions "staying in pdfmd.py" (they live in lib/pdfmd_engines/native.py
+  and lib/pdfmd_native/), the 3.31.x numbering of `[kits]`, `[tables]` and `[smiles]` entries (they take the current
+  line's next patch, as since 3.33), and the personal backup and symlink locations. What came in: the author's standing
+  instructions for agents, merged where every agent needs them, and the attribution rule from 3.34.0 (the writer's
+  `Co-authored-by`, then `Reviewed-by` for the agent that reviewed and landed the commit).
+- docs/agents.md (the guide for programs that USE pdfmd) points developers to AGENTS.md; SPLIT.md's 5f row records the
+  rewrite.
+- tests/test_docs_consistency.py reads the numbering rule from AGENTS.md, its new home (it read CLAUDE.md).
+
+Drafted by Codex from the old file, the author's agent instructions and the code at 3.33.285; rewritten by Claude in the
+orchestrating agent's voice at the author's request, split into the two files, and checked against the code.
+
 ## v3.33.285a — 2026-11-17
 
 No shipped code (SPLIT.md and this entry); PDFMD_VERSION stays 3.33.285.
