@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.293 — 2026-11-17
+
+Pre-edit state: commit `bcd9fef`. The v3.33.59 Typst bibliography rule explicitly rejected fractional entry-spacing, so
+2.5 and 0.5 silently fell back to ordinary paragraph spacing. Accept any finite non-negative number and render it
+without integer formatting. Citeproc also omits fractional values from the AST; recover them from the selected local
+CSL style when the refs attribute is absent. Absent, invalid and negative values keep the existing fallback. Zero and integer output
+are unchanged. The rule regression fails before, and scripts/pdfmd-built PDF baseline measurements fail for both
+fractions (33.1 pt instead of about 94.85 / 40.65 pt). After the fix those measured gaps match 3.5 / 1.5 line pitches.
+Engine-filter plus the five required safety modules: 151 cases with each Pandoc, zero failures on 3.13, five skips;
+on 3.1.3 two failures and one error in existing template tests, all reproduced on cc43d34 (`${.}` defaults paths,
+empty font fallback, missing Bodyfirst). The fractional cases pass with both versions. Ruff F and whitespace checks pass. No new setting; pdfmd.py stays at 784 lines (version only). No TODO changes.
+
 ## v3.33.292 — 2026-11-17
 
 Pre-edit state: commit `0bc4506`. Metadata and config accepted cache-location aliases, but argparse rejected the same

@@ -54,8 +54,8 @@
 -- on top of the previous entry's last line (pitch = cap height, 7.95 pt at 12 pt Times), and 1 put entries closer than the
 -- lines of one entry when linestretch is above about 1.5. LaTeX sets `\itemsep` to N x `\baselineskip`: N lines added to
 -- the line pitch. A `#show:` rule at the top of the `refs` div gives Typst the same: spacing = leading + N x (leading +
--- line height). Only for a whole N >= 0, where Pandoc's template writes a spacing (it writes none for 2.5, nor without the
--- attribute, and the entries then keep the paragraph spacing, as before). The template's own rule already needs Typst 0.12.
+-- line height). Every finite N >= 0 is supported, including 2.5 and 0.5; without the attribute the entries keep their
+-- paragraph spacing. The template's own rule already needs Typst 0.12.
 
 --
 -- Author names in another script's font (v3.33.65). pdfmd's font filter (pdfmd_unicode, run before this one) sets a run the
@@ -333,13 +333,39 @@ end
 -- only something to measure (a format fact)
 local LINE_HEIGHT = "measure[X].height"
 
+-- Citeproc omits fractional entry-spacing from the refs Attr. Recover it from the selected local style;
+-- Pandoc's resource and user-data folders are the same fallbacks used by its style reader.
+local function csl_entry_spacing(meta)
+  if meta.csl == nil then return nil end
+  local style = pandoc.utils.stringify(meta.csl)
+  if style:match("^https?://") then return nil end  -- pdfmd's remote-style resolver normally supplies a local file
+  local names = {style}
+  for _, folder in ipairs(PANDOC_STATE.resource_path or {}) do names[#names + 1] = folder .. "/" .. style end
+  local data = PANDOC_STATE.user_data_dir
+  if data then
+    names[#names + 1] = tostring(data) .. "/csl/" .. style
+    names[#names + 1] = tostring(data) .. "/" .. style
+  end
+  for _, name in ipairs(names) do
+    local file = io.open(name, "rb")
+    if file then
+      local text = file:read("*a"); file:close()
+      text = text:gsub("<!%-%-.-%-%->", "")
+      local attrs = text:match("<[%w_:%-]*bibliography%s+([^>]*)>")
+      return attrs and tonumber(attrs:match([=[entry%-spacing%s*=%s*['"]([^'"]+)['"]]=]) or "") or nil
+    end
+  end
+  return nil
+end
+
 -- the `refs` div: its entries N lines apart (CSL entry-spacing), as LaTeX's \itemsep; nil leaves it to Pandoc's template
-local function entry_spacing(div)
+local function entry_spacing(div, meta)
   if div.identifier ~= "refs" then return nil end
   local lines = tonumber(div.attributes["entry-spacing"] or "")
-  if lines == nil or lines < 0 or lines ~= math.floor(lines) then return nil end
+  if lines == nil and div.attributes["entry-spacing"] == nil then lines = csl_entry_spacing(meta) end
+  if lines == nil or lines < 0 or lines ~= lines or lines == math.huge then return nil end
   local value = "par.leading"
-  if lines > 0 then value = string.format("par.leading + %d * (par.leading + %s)", lines, LINE_HEIGHT) end
+  if lines > 0 then value = string.format("par.leading + %s * (par.leading + %s)", tostring(lines), LINE_HEIGHT) end
   div.content:insert(1, pandoc.RawBlock("typst", "#show: body => context { set par(spacing: " .. value .. "); body }"))
   return div
 end
@@ -361,5 +387,7 @@ local function line_spacing(doc)
   return doc
 end
 
-return {{Meta = meta_rules, Div = entry_spacing,
-         Pandoc = function(doc) return line_spacing(absolute_pictures(plain_missing_links(doc))) end}}
+return {{Meta = meta_rules, Pandoc = function(doc)
+  doc = doc:walk({Div = function(div) return entry_spacing(div, doc.meta) end})
+  return line_spacing(absolute_pictures(plain_missing_links(doc)))
+end}}

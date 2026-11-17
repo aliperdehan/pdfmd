@@ -168,7 +168,10 @@ class Filter(unittest.TestCase):
         self.assertEqual(rules('entry-spacing="0"'), ["#show: body => context { set par(spacing: par.leading); body }"])
         self.assertEqual(rules('entry-spacing="2"'), ["#show: body => context { set par(spacing: par.leading + 2 * "
                                                       "(par.leading + measure[X].height)); body }"])
-        self.assertEqual(rules('entry-spacing="2.5"'), [])               # Pandoc's template writes no spacing for it
+        for value in ("2.5", "0.5"):
+            self.assertEqual(rules(f'entry-spacing="{value}"'),
+                             [f"#show: body => context {{ set par(spacing: par.leading + {value} * "
+                              "(par.leading + measure[X].height)); body }"])
         self.assertEqual(rules(""), [])
         self.assertEqual(rules('entry-spacing="0"', "other"), [])
 
@@ -285,7 +288,7 @@ class CommandLine(unittest.TestCase):
         words = " ".join(["word"] * 40)
         (self.directory / "refs.bib").write_text("".join(f"@book{{k{n}, title={{Entry {n} {words}}}, year={{2000}}}}\n"
                                                          for n in range(3)), encoding="utf-8")
-        for spacing, apart in (("0", 1), ("1", 2)):
+        for spacing, apart in (("0", 1), ("1", 2), ("2.5", 3.5), ("0.5", 1.5)):
             with self.subTest(entry_spacing=spacing):
                 (self.directory / "style.csl").write_text(
                     '<?xml version="1.0" encoding="utf-8"?>\n<style xmlns="http://purl.org/net/xbiblio/csl" '

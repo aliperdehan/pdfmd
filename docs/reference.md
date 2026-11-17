@@ -184,7 +184,9 @@ with `--strip-comments-in hidden` as the remedy. No warning with `show-hidden` o
 
 pdfmd_lua/typst.lua puts lines `linestretch` x LaTeX's \baselineskip for the `fontsize` apart in Typst, in any font
 (`#set text(top-edge: 0.7em, bottom-edge: "baseline")` and `#set par(leading: ...)` at the top of the body); without
-paragraph-spacing or `indent: true` a paragraph break adds Typst's own 0.55em. docs/recipes.md 1.9.
+paragraph-spacing or `indent: true` a paragraph break adds Typst's own 0.55em. A CSL bibliography's `entry-spacing`
+adds that many line pitches between entries, including fractions such as 2.5 and 0.5; zero adds no extra line.
+Without that attribute, paragraph spacing is kept. docs/recipes.md 1.9.
 
 ## Page breaks (v3.27.13, off unless asked since v3.27.15)
 

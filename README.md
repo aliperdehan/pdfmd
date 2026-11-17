@@ -3253,6 +3253,8 @@ alone is now ambiguous and stops the run.
 `linestretch:` and `fontsize:` give Typst the line spacing LaTeX has (since 3.33.73): lines `linestretch` x the LaTeX class's
 line distance apart (12, 13.6 and 14.5 pt at 10, 11 and 12 pt; 1.2 x any other size), in any font, so a page holds as many
 lines in both. Pandoc's own Typst template puts them closer (23.5 pt at `linestretch: 2`, 12 pt, where LaTeX has 28.9).
+A CSL bibliography's `entry-spacing` adds that many line pitches between entries, including 2.5 and 0.5; zero adds no
+extra line. Without the attribute, the entries keep the document's paragraph spacing.
 
 ### Your own defaults: the config file
 
