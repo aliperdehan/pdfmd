@@ -534,19 +534,34 @@ def title_filter_args(sources: Path | list[Path], metadata_files: list[Path], pa
             return " ".join(text(item) for item in value)
         return "" if value is None else str(value)
 
+    warning = []
+    # Only audited defaults: a project filter or kit may print its own title block.
+    own = any(word in ("--template", "--defaults", "-d", "--lua-filter", "--filter")
+              or word.startswith(("--template=", "--defaults=", "--lua-filter=", "--filter=", "-d", "-L", "-F"))
+              for word in pandoc_options or [])
+    if not own and not core.active_kits(files[0], metadata_files, None) and not core.is_assembled_document(files[0]):
+        if core.discovery_disabled(no_auto, "lua") or not core.find_lua_filters(files[0], metadata_files, no_auto):
+            try:
+                import pdfmd_lua
+            except ImportError:
+                core.pdfmd_lua_missing()
+                return []
+            checked = pdfmd_lua.path("title_note")
+            if checked is not None:
+                warning = ["--lua-filter", str(checked)]
     metadata = core.effective_metadata(files[0], metadata_files, [])
     if not any("\\" in text(metadata.get(key)) for key in ("title", "author")) and not core.mapped_author(metadata.get("author")):
-        return []
+        return warning
     try:
         import pdfmd_lua
     except ImportError:
         core.pdfmd_lua_missing()
-        return []
+        return warning
     shipped = pdfmd_lua.path("title_meta")
     if shipped is None:
-        return []
+        return warning
     in_place = core.author_names_in_place(files[0], metadata_files, metadata.get("author"), pandoc_options, no_auto)
-    return [*(["-M", "pdfmd-author-names=true"] if in_place else []), "--lua-filter", str(shipped)]
+    return warning + [*(["-M", "pdfmd-author-names=true"] if in_place else []), "--lua-filter", str(shipped)]
 
 
 def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path],

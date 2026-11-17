@@ -164,6 +164,12 @@ LaTeX prints captions with page numbers; add `toc: true` for reliable pdfLaTeX p
 Pandoc 3.13's Word writer inserts fields to update in Word; 3.1.3 inserts none. Neither tested Typst
 writer prints these lists. See docs/recipes.md 3.5 for a recipe and the writer limitations.
 
+## A byline without a title
+
+With Pandoc's default LaTeX, Typst and HTML templates, author/date are not printed without a title.
+pdfmd emits one NOTE: “author/date not printed: no title (add `title:`)”.
+Word, ODT and EPUB print them anyway. Custom templates, defaults files, kits and project filters are not diagnosed.
+
 ## Paragraph indent for a stretch of text (v3.30.0)
 
 a fenced div `::: {indent=false}` (also `indent=true`, `indent=2em`; `::: noindent`, `::: {.noindent}`, `.indent`;

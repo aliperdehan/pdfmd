@@ -53,7 +53,6 @@ wait for an answer before any code.
 - [ ] Install source: pdfmd records how it was installed; `pdfmd --upgrade`; `--version` says when a newer release exists [3dk]
 - [ ] Older audit leftovers, each to verify first: raw `<img>` in LaTeX builds, `\texttt` wrapping, unreachable remote SVG, a dialect-change warning, `--doctor` hint at `--deep` [Audit]
 - [ ] Typst: warn when a figure and its caption are taller than the text area (they run into the footer) [3fp]
-- [ ] A NOTE when, with no `title:`, the Typst template prints no author or date [3fp]
 
 ## Tables line, one feature line (3.31.0, full suite) [3dj]
 

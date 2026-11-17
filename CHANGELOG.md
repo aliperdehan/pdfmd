@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.317 — 2026-11-17
+
+Pre-edit state: commit `fa13b04`. Pandoc's default LaTeX, Typst and HTML title blocks silently omit the author and date when there is no title. A metadata filter now gives one NOTE naming the remedy, including command-line metadata and template variables; fragments, custom templates, defaults files, kits and project filters are excluded. Word, ODT and EPUB were checked and print the byline without a title. Regression: nine failing subcases before, passing with Pandoc 3.1.3 and 3.13 after; rendered Typst PDFs confirm the omission with both. The touched and required checks pass (148 tests, one skip). pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.316b — 2026-11-17
 
 Pre-edit state: commit `688aac6`. Verify lists of figures and tables through pdfmd with Pandoc 3.1.3 and 3.13, then add recipe 3.5 and remove the agreed TODO line. XeLaTeX and Tectonic print both caption entries in both lists; pdfLaTeX 3.13 needs the extra passes from toc=true (bare Pandoc reproduces the empty lists without it). Typst prints no lists; Word 3.13 inserts updateable fields and 3.1.3 inserts none. LuaLaTeX builds are blocked by the sandbox's TeX cache. The shared LaTeX template supports its list commands too. Documentation only: no pdfmd defect found, no version bump. Documentation consistency: ten tests pass; Word fields were inspected in document.xml, not updated in Word.

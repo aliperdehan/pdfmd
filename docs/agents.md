@@ -102,3 +102,5 @@ LibreOffice, Typst, resvg. Typst makes vector PDF for LaTeX or PNG for Word usin
 fallback. The first working converter wins. `pdfmd-options: {image-dpi: 192}`, `--image-dpi N` and `--setup` set
 raster SVG resolution (default 192; exported pages still default to 300). `--no-auto svg` and
 `--no-auto diagrams` disable the corresponding conversion.
+
+With the default LaTeX, Typst or HTML template, give a `title:` if `author:` or `date:` should print; pdfmd notes their omission without one. Word, ODT and EPUB print the byline without a title.
