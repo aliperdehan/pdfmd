@@ -587,7 +587,8 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     smiles_filter = pdfmd_lua.path("smiles")
     smiles = (smiles_filter is not None and not core.auto_disabled(no_auto, "smiles")
               and any(SMILES_BLOCK_RE.search(core.read_text_best_effort(file)) for file in files))
-    if table is None and not pdf_images and not diagrams and not smiles:
+    html_images = raw_filter is not None and any(re.search(r"<img\b", core.read_text_best_effort(file), re.I) for file in files)
+    if table is None and not html_images and not pdf_images and not diagrams and not smiles:
         return []
     folder = core.cache_root() / "raw"
     # Pandoc reads a string in a metadata file as Markdown, where a backslash escapes: a Windows path keeps forward slashes
@@ -633,7 +634,7 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         map_file.parent.mkdir(parents=True, exist_ok=True)
         map_file.write_text(json.dumps(config, ensure_ascii=False) + "\n", encoding="utf-8")
     args = ["--metadata-file", str(map_file)]
-    if table is not None:
+    if table is not None or html_images:
         args += ["--lua-filter", str(raw_filter)]
     if pdf_images:
         args += ["--lua-filter", str(pdf_filter)]

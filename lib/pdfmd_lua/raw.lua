@@ -442,13 +442,26 @@ function Meta(meta)
   return nil
 end
 
+local function warn_images(list, kind)
+  if family ~= "tex" and family ~= "typst" and family ~= "office" then return end
+  if included and included.html then return end
+  for _, item in ipairs(list) do
+    if item.t == kind and SYNTAX[item.format] == "html" and item.text:lower():match("<img[%s/>]") then
+      warn("dropped-img", "HTML <img> is dropped by this writer; use --raw or pdfmd-options: {raw: {" ..
+           family .. ": [html]}} to keep it")
+    end
+  end
+end
+
 local function Blocks(list)
+  warn_images(list, "RawBlock")
   if not included then return nil end
   local result = process(list, "RawBlock", convert_block)
   return result and pandoc.Blocks(result) or nil
 end
 
 local function Inlines(list)
+  warn_images(list, "RawInline")
   if not included then return nil end
   local result = process(list, "RawInline", convert_inline)
   return result and pandoc.Inlines(result) or nil

@@ -113,6 +113,23 @@ class Filter(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         return done.stdout
 
+    def test_dropped_html_images_warn_once_and_name_the_opt_in(self):
+        for target in ("latex", "typst", "docx"):
+            for src in ("local.png", "https://example.invalid/image.png"):
+                for width in ("", ' width="120"'):
+                    with self.subTest(target=target, src=src, width=width):
+                        text = f'<img src="{src}"{width}>\n\n<img src="{src}"{width}>\n'
+                        done = subprocess.run([PANDOC, "-f", "markdown", "-t", target,
+                                               "--lua-filter", str(RAW_LUA), "-o", str(self.folder / "out")],
+                                              input=text, capture_output=True, text=True)
+                        self.assertEqual(done.returncode, 0, done.stderr)
+                        self.assertEqual(done.stderr.count("WARN  raw:"), 1, done.stderr)
+                        self.assertIn("--raw", done.stderr)
+                        self.assertIn("raw:", done.stderr)
+        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "latex", "--lua-filter", str(RAW_LUA)],
+                              input='`<img src="example.png">`', capture_output=True, text=True)
+        self.assertNotIn("WARN  raw:", done.stderr)
+
     def test_html_is_read_into_the_targets_own_elements(self):
         for target, expect in (("latex", ("\\textbf{bold \\emph{md} inside}", "\\emph{italic}", "longtable", "\\\\")),
                                ("typst", ("#strong[bold #emph[md] inside]", "#table(")),

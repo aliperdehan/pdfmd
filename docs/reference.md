@@ -1647,3 +1647,7 @@ TEXINPUTS (for Tectonic, -Zsearch-path, v3.32.6), so nothing is installed into T
 fetches the kits of any repository (v3.32.7; nothing in it is run), `--kits` lists them. A kit may switch off pdfmd's own
 margin, font or table-width defaults with `no-auto:` (v3.32.8), and a kind of universal markup with `markup-off:`
 (v3.33.68). The README's Kits section is the full description.
+
+Raw HTML `<img src=... width=...>` stays opt-in for LaTeX, Typst and Word: these writers drop it by default,
+with one WARN per build. Use `--raw` or `pdfmd-options: {raw: {tex: [html], typst: [html], office: [html]}}`
+to carry it through Pandoc's HTML reader (local and remote sources, with or without width).

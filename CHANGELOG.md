@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.319 — 2026-11-17
+
+Pre-edit state: commit `fd8b747`. Raw HTML images vanished silently in LaTeX, Typst and Word unless raw passthrough was enabled. Run the raw filter for image-bearing sources and warn once on actual HTML image nodes when the target family does not enable HTML; the default is unchanged. Twelve local/remote, width/no-width and writer cases fail before and pass after; inline code examples do not warn. The raw module and required safety checks are recorded in the batch report. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.318 — 2026-11-17
 
 Pre-edit state: commit `68fd2e9`. Pandoc builds had no optional heap limit. `pdfmd-options.pandoc-memory` now accepts a positive whole size (512m, 2g; k/m/g units), defaults to off, and has a setup row and help topic. A shared invocation helper adds `+RTS -M<size> -RTS` to Pandoc builds, helper conversions and probes; each build scopes its resolved setting and restores its parent's. Invalid values stop clearly; heap overflow keeps Pandoc's error and names the setting. Regression tests fail before (two failures, two errors) and pass after, including an actual heap overflow. Verification and sandbox limits are recorded in the batch report. Startup stays at 182 modules; the helper loads lazily. pdfmd.py stays at 785 lines (version only).
