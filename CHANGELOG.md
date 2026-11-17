@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.33.331 — 2026-11-17
+
+Pre-edit state: commit `64aeeec`. pdfmd hands its Lua filters their folders and files (the picture cache, the SVG
+converter plan, the diagram runner and its Python, the SMILES folder, a LaTeX picture's preamble files) in a metadata
+file, and Pandoc reads a metadata file's strings as Markdown. A path with Markdown in it came back changed: a folder
+named `_ab_` lost its underscores, `x~y~z` became a subscript, and every build with a ```dot, ```d2 or ```mermaid block
+stopped with "Error running filter diagram.lua: string expected, got nil" (the plan file was not found); the other
+folders were silently replaced by ones that do not exist. A temporary folder's random name can be such a name: the
+branch CI's Pandoc 3.1.3 job failed test_diagrams this way on v3.33.324, and it reproduces with every Pandoc. The paths
+are now written as inline code (lib/pdfmd_filters `literal`, with a longer fence for a path that has backticks), which
+Pandoc reads literally and the filters' `pandoc.utils.stringify` returns unchanged; nothing changes in the filters.
+Tests: test_diagrams `test_a_cache_folder_named_like_markdown_still_works` (a cache under `_ab_/x~y~z`; failing before
+with that error, passing after with Pandoc 3.1.3 and 3.13) and `test_metadata_file_strings_come_back_exactly` (ten
+awkward names through Pandoc's own metadata reader); test_diagram_timeout reads the runner path through the fence.
+
 ## v3.33.330b — 2026-11-17
 
 Pre-edit state: commit `1468448`. tests/test_parallel_runner.py's two interrupt tests failed in a full-suite run on a

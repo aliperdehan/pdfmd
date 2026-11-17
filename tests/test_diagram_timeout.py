@@ -76,7 +76,8 @@ class Metadata(unittest.TestCase):
     def test_the_limit_and_the_runner_are_passed(self):
         config = self.map_for(self.DOCUMENT.replace("{value}", str(7)))
         self.assertEqual(config["pdfmd-diagram-timeout"], 7)
-        self.assertTrue(Path(config["pdfmd-diagram-runner"]).is_file())
+        # paths are inline code in the metadata file, so Pandoc keeps them as they are (v3.33.331)
+        self.assertTrue(Path(config["pdfmd-diagram-runner"].strip("`")).is_file())
         self.assertTrue(config["pdfmd-diagram-python"])
 
     def test_zero_turns_the_diagrams_off_and_a_negative_number_passes_no_limit(self):

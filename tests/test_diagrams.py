@@ -8,6 +8,7 @@ which format it asks for per output, the cache, the blocks left as code, the war
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import stat
 import subprocess
@@ -244,6 +245,34 @@ class Diagrams(unittest.TestCase):
         self.write("```dot\ndigraph { b -> c }\n```\n")
         self.run_pdfmd("doc.md", "-t", "html", "-o", "doc.html")
         self.assertEqual(self.ran(), ["dot -Tsvg", "dot -Tsvg"])
+
+    def test_a_cache_folder_named_like_markdown_still_works(self):
+        # pdfmd hands the filters their folders in a metadata file, which Pandoc reads as Markdown: a folder named `_ab_`
+        # (a temporary folder's random name can be one) lost its underscores and every diagram build failed (v3.33.331)
+        cache = self.directory / "_ab_" / "x~y~z" / "cache"
+        self.cache = cache
+        self.install(dot=GRAPHVIZ, **{"rsvg-convert": RSVG})
+        self.write("```dot\ndigraph { a -> b }\n```\n")
+        done = self.run_pdfmd("doc.md", "-t", "latex", "-o", "doc.tex")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual((self.directory / "doc.tex").read_text(encoding="utf-8").count(".pdf}"), 1)
+        self.assertTrue(list(cache.rglob("*.pdf")))
+
+    def test_metadata_file_strings_come_back_exactly(self):
+        sys.path.insert(0, str(ROOT))
+        import pdfmd  # noqa: F401  (puts lib/ on the path)
+        from pdfmd_filters import literal
+        names = ["_ab_", "x~y~z", "*star*", "a`b", "`edge`", "it's -- here...", "two  spaces", "[x](y)", "$x$", "C:/a_b_/c"]
+        metadata = self.directory / "meta.json"
+        metadata.write_text(json.dumps({f"k{index}": literal(name) for index, name in enumerate(names)}), encoding="utf-8")
+        done = subprocess.run([shutil.which("pandoc"), "-f", "markdown", "-t", "json", "--metadata-file", str(metadata)],
+                              input="", capture_output=True, text=True, encoding="utf-8", check=True)
+        meta = json.loads(done.stdout)["meta"]
+        for index, name in enumerate(names):
+            with self.subTest(name=name):
+                inlines = meta[f"k{index}"]["c"]
+                self.assertEqual([item["t"] for item in inlines], ["Code"])
+                self.assertEqual(inlines[0]["c"][1], name)
 
     def test_each_output_asks_for_its_own_format(self):
         self.install(dot=GRAPHVIZ, mmdc=MERMAID, d2=D2, **{"rsvg-convert": RSVG})

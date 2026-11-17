@@ -580,6 +580,16 @@ def title_filter_args(sources: Path | list[Path], metadata_files: list[Path], pa
     return warning + [*(["-M", "pdfmd-author-names=true"] if in_place else []), "--lua-filter", str(shipped)]
 
 
+def literal(text: str) -> str:
+    """A string for pdfmd's metadata file that Pandoc keeps exactly. Pandoc reads a metadata file's strings as Markdown, so a
+    folder named `_ab_` or `x~y~z` (a temporary folder's random name can be one) lost its underscores or tildes on the
+    way and the filters looked in a folder that does not exist (v3.33.331). An inline code span is read literally, and the
+    filters' `pandoc.utils.stringify` gives its text back unchanged."""
+    fence = "`" * (max((len(run) for run in re.findall(r"`+", text)), default=0) + 1)
+    pad = " " if text.startswith("`") or text.endswith("`") else ""
+    return f"{fence}{pad}{text}{pad}{fence}"
+
+
 def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metadata_files: list[Path],
                     flat_pictures: Path | None = None, preamble: list[Path] | None = None,
                     flat_text: bool = False) -> list[str]:
@@ -608,12 +618,12 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         return []
     folder = core.cache_root() / "raw"
     # Pandoc reads a string in a metadata file as Markdown, where a backslash escapes: a Windows path keeps forward slashes
-    config: dict = {"pdfmd-raw-cache": (folder / "pictures").as_posix()}
+    config: dict = {"pdfmd-raw-cache": literal((folder / "pictures").as_posix())}
     if flat_pictures is not None:       # flat Markdown: the pictures it needs sit beside the output, linked by a relative path
-        config = {"pdfmd-raw-cache": flat_pictures.as_posix(), "pdfmd-raw-rel": flat_pictures.name,
-                  "pdfmd-raw-work": (folder / "pictures").as_posix()}       # the SVGs go beside the output, the drawn PDFs stay in the cache
+        config = {"pdfmd-raw-cache": literal(flat_pictures.as_posix()), "pdfmd-raw-rel": literal(flat_pictures.name),
+                  "pdfmd-raw-work": literal((folder / "pictures").as_posix())}       # the SVGs go beside the output, the drawn PDFs stay in the cache
     if preamble:            # a LaTeX picture is drawn with the document's own preamble
-        config["pdfmd-raw-preamble"] = [Path(item).as_posix() for item in preamble]
+        config["pdfmd-raw-preamble"] = [literal(Path(item).as_posix()) for item in preamble]
     if table is not None:
         config["pdfmd-raw"] = table
     if diagrams:
@@ -627,7 +637,7 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
         if not plan_file.is_file():
             plan_file.parent.mkdir(parents=True, exist_ok=True)
             plan_file.write_text(payload, encoding="utf-8")
-        config["pdfmd-svg-plan"] = plan_file.as_posix()
+        config["pdfmd-svg-plan"] = literal(plan_file.as_posix())
         config["pdfmd-diagram-tools"] = [tool for tool in [*(item[0] for item in DIAGRAM_TOOLS), *pdfmd_images.available_converters(core.which, core.resolve_soffice)]
                                           if tool in pdfmd_images.CONVERTERS or core.which(tool)]
         seconds = diagram_timeout_for(files[0], metadata_files)
@@ -637,8 +647,8 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
             runner = Path(pdfmd_lua.FILTERS) / "limited_run.py"
             if sys.executable and runner.is_file():
                 config["pdfmd-diagram-timeout"] = seconds
-                config["pdfmd-diagram-python"] = Path(sys.executable).as_posix()
-                config["pdfmd-diagram-runner"] = runner.as_posix()
+                config["pdfmd-diagram-python"] = literal(Path(sys.executable).as_posix())
+                config["pdfmd-diagram-runner"] = literal(runner.as_posix())
             else:       # a copy of pdfmd without its runner, or a Python that cannot say where it is: the tools run as before
                 print("NOTE  diagram-timeout is not applied: pdfmd_lua/limited_run.py or the Python interpreter was not found",
                       file=sys.stderr)
@@ -719,8 +729,8 @@ def smiles_config(md_path: Path, metadata_files: list[Path]) -> dict:
     except pdfmd_smiles.SmilesError as error:
         raise SystemExit(f"{core.display_path(md_path)}: {error}")
     return {"pdfmd-smiles": {key: str(value) for key, value in settings.items()},
-            "pdfmd-smiles-python": Path(sys.executable).as_posix(),
-            "pdfmd-smiles-dir": Path(pdfmd_smiles.__file__).resolve().parent.as_posix()}
+            "pdfmd-smiles-python": literal(Path(sys.executable).as_posix()),
+            "pdfmd-smiles-dir": literal(Path(pdfmd_smiles.__file__).resolve().parent.as_posix())}
 
 
 # A fenced block written in a diagram language (pdfmd_lua/diagram.lua draws it): ```mermaid, ```{.d2 caption="..."}, ```dot
