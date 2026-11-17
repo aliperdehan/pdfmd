@@ -881,9 +881,11 @@ metadata.yaml's own relative `bibliography:`/`csl:` paths can live in that
 same `metadata/` folder and still resolve -- pdfmd adds `--resource-path`
 pointing back at the document's own directory in that case, so the
 document's own relative image paths keep resolving too.
-With `--no-citeproc`, native Typst bibliography and CSL names are resolved through that resource path and written
-literally. The PDF build's `--root=/` also reaches bibliography files from parent layers and cached copies holding
-clash winners. Citeproc and LaTeX's natbib/biblatex paths keep their existing behaviour. A standalone `--to typst`
+With `--no-citeproc`, native Typst omits the bibliography block and heading when there are no citations, unless
+`nocite` or `full-bibliography: true` explicitly requests uncited entries. Cited lists keep Typst's automatic title
+("Bibliography" in English); `reference-section-title` names the citeproc list. Bibliography and CSL names are resolved
+through that resource path and written literally. The PDF build's `--root=/` also reaches bibliography files from parent
+layers and cached copies holding clash winners. Citeproc and LaTeX's natbib/biblatex paths keep their existing behaviour. A standalone `--to typst`
 export keeps absolute resource names; compile it with `typst compile --root=/ file.typ file.pdf`. Direct `.typ` inputs
 keep Typst's own project root.
 

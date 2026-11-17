@@ -19,6 +19,27 @@ same commit as the change.
 
 ---
 
+## v3.33.302 — 2026-11-17
+
+Pre-edit state: commit `f0d1505`. Bibliography accumulation restores an inherited source even when an uncited document
+has `bibliography: null`; v3.33.296 makes that source readable by native Typst. Pandoc's template then emits a
+bibliography block, whose automatic title adds an empty "Bibliography" heading. Omit the native block when the final
+document has no citations, retaining explicit uncited-entry requests and raw Typst citations. Keep v3.33.296's literal
+paths, CSL option and root handling. A cited native list keeps v3.33.191's automatic title ("Bibliography" in English),
+not citeproc's `reference-section-title`. Update README, reference, help and the agent guide. No settings or TODO changes;
+pdfmd.py stays at 784 lines (version only).
+
+Regression proof: three pre-fix failures cover plain/null metadata and a document filter removing citations. Coverage
+also includes code/e-mail lookalikes, footnote citations introduced by a filter, raw native citations, explicit `nocite`
+and full lists, the released native title and citeproc's title. Both Pandocs (3.13 and 3.1.3) reproduce the three failures
+before the fix; bibliography layers/indent/native markup and the five required safety modules pass afterwards: 169 tests
+per Pandoc, zero failures/errors, one expected setup skip. The copied real document has no heading with either Pandoc;
+the cited copy keeps v3.33.191's title. Parts builds with cited and uncited lists also pass with both Pandocs.
+Citeproc's standalone Typst is byte-identical before/after with both Pandocs,
+and its 3.13 PDF text is identical. The cited real document's 3.1.3 citeproc PDF fails identically before/after with
+"expected function, found content" at `#emph[378](6552)`; the simple cited regression PDF passes. Ruff F and whitespace
+checks pass; start-up imports stay at 182.
+
 ## v3.33.301e — 2026-11-17
 
 Pre-edit state: commit `ab635c1`. split_check still compared the doctor's rounded scratch cache size, so two otherwise identical runs could differ at 0.0 versus 0.1 MB. Mask only that size (including empty), keeping the cache path, other sizes and the command hints significant. Eight focused regressions verify the existing shared hash paths, API times, duplicate-name refusal, preserved file ages, home-path spellings, backup/build-record stamps and scratch data environment as well as this fix. Only the two cache-size subcases fail before; all pass after. Two real doctor runs reproduce the rounding difference and now compare equally. Scripts/tests only: PDFMD_VERSION stays 3.33.301; pdfmd.py stays at 784 lines; no TODO changes. Split-tools and the five required safety modules: 151 tests, zero failures/errors, one skip; the final 35-test split-tools rerun, Ruff F and whitespace checks pass. No full two-tree build comparison was run; these are harness checks, with no shipped-code move to prove.

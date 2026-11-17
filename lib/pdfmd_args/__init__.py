@@ -917,7 +917,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-citeproc", action="store_true",
                         help="don't add --citeproc automatically when the document uses @citation "
                              "syntax (by default pdfmd adds it, so citations and the bibliography "
-                             "render without any flag)")
+                             "render without any flag); native Typst omits an uncited bibliography unless "
+                             "nocite or full-bibliography requests uncited entries")
     parser.add_argument("--full-paths", action="store_true",
                         help="print full/absolute paths in AUTO YAML/TEX/MD lines and (with -v) the "
                              "CMD line, instead of the default -- relative to the current directory, "

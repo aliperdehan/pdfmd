@@ -3437,9 +3437,11 @@ Each clashing key produces one warning naming the winning source and every losin
 unique entries. Citeproc, `--biblatex` and `--natbib` use the same winners; inline references become a bibliography resource
 for BibTeX/Biber. The built-in renderer still leaves citations as written and reports that citation processing needs Pandoc.
 
-With `--no-citeproc`, Typst reads bibliography and CSL files itself. pdfmd resolves their names through the resource
-path and gives Pandoc's Typst PDF builds `--root=/`, so metadata, parent-layer and cached bibliography files remain
-reachable. An explicit root in `--pdf-engine-opt` is kept. A standalone `--to typst` export keeps absolute resource
+With `--no-citeproc`, Typst reads bibliography and CSL files itself. An uncited document has no bibliography block or
+heading, unless `nocite` or `full-bibliography: true` explicitly requests uncited entries. Cited lists keep Typst's
+automatic title ("Bibliography" in English); `reference-section-title` names the citeproc list. pdfmd resolves resource
+names through the resource path and gives Pandoc's Typst PDF builds `--root=/`, so metadata, parent-layer and cached
+bibliography files remain reachable. An explicit root in `--pdf-engine-opt` is kept. A standalone `--to typst` export keeps absolute resource
 names: compile it with `typst compile --root=/ file.typ file.pdf`. A direct `.typ` input keeps Typst's own project root.
 
 **Finding missing bibliography entries.** The `bib` auto kind is on by default. If cited keys are absent from all the

@@ -34,6 +34,10 @@ With two paths, a skipped PDF beside a selected input adds `to name the output, 
 Typst uses LaTeX’s line pitch by default. `pdfmd-options: {typst-line-spacing: pandoc}` (also `--setup`) keeps
 Pandoc’s own Typst spacing without pdfmd’s line rules.
 
+With `--no-citeproc`, native Typst omits an uncited bibliography and its heading unless `nocite` or
+`full-bibliography: true` requests uncited entries. Cited lists keep Typst's automatic title; `reference-section-title`
+names the citeproc list.
+
 ## Reading what pdfmd says
 
 - Every line begins with a word: `OK`, `FAIL`, `WARN`, `NOTE`, `NATIVE`, `FOUND`, `DEFAULTS`, `AUTO`. A document built is

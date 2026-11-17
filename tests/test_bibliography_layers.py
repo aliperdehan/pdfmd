@@ -309,6 +309,66 @@ class NativePaths(Tree):
         import pypdf
         return "\n".join(page.extract_text() for page in pypdf.PdfReader(self.doc / output).pages)
 
+    def test_typst_uncited_native_bibliography_has_no_heading_or_block(self):
+        self.prepare(parent=True)
+        metadata = self.doc / "metadata/metadata.yaml"
+        metadata.write_text(metadata.read_text() + "reference-section-title: References\n")
+        for front in ("", "bibliography: null\n"):
+            with self.subTest(front=front):
+                self.write("SR/x.md", "---\ntitle: T\n" + front + "---\n\n"
+                           "Uncited prose, `[@local]`, <reader@example.org>.\n\n```text\n[@parent]\n```\n")
+                self.build("--no-citeproc")
+                text = self.pdf_text()
+                for absent in ("Bibliography", "References", "Local Book", "Parent Book"):
+                    self.assertNotIn(absent, text)
+                self.build("--no-citeproc", "--to", "typst", "--standalone", output="out.typ")
+                self.assertNotIn("#bibliography(", (self.doc / "out.typ").read_text())
+
+    def test_typst_cited_native_bibliography_keeps_the_released_title(self):
+        self.prepare()
+        metadata = self.doc / "metadata/metadata.yaml"
+        metadata.write_text(metadata.read_text() + "reference-section-title: References\n")
+        self.build("--no-citeproc")
+        text = self.pdf_text()
+        self.assertIn("Bibliography", text)  # v3.33.191: Typst's automatic title, not citeproc's title metadata.
+        self.assertNotIn("References", text)
+        self.assertIn("Local Book", text)
+        self.build()  # Citeproc still owns its list and honours reference-section-title.
+        text = self.pdf_text()
+        self.assertIn("References", text)
+        self.assertNotIn("Bibliography", text)
+        self.assertIn("Local Book", text)
+
+    def test_typst_native_bibliography_uses_citations_after_document_filters(self):
+        self.prepare()
+        filter_path = self.write("citations.lua", "")
+        for body, cited in (("Plain prose.", False), ("A footnote.[^1]\n\n[^1]: [@local]", True)):
+            with self.subTest(cited=cited):
+                filter_path.write_text("function Pandoc(doc) doc.blocks = pandoc.read("
+                                       + json.dumps(body) + ', "markdown").blocks; return doc end\n')
+                self.build("--no-citeproc", "--lua-filter", str(filter_path))
+                text = self.pdf_text()
+                self.assertEqual("Bibliography" in text, cited)
+                self.assertEqual("Local Book" in text, cited)
+
+    def test_typst_native_raw_citations_keep_the_bibliography(self):
+        self.prepare()
+        for body in ('`@local`{=typst}', '```{=typst}\n#cite(label("local"))\n```'):
+            with self.subTest(body=body):
+                self.write("SR/x.md", "---\ntitle: T\n---\n\n" + body + "\n")
+                self.build("--no-citeproc")
+                text = self.pdf_text()
+                self.assertIn("Bibliography", text)
+                self.assertIn("Local Book", text)
+
+    def test_typst_native_bibliography_keeps_explicit_uncited_requests(self):
+        self.prepare()
+        for extra in ("nocite: '@local'", "nocite: '@*'", "full-bibliography: true"):
+            with self.subTest(extra=extra):
+                self.write("SR/x.md", "---\ntitle: T\n" + extra + "\n---\n\nPlain prose.\n")
+                self.build("--no-citeproc", "--to", "typst", "--standalone", output="out.typ")
+                self.assertIn("#bibliography(", (self.doc / "out.typ").read_text())
+
     def test_typst_without_citeproc_resolves_metadata_and_parent_bibliographies(self):
         for parent in (False, True):
             with self.subTest(parent=parent):

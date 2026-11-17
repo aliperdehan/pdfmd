@@ -43,8 +43,10 @@ end
 -- Pandoc 3.1.3 writes cite("a", "b") and ignores modes/supplements. Keep that key-only rendering,
 -- adapting strings and multi-key calls to current Typst's label API. Probe the writer rather than guessing a version.
 local string_citations
+local has_citations = false
 function Cite(element)
   if not FORMAT:match("^typst") then return nil end
+  has_citations = true
   if string_citations == nil then
     local fragment = pandoc.write(pandoc.Pandoc({pandoc.Plain({element})}), "typst")
     string_citations = fragment:match('^#cite%("') ~= nil
@@ -55,4 +57,25 @@ function Cite(element)
     calls[#calls + 1] = "#cite(label(" .. pandoc.json.encode(citation.id) .. "))"
   end
   return pandoc.RawInline("typst", table.concat(calls))
+end
+
+-- Keep raw native citations too: these bypass Pandoc's Cite nodes.
+local function raw_citations(element)
+  if element.format == "typst" and (element.text:find("@", 1, true) or element.text:match("%f[%a]cite%s*%(")) then
+    has_citations = true
+  end
+end
+RawInline = raw_citations
+RawBlock = raw_citations
+
+function Pandoc(doc)
+  if not FORMAT:match("^typst") or has_citations then return nil end
+  -- Source accumulation can supply a bibliography to an uncited document (even with bibliography: null).
+  -- Pandoc's template emits #bibliography whenever that field exists; Typst's title: auto adds an empty heading.
+  -- Keep explicit requests for uncited entries, but otherwise omit the native block altogether.
+  if (doc.meta.nocite and pandoc.utils.stringify(doc.meta.nocite):match("%S")) or doc.meta["full-bibliography"] == true then
+    return nil
+  end
+  doc.meta.bibliography = nil
+  return doc
 end
