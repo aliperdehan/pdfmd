@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.310 — 2026-11-17
+
+Pre-edit state: commit `ba83f88`. The real install check, with Typst absent and LibreOffice turned off (`soffice-timeout: 0`), found resvg failing every conversion with "Error: failed to open the provided file.": 3.33.307 passed `--font-dirs`, which resvg does not have, and resvg reads an unknown option as the input file. resvg's option is `--use-fonts-dir`; the same SVG converts with it (checked with resvg 0.50.0). A test pins the resvg command line (zoom from the resolution, the font folder only when there is one). pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.309 — 2026-11-17
 
 Pre-edit state: commit `076f657`. A real install check (a fresh venv, no Homebrew on PATH, network on) found `pdfmd --install diagram` failing with "No resvg release with a SHA-256 is listed for this OS/architecture": 3.33.306 looked for Rust target names (`resvg-aarch64-apple-darwin.tar.gz`), but resvg publishes `resvg-macos-aarch64.zip`, `resvg-macos-x86_64.zip`, `resvg-linux-aarch64.tar.gz`, `resvg-linux-x86_64.tar.gz`, `resvg-win-x86_64.zip` and `resvg-win-aarch64.zip` (v0.50.0). The pattern now names those, Windows on ARM included; the source archive and usvg's archives never match. The asset test lists the real release's file names and checks each machine picks exactly its own. pdfmd.py stays at 785 lines (version only).

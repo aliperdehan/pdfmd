@@ -153,9 +153,10 @@ def converter_command(name, svg, out, folder, format, dpi, fonts, which, root):
         return [which(name), "compile", "--root", root, *(["--font-path", str(fonts)] if fonts else []),
                 *(["--format", "png", "--ppi", f"{dpi:g}"] if format == "png" else []), folder + "/out.typ", out]
     if name == "resvg":
-        # --zoom scales pixel dimensions too; SVG's reference pixel is 1/96 inch.
+        # --zoom scales pixel dimensions too; SVG's reference pixel is 1/96 inch. resvg's font folder option is
+        # --use-fonts-dir (an unknown option is taken for the input file: "failed to open the provided file").
         return [which(name), "--zoom", f"{dpi / 96:g}",
-                *(["--font-dirs", str(fonts)] if fonts else []), svg, out]
+                *(["--use-fonts-dir", str(fonts)] if fonts else []), svg, out]
     return None
 
 

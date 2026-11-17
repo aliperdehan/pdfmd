@@ -173,6 +173,16 @@ class Converting(unittest.TestCase):
                 self.assertEqual(result.suffix, "." + format)
         self.assertIn("144", seen[-1])
 
+    def test_the_resvg_command_uses_options_resvg_has(self):
+        # resvg 0.50's own options: -z/--zoom and --use-fonts-dir; an unknown one is read as the input file.
+        from pdfmd_images import svg
+        command = svg.converter_command("resvg", "in.svg", "out.png", "dir", "png", 192, "/fonts",
+                                        lambda name: "/tools/" + name, "dir")
+        self.assertEqual(command, ["/tools/resvg", "--zoom", "2", "--use-fonts-dir", "/fonts", "in.svg", "out.png"])
+        self.assertEqual(svg.converter_command("resvg", "in.svg", "out.png", "dir", "png", 96, None,
+                                               lambda name: "/tools/" + name, "dir"),
+                         ["/tools/resvg", "--zoom", "1", "in.svg", "out.png"])
+
     def test_failed_typst_falls_through_to_resvg_and_keeps_the_png_suffix(self):
         from pdfmd_images import svg
         seen = []
