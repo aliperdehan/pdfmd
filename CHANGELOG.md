@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.288a — 2026-11-17
+
+Pre-edit state: commit `cdd553b`. Review of the readiness-test change found a second race: seeking on the open log also moves the inherited child output offset, so a child write between seek and read can overwrite the WATCH signal. Open the output for writing only and poll through separate read handles. A separate open file description cannot move the child's output position, so the signal remains available regardless of scheduling. No timeout or assertion changes. This small corrective commit follows the six closing fixes because the brief forbids amending the earlier watcher commit. Proof: a controlled interleaving reproduces signal loss with the shared offset and preserves it with the separate reader. The full watcher module and five safety modules pass with both Pandoc 3.13 and 3.1.3 (117 cases each, one existing prompt_toolkit-installed skip). Ruff F passes. pdfmd.py stays at 783 lines.
+
 ## v3.33.288 — 2026-11-17
 
 Pre-edit state: commit `5f87ca3`. The editor accepted Ctrl-B into a daemon worker, then returned directly from app.run when Ctrl-X left. A worker that had not received CPU could therefore lose the requested build when the CLI exited: this was an editor lifetime bug, not merely an early test assertion. Retain the latest build worker and join it in finally after the UI exits, including abnormal exits. Display and prompts are unchanged. Keep test_build_saves_first; add a deferred-worker regression modelling an accepted but unscheduled build, with no timed sleeps. The regression deterministically fails on eea2b90 with Pandoc 3.1.3 (no build), then passes after. Proof: the full editor module and five safety modules pass with both Pandoc 3.13 and 3.1.3 (127 cases each; two existing prompt_toolkit-installed skips). Ruff F passes; startup module lists are unchanged and scripts/pdfmd --version takes 0.32 s in the scratch environment. pdfmd.py stays at 783 lines (version only).

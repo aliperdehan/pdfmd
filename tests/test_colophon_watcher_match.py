@@ -46,7 +46,8 @@ exit(PdfmdBuild.watcher(for: file, listing: other) == nil ? 0 : 1)
             (project_b / "report.md").write_text("B")
             # Wait for the real watcher, not a sleeping stand-in: process discovery
             # can run before Python has even received its --watch arguments under load.
-            with (root / 'watch.log').open('w+') as log:
+            log_path = root / 'watch.log'
+            with log_path.open('w') as log:
                 watcher = subprocess.Popen([sys.executable, '-u', str(ROOT / 'scripts/pdfmd'), '--watch', 'report.md',
                                             '--to', 'html', '--no-auto', 'font', '--no-backup'],
                                            cwd=project_a, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
@@ -54,8 +55,8 @@ exit(PdfmdBuild.watcher(for: file, listing: other) == nil ? 0 : 1)
                 try:
                     deadline = time.monotonic() + 120
                     while True:
-                        log.seek(0)
-                        text = log.read()
+                        # A separate reader cannot move the child's write offset.
+                        text = log_path.read_text()
                         if any(line.startswith('WATCH  ') and ': watching ' in line for line in text.splitlines()):
                             break
                         self.assertIsNone(watcher.poll(), text)
