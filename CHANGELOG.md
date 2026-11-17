@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.301d — 2026-11-17
+
+Pre-edit state: commit `16e450a`. The README's keep-source section described pictures through the PDF comparison but omitted the YAML bundle values. State directly that pictures are excluded by default and give the true/all spellings beside their CLI forms. Name the one added state line, SHOW_HIDDEN_CLI, and its worker-transfer requirement in the v3.33.290 entry. Two focused documentation checks fail before and pass after; the five required safety modules pass: 116 tests, zero failures/errors, one skip. Whitespace checks pass. Docs only: PDFMD_VERSION stays 3.33.301; pdfmd.py stays at 784 lines; no TODO changes.
+
 ## v3.33.301c — 2026-11-17
 
 Pre-edit state: commit `8bd4e98`. The LibreOffice profile test's docstring used a Windows backslash in a normal string, producing an invalid-escape SyntaxWarning. Make the docstring raw. Before the edit, compiling tests/*.py with SyntaxWarnings treated as errors fails at test_svg_profile.py; afterwards every test file compiles. The profile, doctor and build-time modules plus the five required safety modules pass: 148 tests, zero failures/errors, one skip. Ruff F and whitespace checks pass. Tests only: PDFMD_VERSION stays 3.33.301; pdfmd.py stays at 784 lines; no TODO changes.
@@ -142,7 +146,7 @@ Typst keeps the link text so the dangling link cannot abort its PDF. `show-hidde
 and a setup row reveal ordinary content; calc-hide statements remain silent. The native and terminal fallbacks strip
 source ranges without Pandoc; calculations still require Pandoc. Quarto receives the same passes around calc after its
 own execution filters. The attached source stays literal. No other default changes. pdfmd.py grows by one state line,
-transferred to batch workers with the existing CLI state.
+transferred to batch workers with the existing CLI state. The added line is `SHOW_HIDDEN_CLI`, the command-line override beside `SHOW_COMMENTS_CLI` that must stay a module global because `worker_state()` copies every `*_CLI` global to `-b -j` batch workers.
 
 The writer/native/show-hidden regressions failed before (13 failures). HTML, LaTeX, Typst, Word, ODT, EPUB, GFM, text
 and ANSI now drop the content while retaining calculator names, with Pandoc 3.1.3 and 3.13; a Typst PDF compiles.

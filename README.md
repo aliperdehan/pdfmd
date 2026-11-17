@@ -1025,9 +1025,9 @@ Flattening cannot be undone (ids, cross-reference numbers, citations and scripts
 can end with its whole source in one HTML comment (the assembled Markdown, a manifest of the layout, the `.csv` data), and
 `--restore` writes them back. It carries what `--attach-source` puts into a PDF for the same bundle setting: the
 `preamble.tex` (found as a PDF build finds it, though the Markdown build itself does not read it) and, by default (`sources`),
-the `.tex` files the text and the preamble `\input`. The pictures are the difference: a PDF holds them, a Markdown file
-does not, so they come with `--bundle` (or `--bundle all`); without, the restored folder needs them put back. `--no-bundle`
-keeps the source and the preamble alone:
+the `.tex` files the text and the preamble `\input`. Pictures stay out of the kept source by default; add them with
+`--bundle` / `pdfmd-options: {bundle: true}` (or `--bundle all` / `pdfmd-options: {bundle: all}` for the whole folder).
+`--no-bundle` keeps the source and the preamble alone:
 
 ```sh
 pdfmd report --to gfm --keep-source            # report.gfm.md ends with the source, compressed (packed)
