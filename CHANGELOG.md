@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.309 — 2026-11-17
+
+Pre-edit state: commit `076f657`. A real install check (a fresh venv, no Homebrew on PATH, network on) found `pdfmd --install diagram` failing with "No resvg release with a SHA-256 is listed for this OS/architecture": 3.33.306 looked for Rust target names (`resvg-aarch64-apple-darwin.tar.gz`), but resvg publishes `resvg-macos-aarch64.zip`, `resvg-macos-x86_64.zip`, `resvg-linux-aarch64.tar.gz`, `resvg-linux-x86_64.tar.gz`, `resvg-win-x86_64.zip` and `resvg-win-aarch64.zip` (v0.50.0). The pattern now names those, Windows on ARM included; the source archive and usvg's archives never match. The asset test lists the real release's file names and checks each machine picks exactly its own. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.308a — 2026-11-17
 
 Pre-edit state: commit `5a24443`. The review outside the sandbox found tests/test_diagram_timeout.py `test_the_filter_is_told_which_svg_converters_are_installed` failing on a machine with LibreOffice: since 3.33.307 the filter's tool list comes from the shared SVG chain, which also finds `soffice` outside PATH and the Python converters cairosvg and svglib, and the test pinned only `which`. It now pins the LibreOffice lookup and the Python modules too, so the answer does not depend on what the machine has. Test only.

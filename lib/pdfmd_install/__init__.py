@@ -676,13 +676,12 @@ def resvg_asset_pattern(system: str | None = None, machine: str | None = None) -
     system = (system or platform.system()).lower()
     machine = (machine or platform.machine()).lower()
     machine = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
-    targets = {("darwin", "aarch64"): "aarch64-apple-darwin", ("darwin", "x86_64"): "x86_64-apple-darwin",
-               ("linux", "aarch64"): "aarch64-unknown-linux-musl", ("linux", "x86_64"): "x86_64-unknown-linux-musl",
-               ("windows", "x86_64"): "x86_64-pc-windows-msvc"}
-    target = targets.get((system, machine))
-    if target is None:
+    # resvg's own release names (v0.50.0, 2026-11): resvg-macos-aarch64.zip, resvg-linux-x86_64.tar.gz,
+    # resvg-win-x86_64.zip; the source archive (resvg-0.50.0.tar.xz) and usvg's archives never match.
+    names = {"darwin": "macos", "linux": "linux", "windows": "win"}
+    if system not in names or machine not in ("aarch64", "x86_64"):
         return None
-    return r"resvg-(?:v?[0-9.]+-)?" + target + (r"\.zip" if system == "windows" else r"\.tar\.gz")
+    return "resvg-" + names[system] + "-" + machine + (r"\.tar\.gz" if system == "linux" else r"\.zip")
 
 
 def install_resvg() -> bool:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import hashlib
+import re
 import os
 import shutil
 import subprocess
@@ -164,13 +165,17 @@ class Resvg(unittest.TestCase):
     setUp = Installs.setUp
     def test_resvg_assets_cover_supported_machines(self):
         installer = pdfmd.pdfmd_install
-        cases = [("Darwin", "arm64", "aarch64-apple-darwin"), ("Darwin", "x86_64", "x86_64-apple-darwin"),
-                 ("Linux", "aarch64", "aarch64-unknown-linux-musl"), ("Linux", "AMD64", "x86_64-unknown-linux-musl"),
-                 ("Windows", "AMD64", "x86_64-pc-windows-msvc")]
-        for system, machine, target in cases:
+        # The asset names of resvg's v0.50.0 release, as GitHub lists them (checked 2026-11-17).
+        assets = ["resvg-0.50.0.tar.xz", "resvg-explorer-extension.exe", "resvg-linux-aarch64.tar.gz",
+                  "resvg-linux-x86_64.tar.gz", "resvg-macos-aarch64.zip", "resvg-macos-x86_64.zip",
+                  "resvg-win-aarch64.zip", "resvg-win-x86_64.zip", "usvg-linux-x86_64.tar.gz", "usvg-macos-aarch64.zip"]
+        cases = [("Darwin", "arm64", "resvg-macos-aarch64.zip"), ("Darwin", "x86_64", "resvg-macos-x86_64.zip"),
+                 ("Linux", "aarch64", "resvg-linux-aarch64.tar.gz"), ("Linux", "AMD64", "resvg-linux-x86_64.tar.gz"),
+                 ("Windows", "AMD64", "resvg-win-x86_64.zip"), ("Windows", "ARM64", "resvg-win-aarch64.zip")]
+        for system, machine, expected in cases:
             with self.subTest(system=system, machine=machine):
-                suffix = ".zip" if system == "Windows" else ".tar.gz"
-                self.assertRegex("resvg-" + target + suffix, installer.resvg_asset_pattern(system, machine))
+                pattern = installer.resvg_asset_pattern(system, machine)
+                self.assertEqual([name for name in assets if re.fullmatch(pattern, name)], [expected])
         self.assertIsNone(installer.resvg_asset_pattern("Linux", "riscv64"))
 
     def test_resvg_download_checks_the_actual_digest_before_installing(self):
