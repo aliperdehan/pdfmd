@@ -752,7 +752,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "| false}` (fast: object streams only), or --setup, sets it for a document or every document")
     parser.add_argument("--doctor", action="store_true",
                         help="one report on everything pdfmd uses (Pandoc and engines, fonts, emoji, PDF "
-                             "reading, OCR, config, cache) and the command that fixes each missing piece")
+                             "reading, OCR, diagram SVG converters, config, cache) and the command that fixes each missing piece")
     parser.add_argument("--deep", action="store_true",
                         help="with --doctor: also build a small page with each installed engine (a few seconds "
                              "each), to find one that is installed but cannot make a PDF")

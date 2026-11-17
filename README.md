@@ -2625,7 +2625,9 @@ puts D2's release binary (17 MB, checked against the SHA-256 GitHub lists) in pd
 diagram:dot` Graphviz built to WebAssembly (2 MB, run by node, which pdfmd fetches when there is none): it writes only SVG,
 which pdfmd converts for a PDF or Word picture with `rsvg-convert` or `inkscape` (D2 needs the same), and it sizes labels
 by Graphviz's own estimate of the font, a couple of percent off the real tool's. A tool of your own on PATH is always the one
-that runs. `pdfmd --doctor` shows which tools are there, and
+that runs. Without either SVG converter, a PDF/Word diagram stays as code and its warning names the missing
+conversion and `rsvg-convert`/`inkscape`; an installed converter that fails is reported separately.
+`pdfmd --doctor` shows the diagram tools and these two SVG converters, and
 `--no-auto diagrams` turns the whole thing off. The attributes need Pandoc's Markdown (a file with front matter); a file
 read as gfm takes the plain ```` ```dot ```` form. Mermaid needs Chrome (mermaid-cli downloads one); in a sandbox
 `PDFMD_MMDC_CONFIG=puppeteer.json` is handed to `mmdc -p`.

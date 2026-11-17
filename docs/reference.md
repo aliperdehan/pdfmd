@@ -1195,7 +1195,11 @@ error (a warning too with `--strict`); `--check-ignore`, `pdfmd-options.check-ig
 `<!-- pdfmd-check: ignore CODE -->` turn checks off.
 
 A fenced ```mermaid, ```d2 or ```dot block (v3.26.16) is drawn by mmdc, d2 or dot when installed and replaced by the
-picture in the format the output takes (pdfmd_lua/diagram.lua); `--no-auto diagrams` leaves the code. A tool run may take
+picture in the format the output takes (pdfmd_lua/diagram.lua); `--no-auto diagrams` leaves the code.
+D2 and SVG-only Graphviz need rsvg-convert or inkscape for PDF/PNG (LaTeX/Word/OpenDocument).
+A missing converter leaves the diagram as code with a warning naming the conversion and these tools;
+an installed converter's failure is reported separately. `--doctor` lists the diagram SVG converters.
+Each warning uses that diagram's own error, never another tool's success message. A tool run may take
 `diagram-timeout` seconds (v3.32.1; default 120, 0 = draw nothing, negative = no limit): pdfmd_lua/limited_run.py stops a
 run that takes longer with the processes it started, and the diagram stays as code with a warning.
 

@@ -33,6 +33,7 @@ class DoctorTests(unittest.TestCase):
             empty.mkdir()
             result = doctor(str(empty), directory)
             text = result.stdout
+            self.assertIn("diagram SVG to PDF/PNG: nothing installed (rsvg-convert or inkscape)", text)
             self.assertIn("MISS  pandoc", text)
             self.assertIn("pdfmd --install pandoc", text)
             self.assertIn("MISS  tesseract", text)

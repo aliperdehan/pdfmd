@@ -562,7 +562,8 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     if table is not None:
         config["pdfmd-raw"] = table
     if diagrams:
-        config["pdfmd-diagram-tools"] = [tool for tool, _, _ in DIAGRAM_TOOLS if core.which(tool)]
+        config["pdfmd-diagram-tools"] = [tool for tool in [*(item[0] for item in DIAGRAM_TOOLS), "rsvg-convert", "inkscape"]
+                                          if core.which(tool)]
         seconds = diagram_timeout_for(files[0], metadata_files)
         if seconds == 0:
             config["pdfmd-diagram-off"] = True

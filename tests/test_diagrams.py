@@ -330,6 +330,77 @@ class Diagrams(unittest.TestCase):
         self.assertIn("a d2 diagram could not be drawn (err: failed to compile in.d2: in.d2:1:3: unexpected token)",
                       done.stdout + done.stderr)
 
+    def test_graphviz_keeps_the_document_working_directory(self):
+        script = GRAPHVIZ.replace('echo "$0 $*" >> "$STUB_LOG"',
+                                 '[ -f diagram-local-marker ] || { echo "wrong diagram working directory" >&2; exit 1; }\n'
+                                 'echo "$0 $*" >> "$STUB_LOG"')
+        self.install(dot=script)
+        (self.directory / "diagram-local-marker").write_text("local image stand-in")
+        self.write("```dot\ndigraph { a -> b }\n```\n")
+        done = self.run_pdfmd("doc.md", "--to", "html", "-o", "doc.html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("could not be drawn", done.stdout + done.stderr)
+        self.assertIn("data:image/svg+xml;base64,", (self.directory / "doc.html").read_text())
+
+    def test_missing_svg_converters_name_the_reason_for_each_diagram(self):
+        noisy = D2 + 'echo "success: successfully compiled in.d2 to out.svg in 4ms" >&2\n'
+        svg_only = GRAPHVIZ.replace("-Tpdf) printf", "-Tpdf) exit 1 ;;\n  -Tnever) printf").replace(
+            "-Tpng) printf", "-Tpng) exit 1 ;;\n  -Tnever2) printf")
+        self.install(d2=noisy, dot=svg_only)
+        self.write("```d2\nx -> y\n```\n\n```dot\ndigraph { a -> b }\n```\n")
+        for target, extension, picture in (("latex", "tex", "PDF"), ("docx", "docx", "PNG")):
+            with self.subTest(target=target):
+                done = self.run_pdfmd("doc.md", "--to", target, "-o", "doc." + extension)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                warnings = [line for line in (done.stdout + done.stderr).splitlines() if line.startswith("WARN  diagram:")]
+                self.assertEqual(len(warnings), 2, done.stderr)
+                for tool, line in zip(("d2", "dot"), warnings):
+                    self.assertIn("a " + tool + " diagram", line)
+                    self.assertIn("no SVG-to-" + picture + " converter found", line)
+                    self.assertIn("rsvg-convert", line)
+                    self.assertIn("inkscape", line)
+                    self.assertIn("--doctor", line)
+                    self.assertNotIn("successfully compiled", line)
+                if target == "latex":
+                    self.assertIn("digraph", (self.directory / "doc.tex").read_text())
+                else:
+                    with zipfile.ZipFile(self.directory / "doc.docx") as archive:
+                        self.assertIn("digraph", archive.read("word/document.xml").decode())
+
+    def test_inkscape_fallback_still_draws_after_a_converter_failure(self):
+        inkscape = RSVG.replace('if [ "$1" = "-o" ]; then out="$2"; fi',
+                                'case "$1" in --export-filename=*) out="${1#*=}" ;; esac').replace(
+                                    "rsvg-convert $*", "inkscape $*")
+        self.install(d2=D2, inkscape=inkscape, **{"rsvg-convert": FAILING})
+        self.write("```d2\nx -> y\n```\n")
+        done = self.run_pdfmd("doc.md", "--to", "docx", "-o", "doc.docx")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("could not be drawn", done.stdout + done.stderr)
+        self.assertTrue(any(call.startswith("inkscape ") for call in self.ran()), self.ran())
+        with zipfile.ZipFile(self.directory / "doc.docx") as archive:
+            self.assertTrue(any(name.startswith("word/media/") for name in archive.namelist()))
+
+    def test_a_dot_error_does_not_repeat_a_previous_d2_success(self):
+        noisy = D2 + 'echo "success: successfully compiled in.d2 to out.svg in 4ms" >&2\n'
+        self.install(d2=noisy, dot=FAILING)
+        self.write("```d2\nx -> y\n```\n\n```dot\ninvalid\n```\n")
+        done = self.run_pdfmd("doc.md", "--to", "html", "-o", "doc.html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        warnings = [line for line in (done.stdout + done.stderr).splitlines() if line.startswith("WARN  diagram:")]
+        self.assertEqual(len(warnings), 1, done.stderr)
+        self.assertIn("a dot diagram", warnings[0])
+        self.assertIn("syntax error in line 1", warnings[0])
+        self.assertNotIn("successfully compiled", warnings[0])
+
+    def test_an_installed_broken_converter_is_reported_as_a_conversion_failure(self):
+        self.install(d2=D2, **{"rsvg-convert": FAILING})
+        self.write("```d2\nx -> y\n```\n")
+        done = self.run_pdfmd("doc.md", "--to", "docx", "-o", "doc.docx")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("SVG-to-PNG conversion failed", done.stdout + done.stderr)
+        self.assertIn("rsvg-convert", done.stdout + done.stderr)
+        self.assertNotIn("no SVG-to-PNG converter found", done.stdout + done.stderr)
+
     def test_a_graphviz_that_writes_only_svg_is_converted_for_a_pdf(self):
         # the WebAssembly Graphviz of `pdfmd --install diagram:dot` has no Cairo: -Tpdf fails, -Tsvg is converted
         svg_only = GRAPHVIZ.replace("  -Tpdf)", "  -Tpdf) exit 1 ;;\n  -Tnever)").replace("-Tpng) printf", "-Tpng) exit 1 ;;\n  -Tnever2) printf")

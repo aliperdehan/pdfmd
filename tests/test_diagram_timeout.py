@@ -64,6 +64,11 @@ class Metadata(unittest.TestCase):
 
     DOCUMENT = "---\npdfmd-options:\n  diagram-timeout: {value}\n---\n\n```dot\ndigraph { a -> b }\n```\n"
 
+    def test_the_filter_is_told_which_svg_converters_are_installed(self):
+        with mock.patch.object(pdfmd, "which", lambda name: "/tools/" + name if name in ("dot", "inkscape") else None):
+            config = self.map_for(self.DOCUMENT.replace("{value}", "7"))
+        self.assertEqual(config["pdfmd-diagram-tools"], ["dot", "inkscape"])
+
     def test_the_limit_and_the_runner_are_passed(self):
         config = self.map_for(self.DOCUMENT.replace("{value}", str(7)))
         self.assertEqual(config["pdfmd-diagram-timeout"], 7)

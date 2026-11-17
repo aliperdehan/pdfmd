@@ -116,23 +116,7 @@ end
 local POSIX = package.config:sub(1, 1) == "/"
 local last_error = ""
 
--- pandoc.pipe under the time limit (what raises is what pandoc.pipe raises). A stopped run marks the tool as timed out.
-local function guarded(command, args, input)
-  if timed_out[command] then error("not run: " .. command .. " already ran past the time limit", 0) end
-  if not (limit and python and runner) then return pandoc.pipe(command, args, input) end
-  local wrapped = {runner, tostring(limit), command}
-  for _, value in ipairs(args) do wrapped[#wrapped + 1] = value end
-  local ok, result = pcall(pandoc.pipe, python, wrapped, input)
-  if ok then return result end
-  if tostring(result):find(TIMEOUT_MARK, 1, true) then
-    timed_out[command] = true
-    if current_tool then timed_out[current_tool] = true end
-    stopped_command = command
-  end
-  error(result, 0)
-end
-
-local function run_in(folder, command, args)
+local function run_in(folder, command, args, input, in_place)
   if timed_out[command] then return false end
   local run, run_args = command, args
   if limit and python and runner then       -- the runner starts the tool and stops it, with what it started, when the time is up
@@ -146,10 +130,13 @@ local function run_in(folder, command, args)
   if POSIX then
     local inner = {run}
     for _, value in ipairs(run_args) do inner[#inner + 1] = value end
-    run, run_args = "/bin/sh", {"-c", 'exec "$@" 2>pdfmd-tool.err', "sh"}
+    run, run_args = "/bin/sh", {"-c", 'err=$1; shift; exec "$@" 2>"$err"', "sh", folder .. "/pdfmd-tool.err"}
     for _, value in ipairs(inner) do run_args[#run_args + 1] = value end
   end
-  local ok, result = pcall(pandoc.system.with_working_directory, folder, function() return pandoc.pipe(run, run_args, "") end)
+  local execute = function() return pandoc.pipe(run, run_args, input or "") end
+  local ok, result
+  if in_place then ok, result = pcall(execute)
+  else ok, result = pcall(pandoc.system.with_working_directory, folder, execute) end
   if not ok and tostring(result):find(TIMEOUT_MARK, 1, true) then
     timed_out[command] = true
     if current_tool then timed_out[current_tool] = true end
@@ -157,29 +144,44 @@ local function run_in(folder, command, args)
   end
   if POSIX then
     local handle = io.open(folder .. "/pdfmd-tool.err", "rb")
-    last_error = handle and handle:read("a") or ""
+    last_error = not ok and handle and handle:read("a") or ""
     if handle then handle:close() end
-    last_error = last_error:gsub("^%s+", ""):gsub("%s+$", ""):match("[^\n]*") or ""
+  else
+    last_error = not ok and tostring(result) or ""
   end
-  return ok
+  if not ok and last_error == "" then last_error = tostring(result) end
+  last_error = last_error:gsub("^%s+", ""):gsub("%s+$", ""):match("[^\n]*") or ""
+  return ok, result
 end
 
 -- SVG -> PDF or PNG, for D2 (whose own PDF and PNG need a browser download).
-local function convert_svg(svg, out, format)
+local function convert_svg(folder, svg, out, format)
   local attempts = {}
   if format == "pdf" then
     attempts = {{"rsvg-convert", {"-f", "pdf", "-o", out, svg}}, {"inkscape", {svg, "--export-type=pdf", "--export-filename=" .. out}}}
   else
     attempts = {{"rsvg-convert", {"-z", "2", "-f", "png", "-o", out, svg}}, {"inkscape", {svg, "--export-type=png", "--export-dpi=192", "--export-filename=" .. out}}}
   end
+  local failures = {}
   for _, attempt in ipairs(attempts) do
-    if pcall(guarded, attempt[1], attempt[2], "") and file_exists(out) then return true end
+    if installed(attempt[1]) then
+      os.remove(out) -- a failed converter must not leave output for the next attempt
+      local ok = run_in(folder, attempt[1], attempt[2], "", true)
+      if ok and #(read_file(out) or "") > 0 then return true end
+      failures[#failures + 1] = attempt[1] .. ": " .. (last_error ~= "" and last_error or "produced no output")
+    end
+  end
+  if #failures == 0 then
+    last_error = "no SVG-to-" .. format:upper() .. " converter found (install rsvg-convert or inkscape; see --doctor)"
+  else
+    last_error = "SVG-to-" .. format:upper() .. " conversion failed (" .. table.concat(failures, "; ") .. ")"
   end
   return false
 end
 
 local function draw(tool, source, attributes, format)
   current_tool = tool
+  last_error = ""
   local key = pandoc.sha1(table.concat({tool, format, attributes.engine or "", attributes.theme or "", attributes.layout or "", source}, "\0"))
   local target = cache_dir .. "/" .. key .. "." .. format
   if file_exists(target) and #(read_file(target) or "") > 0 then return target end
@@ -189,14 +191,14 @@ local function draw(tool, source, attributes, format)
       local engine = GRAPHVIZ_ENGINES[attributes.engine or "dot"] and (attributes.engine or "dot") or "dot"
       local args = {"-T" .. format}
       if format == "png" then args[#args + 1] = "-Gdpi=192" end
-      local ok, data = pcall(guarded, engine, args, source)
+      local ok, data = run_in(folder, engine, args, source, true)
       if ok and data and #data > 0 then
         made = write_file(target, data)
       elseif format ~= "svg" and not timed_out[engine] then
         -- a Graphviz without Cairo (pdfmd --install diagram:dot) writes only SVG: take that and convert it, as for D2
-        local svg_ok, svg = pcall(guarded, engine, {"-Tsvg"}, source)
+        local svg_ok, svg = run_in(folder, engine, {"-Tsvg"}, source, true)
         if svg_ok and svg and #svg > 0 and write_file(folder .. "/out.svg", svg)
-            and convert_svg(folder .. "/out.svg", folder .. "/out." .. format, format) then
+            and convert_svg(folder, folder .. "/out.svg", folder .. "/out." .. format, format) then
           made = write_file(target, read_file(folder .. "/out." .. format))
         end
       end
@@ -209,7 +211,7 @@ local function draw(tool, source, attributes, format)
       if run_in(folder, "d2", args) and file_exists(folder .. "/out.svg") then
         if format == "svg" then
           made = write_file(target, read_file(folder .. "/out.svg"))
-        elseif convert_svg(folder .. "/out.svg", folder .. "/out." .. format, format) then
+        elseif convert_svg(folder, folder .. "/out.svg", folder .. "/out." .. format, format) then
           made = write_file(target, read_file(folder .. "/out." .. format))
         end
       end

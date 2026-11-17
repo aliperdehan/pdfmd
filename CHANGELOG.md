@@ -19,6 +19,24 @@ same commit as the change.
 
 ---
 
+## v3.33.305 — 2026-11-17
+
+Pre-edit state: commit `edba628`. Diagram warnings reused D2's successful stderr when SVG conversion failed,
+and then repeated it for Graphviz. Capture each command's own error, clear successful chatter and reset the
+error for each diagram. Report missing SVG-to-PDF/PNG converters separately from failed installed converters;
+name the existing rsvg-convert and inkscape attempts and list their availability in --doctor. Graphviz's SVG
+fallback uses the same reporting. Add no converter. Update README, reference, help and the agent guide. No
+settings or TODO changes; pdfmd.py stays at 784 lines (version only).
+
+Regression proof: four pre-fix failures cover PDF/PNG conversion, D2 chatter leaking into a failed dot block,
+and a broken installed converter. The full diagram, timeout, doctor, help and five required safety modules
+ran: 166 tests, one pre-existing help-topic failure (`['--show-hidden'] != []`), zero errors and one setup skip.
+All 24 diagram cases pass, including real PDF and Graphviz builds. Preserve Graphviz's document working
+directory while capturing stderr: the final directory/fallback checks pass with Pandoc 3.13; all five focused
+diagram regressions pass with 3.1.3. The three original regressions also pass with 3.13. Shellcheck of all new
+shell fixtures and the stderr wrapper, Ruff F and whitespace checks pass. Start-up stays at 182 modules; the
+launcher reports the version in 0.22 s. No Windows or hand GUI checks, installs or network access were used.
+
 ## v3.33.304 — 2026-11-17
 
 Pre-edit state: commit `b4091f3`. The size mapping described `core` as Pandoc and Tectonic although it routes to
