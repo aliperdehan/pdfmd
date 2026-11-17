@@ -608,6 +608,7 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     others put it after the writer's own. `label` names the document in a message (report mode: `REPORT`); `md_path` by default."""
     args = core.metadata_append_args(inputs, metadata_files, pandoc_options, no_auto)
     args += md_macro_args(inputs, metadata_files)
+    args += core.deferred("pdfmd_filters.hidden", "mark_args")(inputs, metadata_files)
     args += core.calc_filter_args(inputs, metadata_files)
     args += core.csv_table_filter_args(inputs, no_auto, csv_filter, metadata_files)
     args += pagebreak_filter_args(md_path, metadata_files)

@@ -571,6 +571,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "text; highlight (==text==) marks it; underline (<u>text</u>) underlines it; keep (::: keep) holds blocks on one page; landscape (::: landscape) puts them on landscape pages; appendix (\\appendix, <!-- appendix -->, "
                              "{.appendix}) letters the sections after it; space (\\vspace{1cm}, \\bigskip, <br>) is vertical space; bare: all kinds. On, except space, in the pdfmd and obsidian flavours (off with flavour: pandoc); also "
                              "pdfmd-options.markup (true, false or a list) and pdfmd --setup")
+    parser.add_argument("--show-hidden", action="store_true", default=None,
+                        help="print plain hide/hidden blocks and spans (off by default); calc hide stays silent. "
+                             "Also pdfmd-options.show-hidden and pdfmd --setup")
     parser.add_argument("--show-comments", action="store_true", default=None,
                         help="show the <!-- comments --> of the text in the output instead of dropping them: a box labelled "
                              "Comment (LaTeX, Typst, HTML, EPUB), a real Word comment (docx); the Markdown family keeps them as "

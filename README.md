@@ -1213,6 +1213,13 @@ the lines again from your file (a document read from standard input has no file:
 prints nothing; its lines are read as Markdown, so the raw block is safer when an expression has `*` or `_` in it. Not the same
 thing: ```` ```{.calc} ```` is a code block with a class, shown as code and never calculated, which is how to show calc source.
 
+Plain `::: hide` / `::: hidden` blocks and `[text]{.hide}` / `[text]{.hidden}` spans are read by pdfmd's filters,
+then removed from every output, including HTML's file contents and the built-in renderer. Calc definitions inside still
+work in later calculations (calc needs Pandoc). A reference to a hidden label warns. `--show-hidden` or
+`pdfmd-options: {show-hidden: true}` prints them as ordinary content (default off; also in `--setup`), so the same source
+can make a student copy and an answer key. Calc's `::: {.calc .hide}` remains silent. The attached source keeps the blocks.
+
+
 To keep the values in one citable file, `calc: {constants: tables/constants.csv}` (or `--calc-constants FILE`) loads a CSV before the
 document is read, with the columns `name,value[,digits[,note]]` (a header row is fine; comma, semicolon or tab; `#` lines are skipped):
 

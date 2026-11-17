@@ -47,7 +47,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.33.289"
+PDFMD_VERSION = "3.33.290"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
@@ -461,6 +461,7 @@ MARKUP_CLI: dict = {"kinds": None, "off": False}
 
 # Command-line visible-comments override.
 SHOW_COMMENTS_CLI: dict = {"on": None}
+SHOW_HIDDEN_CLI: bool | None = None
 
 try:
     import pdfmd_flavours  # noqa: F401 -- preserve the pre-move start-up module set

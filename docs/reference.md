@@ -170,6 +170,15 @@ Beamer get `\setlength{\parskip}` in a header file, Typst `#set par(spacing: <le
 `indent: true` Typst's spacing is its leading, as LaTeX drops parskip then. The HTML engines are not given it
 (pdfmd_paragraph). docs/recipes.md 1.9.
 
+## Hidden content
+
+Plain `::: hide` / `::: hidden` divs and `[text]{.hide}` / `[text]{.hidden}` spans are removed after pdfmd's filters
+read them, for every writer and the native tier. HTML drops the content from the file. Calc names defined inside remain
+available outside (calculations require Pandoc). A referenced hidden label produces one WARN naming it, for links,
+Pandoc cross-references and LaTeX reference commands. `--show-hidden`, `pdfmd-options.show-hidden` and its `--setup` row
+print plain hidden content as ordinary content (default off), while `::: {.calc .hide}` remains calc's silent statement
+form. The source attachment retains the original blocks and spans.
+
 ## Typst's line spacing (v3.33.73)
 
 pdfmd_lua/typst.lua puts lines `linestretch` x LaTeX's \baselineskip for the `fontsize` apart in Typst, in any font

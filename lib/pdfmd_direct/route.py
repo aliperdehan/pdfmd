@@ -164,6 +164,10 @@ def convert_qmd(source: Path, output: Path, target_format: str,
     # directory, so render there and move the result to the real destination
     # afterward (covers -o/--out pointing elsewhere, or --destination-cwd).
     cmd = [quarto, "render", source.name, "--to", target_format, "-o", output.name]
+    # Quarto forwards these Pandoc arguments after its execution/content filters.
+    cmd += core.deferred("pdfmd_filters.hidden", "mark_args")(source, [])
+    cmd += core.calc_filter_args(source, [])
+    cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
     result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=source.parent)
     rendered = source.parent / output.name
     if result.returncode == 0 and rendered.exists() and rendered.resolve() != output.resolve():

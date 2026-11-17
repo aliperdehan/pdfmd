@@ -928,11 +928,19 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
     as written), ``footnotes`` (turned into endnotes). HTML comments are
     dropped silently (a ``<!-- pagebreak -->`` comment becomes a page break).
     """
+    if source_path is not None:
+        text = core.deferred("pdfmd_filters.hidden", "native_text")(text, source_path, metadata_files)
     front, body = core.split_front_matter(text.lstrip("﻿"))
     metadata: dict = {}
     for path in core.pandoc_metadata_order(list(metadata_files)):
         metadata.update(core.metadata_file_yaml(path))
     metadata.update(front)
+    if source_path is None:
+        options = metadata.get("pdfmd-options")
+        options = options if isinstance(options, dict) else {}
+        shown = core.SHOW_HIDDEN_CLI if core.SHOW_HIDDEN_CLI is not None else options.get("show-hidden", False)
+        transform = "reveal_hidden" if core.option_flag(shown) is True else "strip_hidden"
+        body = core.deferred("pdfmd_filters.hidden", transform)(body)
 
     counts: dict[str, int] = {}
 

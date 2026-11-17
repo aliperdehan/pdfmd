@@ -100,7 +100,8 @@ def ansi_without_pandoc(md_path: Path, output: Path) -> "tuple[bool, str]":
         return False, core.PANDOC_MISSING
     try:
         from pdfmd_ansi.native import from_markdown
-        text, _ = ansi_document_text(from_markdown(core.read_text_best_effort(md_path)))
+        source = core.deferred("pdfmd_filters.hidden", "native_text")(core.read_text_best_effort(md_path), md_path)
+        text, _ = ansi_document_text(from_markdown(source))
     except (OSError, ImportError, ValueError) as error:
         return False, f"{core.display_path(md_path)}: --to ansi could not read it without Pandoc ({type(error).__name__}: {error})"
     print(f"NOTE  ansi: no Pandoc: {core.display_path(md_path)} was read by the built-in parser (no filters, citations "

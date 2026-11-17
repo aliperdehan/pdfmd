@@ -605,6 +605,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                         list(preamble_files or ([] if core.discovery_disabled(no_auto, "preamble")
                                                                 else core.find_preambles(md_path.parent, md_path.stem, []))),
                                         target_format, bool(office_arguments.filter_arguments), no_auto)
+                cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
                 cmd += core.paragraph_spacing_typst_args(md_path, metadata_files, target_format)
                 cmd += core.typst_filter_args(target_format, cmd, pandoc_cwd)
                 if target_format == "epub" and core.EBOOK_MATH.get("mode") == "text":
@@ -870,7 +871,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # last of all, after the LaTeX filter below too: a reference it makes to a figure Typst has no
                     # label for is a link Typst would stop on; WeasyPrint's math is typeset once its \ce is converted
                     cmd += core.paragraph_spacing_typst_args(md_path, metadata_files, engine)
-                    last_filters = core.typst_filter_args(engine, cmd, pandoc_cwd) + core.weasyprint_math_args(
+                    last_filters = core.deferred("pdfmd_filters.hidden", "finish_args")()
+                    last_filters += core.typst_filter_args(engine, cmd, pandoc_cwd) + core.weasyprint_math_args(
                         engine, pandoc_options,
                         selected_font or core.document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables),
                         no_auto)

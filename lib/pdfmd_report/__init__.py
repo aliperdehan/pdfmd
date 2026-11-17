@@ -314,13 +314,14 @@ def run(core, *,
                     hoist_code_header(cmd)
                     keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                 cmd += core.paragraph_spacing_typst_args(files[0], metadata_files, target_format)
-                cmd += typst_filter_args(target_format, cmd, pandoc_cwd)
                 cmd += report_office_arguments.filter_arguments
                 cmd += chem_filter_args(list(files), metadata_files,
                                         list(report_preambles or ([] if discovery_disabled(report_no_auto, "preamble")
                                                                   else find_preambles(files[0].parent, files[0].stem, []))),
                                         target_format, bool(report_office_arguments.filter_arguments),
                                         report_no_auto)
+                cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
+                cmd += typst_filter_args(target_format, cmd, pandoc_cwd)
                 if report_office_arguments.filter_arguments:
                     result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
                                                args.verbose, args.debug)
@@ -458,7 +459,8 @@ def run(core, *,
                         keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                     # as for one document (v3.28.2): last, after the LaTeX filter (v3.28.11)
                     cmd += core.paragraph_spacing_typst_args(files[0], metadata_files, engine)
-                    report_last = typst_filter_args(engine, cmd, pandoc_cwd) + weasyprint_math_args(
+                    report_last = core.deferred("pdfmd_filters.hidden", "finish_args")()
+                    report_last += typst_filter_args(engine, cmd, pandoc_cwd) + weasyprint_math_args(
                         engine, pandoc_options,
                         args.font or document_font_setting("mainfont", list(files), metadata_files, variables),
                         report_no_auto)

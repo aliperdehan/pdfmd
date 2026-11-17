@@ -47,6 +47,18 @@ class QuartoWithoutPandoc(unittest.TestCase):
                 self.assertEqual((self.folder / arguments[-1]).read_text(), "<p>Quarto result</p>")
                 self.assertIn("quarto", done.stdout)
 
+    def test_hidden_content_filters_reach_quartos_pandoc(self):
+        tool = self.bin / "quarto"
+        tool.write_text(f"#!{sys.executable}\n" +
+                        "import sys\nfrom pathlib import Path\n"
+                        "filters = [sys.argv[i+1] for i, word in enumerate(sys.argv) if word == '--lua-filter']\n"
+                        "assert Path(filters[0]).name == 'hidden_mark.lua'\n"
+                        "assert Path(filters[-1]).name == 'hidden.lua'\n"
+                        "Path(sys.argv[sys.argv.index('-o')+1]).write_text('<p>Visible</p>')\n", encoding="utf-8")
+        tool.chmod(0o755)
+        done = self.run_pdfmd("analysis.qmd", "--to", "html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
     def test_missing_quarto_names_quarto(self):
         done = self.run_pdfmd("analysis.qmd", "--to", "html")
         self.assertNotEqual(done.returncode, 0)

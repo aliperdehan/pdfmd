@@ -19,6 +19,26 @@ same commit as the change.
 
 ---
 
+## v3.33.290 — 2026-11-17
+
+Pre-edit state: commit `cc43d34`. Plain hide/hidden divs and spans travelled into every output. Mark them before calc
+and the other content filters, and remove their wrappers after those filters have read them, before writer-specific
+flattening and Typst link repair. HTML drops the content from the file. A referenced hidden label gets one WARN;
+Typst keeps the link text so the dangling link cannot abort its PDF. `show-hidden` (off by default), `--show-hidden`
+and a setup row reveal ordinary content; calc-hide statements remain silent. The native and terminal fallbacks strip
+source ranges without Pandoc; calculations still require Pandoc. Quarto receives the same passes around calc after its
+own execution filters. The attached source stays literal. No other default changes. pdfmd.py grows by one state line,
+transferred to batch workers with the existing CLI state.
+
+The writer/native/show-hidden regressions failed before (13 failures). HTML, LaTeX, Typst, Word, ODT, EPUB, GFM, text
+and ANSI now drop the content while retaining calculator names, with Pandoc 3.1.3 and 3.13; a Typst PDF compiles.
+Calc, native, ANSI, report, parts, bibliography and the five required safety modules were run in full. The office module
+has one Calibre failure, reproduced on the pre-edit snapshot: `ebook-convert failed ... 1% Converting input to HTML`.
+The serve module has three failures and sixteen errors because socket binding is blocked (`PermissionError: [Errno 1]
+Operation not permitted`); its other 48 cases pass. Quarto, source-range/code examples and reference forms are covered.
+Quarto HTML cannot complete here: its Sass cache reports `unable to open database file` in the sandbox.
+Ruff F and diff whitespace checks pass. No TODO changes.
+
 ## v3.33.289 — 2026-11-17
 
 Pre-edit state: commit `44b8c39`. Statement fences without YAML front matter used the GFM reader, which makes

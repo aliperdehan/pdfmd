@@ -290,6 +290,7 @@ def run_main() -> None:
     core.LINEBREAK_CLI.update({"kinds": args.linebreak, "off": args.no_linebreak})
     core.MARKUP_CLI.update({"kinds": args.markup, "off": args.no_markup})
     core.SHOW_COMMENTS_CLI["on"] = args.show_comments
+    core.SHOW_HIDDEN_CLI = args.show_hidden
     core.FLAVOUR_CLI["name"] = args.flavour
     core.UNCLOSED_CLI["mode"] = args.unclosed_comment
     core.GFM_CLI.update({"scripts": args.gfm_scripts, "math": args.gfm_math})
