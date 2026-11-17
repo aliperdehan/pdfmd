@@ -54,7 +54,8 @@ Pandoc’s own Typst spacing without pdfmd’s line rules.
 
 ## Running without a person
 
-- `PDFMD_NO_PROMPT=1` stops every question and every offer (an install, the setup hint).
+- `PDFMD_NO_PROMPT=1` stops every question and every offer (an install, the setup hint). An explicitly requested
+  `--install calibre` takes the default package manager if available, otherwise the SHA-256-checked GitHub download.
 - `PDFMD_CONFIG=` (empty) ignores the user's config file, so a run does not depend on this machine's settings;
   `PDFMD_CONFIG=file.yaml` names another. A `.pdfmd/` folder in the document's folder or above it still applies (it is a
   project's own setting; `--verbose` lists it as `AUTO SETTINGS`, the closing `FOUND` line as `.pdfmd`).

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.301 — 2026-11-17
+
+Pre-edit state: commit `ce473b7`. Without a terminal or with PDFMD_NO_PROMPT=1, Calibre installation took the non-default download answer. DECISION 97 makes it take the same package-manager default as Y, including failure reporting; the SHA-256-checked download remains the fallback when no manager exists or the interactive answer is d. Print the selected method. Fake regressions fail in six subcases before, covering non-terminal/no-prompt/default success, manager failures and the named download. Existing download fixtures explicitly exclude package managers. Update README, reference and the agent guide. pdfmd.py remains 784 lines (version only); no settings or TODO changes. Installer and the five required safety modules: 136 tests, one sandbox failure (hdiutil: create failed - Device not configured), zero errors, two skips; all new fake regressions pass. No real package manager or network was used. Ruff F and whitespace checks pass.
+
 ## v3.33.300 — 2026-11-17
 
 Pre-edit state: commit `d60de4b`. DECISION 96 keeps LaTeX’s Typst line pitch as the default and adds typst-line-spacing: latex | pandoc. The opt-in pandoc mode bypasses template rewriting and the Lua text-edge, leading and paragraph-spacing rules; all other Typst fixes remain active. Register the setting and setup row with its default, document both modes and update help and the agent guide. Two pipeline regressions fail before, including a measured 28.89 pt pitch where Pandoc gives 23.50 pt. pdfmd.py stays at 784 lines (version only); no TODO changes. Engine filters, paragraph spacing and the five safety modules: 163 cases, zero failures/errors, five skips after correcting a setting-test mock; the 39-case engine-filter rerun passes. Five focused spacing cases pass with Pandoc 3.1.3, including both measured PDFs. The pandoc export matches that installed Pandoc’s entire output; a separately saved default export is byte-identical before/after. Ruff F and whitespace checks pass.

@@ -422,11 +422,13 @@ The built-in renderers set the paper from `papersize:` (or `--paper`): `a0`-`a6`
 A name they do not know is a `NOTE` and A4 (md2pdf has no `executive`, `folio` or `tabloid` either, and says so).
 
 `pdfmd --install calibre` (v3.29) gets Calibre when it is missing (190 to 360 MB). In a terminal on a Mac or Windows it offers
-`brew install --cask calibre` or `winget install --id calibre.calibre -e` first. Otherwise (or on answering `d`) pdfmd downloads the
+`brew install --cask calibre` or `winget install --id calibre.calibre -e` first (default Y). With no terminal or with
+`PDFMD_NO_PROMPT=1`, it takes that same package-manager default, including its failure result. Without a package manager
+(or on answering `d`), pdfmd downloads the
 release file for your machine and checks it against the SHA-256 GitHub lists for it, and refuses a download whose checksum is not
 listed: on macOS it opens the disk image read-only and copies `calibre.app` into `~/Applications`, on Linux (x86-64, ARM)
 it unpacks the archive into pdfmd's data folder (no root, no desktop entries), and either way runs `ebook-convert --version`
-to check. Windows: `winget`, or the installer from calibre-ebook.com. Calibre is a program pdfmd runs, never one it contains.
+to check. One line names the method being run. Windows: `winget`, or the installer from calibre-ebook.com. Calibre is a program pdfmd runs, never one it contains.
 
 A browser prints a Markdown document too (v3.29): `-e edge`, `-e chrome`, `-e chromium` or `-e brave` (or `-e browser` for the
 first one installed) has Pandoc write one self-contained HTML page and the browser, headless, print it with the document's

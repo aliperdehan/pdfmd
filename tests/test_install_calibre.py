@@ -120,7 +120,8 @@ class Install(unittest.TestCase):
 
     def run_install(self, **kwargs) -> tuple[bool, str, str]:
         out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        with mock.patch.object(pdfmd, "calibre_package_manager", return_value=None), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             done = pdfmd.install_calibre(interactive=False, applications=self.apps, find=self.find, **kwargs)
         return done, out.getvalue(), err.getvalue()
 
@@ -196,6 +197,57 @@ class Install(unittest.TestCase):
         self.assertTrue(done)
         self.assertIn("already installed", out)
         self.assertEqual(self.fetched, [])
+
+
+class NoPromptMethod(unittest.TestCase):
+    def test_no_prompt_takes_the_default_package_manager_without_a_download(self):
+        manager = ["fake-manager", "install", "calibre"]
+        for interactive, tty, no_prompt in ((False, True, ""), (None, False, ""), (None, True, "1")):
+            with self.subTest(interactive=interactive, tty=tty, no_prompt=no_prompt):
+                out = io.StringIO()
+                with mock.patch.object(pdfmd, "calibre_package_manager", return_value=manager), \
+                        mock.patch.object(pdfmd, "resolve_calibre", side_effect=[None, "/fake/ebook-convert"]), \
+                        mock.patch.object(pdfmd.pdfmd_install, "calibre_release_asset", return_value=None) as asset, \
+                        mock.patch.object(pdfmd.pdfmd_install.subprocess, "run", return_value=subprocess.CompletedProcess(manager, 0)) as run, \
+                        mock.patch.object(sys.stdin, "isatty", return_value=tty), \
+                        mock.patch.object(sys.stdout, "isatty", return_value=tty), \
+                        mock.patch.dict(os.environ, {"PDFMD_NO_PROMPT": no_prompt}), \
+                        mock.patch("builtins.input", side_effect=AssertionError("asked a question")), \
+                        contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                    done = pdfmd.install_calibre(interactive=interactive)
+                self.assertTrue(done, out.getvalue())
+                run.assert_called_once_with(manager)
+                asset.assert_not_called()
+                self.assertIn("package manager: fake-manager install calibre", out.getvalue())
+
+    def test_no_prompt_keeps_the_package_managers_failure_and_does_not_download(self):
+        manager = ["fake-manager", "install", "calibre"]
+        for failure in (subprocess.CompletedProcess(manager, 1), OSError("cannot start")):
+            with self.subTest(failure=failure):
+                out, err = io.StringIO(), io.StringIO()
+                with mock.patch.object(pdfmd, "calibre_package_manager", return_value=manager), \
+                        mock.patch.object(pdfmd, "resolve_calibre", return_value=None), \
+                        mock.patch.object(pdfmd.pdfmd_install, "calibre_release_asset", return_value=None) as asset, \
+                        mock.patch.object(pdfmd.pdfmd_install.subprocess, "run", side_effect=failure if isinstance(failure, OSError) else None,
+                                          return_value=failure) as run, \
+                        contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    done = pdfmd.install_calibre(interactive=False)
+                self.assertFalse(done)
+                run.assert_called_once_with(manager)
+                asset.assert_not_called()
+                self.assertIn("did not give a Calibre pdfmd can find", err.getvalue())
+                self.assertIn("package manager: fake-manager install calibre", out.getvalue())
+
+    @unittest.skipIf(sys.platform == "win32", "Windows uses its package manager or external installer")
+    def test_without_a_package_manager_the_checked_download_is_named(self):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(pdfmd, "calibre_package_manager", return_value=None), \
+                mock.patch.object(pdfmd, "resolve_calibre", return_value=None), \
+                mock.patch.object(pdfmd.pdfmd_install, "calibre_release_asset", return_value=None), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertFalse(pdfmd.install_calibre(interactive=False))
+        self.assertIn("GitHub download (SHA-256 checked)", out.getvalue())
+        self.assertIn("SHA-256", err.getvalue())
 
 
 class Detach(unittest.TestCase):

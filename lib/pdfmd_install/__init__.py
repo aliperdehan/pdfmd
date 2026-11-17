@@ -808,15 +808,18 @@ def install_calibre(fetch=None, release: dict | None = None, applications: Path 
         return True
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty() and not os.environ.get("PDFMD_NO_PROMPT")
-    manager = calibre_package_manager()
-    if manager and interactive:
+    manager = core.calibre_package_manager()
+    if manager:
         command_text = " ".join(manager)
-        try:
-            answer = input(f"Install Calibre with `{command_text}`? [Y/n/d = download it myself] ").strip().casefold()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return False
+        answer = "y"
+        if interactive:
+            try:
+                answer = input(f"Install Calibre with `{command_text}`? [Y/n/d = download it myself] ").strip().casefold()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return False
         if answer in ("", "y", "yes"):
+            print(f"INSTALL  Calibre: package manager: {command_text}")
             try:
                 ran = subprocess.run(manager).returncode == 0
             except OSError as error:
@@ -835,6 +838,7 @@ def install_calibre(fetch=None, release: dict | None = None, applications: Path 
         print(f"pdfmd does not unpack Calibre on this system ({platform.system()} {platform.machine()}): "
               f"{calibre_install_hint()}", file=sys.stderr)
         return False
+    print("INSTALL  Calibre: GitHub download (SHA-256 checked)")
     pattern = calibre_asset_pattern()
     asset = calibre_release_asset(pattern, release)
     if asset is None:
