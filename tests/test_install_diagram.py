@@ -181,7 +181,8 @@ class Resvg(unittest.TestCase):
     def test_resvg_download_checks_the_actual_digest_before_installing(self):
         installer = pdfmd.pdfmd_install
         archive = self.root / "release.tar.gz"
-        tarball(archive, {"resvg": b"#!/bin/sh\necho 'resvg 9.9.9'\n"}, 0o755)
+        executable = "resvg.exe" if sys.platform == "win32" else "resvg"   # the name install_resvg looks for
+        tarball(archive, {executable: b"#!/bin/sh\necho 'resvg 9.9.9'\n"}, 0o755)
         payload = archive.read_bytes()
         for valid in (False, True):
             with self.subTest(valid=valid):
@@ -198,7 +199,7 @@ class Resvg(unittest.TestCase):
                         unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as out, \
                         unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as err:
                     self.assertEqual(pdfmd.install_extra("diagram:resvg"), valid)
-                self.assertEqual((pdfmd.tools_directory() / "resvg").exists(), valid)
+                self.assertEqual((pdfmd.tools_directory() / executable).exists(), valid)
                 self.assertIn("SHA-256 verified" if valid else "SHA-256 mismatch", out.getvalue() + err.getvalue())
 
     def test_resvg_without_a_digest_downloads_nothing(self):

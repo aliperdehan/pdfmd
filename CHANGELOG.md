@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.311b — 2026-11-17
+
+Pre-edit state: commit `95bbd03`. CI's Windows jobs failed test_install_diagram `test_resvg_download_checks_the_actual_digest_before_installing` (3.33.306): on Windows install_resvg extracts `resvg.exe`, and the test's archive held a file named `resvg`. The archive and the check now use the platform's executable name. Test only.
+
 ## v3.33.311a — 2026-11-17
 
 Pre-edit state: commit `371779b`. CI's twelve "native" jobs (no Pandoc) failed test_attach `test_hidden_kind_through_assembly_cli_metadata_and_config` (3.33.291): it builds through pdfmd, which stops with "Pandoc was not found on PATH" there. It now skips without Pandoc, as the module's other Pandoc tests do. Test only.
