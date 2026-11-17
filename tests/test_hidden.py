@@ -48,7 +48,7 @@ class Hidden(unittest.TestCase):
     def test_every_writer_drops_blocks_and_spans_after_calc_reads_them(self):
         document = ("---\ntitle: Hidden test\n---\n\nVisible.\n\n::: hide\nSecretblock\n\n"
                     "`x = 40`{=}\n\n::: calc\n`y = 2`{=}\n:::\n\n:::\n\n"
-                    "Outside `x+y`{=}. [Secretspan]{.hidden}\n\n::: hidden\nSecretalias\n:::\n")
+                    "Outside `x+y`{=}. [Secretspan]{.hide}\n\n::: hide\nSecretalias\n:::\n")
         for writer in ("html", "latex", "typst", "docx", "odt", "epub", "gfm", "txt", "ansi"):
             with self.subTest(writer=writer):
                 text, done = self.build(writer, document)
@@ -96,7 +96,7 @@ class Hidden(unittest.TestCase):
             'return {{Pandoc = function(doc) local text = pandoc.utils.stringify(doc); '
             'if text:find("Secret", 1, true) then doc.blocks:insert(pandoc.Para({pandoc.Str("Readfirst")})) end; '
             'return doc end}}')
-        text, _ = self.build("html", "::: hide\nSecret\n:::\n\n- Item\n\n  ::: hidden\n  Secretnested\n  :::\n\n"
+        text, _ = self.build("html", "::: hide\nSecret\n:::\n\n- Item\n\n  ::: hide\n  Secretnested\n  :::\n\n"
                              "```markdown\n::: hide\nExample\n:::\n```\n")
         self.assertNotIn("Secret", text)
         self.assertIn("Readfirst", text)
@@ -118,7 +118,7 @@ class Hidden(unittest.TestCase):
     def test_source_ranges_preserve_calc_hide_code_and_other_attributes(self):
         from pdfmd_filters.hidden import strip_hidden
         text = ("::: {.calc .hide}\nx = 2\n:::\n\n::: hide\nAnswer\n:::\n\n"
-                "[outer [inner]{.strong} secret]{.hidden} [kept]{.strong}\n\n"
+                "[outer [inner]{.strong} secret]{.hide} [kept]{.strong}\n\n"
                 "`[example]{.hide}`\n\n    ::: hide\n    Codeexample\n    :::\n")
         stripped = strip_hidden(text)
         self.assertNotIn("Answer", stripped)
@@ -130,7 +130,7 @@ class Hidden(unittest.TestCase):
     def test_reference_link_and_latex_reference_forms(self):
         for ref in ("[See][a]\n\n[a]: #answer", r"\ref{answer}", r"\cref{answer}"):
             with self.subTest(ref=ref):
-                _, done = self.build("html", "---\ntitle: T\n---\n\n::: {.hidden #answer}\nSecret\n:::\n\n" + ref)
+                _, done = self.build("html", "---\ntitle: T\n---\n\n::: {.hide #answer}\nSecret\n:::\n\n" + ref)
                 self.assertEqual((done.stdout + done.stderr).count("WARN  hidden:"), 1, done.stdout + done.stderr)
 
     @unittest.skipUnless(shutil.which("quarto"), "needs Quarto")
@@ -139,14 +139,58 @@ class Hidden(unittest.TestCase):
         for writer in ("html", "typst"):
             with self.subTest(writer=writer):
                 text, _ = self.build(writer, "---\ntitle: T\n---\n\n::: hide\nSecret\n\n`x = 42`{=}\n:::\n\n"
-                                     "Visible `x`{=}. [Secretspan]{.hidden}\n")
+                                     "Visible `x`{=}. [Secretspan]{.hide}\n")
                 self.assertNotIn("Secret", text)
                 self.assertIn("42", text)
                 self.assertIn("Visible", text)
 
     def test_native_show_hidden_prints_ordinary_span_text(self):
-        body = "---\npdfmd-options: {show-hidden: true}\n---\n\n[Answer]{.hidden}\n"
+        body = "---\npdfmd-options: {show-hidden: true}\n---\n\n[Answer]{.hide}\n"
         self.source.write_text(body)
         for path in (None, self.source):
             source, _ = pdfmd.normalise_gfm(body, "inkmd", source_path=path)
             self.assertEqual(source.text.strip(), "Answer")
+
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_plain_hidden_is_ordinary_in_every_writer_and_calc_alias_stays_silent(self):
+        document = ("---\ntitle: T\n---\n\n::: {.hidden #ordinary}\nOrdinaryblock\n:::\n\n"
+                    "[Ordinaryspan]{.hidden} [see](#ordinary).\n\n::: hidden\nOrdinaryshort\n:::\n\n"
+                    "::: {.calc .hidden}\nx = 42\n:::\n\nValue `x`{=}.\n")
+        for writer in ("html", "latex", "typst", "docx", "odt", "epub", "gfm", "txt", "ansi"):
+            with self.subTest(writer=writer):
+                text, done = self.build(writer, document)
+                for kept in ("Ordinaryblock", "Ordinaryspan", "Ordinaryshort", "42"):
+                    self.assertIn(kept, text)
+                self.assertNotIn("x = 42", text)
+                self.assertNotIn("WARN  hidden:", done.stdout + done.stderr)
+        for flags in ((), ("--show-hidden",)):
+            text, _ = self.build("html", document, *flags)
+            self.assertIn('class="hidden"', text)
+            self.assertIn('id="ordinary"', text)
+
+    def test_hidden_survives_native_and_source_stripping(self):
+        from pdfmd_filters.hidden import strip_hidden, reveal_hidden
+        body = "::: {.hidden}\nOrdinaryblock\n:::\n\n[Ordinaryspan]{.hidden}\n"
+        self.assertEqual(strip_hidden(body), body)
+        self.assertEqual(reveal_hidden(body), body)
+        for shown in (False, True):
+            self.source.write_text("---\npdfmd-options: {show-hidden: " + str(shown).lower() + "}\n---\n" + body)
+            for path in (None, self.source):
+                source, _ = pdfmd.normalise_gfm(self.source.read_text(), "inkmd", source_path=path)
+                self.assertIn("Ordinaryblock", source.text)
+                self.assertIn("Ordinaryspan", source.text)
+
+    @unittest.skipUnless(shutil.which("pandoc") and shutil.which("pdflatex"), "needs Pandoc and pdfLaTeX")
+    def test_quarto_math_macro_shape_survives_html_latex_and_pdf(self):
+        body = "---\ntitle: T\n---\n\n::: {.hidden}\n$$ \\def\\RR{{\\bf R}} $$\n:::\n\nUse $\\RR$.\n"
+        for writer in ("html", "latex"):
+            with self.subTest(writer=writer):
+                text, _ = self.build(writer, body, "--from", "markdown-latex_macros", "--mathjax")
+                self.assertIn(r"\def\RR", text)
+                self.assertIn(r"\RR", text)
+        # A display scopes TeX's \def locally even before pdfmd 3.33.290. Use its global form for a later formula.
+        text, _ = self.build("pdf", body.replace(r"\def", r"\gdef"), "-e", "pdflatex",
+                             "--engine-fallback", "missing", "--no-cache")
+        self.assertIn("Use", text)
+        self.assertIn("R", text)

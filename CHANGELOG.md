@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.33.295 — 2026-11-17
+
+Pre-edit state: commit `c87eb84`. Plain `.hidden` containers removed since v3.33.290 collided with Quarto's math-macro
+containers (DECISION 98). Only `.hide` now marks content for removal or revelation, in every writer, the native tier
+and stripped source copies; plain `.hidden` stays ordinary. Calc's `.calc .hidden` alias remains silent. Attachment
+warnings follow the same rule. Keep `hidden` as the opt-in strip-comments kind, with `hide` as its alias. Update the
+README, reference, help and setup wording. Four new regressions failed before (17 failures, including writer subcases);
+they cover the macro definition in HTML/LaTeX, a LaTeX PDF with the globally scoped `\gdef` variant, ordinary containers in every writer, calc's
+alias, native normalisation, stripping and attachments. The exact display-local `\def` PDF fails with "Undefined control
+sequence" on v3.33.289 too; its HTML and LaTeX sources are byte-identical to v3.33.289. Preserving source does not
+change TeX scoping. Full hidden/attach and the five safety
+modules: 207 cases per Pandoc (3.13/3.1.3), one existing Quarto HTML failure ("unable to open database file", Sass cache)
+and one skip each. Calc and native: 188 cases, zero failures/errors, two skips. Ruff F and whitespace checks pass.
+pdfmd.py stays at 784 lines (version only); no TODO changes.
+
 ## v3.33.294 — 2026-11-17
 
 Pre-edit state: commit `5b66313`. The office route probed Typst's version again before preserving PDF document

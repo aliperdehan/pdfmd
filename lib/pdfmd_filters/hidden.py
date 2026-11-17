@@ -1,4 +1,4 @@
-"""Plain hide/hidden containers: read first, remove at the end; source copies stay literal."""
+"""Plain hide containers: read first, remove at the end; source copies stay literal."""
 from __future__ import annotations
 
 import re
@@ -7,7 +7,7 @@ from pdfmd_base import core
 
 
 DIV = re.compile(r"(?m)^[ \t]*(?:(?:>[ \t]*)+)?(:{3,})[ \t]*(.*?)[ \t]*$")
-CLASSES = re.compile(r"(?<!\S)\.(hide|hidden|calc)(?![\w-])")
+CLASSES = re.compile(r"(?<!\S)\.(hide|calc)(?![\w-])")
 
 
 def show_hidden(source, metadata_files=()):
@@ -39,7 +39,7 @@ def ranges(text):
                     found.append((offset + start, offset + end))
             continue
         classes = set(CLASSES.findall(attrs.strip("{} ")))
-        plain = attrs in ("hide", "hidden") or bool(classes & {"hide", "hidden"}) and "calc" not in classes
+        plain = attrs == "hide" or "hide" in classes and "calc" not in classes
         stack.append((match.start(), plain))
     for start, hidden in stack:  # Pandoc closes an unclosed fenced div at EOF
         if hidden:
@@ -62,7 +62,7 @@ def spans(masked):
         elif brackets:
             start = brackets.pop()
             attrs = re.match(r"\{([^{}]*)\}", masked[match.end():])
-            if attrs and set(CLASSES.findall(attrs[1])) & {"hide", "hidden"}:
+            if attrs and "hide" in CLASSES.findall(attrs[1]):
                 yield start, match.start(), match.end() + attrs.end()
 
 

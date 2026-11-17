@@ -190,7 +190,7 @@ COMMENT_KIND_NAMES = {
     "preamble": "preamble", "tex": "preamble", "latex": "preamble",
     "bibliography": "bibliography", "bib": "bibliography", "bibtex": "bibliography",
     "references": "bibliography", "csl": "csl", "style": "csl",
-    "hidden": "hidden",
+    "hidden": "hidden", "hide": "hidden",
     "metadata": "metadata", "yaml": "metadata", "yml": "metadata", "lua": "lua",
 }
 TEX_VERBATIM_BEGIN_RE = re.compile(r"\\begin\{(verbatim\*?|Verbatim\*?|lstlisting|minted|alltt|filecontents\*?|comment)\}")

@@ -1106,7 +1106,7 @@ class RawLatexPictures(unittest.TestCase):
 
 @unittest.skipUnless(pypdf, "needs pypdf")
 class HiddenSource(unittest.TestCase):
-    BODY = ("::: hide\nSecretblock\n\n`x = 42`{=}\n:::\n\n[Secretspan]{.hidden}\n\n"
+    BODY = ("::: hide\nSecretblock\n\n`x = 42`{=}\n:::\n\n[Secretspan]{.hide}\n\n"
             "::: {.calc .hide}\ny = 3\n:::\n\nValue `x`{=}.\n")
 
     def setUp(self):
@@ -1216,9 +1216,24 @@ class HiddenSource(unittest.TestCase):
 
     def test_bundled_markdown_also_loses_hidden_content(self):
         pdfmd.BUNDLE_CLI = "all"
-        (self.root / "extra.md").write_text("::: hidden\nSecretbundle\n:::\n\nKeptbundle\n")
+        (self.root / "extra.md").write_text("::: hide\nSecretbundle\n:::\n\nKeptbundle\n")
         text, manifest, _ = self.attach("pdfmd-options: {strip-comments: [hidden]}\n")
         self.assertNotIn("Secret", text)
         self.assertTrue(any(item["path"] == "extra.md" for item in manifest.get("extras", [])))
         data = pdfmd.read_pdf_attachments(self.root / "out.pdf")
         self.assertFalse(any(b"Secretbundle" in value for value in data.values()))
+
+
+    def test_plain_hidden_never_warns_or_strips_and_hide_is_a_kind_alias(self):
+        body = "::: {.hidden}\n$$ \\def\\RR{{\\bf R}} $$\n:::\n\n[Ordinary]{.hidden}\n"
+        for kind in ("hidden", "hide"):
+            with self.subTest(kind=kind):
+                text, _, said = self.attach(body=body)
+                self.assertIn(body, text)
+                self.assertNotIn("WARN  hidden:", said)
+                text, manifest, said = self.attach("pdfmd-options: {strip-comments: [" + kind + "]}\n", body + self.BODY)
+                self.assertIn(body, text)
+                self.assertNotIn("Secret", text)
+                self.assertIn("hidden", manifest["comments_stripped"])
+                self.assertNotIn("WARN  hidden:", said)
+        self.assertEqual(pdfmd.comment_kind_set("hide"), pdfmd.comment_kind_set("hidden"))

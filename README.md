@@ -1213,13 +1213,15 @@ the lines again from your file (a document read from standard input has no file:
 prints nothing; its lines are read as Markdown, so the raw block is safer when an expression has `*` or `_` in it. Not the same
 thing: ```` ```{.calc} ```` is a code block with a class, shown as code and never calculated, which is how to show calc source.
 
-Plain `::: hide` / `::: hidden` blocks and `[text]{.hide}` / `[text]{.hidden}` spans are read by pdfmd's filters,
+Plain `::: hide` / `::: {.hide}` blocks and `[text]{.hide}` spans are read by pdfmd's filters,
 then removed from every output, including HTML's file contents and the built-in renderer. Calc definitions inside still
 work in later calculations (calc needs Pandoc). A reference to a hidden label warns. `--show-hidden` or
 `pdfmd-options: {show-hidden: true}` prints them as ordinary content (default off; also in `--setup`), so the same source
-can make a student copy and an answer key. Calc's `::: {.calc .hide}` remains silent. The attached source keeps the blocks and warns that the hidden answers travel with it. Choose
+can make a student copy and an answer key. Plain `.hidden` divs and spans are left alone because Quarto uses them
+for math macros (for example, `$$ \def\RR{{\bf R}} $$` inside `::: {.hidden}`). Calc's `::: {.calc .hide}`
+and its `.calc .hidden` alias remain silent. The attached source keeps the blocks and warns that the hidden answers travel with it. Choose
 `strip-comments: [markdown, hidden]` or `{hidden: true}` (`--strip-comments-in hidden`, also in `--setup`) to remove them
-from the attached or assembled copy. `strip-comments: true` keeps hidden content; the `hidden` kind is opt-in.
+from the attached or assembled copy. `strip-comments: true` keeps hidden content; the `hidden` kind (alias `hide`) is opt-in and acts only on `.hide`.
 `--keep-comments-in hidden` keeps it for a run. Calc-hide statement blocks stay. No warning with `show-hidden` on or
 `hidden` stripped. If stripping loses calculator names used outside, a NOTE names them: the restored source will not
 define them.

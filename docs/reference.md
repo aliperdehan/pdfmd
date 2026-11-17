@@ -172,12 +172,14 @@ Beamer get `\setlength{\parskip}` in a header file, Typst `#set par(spacing: <le
 
 ## Hidden content
 
-Plain `::: hide` / `::: hidden` divs and `[text]{.hide}` / `[text]{.hidden}` spans are removed after pdfmd's filters
+Plain `::: hide` / `::: {.hide}` divs and `[text]{.hide}` spans are removed after pdfmd's filters
 read them, for every writer and the native tier. HTML drops the content from the file. Calc names defined inside remain
 available outside (calculations require Pandoc). A referenced hidden label produces one WARN naming it, for links,
 Pandoc cross-references and LaTeX reference commands. `--show-hidden`, `pdfmd-options.show-hidden` and its `--setup` row
-print plain hidden content as ordinary content (default off), while `::: {.calc .hide}` remains calc's silent statement
-form. The source attachment retains the original blocks and spans and warns that the hidden content travels in it,
+print plain hidden content as ordinary content (default off), while `::: {.calc .hide}` and `.calc .hidden` remain
+calc's silent statement forms. Plain `.hidden` divs and spans are left alone because Quarto uses them for math macros (for example,
+`$$ \def\RR{{\bf R}} $$` inside `::: {.hidden}`). The source attachment retains the original blocks and spans and
+warns that the hidden content travels in it,
 with `--strip-comments-in hidden` as the remedy. No warning with `show-hidden` on or the `hidden` kind stripped.
 
 ## Typst's line spacing (v3.33.73)
@@ -706,7 +708,7 @@ metadata (YAML `#` comments and the file's own quoting and layout: the merged
 text cannot hold them, so the attachment stores each metadata file and the
 document's front matter as written and --restore writes them back byte for
 byte; v3.25.13). --strip-comments-in KINDS / --keep-comments-in KINDS do the
-same per run. The additional kind `hidden` removes plain hide/hidden divs and spans from the assembled or attached
+same per run. The additional kind `hidden` (alias `hide`) removes plain hide divs and spans from the assembled or attached
 copy, keeping calc-hide statement blocks. It is off by default, including with `strip-comments: true` and
 `--strip-comments`: name it explicitly (`[markdown, hidden]`, `{hidden: true}`, `--strip-comments-in hidden`);
 `--keep-comments-in hidden` keeps it. The existing setup row offers hidden alone or Markdown plus hidden.

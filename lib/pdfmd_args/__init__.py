@@ -212,7 +212,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "strip them")
     parser.add_argument("--strip-comments-in", default="", metavar="KINDS",
                         help="strip comments from just these kinds of source (comma-separated: markdown, "
-                             "preamble, bibliography, csl, metadata, hidden), whatever the rest do. Hidden blocks/spans "
+                             "preamble, bibliography, csl, metadata, hidden; hide aliases hidden), whatever the rest do. "
+                             "Plain hide blocks/spans "
                              "are stripped only when named, never by --strip-comments alone. Kept, the YAML "
                              "files come back as written; Lua filters are never touched")
     parser.add_argument("--keep-comments-in", default="", metavar="KINDS",
@@ -573,7 +574,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "{.appendix}) letters the sections after it; space (\\vspace{1cm}, \\bigskip, <br>) is vertical space; bare: all kinds. On, except space, in the pdfmd and obsidian flavours (off with flavour: pandoc); also "
                              "pdfmd-options.markup (true, false or a list) and pdfmd --setup")
     parser.add_argument("--show-hidden", action="store_true", default=None,
-                        help="print plain hide/hidden blocks and spans (off by default); calc hide stays silent. "
+                        help="print plain hide blocks and spans (off by default); calc hide stays silent. "
                              "Also pdfmd-options.show-hidden and pdfmd --setup")
     parser.add_argument("--show-comments", action="store_true", default=None,
                         help="show the <!-- comments --> of the text in the output instead of dropping them: a box labelled "

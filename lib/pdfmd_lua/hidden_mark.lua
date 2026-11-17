@@ -1,6 +1,6 @@
 -- Preserve hidden containers around the content filters: calc and macros still read them.
 local function plain(element)
-  return (element.classes:includes("hide") or element.classes:includes("hidden"))
+  return element.classes:includes("hide")
     and not (element.tag == "Div" and element.classes:includes("calc"))
 end
 return {{Pandoc = function(doc)
@@ -34,7 +34,7 @@ return {{Pandoc = function(doc)
     if not plain(element) then return nil end
     local classes = pandoc.List()
     for _, class in ipairs(element.classes) do
-      if class ~= "hide" and class ~= "hidden" then classes:insert(class) end
+      if class ~= "hide" then classes:insert(class) end
     end
     element.classes = classes
     if shown then return element end

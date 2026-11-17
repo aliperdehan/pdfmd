@@ -558,9 +558,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "config", "number"),
         choice("options.strip-comments", "Drop comments or hidden content from assembled/attached source",
                (("true", "strip comment kinds"), ("false", "keep comments"),
-                ("hidden", "only plain hide/hidden blocks and spans"),
-                ("markdown,hidden", "Markdown comments and plain hide/hidden content")), "",
-               "On strips comment kinds, keeping hidden content. Hidden is opt-in; calc-hide statements stay.",
+                ("hidden", "only plain hide blocks and spans"),
+                ("markdown,hidden", "Markdown comments and plain hide content")), "",
+               "On strips comment kinds, keeping hidden content. Hidden (alias hide) is opt-in; calc-hide statements stay.",
                "Source inside the PDF"),
         # -- cache
         choice("options.cache.aux", "Remember reference numbers between builds", on_off, "",
@@ -641,7 +641,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 "Each spelling of a chosen family becomes the output's own line break, in text as well as in table cells. Left unset, "
                 "every spelling is carried in table cells only (a cell cannot hold a blank line or \\par), and text outside a table "
                 "keeps what each format makes of it. Per run: --linebreak / --no-linebreak.", "Universal markup"),
-        choice("options.show-hidden", "Print plain hide/hidden blocks and spans", on_off, "",
+        choice("options.show-hidden", "Print plain hide blocks and spans", on_off, "",
                "Off by default: content is read by filters, then removed. Calc hide stays silent. Per run: --show-hidden.",
                "Universal markup"),
         choice("options.show-comments", "Show the <!-- comments --> of the text in the output", on_off, "",
