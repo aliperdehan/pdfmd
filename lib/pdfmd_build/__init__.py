@@ -593,9 +593,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if is_tex_target and tablewidth_auto:
                     cmd += core.width_filter_args(width_filter)
                 cmd += core.cellalign_args([md_path, *parts_inputs], metadata_files)
+                if target_format in core.OFFICE_REFERENCE_EXTENSIONS:
+                    cmd += core.image_filter_args(no_auto, [md_path, *parts_inputs], metadata_files, format="png")
                 if is_tex_target:
                     cmd += core.tblr_header_args([md_path, *parts_inputs], metadata_files)
-                    cmd += core.code_filter_args(no_auto, [md_path, *parts_inputs], metadata_files) + core.image_filter_args(no_auto, [md_path, *parts_inputs])
+                    cmd += core.code_filter_args(no_auto, [md_path, *parts_inputs], metadata_files) + core.image_filter_args(no_auto, [md_path, *parts_inputs], metadata_files)
                     core.hoist_code_header(cmd)
                     core.keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
                 for lua_filter in lua_filters:
@@ -859,7 +861,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += core.cellalign_args([md_path, *parts_inputs], metadata_files)
                     if engine in core.LATEX_ENGINES:
                         cmd += core.tblr_header_args([md_path, *parts_inputs], metadata_files)
-                        cmd += core.code_filter_args(no_auto, [md_path, *parts_inputs], metadata_files) + core.image_filter_args(no_auto, [md_path, *parts_inputs])
+                        cmd += core.code_filter_args(no_auto, [md_path, *parts_inputs], metadata_files) + core.image_filter_args(no_auto, [md_path, *parts_inputs], metadata_files)
                         core.hoist_code_header(cmd)
                         core.keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
                     for lua_filter in lua_filters:

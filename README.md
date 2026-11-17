@@ -245,7 +245,7 @@ folders; the system installers below do the same job:
   default; a run that takes longer is stopped together with the process it started, its file fails with the setting named, and a batch
   goes on. `0` never runs LibreOffice (it counts as not installed), a negative number (`-1`) removes the limit. It is a `pdfmd-options` key
   (one document), a config key and a row of `pdfmd --setup` ("Checks and limits").
-  **Diagram time limit:** every run of `mmdc`, `dot` or `d2` (and of the `rsvg-convert` or `inkscape` that turns their SVG into a PDF or
+  **Diagram time limit:** every run of `mmdc`, `dot` or `d2` (and of each converter that turns their SVG into a PDF or
   PNG) may take `diagram-timeout` seconds, 120 by default. A run that takes longer is stopped together with the processes it started
   (Mermaid starts a browser), the diagram stays as code with a warning that names the setting (`--strict` makes it an error), and that
   tool is not tried again in the build, so a browser that cannot start costs the limit once and not once per diagram (the Word and
@@ -2583,15 +2583,20 @@ adjust a single block.
 
 ### Images: SVG and remote ones
 
-LaTeX reads PDF, PNG and JPEG, not SVG. In a LaTeX build pdfmd converts each SVG the document names, once, with
-whatever is installed (`rsvg-convert`, Inkscape, `cairosvg`, `svglib`, or LibreOffice, which most machines have), keeps
-the PDF by the file's content, and uses it where the document wrote the SVG: a Markdown image, a raw
+LaTeX reads PDF, PNG and JPEG, not SVG. In a LaTeX or Word build pdfmd converts each SVG the document names, once, with
+the same chain as diagrams: `rsvg-convert`, Inkscape, `cairosvg`, `svglib`, LibreOffice, Typst, then resvg.
+The first successful converter wins; existing converters keep their order. Typst makes a vector PDF on a page
+the size of the SVG, with no margin; resvg makes a PNG. pdfmd keeps the result by the file's content, and uses it where the document wrote the SVG: a Markdown image, a raw
 `\includegraphics{figure.svg}`, a raw `\includesvg{figure}`. A raw `\includegraphics` also gets `graphicx` loaded,
 which Pandoc only does for a Markdown image (a PNG in one used to stop the build with "undefined control sequence").
 A Markdown image from the web is fetched once and kept for a week, so the build does not need the network again, an SVG
 badge works, and a Pandoc built without HTTP support (Homebrew's is) no longer drops it; with no network there is one
 warning and the image's description stays. `--no-auto svg` and `--no-auto remoteimages` turn the two off, and
-`pdfmd --doctor` says which converter will be used.
+`pdfmd --doctor` lists the chain and every converter found. Typst on PATH wins over the one
+`--install typst` or `--install full` puts in pdfmd’s tools folder; conversion uses pdfmd’s fonts folder.
+The `image-dpi` option (`pdfmd-options: {image-dpi: 192}`, `--image-dpi N`, or `--setup`) controls raster SVG
+conversion and Graphviz PNGs; default 192, preserving the existing diagrams. Exported pages (`--to png|jpg|tiff`)
+keep their default 300. Vector PDFs keep their size.
 
 ### Diagrams written as code
 
@@ -2627,11 +2632,12 @@ a diagram the tool cannot parse stays as code too, and the warning gives the too
 finish in `diagram-timeout` seconds (120 by default; see "Diagram time limit" above). `pdfmd --install diagram:d2`
 puts D2's release binary (17 MB, checked against the SHA-256 GitHub lists) in pdfmd's tools folder, and `--install
 diagram:dot` Graphviz built to WebAssembly (2 MB, run by node, which pdfmd fetches when there is none): it writes only SVG,
-which pdfmd converts for a PDF or Word picture with `rsvg-convert` or `inkscape` (D2 needs the same), and it sizes labels
+which pdfmd converts for a PDF or Word picture with the shared SVG chain (D2 needs the same), and it sizes labels
 by Graphviz's own estimate of the font, a couple of percent off the real tool's. A tool of your own on PATH is always the one
-that runs. Without either SVG converter, a PDF/Word diagram stays as code and its warning names the missing
-conversion and `rsvg-convert`/`inkscape`; an installed converter that fails is reported separately.
-`pdfmd --doctor` shows the diagram tools and these two SVG converters, and
+that runs. SVG conversion uses the same chain as images, ending with Typst and resvg; Typst produces vector PDF
+for LaTeX and PNG for Word, while resvg is a PNG fallback for either. Without a working converter the diagram
+stays as code; the warning names the missing tools (including Typst and resvg) or the failed converters.
+`pdfmd --doctor` shows the shared chain and which converters are found, and
 `--no-auto diagrams` turns the whole thing off. The attributes need Pandoc's Markdown (a file with front matter); a file
 read as gfm takes the plain ```` ```dot ```` form. Mermaid needs Chrome (mermaid-cli downloads one); in a sandbox
 `PDFMD_MMDC_CONFIG=puppeteer.json` is handed to `mmdc -p`.
@@ -2997,7 +3003,7 @@ Most of these print an `AUTO` line, and each can be switched off individually.
 | `UNICODE` | text the main font cannot draw (Arabic, Han, Greek with accents, rare symbols...) | sets each run in an installed font for its script (see *Other scripts*), instead of printing boxes |
 | `MONOFONT` | the document contains code | JetBrains Mono for code (Menlo or another installed monospace font if it isn't installed) |
 | `tablewidth` | a pipe table with plain `---` separators and long lines | picks the column widths that give the fewest lines within the text width (a column never narrower than its longest word), and gives a table that fits its natural width back; unequal dashes (`--|-----`) are kept, but only where Pandoc's own Markdown reader runs (a document with front matter or a linked metadata file, the global one of `pdfmd --setup` included); the `gfm` reader of a plain file gives the dashes no width, so there every table is balanced. Pandoc counts colons as dashes. A chosen column too narrow for its longest word is widened to it and the others give up the room (`column-word-floor: off` stops that where breaking a word is meant, chemical names say; `column-word-floor-limit`, 16, is the longest word protected). `column-widths: keep` in `pdfmd-options` leaves every table as written, `column-widths: force` ignores the dashes and balances every table (`table-widths` and `table-word-floor` are the older names, still read). A cell more than `column-outlier` (2) times longer than the next one in its column, in a column of `column-outlier-rows` (4) rows or more and at least `column-outlier-length` (30) characters, does not size the column but wraps (`column-outlier: 0` switches that off). Raw TeX in a cell (`\SI`, `\SIrange`, `\num`, `\ce`) used to count as nothing; it now counts as about what it prints, a stopgap until a real width estimator exists (`column-count-raw-tex: off` for the old behaviour). Every number is a setting in the config and `--setup`; one table says so after its caption, `{widths=force word-floor=off column-outlier=3 column-outlier-rows=6 column-outlier-length=40 column-word-floor-limit=24 count-raw-tex=off}` (Pandoc 3.8.2 or newer). LaTeX engines only: Typst, WeasyPrint, HTML, Word and OpenDocument take the widths Pandoc gives, equal columns for a `---|---` table with a long line when the Markdown reader ran |
-| `svg`, `remoteimages` | an SVG, or an image from the web, in a LaTeX build | the SVG is converted to a PDF (once), the remote image is fetched and kept (`--no-auto svg`, `--no-auto remoteimages`) |
+| `svg`, `remoteimages` | an SVG, or an image from the web, in a LaTeX/Word build | the SVG is converted to a PDF (PNG for Word or with resvg), the remote image is fetched and kept (`--no-auto svg`, `--no-auto remoteimages`) |
 | `typstdirect`, `htmldirect` | a `.typ` or `.html` file | built by Typst / WeasyPrint or a browser, not through Pandoc (`--no-auto typstdirect` for the old route) |
 | `codewrap` | code blocks in a LaTeX build | long lines wrap at the margin (`--no-code-wrap` or `--no-auto codewrap` for the old behaviour) |
 | `YAML` / `TEX` / `LUA` | project files found | attaches `metadata.yaml`, `preamble.tex`, `<name>.lua` (see below) |

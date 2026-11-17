@@ -60,7 +60,7 @@ UNSET = {
     "options.lua-filter": "none", "options.preamble": "none",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
     "options.flavour": "auto: obsidian in a vault, pdfmd elsewhere", "options.embed-px-to-pt": "0.75 (1 CSS pixel)", "options.embed-fit": "text-width", "options.embed-search": "vault", "options.single-newline": "the flavour's: a line break in obsidian (or as the vault says), a space elsewhere", "options.unclosed-comment": "hide in an Obsidian vault (the rest of the note, as Obsidian does), keep elsewhere",
-    "options.page-folder": "on", "options.report-build": "route", "options.report-titles": "chapters", "options.strict": "off", "options.build-time": "on", "options.time-format": "auto", "options.build-log": "on", "options.build-log-keep": "5", "options.build-log-max-size": "512 KB", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit", "options.soffice-timeout": "300 seconds", "options.diagram-timeout": "120 seconds", "options.serve-max-request-mb": "100 MB", "options.download-retries": "2 extra tries",
+    "options.page-folder": "on", "options.report-build": "route", "options.report-titles": "chapters", "options.strict": "off", "options.build-time": "on", "options.time-format": "auto", "options.build-log": "on", "options.build-log-keep": "5", "options.build-log-max-size": "512 KB", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit", "options.soffice-timeout": "300 seconds", "options.diagram-timeout": "120 seconds", "options.image-dpi": "192 embedded SVG; 300 exported page", "options.serve-max-request-mb": "100 MB", "options.download-retries": "2 extra tries",
     "options.check-ignore": "none",
     "options.html.standalone": "off (a page fragment)", "options.html.css": "none",
     "options.office.reference-doc": "one beside the document, else Pandoc's",
@@ -107,7 +107,7 @@ FOLDER_OPTIONS = frozenset({
     "options.smiles.engine", "options.smiles.format", "options.smiles.office-format", "options.smiles.palette", "options.smiles.cell-width", "options.smiles.cell-height", "options.smiles.per-row", "options.smiles.bond-length", "options.smiles.dpi",
     "options.flavour", "options.single-newline", "options.unclosed-comment", "options.embed-px-to-pt", "options.embed-fit", "options.embed-search", "options.raw", "options.pagebreak", "options.show-hidden", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.typeset", "options.calc.typeset-upright", "options.calc.typeset-italic", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.page-folder", "options.report-build", "options.report-titles", "options.strict",
     "options.max-asset-mb", "options.max-output-mb", "options.check-ignore", "options.build-time", "options.time-format",
-    "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout", "options.diagram-timeout",
+    "options.image-dpi", "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout", "options.diagram-timeout",
     "options.no-auto", "options.auto.explicit-only", "options.auto.on", "options.kit", "options.kit-stack", "options.metadata-append", "options.metadata-parents",
     "options.path-style", "options.path-up", "options.ranking.by", "options.ranking.names",
 })
@@ -790,6 +790,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "A run that takes longer is stopped, with the process it started, and its file fails with this setting named; the "
              "other files go on. Default 300. 0: LibreOffice is never run (it counts as not installed). A negative number "
              "(-1): no limit. Per document: `soffice-timeout` in `pdfmd-options`.", "Checks and limits", "config", "number"),
+        text("options.image-dpi", "Raster image resolution (pixels per inch)",
+             "A number above 0. SVG images and raster diagrams default to 192 (the existing diagram resolution); "
+             "exported pages (--to png, jpg, tiff) default to 300. Per run: --image-dpi. "
+             "Per document: image-dpi in pdfmd-options. Vector PDFs keep their size.", "Output", "config", "number"),
         text("options.diagram-timeout", "Time limit of one diagram tool run (seconds)",
              "mmdc, dot, d2 and the converters behind them: a run that takes longer is stopped, with the process it started, "
              "and the diagram stays as code with a warning that names this setting; that tool is not tried again in the build. "

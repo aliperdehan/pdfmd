@@ -85,6 +85,10 @@ def picture_one(args, source: Path, destination_for, pad: float, dpi: float, qua
     for stderr). The PDF is built, and cropped, once."""
     from pdfmd_crop import CropError, crop_pdf
     from pdfmd_crop.images import pictures
+    if args.image_dpi is None:
+        from pdfmd_filters import image_dpi_for
+        from pdfmd_crop.images import DEFAULT_DPI
+        dpi = image_dpi_for(source, [], DEFAULT_DPI)
     targets = picture_targets(args)
     out_lines: list[str] = []
     err_lines: list[str] = []

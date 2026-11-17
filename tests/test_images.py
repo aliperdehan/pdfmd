@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
@@ -140,6 +141,118 @@ class Converting(unittest.TestCase):
             pdf, why = images.convert_svg(self.svg, self.cache, self.which)
         self.assertIsNone(pdf)
         self.assertIn("rsvg", why)
+        self.assertIn("typst", why)
+        self.assertIn("resvg", why)
+
+    def test_all_found_converters_keep_the_legacy_order(self):
+        from pdfmd_images import svg
+        with mock.patch.object(svg, "_python_module", return_value=True):
+            self.assertEqual(svg.available_converters(lambda name: "/tools/" + name, lambda: "/tools/soffice"),
+                             list(svg.CONVERTERS))
+
+    def test_typst_sizes_the_page_and_uses_the_font_path_for_pdf_and_png(self):
+        from pdfmd_images import svg
+        fonts = self.directory / "fonts"
+        fonts.mkdir()
+        seen = []
+        def run(command, **kwargs):
+            seen.append(command)
+            document = Path(command[-2]).read_text()
+            self.assertIn("#set page(width: auto, height: auto, margin: 0pt)", document)
+            self.assertIn("#image(", document)
+            self.assertEqual(command[command.index("--font-path") + 1], str(fonts))
+            self.assertIn("--root", command)
+            Path(command[-1]).write_bytes(PNG_BYTES if "png" in command else b"%PDF-vector")
+            return subprocess.CompletedProcess(command, 0, "", "")
+        with mock.patch.object(svg, "_python_module", return_value=False), \
+                mock.patch.object(svg.subprocess, "run", side_effect=run):
+            for format in ("pdf", "png"):
+                result, why = images.convert_svg(self.svg, self.cache, lambda name: "/tools/typst" if name == "typst" else None,
+                                                 format=format, dpi=144, fonts=fonts)
+                self.assertIsNotNone(result, why)
+                self.assertEqual(result.suffix, "." + format)
+        self.assertIn("144", seen[-1])
+
+    def test_failed_typst_falls_through_to_resvg_and_keeps_the_png_suffix(self):
+        from pdfmd_images import svg
+        seen = []
+        def run(command, **kwargs):
+            seen.append(command)
+            if command[0].endswith("typst"):
+                return subprocess.CompletedProcess(command, 1, "", "cannot draw SVG")
+            Path(command[-1]).write_bytes(PNG_BYTES)
+            return subprocess.CompletedProcess(command, 0, "", "")
+        with mock.patch.object(svg, "_python_module", return_value=False), \
+                mock.patch.object(svg.subprocess, "run", side_effect=run):
+            result, why = images.convert_svg(self.svg, self.cache, lambda name: "/tools/" + name if name in ("typst", "resvg") else None)
+        self.assertIsNotNone(result, why)
+        self.assertEqual(result.suffix, ".png")
+        self.assertEqual(result.read_bytes(), PNG_BYTES)
+        self.assertEqual([Path(call[0]).name for call in seen], ["typst", "resvg"])
+
+    def test_each_converter_works_alone_for_pdf_and_png(self):
+        from pdfmd_images import svg
+        expected = ("rsvg-convert", "inkscape", "cairosvg", "svglib", "soffice", "typst", "resvg")
+        self.assertEqual(svg.CONVERTERS, expected)
+        def cairo(**kwargs):
+            Path(kwargs["write_to"]).write_bytes(b"converted")
+        def reportlab(drawing, filename, **kwargs):
+            Path(filename).write_bytes(b"converted")
+        modules = {"cairosvg": types.SimpleNamespace(svg2pdf=cairo, svg2png=cairo),
+                   "svglib": types.ModuleType("svglib"), "svglib.svglib": types.SimpleNamespace(svg2rlg=lambda _: object()),
+                   "reportlab": types.ModuleType("reportlab"),
+                   "reportlab.graphics": types.SimpleNamespace(renderPDF=types.SimpleNamespace(drawToFile=reportlab),
+                                                              renderPM=types.SimpleNamespace(drawToFile=reportlab))}
+        calls = []
+        def run(command, **kwargs):
+            calls.append(command)
+            if "--convert-to" in command:
+                out = Path(command[command.index("--outdir") + 1]) / (self.svg.stem + "." + command[command.index("--convert-to") + 1])
+            elif "-o" in command:
+                out = Path(command[command.index("-o") + 1])
+            elif command[-1].startswith("--export-filename="):
+                out = Path(command[-1].split("=", 1)[1])
+            else:
+                out = Path(command[-1])
+            out.write_bytes(b"converted")
+            return subprocess.CompletedProcess(command, 0, "", "")
+        for name in expected:
+            for format in ("pdf", "png"):
+                with self.subTest(converter=name, format=format), mock.patch.dict(sys.modules, modules), \
+                        mock.patch.object(svg, "_python_module", side_effect=lambda module: module == name or (name == "svglib" and module == "reportlab")), \
+                        mock.patch.object(svg.subprocess, "run", side_effect=run):
+                    result, why = images.convert_svg(self.svg, self.cache / name / format,
+                        lambda tool: "/tools/" + tool if tool == name else None,
+                        lambda: "/tools/soffice" if name == "soffice" else None, format=format)
+                    self.assertIsNotNone(result, why)
+                    self.assertEqual(result.suffix, ".png" if name == "resvg" else "." + format)
+                    self.assertEqual(result.read_bytes(), b"converted")
+        rsvg = [call for call in calls if call[0] == "/tools/rsvg-convert"]
+        self.assertEqual(rsvg[0][1:3], ["-f", "pdf"])
+        self.assertEqual(rsvg[-1][1:5], ["-z", "2", "-f", "png"])
+
+    @unittest.skipUnless(shutil.which("typst"), "needs Typst")
+    def test_real_typst_makes_an_image_sized_vector_pdf_and_png(self):
+        import struct
+        from pdfmd_images import svg
+        fonts = self.directory / "fonts"
+        fonts.mkdir()
+        self.svg = self.svg.rename(self.directory / "a ü.svg")
+        which = lambda name: shutil.which("typst") if name == "typst" else None
+        with mock.patch.object(svg, "_python_module", return_value=False):
+            pdf, why = images.convert_svg(self.svg, self.cache, which, fonts=fonts)
+            self.assertIsNotNone(pdf, why)
+            self.assertTrue(pdf.read_bytes().startswith(b"%PDF"))
+            png, why = images.convert_svg(self.svg, self.cache, which, format="png", dpi=192, fonts=fonts)
+            self.assertIsNotNone(png, why)
+            self.assertEqual(struct.unpack(">II", png.read_bytes()[16:24]), (400, 200))
+            try:
+                from pypdf import PdfReader
+            except ImportError:
+                return
+            page = PdfReader(pdf).pages[0]
+            self.assertEqual((float(page.mediabox.width), float(page.mediabox.height)), (150, 75))
+            self.assertEqual(len(page.images), 0)  # the SVG stayed vector
 
 
 class ConcurrentCaching(unittest.TestCase):
@@ -175,7 +288,7 @@ class ConcurrentCaching(unittest.TestCase):
             root = Path(directory)
             source = root / "a.svg"
             source.write_text(SVG, encoding="utf-8")
-            def convert(name, svg_file, produced, *args):
+            def convert(name, svg_file, produced, *args, **kwargs):
                 produced.write_bytes(b"%PDF-test")
                 return True, ""
             with mock.patch.object(svg, "available_converters", return_value=["fake"]), mock.patch.object(svg, "_run", side_effect=convert):
@@ -280,6 +393,40 @@ class Arguments(unittest.TestCase):
         source = self.document("![a](a.svg)\n")
         with mock.patch.object(pdfmd, "which", side_effect=lambda name: "/usr/bin/rsvg-convert" if name == "rsvg-convert" else None):
             self.assertEqual(pdfmd.image_filter_args(None, [source]), [])
+
+    def test_resolution_layers_cli_and_worker_state(self):
+        from pdfmd_filters import image_dpi_for
+        source = self.document("---\npdfmd-options: {image-dpi: 144}\n---\n![a](a.svg)\n")
+        metadata = self.directory / "metadata.yaml"
+        metadata.write_text("pdfmd-options: {image-dpi: 120}\n")
+        with mock.patch.object(pdfmd, "IMAGE_DPI_CLI", None), \
+                mock.patch.object(pdfmd, "config_options", return_value={"image-dpi": 96}):
+            self.assertEqual(image_dpi_for(source, [metadata]), 144)
+            source.write_text("![a](a.svg)\n")
+            self.assertEqual(image_dpi_for(source, [metadata]), 120)
+            self.assertEqual(image_dpi_for(source), 96)
+            with mock.patch.object(pdfmd, "IMAGE_DPI_CLI", 72):
+                self.assertEqual(image_dpi_for(source, [metadata]), 72)
+                self.assertEqual(pdfmd.worker_state()["IMAGE_DPI_CLI"], 72)
+        with mock.patch.object(pdfmd, "IMAGE_DPI_CLI", None), \
+                mock.patch.object(pdfmd, "config_options", return_value={}):
+            self.assertEqual(image_dpi_for(source), 192)
+            self.assertEqual(image_dpi_for(source, default=300), 300)
+
+    def test_raster_fallback_cache_tracks_resolution(self):
+        source = self.document("![a](a.svg)\n")
+        from pdfmd_images import svg
+        def draw(name, file, produced, *args, **kwargs):
+            produced.write_bytes(PNG_BYTES)
+            return True, ""
+        with mock.patch.object(svg, "available_converters", return_value=["resvg"]), \
+                mock.patch.object(svg, "_run", side_effect=draw) as run:
+            first, _ = images.convert_svg(self.directory / "a.svg", self.cache, dpi=144)
+            second, _ = images.convert_svg(self.directory / "a.svg", self.cache, dpi=288)
+            self.assertNotEqual(first, second)
+            self.assertEqual(images.convert_svg(self.directory / "a.svg", self.cache, dpi=144)[0], first)
+            self.assertEqual(run.call_count, 2)
+        self.assertEqual(pdfmd.image_filter_args(["svg"], [source], format="png"), [])
 
 
 class Remote(unittest.TestCase):

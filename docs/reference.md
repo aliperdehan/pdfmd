@@ -258,12 +258,13 @@ Pandoc's Typst writer labels headings, divs, spans, figures and tables; a link t
 ## Images LaTeX cannot read (v3.25.7; the package pdfmd_images)
 
 LaTeX reads PDF, PNG and JPEG, not SVG. In a LaTeX build pdfmd converts each SVG a document names -- a Markdown
-image, a raw `\includegraphics{a.svg}` or `\includesvg{a}` -- once, with the first converter found (rsvg-convert,
-Inkscape, cairosvg, svglib, LibreOffice), keeps the PDF in ~/.cache/pdfmd/images by the file's content, and the
+image, a raw `\includegraphics{a.svg}` or `\includesvg{a}` -- once, with the first working converter (rsvg-convert,
+Inkscape, cairosvg, svglib, LibreOffice, Typst, resvg), keeps the PDF (a PNG from resvg) in ~/.cache/pdfmd/images by the file's content, and the
 Lua filter pdfmd_lua/images.lua puts it where the document wrote the SVG. A Markdown SVG is left to Pandoc when
 rsvg-convert is installed (Pandoc converts it itself). A raw `\includegraphics` also gets graphicx, which Pandoc
-only loads for a Markdown image (a PNG in one failed with "undefined control sequence"). Without any converter
-there is one WARN naming the file and what to install. A remote image (http/https) in a Markdown image is fetched
+only loads for a Markdown image (a PNG in one failed with "undefined control sequence"). Word builds use the
+same chain for PNG, leaving Pandoc’s own conversion in place when rsvg-convert is installed. Without any
+converter there is one WARN naming the file and what to install. A remote image (http/https) in a Markdown image is fetched
 once into ~/.cache/pdfmd/images/remote (PNG, JPEG, SVG, PDF; seven days; an older copy is kept if the fetch
 fails), which is what makes it work with a Pandoc built without HTTP support (Homebrew's is) and for an SVG badge;
 with no network there is one WARN and Pandoc leaves the description. `--no-auto svg` and `--no-auto remoteimages`
@@ -1200,9 +1201,16 @@ and kept in pdfmd’s tools folder; delete that executable to remove it (as for 
 
 A fenced ```mermaid, ```d2 or ```dot block (v3.26.16) is drawn by mmdc, d2 or dot when installed and replaced by the
 picture in the format the output takes (pdfmd_lua/diagram.lua); `--no-auto diagrams` leaves the code.
-D2 and SVG-only Graphviz need rsvg-convert or inkscape for PDF/PNG (LaTeX/Word/OpenDocument).
-A missing converter leaves the diagram as code with a warning naming the conversion and these tools;
-an installed converter's failure is reported separately. `--doctor` lists the diagram SVG converters.
+D2 and SVG-only Graphviz use the same converter chain as SVG images for PDF/PNG (LaTeX/Word/OpenDocument):
+rsvg-convert, Inkscape, cairosvg, svglib, LibreOffice, Typst, resvg, in that order, falling through on failure.
+Typst makes a vector PDF for LaTeX on a page the SVG’s own size with no margin, or PNG for Word. It uses
+pdfmd’s fonts folder, a root containing the SVG, and the Typst on PATH (else the managed tools folder).
+resvg makes PNG for either target when earlier converters are missing or fail. `image-dpi` in `pdfmd-options`,
+`--image-dpi N` or `--setup` controls raster SVG conversion and Graphviz PNGs (192 by default, preserving
+existing output); exported pages keep their default 300. It also participates in raster cache keys.
+A missing converter leaves the diagram as code with a warning naming the conversion, Typst and resvg among
+the choices; an installed converter’s failure is reported separately. `--doctor` lists the chain and all
+converters found. Existing rsvg-convert/Inkscape output is unchanged at the default resolution.
 Each warning uses that diagram's own error, never another tool's success message. A tool run may take
 `diagram-timeout` seconds (v3.32.1; default 120, 0 = draw nothing, negative = no limit): pdfmd_lua/limited_run.py stops a
 run that takes longer with the processes it started, and the diagram stays as code with a warning.

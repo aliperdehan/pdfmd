@@ -496,7 +496,7 @@ def install_mathjax() -> bool:
 # download of its own for macOS or Linux, so `pdfmd --install diagram:dot` fetches @hpcc-js/wasm-graphviz (Graphviz built
 # to WebAssembly, one 2 MB script, the SHA-256 below) and writes `dot`, `neato`, ... launchers that run it with node
 # (pdfmd_lua/graphviz.cjs); node comes the way it does for KaTeX. It writes SVG only: for a PDF or a PNG diagram.lua
-# converts that SVG, as for D2, which takes rsvg-convert or inkscape. The tools folder is last on PATH, so a Graphviz or D2
+# converts that SVG, as for D2, using the shared SVG converter chain. The tools folder is last on PATH, so a Graphviz or D2
 # you installed yourself is the one that runs.
 D2_REPOSITORY = "terrastruct/d2"
 D2_TARGETS = {
@@ -569,7 +569,7 @@ def install_d2() -> bool:
         print(f"D2 was downloaded to {target} but does not run here: {ran.stderr.strip() if ran else 'it does not answer'}", file=sys.stderr)
         return False
     print(f"Installed D2 {ran.stdout.strip()} in {core.tools_directory()} (used when no other d2 is on PATH; delete the file "
-          "to remove it). A PDF or Word diagram is converted from D2's SVG by rsvg-convert or inkscape.")
+          "to remove it). A PDF or Word diagram is converted from D2's SVG by the shared SVG chain (including Typst and resvg).")
     return True
 
 
@@ -664,7 +664,7 @@ def install_graphviz() -> bool:
         return False
     print(f"Installed Graphviz {GRAPHVIZ_VERSION} in {target}: `dot`, `neato` and the other layout commands are in "
           f"{core.tools_directory()} (used when no other is on PATH; delete them and the folder to remove). They write SVG; a "
-          "PDF or Word diagram is converted from it by rsvg-convert or inkscape.")
+          "PDF or Word diagram is converted from it by the shared SVG chain (including Typst and resvg).")
     return True
 
 

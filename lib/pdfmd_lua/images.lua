@@ -1,6 +1,7 @@
 -- pdfmd: the images a LaTeX engine cannot read. pdfmd converts each SVG a document names (once, kept by content) and
--- passes the map, as written in the document -> the PDF, in the metadata field `pdfmd-image-map`; this filter puts the
--- PDF where the document named the SVG: a Markdown image, a raw `\includegraphics{a.svg}`, a raw `\includesvg{a}`.
+-- passes the map, as written in the document -> the PDF/PNG, in the metadata field `pdfmd-image-map`; this filter puts the
+-- result where the document named the SVG: a Markdown image, a raw `\includegraphics{a.svg}`, a raw `\includesvg{a}`.
+-- Word builds use the same map with PNGs for Markdown images.
 
 local map = {}
 

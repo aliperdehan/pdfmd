@@ -521,7 +521,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--crop-ignore-bottom", type=float, default=None, metavar="PT",
                         help="with --crop: do not look at the bottom PT points of each page (a page number); default 0")
     parser.add_argument("--image-dpi", type=float, default=None, metavar="DPI",
-                        help="with --to png, jpg or tiff: pixels per inch of the picture (default 300)")
+                        help="pixels per inch: SVG images and raster diagrams (default 192), exported png, jpg or tiff pages (300); "
+                             "also pdfmd-options: {image-dpi: N} and --setup")
     parser.add_argument("--image-quality", type=int, default=None, metavar="1-100",
                         help="with --to jpg: the JPEG quality (default 90)")
     parser.add_argument("--page-folder", action=argparse.BooleanOptionalAction, default=None,

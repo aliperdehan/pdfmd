@@ -78,14 +78,33 @@ def code_filter_args(no_auto: list[str] | None, sources: list[Path], metadata_fi
     return args
 
 
+def image_dpi_for(source: Path, metadata_files=(), default=192):
+    """Reuse image-dpi for embedded raster SVGs (legacy diagrams: 192; exported pages: 300)."""
+    value = core.IMAGE_DPI_CLI
+    if value is None:
+        value = (core.first_pdfmd_option(source, metadata_files, "image-dpi") if source.suffix.lower() in (".md", ".markdown")
+                 else core.config_options().get("image-dpi"))
+    if value is None:
+        return default
+    try:
+        dpi = float(value)
+        if 0 < dpi < float("inf"):
+            return dpi
+    except (TypeError, ValueError):
+        pass
+    print(f"WARN  image-dpi must be a number above 0; using {default}", file=sys.stderr)
+    return default
+
+
 SVG_WARNED: set[str] = set()
 
 
-def image_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[str]:
-    """What a LaTeX build needs for images LaTeX cannot read (pdfmd_images; pdfmd_lua/images.lua): each SVG the
+def image_filter_args(no_auto: list[str] | None, sources: list[Path], metadata_files=(), *, format="pdf") -> list[str]:
+    """What a LaTeX/Word build needs for SVG images (pdfmd_images; pdfmd_lua/images.lua): each SVG the
     documents name is converted once to a PDF (kept by content in the cache) and the filter puts the PDF where the
     document wrote the SVG, in a raw `\\includegraphics{a.svg}` or `\\includesvg{a}` and in a Markdown image when Pandoc
-    has no rsvg-convert to do it itself. A raw `\\includegraphics` also gets graphicx, which Pandoc only loads for a
+    has no rsvg-convert to do it itself. Word requests PNG; resvg returns PNG for either target.
+    A raw `\\includegraphics` also gets graphicx, which Pandoc only loads for a
     Markdown image. Nothing for `--no-auto svg`, a document without such images, or a lone pdfmd.py."""
     if core.auto_disabled(no_auto, "svg"):
         return []
@@ -103,15 +122,19 @@ def image_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[st
     mapping: dict[str, str] = {}
     raw_graphics = False
 
-    def to_pdf(file: Path, source: Path, written: str) -> str | None:
-        pdf, why = pdfmd_images.convert_svg(file, core.cache_root() / "images", core.which, core.resolve_soffice, core.run_soffice)
+    def convert(file: Path, source: Path, written: str) -> str | None:
+        pdf, why = pdfmd_images.convert_svg(file, core.cache_root() / "images", core.which, core.resolve_soffice, core.run_soffice,
+                                          format=format, dpi=image_dpi_for(source, metadata_files), fonts=core.fonts_directory())
         if pdf is None and str(file) not in SVG_WARNED:
             SVG_WARNED.add(str(file))
-            print(f"WARN  {core.display_path(source)}: {written} is an SVG and LaTeX cannot read it; {why}", file=sys.stderr)
+            reason = "LaTeX cannot read it" if format == "pdf" else "could not be converted to PNG"
+            print(f"WARN  {core.display_path(source)}: {written} is an SVG and {reason}; {why}", file=sys.stderr)
         return str(pdf) if pdf is not None else None
 
     for source in sources:
         for reference in pdfmd_images.find_references(core.read_text_best_effort(source)):
+            if format == "png" and reference.kind != "markdown":
+                continue
             raw_graphics = raw_graphics or reference.kind != "markdown"
             if reference.path in mapping:
                 continue
@@ -130,7 +153,7 @@ def image_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[st
                         print(f"WARN  {core.display_path(source)}: {reference.path} could not be fetched ({why})", file=sys.stderr)
                     continue
                 if local.suffix == ".svg":
-                    converted = to_pdf(local, source, reference.path)
+                    converted = convert(local, source, reference.path)
                     if converted:
                         mapping[reference.path] = converted
                 else:
@@ -142,7 +165,7 @@ def image_filter_args(no_auto: list[str] | None, sources: list[Path]) -> list[st
             file = source.parent / urllib.parse.unquote(written)
             if not file.is_file():
                 continue
-            converted = to_pdf(file, source, reference.path)
+            converted = convert(file, source, reference.path)
             if converted:
                 mapping[reference.path] = converted
     args: list[str] = []
@@ -562,8 +585,19 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
     if table is not None:
         config["pdfmd-raw"] = table
     if diagrams:
-        config["pdfmd-diagram-tools"] = [tool for tool in [*(item[0] for item in DIAGRAM_TOOLS), "rsvg-convert", "inkscape"]
-                                          if core.which(tool)]
+        import pdfmd_images
+        from pdfmd_images.svg import diagram_converters, typst_document
+        dpi = image_dpi_for(files[0], metadata_files)
+        plan = {"converters": diagram_converters(core.which, core.resolve_soffice, core.fonts_directory(), dpi),
+                "typst": typst_document("out.svg"), "dpi": dpi}
+        payload = json.dumps(plan, ensure_ascii=False)
+        plan_file = folder / "maps" / ("svg-" + hashlib.sha256(payload.encode()).hexdigest()[:20] + ".json")
+        if not plan_file.is_file():
+            plan_file.parent.mkdir(parents=True, exist_ok=True)
+            plan_file.write_text(payload, encoding="utf-8")
+        config["pdfmd-svg-plan"] = plan_file.as_posix()
+        config["pdfmd-diagram-tools"] = [tool for tool in [*(item[0] for item in DIAGRAM_TOOLS), *pdfmd_images.available_converters(core.which, core.resolve_soffice)]
+                                          if tool in pdfmd_images.CONVERTERS or core.which(tool)]
         seconds = diagram_timeout_for(files[0], metadata_files)
         if seconds == 0:
             config["pdfmd-diagram-off"] = True

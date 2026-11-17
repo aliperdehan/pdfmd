@@ -367,7 +367,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += core.width_filter_args(width_filter)
             cmd += core.cellalign_args(md_path, metadata_files)
             cmd += core.tblr_header_args(md_path, metadata_files)
-            cmd += core.code_filter_args(no_auto, [md_path, title_source], metadata_files) + core.image_filter_args(no_auto, [md_path, title_source])
+            cmd += core.code_filter_args(no_auto, [md_path, title_source], metadata_files) + core.image_filter_args(no_auto, [md_path, title_source], metadata_files)
             core.hoist_code_header(cmd)
             cmd += core.markup_header_args(md_path, metadata_files, cmd)
             core.keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)

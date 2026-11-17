@@ -519,7 +519,7 @@ Per block: `{.numberLines startFrom=10 step=5}`, `{.noNumberLines}`, `{wrap=fals
 ![A drawing](plots/fig.pdf)
 ```
 
-- an **SVG** in a LaTeX build is converted to a PDF once (rsvg-convert, inkscape, cairosvg, svglib or LibreOffice,
+- an **SVG** in a LaTeX build is converted to a PDF (PNG with resvg) once (rsvg-convert, inkscape, cairosvg, svglib, LibreOffice, Typst or resvg,
   whichever is installed) and kept in the cache; `--no-auto svg` stops it;
 - an image from the **web** is fetched once and kept for 7 days (`--no-auto remoteimages`); offline you get one warning and
   Pandoc's description text;

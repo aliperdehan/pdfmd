@@ -42,6 +42,7 @@ local D2_LAYOUTS = {dagre = true, elk = true}
 
 local cache_dir, cache_rel = nil, nil
 local flat = false
+local converters, typst_source, image_dpi = {}, nil, 192
 local warned = {}
 local present = {}
 local limit, python, runner, off = nil, nil, nil, false     -- the time limit (see above)
@@ -155,24 +156,23 @@ local function run_in(folder, command, args, input, in_place)
 end
 
 -- SVG -> PDF or PNG, for D2 (whose own PDF and PNG need a browser download).
-local function convert_svg(folder, svg, out, format)
-  local attempts = {}
-  if format == "pdf" then
-    attempts = {{"rsvg-convert", {"-f", "pdf", "-o", out, svg}}, {"inkscape", {svg, "--export-type=pdf", "--export-filename=" .. out}}}
-  else
-    attempts = {{"rsvg-convert", {"-z", "2", "-f", "png", "-o", out, svg}}, {"inkscape", {svg, "--export-type=png", "--export-dpi=192", "--export-filename=" .. out}}}
-  end
+local function convert_svg(folder, format)
+  local attempts = converters[format] or {}
   local failures = {}
   for _, attempt in ipairs(attempts) do
-    if installed(attempt[1]) then
-      os.remove(out) -- a failed converter must not leave output for the next attempt
-      local ok = run_in(folder, attempt[1], attempt[2], "", true)
-      if ok and #(read_file(out) or "") > 0 then return true end
-      failures[#failures + 1] = attempt[1] .. ": " .. (last_error ~= "" and last_error or "produced no output")
+    local made = folder .. "/out." .. attempt.suffix
+    os.remove(made) -- a failed converter must not leave output for the next attempt
+    if attempt.name == "typst" and typst_source then write_file(folder .. "/out.typ", typst_source) end
+    local args = {}
+    for index = 2, #attempt.command do
+      args[#args + 1] = attempt.command[index]:gsub("@DIR@", function() return folder end)
     end
+    local ok = run_in(folder, attempt.command[1], args, "", true)
+    if ok and #(read_file(made) or "") > 0 then return made end
+    failures[#failures + 1] = attempt.name .. ": " .. (last_error ~= "" and last_error or "produced no output")
   end
   if #failures == 0 then
-    last_error = "no SVG-to-" .. format:upper() .. " converter found (install rsvg-convert or inkscape; see --doctor)"
+    last_error = "no SVG-to-" .. format:upper() .. " converter found (install rsvg-convert, inkscape, cairosvg, svglib, LibreOffice, Typst or resvg (pdfmd --install typst or diagram:resvg); see --doctor)"
   else
     last_error = "SVG-to-" .. format:upper() .. " conversion failed (" .. table.concat(failures, "; ") .. ")"
   end
@@ -183,24 +183,30 @@ local function draw(tool, source, attributes, format)
   current_tool = tool
   last_error = ""
   local key = pandoc.sha1(table.concat({tool, format, attributes.engine or "", attributes.theme or "", attributes.layout or "", source}, "\0"))
+  if image_dpi ~= 192 then key = pandoc.sha1(key .. tostring(image_dpi)) end
   local target = cache_dir .. "/" .. key .. "." .. format
   if file_exists(target) and #(read_file(target) or "") > 0 then return target end
+  if format == "pdf" and file_exists(target:gsub("%.pdf$", ".png")) then return (target:gsub("%.pdf$", ".png")) end
+  local function save_svg(folder, svg)
+    if not write_file(folder .. "/out.svg", svg) then return false end
+    local converted = convert_svg(folder, format)
+    if not converted then return false end
+    target = target:gsub("%.[^.]+$", "." .. converted:match("%.([^.]+)$"))
+    return write_file(target, read_file(converted))
+  end
   local made = false
   pandoc.system.with_temporary_directory("pdfmd-diagram", function(folder)
     if tool == "dot" then
       local engine = GRAPHVIZ_ENGINES[attributes.engine or "dot"] and (attributes.engine or "dot") or "dot"
       local args = {"-T" .. format}
-      if format == "png" then args[#args + 1] = "-Gdpi=192" end
+      if format == "png" then args[#args + 1] = "-Gdpi=" .. string.format("%g", image_dpi) end
       local ok, data = run_in(folder, engine, args, source, true)
       if ok and data and #data > 0 then
         made = write_file(target, data)
       elseif format ~= "svg" and not timed_out[engine] then
         -- a Graphviz without Cairo (pdfmd --install diagram:dot) writes only SVG: take that and convert it, as for D2
         local svg_ok, svg = run_in(folder, engine, {"-Tsvg"}, source, true)
-        if svg_ok and svg and #svg > 0 and write_file(folder .. "/out.svg", svg)
-            and convert_svg(folder, folder .. "/out.svg", folder .. "/out." .. format, format) then
-          made = write_file(target, read_file(folder .. "/out." .. format))
-        end
+        if svg_ok and svg and #svg > 0 then made = save_svg(folder, svg) end
       end
     elseif tool == "d2" then
       write_file(folder .. "/in.d2", source)
@@ -211,8 +217,8 @@ local function draw(tool, source, attributes, format)
       if run_in(folder, "d2", args) and file_exists(folder .. "/out.svg") then
         if format == "svg" then
           made = write_file(target, read_file(folder .. "/out.svg"))
-        elseif convert_svg(folder, folder .. "/out.svg", folder .. "/out." .. format, format) then
-          made = write_file(target, read_file(folder .. "/out." .. format))
+        else
+          made = save_svg(folder, read_file(folder .. "/out.svg"))
         end
       end
     else                                                    -- mmdc
@@ -308,6 +314,10 @@ function Pandoc(doc)
   if doc.meta["pdfmd-diagram-python"] and doc.meta["pdfmd-diagram-runner"] then
     python = pandoc.utils.stringify(doc.meta["pdfmd-diagram-python"])
     runner = pandoc.utils.stringify(doc.meta["pdfmd-diagram-runner"])
+  end
+  if doc.meta["pdfmd-svg-plan"] then
+    local plan = pandoc.json.decode(read_file(pandoc.utils.stringify(doc.meta["pdfmd-svg-plan"])))
+    converters, typst_source, image_dpi = plan.converters, plan.typst, plan.dpi
   end
   off = doc.meta["pdfmd-diagram-off"] ~= nil
   local tools = doc.meta["pdfmd-diagram-tools"]

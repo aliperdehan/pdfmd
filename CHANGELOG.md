@@ -19,6 +19,38 @@ same commit as the change.
 
 ---
 
+## v3.33.307 — 2026-11-17
+
+Pre-edit state: commit `df4453d`. SVG images and diagrams used different converter lists, and neither diagram
+converter came with a Homebrew-free install. Share the image chain with diagrams, retaining rsvg-convert,
+Inkscape, cairosvg, svglib and LibreOffice in order, then trying Typst and resvg. Typst makes a vector PDF
+on the SVG's own page with no margin, or PNG for Word; use the found Typst, pdfmd's fonts and a root containing
+the SVG. resvg falls back to PNG for either writer, keeping the correct extension. Keep existing converter
+commands, output and default cache keys; keep diagram timeouts on each converter. Pass command plans as
+JSON files so Pandoc's Markdown metadata reader cannot alter command text or Typst source. Doctor lists the
+chain and all converters found; missing-converter warnings name Typst and resvg.
+
+Reuse image-dpi (CLI, pdfmd-options and setup) for raster SVG conversion and Graphviz PNGs, preserving the
+existing 192 DPI; exported pages keep 300 DPI. Record it in setup's inventory and cache keys. The SVG reference
+pixel's 1/96 inch is a file-format fact used to scale raster converters, not a new setting. Update help, README,
+reference, recipes and agent guide. No TODO changes. pdfmd.py grows from 784 to 785 lines for the image-dpi
+CLI override transferred to spawned workers; all conversion code lives in the existing images package.
+
+Word SVG images also use the shared PNG chain. Keep the existing rejection of --image-dpi on a PDF input
+without picture output. The bare-tool test paths retain only the optional fontconfig utility for cheap font
+discovery; the doctor fixture disables LibreOffice explicitly, rather than discovering the real Mac app.
+
+Regression proof: the Typst API case errors before the fix; eight image/D2/dot integration subcases and the
+doctor chain assertion fail against the pre-edit snapshot. The 11 touched/support/safety modules ran 241 tests:
+zero assertion failures, five socket-binding errors in test_images.Remote (`PermissionError: [Errno 1]
+Operation not permitted`), one existing setup skip (prompt_toolkit is installed). All 175 tests in the nine
+other modules pass, as do all 31 crop tests and the 30 image tests that do not bind sockets. The final 16
+focused cases pass with Pandoc 3.13; seven compatibility cases pass with 3.1.3, covering the conversion matrix,
+missing converters, existing rsvg/Inkscape paths and image maps. Real Typst makes a 150 by 75 pt vector PDF
+and 400 by 200 PNG at 192 DPI from a 200 by 100 SVG, including a Unicode filename; a pdfmd/pdflatex build embeds
+an SVG image, D2 and SVG-only dot as three vector forms. Ruff F, shellcheck and whitespace checks pass;
+start-up remains 182 modules. No real downloads/installs, full suite, Windows or hand GUI checks.
+
 ## v3.33.306 — 2026-11-17
 
 Pre-edit state: commit `da0bbff`. Diagram installation omitted an SVG raster converter, so the tools

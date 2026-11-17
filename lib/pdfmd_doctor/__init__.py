@@ -233,7 +233,8 @@ def doctor_report(deep: bool = False) -> bool:
     try:
         import pdfmd_images
         converters = pdfmd_images.available_converters(core.which, core.resolve_soffice)
-        line(None, "SVG images in LaTeX builds are converted with: " + (converters[0] if converters else
+        line(None, "SVG converter chain: " + " -> ".join(pdfmd_images.CONVERTERS))
+        line(None, "SVG images and diagrams to PDF/PNG: " + (", ".join(converters) if converters else
              "nothing installed (" + pdfmd_images.install_hint() + ")"))
     except ImportError:
         pass
@@ -241,9 +242,6 @@ def doctor_report(deep: bool = False) -> bool:
     line(None, "diagrams written as code (```dot, ```d2, ```mermaid) are drawn with: "
          + (", ".join(drawn_by) if drawn_by else "nothing installed ("
             + "; ".join(f"{name}: {hint.split('  |')[0]}" for _, name, hint in core.DIAGRAM_TOOLS) + ")"))
-    diagram_converters = [tool for tool in ("rsvg-convert", "inkscape") if core.which(tool)]
-    line(None, "diagram SVG to PDF/PNG: " + (", ".join(diagram_converters) if diagram_converters else
-         "nothing installed (rsvg-convert or inkscape)"))
     has_rdkit = importlib.util.find_spec("rdkit") is not None
     line(None, "chemical structures (```smiles blocks) are drawn with: "
          + ("RDKit" if has_rdkit else "nothing installed (pip install rdkit)"))

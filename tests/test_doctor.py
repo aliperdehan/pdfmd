@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,7 +19,15 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def doctor(path: str, home: str, *extra: str) -> subprocess.CompletedProcess:
-    environment = {**os.environ, "PATH": path, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": "",
+    # The tools under test may all be absent; fontconfig still avoids a slow scan of macOS font collections.
+    if sys.platform == "darwin" and (fontconfig := shutil.which("fc-list")) and not shutil.which("fc-list", path=path):
+        fonts = Path(home) / "font-tools"
+        fonts.mkdir(exist_ok=True)
+        (fonts / "fc-list").symlink_to(fontconfig)
+        path = os.pathsep.join((path, str(fonts)))
+    config = Path(home) / "config.yaml"
+    config.write_text("options: {soffice-timeout: 0}\n")
+    environment = {**os.environ, "PATH": path, "PDFMD_NO_PROMPT": "1", "PDFMD_CONFIG": str(config),
                    "XDG_CONFIG_HOME": home, "XDG_CACHE_HOME": home, "XDG_DATA_HOME": home,
                    "LOCALAPPDATA": home, "APPDATA": home, "PDFMD_NO_APP_PATHS": "1",
                    "ProgramFiles": home, "ProgramW6432": home, "ProgramFiles(x86)": home}      # no tool turns up in a Windows install folder
@@ -33,7 +42,9 @@ class DoctorTests(unittest.TestCase):
             empty.mkdir()
             result = doctor(str(empty), directory)
             text = result.stdout
-            self.assertIn("diagram SVG to PDF/PNG: nothing installed (rsvg-convert or inkscape)", text)
+            self.assertIn("SVG converter chain: rsvg-convert -> inkscape -> cairosvg -> svglib -> soffice -> typst -> resvg", text)
+            self.assertIn("SVG images and diagrams to PDF/PNG:", text)
+            self.assertIn("pdfmd --install diagram:resvg", text)
             self.assertIn("MISS  pandoc", text)
             self.assertIn("pdfmd --install pandoc", text)
             self.assertIn("MISS  tesseract", text)

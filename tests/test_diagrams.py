@@ -89,8 +89,21 @@ case "$out" in
   *) printf '%s' '@PDF@' > "$out" ;;
 esac
 """
-GRAPHVIZ, D2, MERMAID, RSVG = (script.replace("@SVG@", SVG).replace("@PNG@", PNG).replace("@PDF@", PDF_LINE)
-                               for script in (GRAPHVIZ, D2, MERMAID, RSVG))
+TYPST = """#!/bin/sh
+echo "typst $*" >> "$STUB_LOG"
+for last; do :; done
+case "$last" in
+  *.png) printf '@PNG@' > "$last" ;;
+  *) printf '%s' '@PDF@' > "$last" ;;
+esac
+"""
+RESVG = """#!/bin/sh
+echo "resvg $*" >> "$STUB_LOG"
+for last; do :; done
+printf '@PNG@' > "$last"
+"""
+GRAPHVIZ, D2, MERMAID, RSVG, TYPST, RESVG = (script.replace("@SVG@", SVG).replace("@PNG@", PNG).replace("@PDF@", PDF_LINE)
+                                          for script in (GRAPHVIZ, D2, MERMAID, RSVG, TYPST, RESVG))
 
 
 # A stand-in whose PDF is a real one (the SVG through rsvg-convert), for a build that LaTeX or Typst really typesets.
@@ -123,6 +136,9 @@ class Diagrams(unittest.TestCase):
         self.bare = self.directory / "bare"
         self.bare.mkdir()
         (self.bare / "pandoc").symlink_to(shutil.which("pandoc"))
+        # Keep font discovery cheap on macOS without exposing any real diagram tools or converters.
+        if fontconfig := shutil.which("fc-list"):
+            (self.bare / "fc-list").symlink_to(fontconfig)
 
     def install(self, **tools: str) -> None:
         for name, script in tools.items():
@@ -139,9 +155,11 @@ class Diagrams(unittest.TestCase):
 
     def run_pdfmd(self, *arguments: str, stubs: bool = True) -> subprocess.CompletedProcess:
         path = os.pathsep.join([str(self.stubs)] * stubs + [str(self.bare), os.path.dirname(sys.executable)])
+        config = self.directory / "config.yaml"
+        config.write_text("options: {soffice-timeout: 0}\n")
         environment = {**os.environ, "PATH": path, "STUB_LOG": str(self.log),
-                       "PDFMD_CONFIG": "", "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], "XDG_CACHE_HOME": str(self.cache),
-                       "PDFMD_NO_PROMPT": "1",
+                       "PDFMD_CONFIG": str(config), "XDG_CONFIG_HOME": os.environ["XDG_CONFIG_HOME"], "XDG_CACHE_HOME": str(self.cache),
+                       "PDFMD_NO_PROMPT": "1", "PDFMD_NO_APP_PATHS": "1",
                        # the tools `pdfmd --install diagram` keeps are on pdfmd's own PATH: an empty data folder, or they answer for a missing dot
                        "XDG_DATA_HOME": str(self.directory / "data"), "LOCALAPPDATA": str(self.directory / "data")}
         environment.pop("PDFMD_STRICT", None)
@@ -359,6 +377,8 @@ class Diagrams(unittest.TestCase):
                     self.assertIn("no SVG-to-" + picture + " converter found", line)
                     self.assertIn("rsvg-convert", line)
                     self.assertIn("inkscape", line)
+                    self.assertIn("Typst", line)
+                    self.assertIn("resvg", line)
                     self.assertIn("--doctor", line)
                     self.assertNotIn("successfully compiled", line)
                 if target == "latex":
@@ -414,6 +434,52 @@ class Diagrams(unittest.TestCase):
         self.assertIn("dot -Tsvg", calls)
         self.assertTrue(any(call.startswith("rsvg-convert") and "pdf" in call for call in calls), calls)
         self.assertIn("includegraphics", (self.directory / "doc.tex").read_text(encoding="utf-8"))
+
+
+    def test_typst_and_resvg_convert_svg_images_and_both_diagram_languages(self):
+        svg_only = GRAPHVIZ.replace("-Tpdf) printf", "-Tpdf) exit 1 ;;\n  -Tnever) printf").replace(
+            "-Tpng) printf", "-Tpng) exit 1 ;;\n  -Tnever2) printf")
+        managed = self.directory / "data" / "pdfmd" / "bin" / "typst"
+        for converter in ("typst", "managed-typst", "resvg", "fallback"):
+            self.install(d2=D2, dot=svg_only)
+            for old in (self.stubs / "typst", self.stubs / "resvg", managed):
+                if old.exists():
+                    old.unlink()
+            if converter == "typst":
+                self.install(typst=TYPST)
+            elif converter == "managed-typst":
+                managed.parent.mkdir(parents=True, exist_ok=True)
+                managed.write_text(TYPST)
+                managed.chmod(0o755)
+            elif converter == "resvg":
+                self.install(resvg=RESVG)
+            else:
+                self.install(typst=FAILING, resvg=RESVG)
+            for target, extension in (("latex", "tex"), ("docx", "docx")):
+                with self.subTest(converter=converter, target=target):
+                    # Separate content and caches make every combination perform a fresh conversion.
+                    (self.directory / "image.svg").write_text(SVG + f"<!--{converter}-{target}-->")
+                    self.log.write_text("")
+                    self.write("---\ntitle: SVG\npdfmd-options: {image-dpi: 144}\n---\n\n![image](image.svg)\n\n"
+                               "```d2\nx -> " + converter + " target" + target + "\n```\n\n```dot\ndigraph { a -> " + converter + target + " }\n```\n")
+                    done = self.run_pdfmd("doc.md", "--to", target, "-o", "doc." + extension)
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    self.assertNotIn("could not be drawn", done.stdout + done.stderr)
+                    self.assertNotIn("Could not convert image", done.stderr)
+                    if target == "latex":
+                        tex = (self.directory / "doc.tex").read_text()
+                        body = tex.split(r"\begin{document}", 1)[1]
+                        self.assertEqual(body.count(r"\includegraphics"), 3, tex)
+                    else:
+                        with zipfile.ZipFile(self.directory / "doc.docx") as archive:
+                            xml = archive.read("word/document.xml").decode()
+                            self.assertNotIn("digraph", xml)
+                            self.assertEqual(sum(name.endswith(".png") and name.startswith("word/media/")
+                                                 for name in archive.namelist()), 3)
+                            self.assertEqual(xml.count("<w:drawing>"), 3)
+                    calls = self.ran()
+                    self.assertTrue(any(call.startswith("typst compile") if converter in ("typst", "managed-typst") else call.startswith("resvg ")
+                                        for call in calls), calls)
 
     def test_a_caption_and_an_id_make_a_figure(self):
         self.install(dot=GRAPHVIZ)

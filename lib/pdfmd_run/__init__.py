@@ -177,6 +177,7 @@ def run_main() -> None:
                              ("emoji_fallback", "emoji_fallback", args.emoji_fallback)):
         if getattr(args, flag) not in (None, False):
             core.INKMD_CLI[key] = value
+    core.IMAGE_DPI_CLI = args.image_dpi
     core.CODE_CLI.clear()
     if args.line_numbers:
         core.CODE_CLI["line-numbers"] = True
@@ -318,8 +319,11 @@ def run_main() -> None:
             raise SystemExit(status)
     if (args.crop_pad is not None or args.crop_ignore_bottom is not None or args.crop_page is not None) and not args.crop:
         raise SystemExit("--crop-pad, --crop-ignore-bottom and --crop-page go with --crop: pdfmd --crop formula.pdf --crop-pad 1")
-    if (args.image_dpi is not None or args.image_quality is not None) and not (args.crop or args.to_many or core.picture_target(args) in core.PICTURE_ONLY):
-        raise SystemExit("--image-dpi and --image-quality go with --to png, jpg, tiff, eps, ps or svg")
+    if args.image_quality is not None and not (args.crop or args.to_many or core.picture_target(args) in core.PICTURE_ONLY):
+        raise SystemExit("--image-quality goes with --to png, jpg, tiff, eps, ps or svg")
+    if (args.image_dpi is not None and args.path and all(path.suffix.lower() == ".pdf" for path in args.path)
+            and not (args.crop or args.to_many or core.picture_target(args) in core.PICTURE_ONLY)):
+        raise SystemExit("--image-dpi on a PDF input goes with --to png, jpg, tiff, eps, ps or svg")
     if args.to_many:
         raise SystemExit(core.multi_target_command(args))
     if args.crop or core.picture_target(args) in core.PICTURE_ONLY:

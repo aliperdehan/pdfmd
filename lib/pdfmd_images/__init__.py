@@ -1,5 +1,5 @@
-"""Images that a LaTeX engine cannot read as they are. Today that is SVG: LaTeX wants a PDF (or a raster), so pdfmd
-converts each SVG a document refers to once, keeps the result by the file's content, and hands the build the PDF.
+"""SVG images converted for LaTeX (PDF, or PNG as a fallback) and Word (PNG), using the same chain as diagrams.
+pdfmd converts each SVG a document refers to once and keeps the result by the file's content.
 pdfmd.py works without this package: SVG then goes to Pandoc as before."""
 
 from __future__ import annotations

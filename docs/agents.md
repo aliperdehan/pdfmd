@@ -17,7 +17,7 @@ pdfmd *                            # skip non-inputs (including PDFs and picture
 pdfmd report.md -e typst            # a PDF engine by name (or a list: -e typst,lualatex)
 pdfmd report.md --kit apa7         # build with a kit (a house style); `pdfmd --kits apa7` describes it, builds nothing
 pdfmd --install diagram:resvg        # SVG to PNG tool, GitHub SHA-256 checked, in pdfmd’s tools folder
-pdfmd --doctor                      # tools, including diagram SVG converters, and what fixes each
+pdfmd --doctor                      # tools, shared SVG image/diagram converter chain, found converters and fixes
 pdfmd --doctor --deep               # also builds a small page with every engine: "installed" is not "works"
 pdfmd report.md --check             # what would go wrong, without building (links, images, labels, citations ...)
 pdfmd report.md --verbose           # the exact Pandoc command and every automatic decision, with its reason
@@ -96,3 +96,9 @@ For a template's running head, `pdfmd-options: {office: {replace: {KICKER: "$cou
 metadata from the built Word/OpenDocument file, including office profile changes. `$$` is a dollar;
 missing/empty values disappear and spaces collapse with ends trimmed. Literal values without dollars keep
 their spacing; metadata text is XML-escaped.
+
+SVG images and D2/SVG-only dot diagrams share the converter chain: rsvg-convert, Inkscape, cairosvg, svglib,
+LibreOffice, Typst, resvg. Typst makes vector PDF for LaTeX or PNG for Word using pdfmd’s fonts; resvg is the PNG
+fallback. The first working converter wins. `pdfmd-options: {image-dpi: 192}`, `--image-dpi N` and `--setup` set
+raster SVG resolution (default 192; exported pages still default to 300). `--no-auto svg` and
+`--no-auto diagrams` disable the corresponding conversion.
