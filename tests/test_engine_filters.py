@@ -256,6 +256,47 @@ class CommandLine(unittest.TestCase):
                               encoding="utf-8", cwd=self.directory,
                               env={**os.environ, "PDFMD_NO_PROMPT": "1"})
 
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs pdftotext")
+    def test_typst_lists_of_figures_and_tables_with_and_without_contents(self):
+        picture = self.directory / "pixel.png"
+        picture.write_bytes(bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+                                         "0000000d49444154789c6360606060000000050001a5f645400000000049454e44ae426082"))
+        source = self.directory / "doc.md"
+        for lof, lot, toc in ((None, None, None), (False, False, False), (True, True, False), (True, True, True),
+                              (True, False, False), (False, True, False)):
+            with self.subTest(lof=lof, lot=lot, toc=toc):
+                requests = "".join(f"{key}: {str(value).lower()}\n" for key, value in
+                                   (("lof", lof), ("lot", lot), ("toc", toc)) if value is not None)
+                source.write_text("---\nmainfont: Libertinus Serif\n" + requests + "---\n\n"
+                                  "# Bodymarker\n\n![Figuremarker](pixel.png)\n\n"
+                                  "| a | b |\n|---|---|\n| 1 | 2 |\n\n: Tablemarker\n", encoding="utf-8")
+                done = self.run_pdfmd("doc.md", "-e", "typst", "--no-stamp", "--no-backup")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                text = subprocess.check_output(["pdftotext", str(source.with_suffix(".pdf")), "-"], encoding="utf-8")
+                self.assertEqual(text.count("Figuremarker"), 1 + int(bool(lof)), text)
+                self.assertEqual(text.count("Tablemarker"), 1 + int(bool(lot)), text)
+                self.assertEqual("List of Figures" in text, bool(lof), text)
+                self.assertEqual("List of Tables" in text, bool(lot), text)
+                if toc:
+                    self.assertLess(text.index("Contents"), text.index("List of Figures"))
+                if lof and lot:
+                    self.assertLess(text.index("List of Figures"), text.index("List of Tables"))
+
+    def test_typst_list_titles_follow_the_document_language(self):
+        for lang, figures, tables in (("en", "List of Figures", "List of Tables"),
+                                      ("ru-RU", "Список иллюстраций", "Список таблиц"),
+                                      ("fr", "Table des figures", "Liste des tableaux")):
+            with self.subTest(lang=lang):
+                source = self.directory / "doc.md"
+                source.write_text(f"---\nlof: true\nlot: true\nlang: {lang}\n---\n\nBody.\n", encoding="utf-8")
+                done = self.run_pdfmd("doc.md", "--to", "typst", "--standalone", "--no-stamp", "-o", "doc.typ")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                out = (self.directory / "doc.typ").read_text(encoding="utf-8")
+                self.assertIn(figures, out)
+                self.assertIn(tables, out)
+                self.assertIn("figure.where(kind: image)", out)
+                self.assertIn("figure.where(kind: table)", out)
+
     def test_inline_calls_followed_by_brackets_build_and_modern_output_is_unchanged(self):
         text = ('A *378*(6552), ~~s~~(z), [l](https://example.org)(y), **bold**(b), '
                 '[caps]{.smallcaps}(c), [under]{.underline}[d], [span]{.foo}(e), '

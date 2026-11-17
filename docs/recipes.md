@@ -447,13 +447,13 @@ Give figures and tables captions (`![A figure caption](plot.png)` alone in a par
 `pdfmd report -e xelatex`, or `pdfmd report --to docx`.
 
 - LaTeX (`pdflatex`, `xelatex`, `lualatex`, `tectonic`) prints separate lists of caption texts and page
-  numbers before the body. `toc: true` also prints the contents. Keep it for pdfLaTeX with Pandoc 3.13:
-  without the extra passes it triggers, Pandoc can leave the figure/table lists empty; bare Pandoc
-  does the same. XeLaTeX and Tectonic also print the lists without `toc`.
+  numbers before the body, with or without `toc: true`. That key also prints the contents; it is not
+  needed for the lists through pdfmd, including pdfLaTeX and LuaLaTeX with Pandoc 3.13.
 - Word with Pandoc 3.13 gets List of Figures and List of Tables fields. Update the fields in Word to
   fill in captions and page numbers; Pandoc does not fill them itself. Pandoc 3.1.3 ignores these keys
   for Word and writes no list fields.
-- Typst with Pandoc 3.1.3 or 3.13 ignores these keys: captions print, but neither list appears.
+- Typst with Pandoc 3.1.3 or 3.13 prints both lists after the contents, or where the contents would be
+  without `toc`. Their titles follow `lang:`. Without `lof`/`lot`, no lists are added.
 
 The front-matter keys work with both tested Pandocs. Pandoc 3.13 also accepts `--lof` / `--lot`, passed
 through by pdfmd; 3.1.3 has neither option. These options alone do not cure 3.13's pdfLaTeX rerun issue.

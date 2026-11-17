@@ -160,9 +160,10 @@ A part's own leading front matter remains discarded.
 ## Lists of figures and tables
 
 Pandoc metadata `lof: true` and `lot: true` requests lists of captioned figures and tables.
-LaTeX prints captions with page numbers; add `toc: true` for reliable pdfLaTeX passes with Pandoc 3.13.
-Pandoc 3.13's Word writer inserts fields to update in Word; 3.1.3 inserts none. Neither tested Typst
-writer prints these lists. See docs/recipes.md 3.5 for a recipe and the writer limitations.
+LaTeX prints captions with page numbers, with or without `toc: true`. Typst prints the lists after the
+contents (or where the contents would be), using the document language for the titles; without the keys
+no lists are added. Both Pandoc 3.1.3 and 3.13 work. Pandoc 3.13's Word writer inserts fields to update in
+Word; 3.1.3 inserts none. See docs/recipes.md 3.5 for a recipe and the Word limitation.
 
 ## Pandoc's memory cap
 

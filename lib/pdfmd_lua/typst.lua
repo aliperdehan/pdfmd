@@ -411,7 +411,56 @@ local function line_spacing(doc)
   return doc
 end
 
+-- The default template places its contents before body; these lists therefore follow it, or occupy that
+-- position when there is no contents. Typst's automatic outline title is always "Contents", even for figures.
+-- Read Pandoc's bundled translations for the document language rather than maintaining another language table.
+local function figure_lists(doc)
+  local function enabled(key)
+    local value = variables[key]
+    if value == nil then value = doc.meta[key] end
+    return indent_on(value)
+  end
+  local lof, lot = enabled("lof"), enabled("lot")
+  if not lof and not lot then return doc end
+  local titles = {ListOfFigures = "List of Figures", ListOfTables = "List of Tables"}
+  local lang = pandoc.utils.stringify(variables.lang or doc.meta.lang or "en"):gsub("_", "-")
+  if lang ~= "en" and lang:match("^[%a%d%-]+$") then
+    for _, tag in ipairs({lang, lang:match("^[^%-]+")}) do
+      local ok, yaml = pcall(pandoc.pipe, "pandoc", {"--print-default-data-file=translations/" .. tag .. ".yaml"}, "")
+      if ok then
+        local parsed = pandoc.read("---\n" .. yaml .. "\n---\n", "markdown").meta
+        for key, _ in pairs(titles) do
+          if parsed[key] then titles[key] = pandoc.utils.stringify(parsed[key]) end
+        end
+        break
+      end
+    end
+  end
+  if lot then
+    doc = doc:walk({Table = function(tbl)
+      if #tbl.caption.long == 0 then return nil end
+      local written = pandoc.write(pandoc.Pandoc({tbl}), "typst")
+      if written:match("^%s*#figure%s*%(") then return nil end
+      -- Pandoc 3.1.3 writes a caption as plain text after #table, outside a figure. An outline cannot find it.
+      local caption = pandoc.write(pandoc.Pandoc(tbl.caption.long), "typst"):gsub("%s+$", "")
+      tbl.caption = {long = {}}
+      local body = pandoc.write(pandoc.Pandoc({tbl}), "typst"):gsub("%s+$", "")
+      return pandoc.RawBlock("typst", "#figure([\n" .. body .. "\n], caption: [" .. caption .. "], kind: table)")
+    end})
+  end
+  local blocks = pandoc.Blocks{}
+  local function outline(key, kind)
+    local title = pandoc.write(pandoc.Pandoc({pandoc.Plain({pandoc.Str(titles[key])})}), "typst"):gsub("%s+$", "")
+    blocks:insert(pandoc.RawBlock("typst", "#outline(title: [" .. title .. "], target: figure.where(kind: " .. kind .. "))"))
+  end
+  if lof then outline("ListOfFigures", "image") end
+  if lot then outline("ListOfTables", "table") end
+  blocks:extend(doc.blocks)
+  doc.blocks = blocks
+  return doc
+end
+
 return {{Meta = meta_rules, Pandoc = function(doc)
   doc = doc:walk({Div = function(div) return entry_spacing(div, doc.meta) end})
-  return line_spacing(absolute_pictures(call_delimiters(plain_missing_links(doc))))
+  return line_spacing(figure_lists(absolute_pictures(call_delimiters(plain_missing_links(doc)))))
 end}}

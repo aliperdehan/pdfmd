@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.324 — 2026-11-17
+
+Pre-edit state: commit `ecc68d9`. Pandoc Typst templates ignored lof/lot, so captioned figures and tables never acquired lists. The final Typst filter now inserts native figure/table outlines at the start of the body, after the template contents or at that position without toc, and reads titles from Pandoc's bundled translations for lang. Pandoc 3.1.3 writes table captions outside figures; wrap its captioned tables in Typst figures when lot is requested so the table outline can find them. Without the keys output is unchanged. Correct recipe 3.5: LaTeX lists work through pdfmd with or without toc; retain Word limitations. Two regressions (seven failing subcases before) cover both lists, each alone, neither, contents order and English/Russian/French titles. Both Pandoc results and full module checks are in the batch report. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.323 — 2026-11-17
 
 Pre-edit state: commit `f7d54b6`. Cached SVG raster fallbacks retried every installed PDF converter on every build, including known failures such as a timed-out LibreOffice. Store available vector-converter names beside the PNG and retry only newly available converters; legacy or invalid records get one attempt and are then recorded. A PDF still returns immediately. Two regressions fail before (four subcases) and pass after, covering failed converters, a new vector converter and PDF reuse. Full image and required safety-module results are in the batch report. pdfmd.py stays at 785 lines (version only).
