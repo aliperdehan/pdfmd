@@ -181,7 +181,7 @@ class Filter(unittest.TestCase):
         self.assertIn("3+3", out)
         self.assertIn("`1+1`{=}", out)
         self.assertIn("`4+4`{=}", out)
-        self.assertNotIn("WARN", self.convert("`2+2` only\n").stderr)
+        self.assertNotIn("WARN  calc", self.convert("`2+2` only\n").stderr)
 
     def test_a_failed_span_loses_its_marker_and_nothing_else(self):
         out = self.convert("Good `1+1`{=} bad `1/0`{=}, fine `2+2`{=}.\n")
@@ -579,7 +579,7 @@ class Switches(unittest.TestCase):
                                    "--no-auto", "font", *arguments], cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
                                   env={**os.environ, **(env or {})})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            self.assertNotIn("WARN", done.stdout + done.stderr)
+            self.assertNotIn("WARN  calc", done.stdout + done.stderr)
             return (self.directory / ("out." + target)).read_text(encoding="utf-8")
         off = convert("latex")
         self.assertIn("Total DNA: m = c\\_s * V\\_el = 28.07 * 75 = 2105.25 ng/mL", off)         # off is the text, as before
@@ -616,7 +616,7 @@ class Switches(unittest.TestCase):
                                    "--no-auto", "font", *arguments], cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
                                   env={**os.environ, **(env or {})})
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            self.assertNotIn("WARN", done.stdout + done.stderr)
+            self.assertNotIn("WARN  calc", done.stdout + done.stderr)
             return (self.directory / ("out." + target)).read_text(encoding="utf-8")
         display = convert("latex", "--calc-typeset", "display")
         flat = " ".join(display.split())
@@ -675,7 +675,7 @@ class Switches(unittest.TestCase):
             return done, " ".join((self.directory / "out.tex").read_text(encoding="utf-8").split()) if done.returncode == 0 else ""
         done, display = convert("--calc-typeset", "display", "--calc-typeset-upright", "k")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertNotIn("WARN", done.stdout + done.stderr)
+        self.assertNotIn("WARN  calc", done.stdout + done.stderr)
         self.assertIn("\\text{Mid: } m = c_{\\mathrm{s}}\\cdot V_{\\mathrm{el}} = 2105.25", display)             # one piece, in its own line only
         self.assertIn("\\text{End: } m = c_{s}\\cdot \\mathrm{V}_{\\mathit{el}}\\cdot \\mathrm{k}_{\\mathit{DNA}} = 105262.50 \\text{ ng}\\]", display)           # k upright from the list, el and DNA italic from the line
         self.assertIn("\\text{Plain: } m = c_{s}\\cdot V_{\\mathrm{el}} = 2105.25", display)

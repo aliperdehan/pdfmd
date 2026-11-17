@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.301b — 2026-11-17
+
+Pre-edit state: commit `07268ea`. Four remaining calc tests rejected every WARN, including unrelated runner font warnings. Narrow their absence checks to WARN  calc; the batch’s other new tests already name their warning families, and item 2 replaced the gap warning tests. An injected STIX font warning makes the existing typesetting build test fail before this edit. No other test behaviour changes. Tests only: PDFMD_VERSION stays 3.33.301 and pdfmd.py stays at 784 lines; no TODO changes. The injected-font regression passes with Pandoc 3.13 and 3.1.3; full calc plus the five required safety modules: 239 tests, zero failures/errors, one skip. Ruff F and whitespace checks pass.
+
 ## v3.33.301a — 2026-11-17
 
 Pre-edit state: commit `b995587`. The watcher test needs Pandoc, which native macOS CI deliberately omits. Follow the existing skipUnless(shutil.which("pandoc")) pattern for watcher tests, and tolerate ProcessLookupError during cleanup when the child has already exited. Fake regressions fail before for both the missing skip and the cleanup exception. Tests only: PDFMD_VERSION stays 3.33.301 and pdfmd.py stays at 784 lines; no TODO changes. Both fake regressions pass after (including an actual skipped suite with Pandoc hidden); the real watcher and five required safety modules pass: 117 tests, zero failures/errors, one skip. Ruff F and whitespace checks pass.
