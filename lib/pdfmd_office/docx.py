@@ -255,8 +255,8 @@ def patch_styles(styles: str, spec: OfficeSpec, house: bool) -> str:
             span = _style(styles, style_id)
             if span and "Theme=" in styles[span[0]:span[1]]:
                 styles = _edit_style(styles, style_id, "rPr", "rFonts", _fonts_element(spec.main, spec.cjk))
-    if spec.indent:
-        for style_id, indent in (("BodyText", 360), ("FirstParagraph", 0)):
+    if spec.indent or spec.indent_length is not None:
+        for style_id, indent in (("BodyText", spec.indent_length if spec.indent_length is not None else 360), ("FirstParagraph", 0)):
             styles = _edit_style(styles, style_id, "pPr", "spacing", '<w:spacing w:before="0" w:after="0"/>')
             styles = _edit_style(styles, style_id, "pPr", "ind", f'<w:ind w:firstLine="{indent}"/>')
     if house:

@@ -145,7 +145,7 @@ div's `#id` stays. LaTeX and Beamer set `\parindent` in a group, Typst a `first-
 style for each length (`pdfmd-indent-0pt`, `pdfmd-indent-2em`; an em is 12 pt there) on the plain paragraphs of the div; its lists,
 quotes, code and tables keep their own styles. The other formats have no per-block indent: the text stays, the setting is dropped,
 with a NOTE. The document's own indent is Pandoc's
-`indent: true` in the front matter (none is the default): LaTeX indents the first line of each paragraph, and since 3.33.42
+`indent: true` in the front matter (none is the default; a length such as `indent: 0.5in` or `pdfmd-options: {indent: 0.5in}` also works in LaTeX, Typst, Word and HTML): LaTeX indents the first line of each paragraph, and since 3.33.42
 Typst does too (1.5em; Pandoc's Typst template has no such variable, so pdfmd sets it). LaTeX then drops the space between
 paragraphs too, and since 3.33.58 so does Typst (its paragraph spacing is its line spacing).
 

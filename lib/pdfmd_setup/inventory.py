@@ -140,6 +140,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "attach-csl": "options.attach-csl",
     "css": "options.css", "css-scope": "options.css-scope",
     "typst-line-spacing": "options.typst-line-spacing",
+    "indent": "options.indent",
     "paragraph-spacing": "options.paragraph-spacing", "fullcite-list": "options.fullcite-list", "bibliography-indent": "options.bibliography-indent",
     "cover": Omitted("document", "per document: a title page, or a picture for the first page / an EPUB's cover"),
     "attach-links": "options.attach-links",

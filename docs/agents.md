@@ -108,3 +108,5 @@ With the default LaTeX, Typst or HTML template, give a `title:` if `author:` or 
 To cap Pandoc's heap, set `pdfmd-options: {pandoc-memory: 512m}` (or `2g`; whole k/m/g units). Unset or null means off. On heap overflow, raise or unset `pandoc-memory`; PDF engines have separate memory use.
 
 Use `--strip-comments` or `pdfmd-options: {strip-comments: true}` to remove HTML comments from the build itself as well as assembled/attached source. Code examples and pdfmd marker comments survive. This also removes comments before `--show-comments` draws them.
+
+Document `indent:` (front matter or pdfmd-options) accepts lengths such as 0.5in, 3em and 1cm in LaTeX, Typst, Word and HTML. True stays 1.5em; false/unset keeps defaults. Invalid lengths stop the build; indent divs still override a stretch.

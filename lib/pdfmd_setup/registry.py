@@ -36,6 +36,7 @@ UNSET = {
     "geometry": "margin=1in", "mainfont": "STIX Two Text (or a serif with the letters)",
     "monofont": "JetBrains Mono (or Menlo)", "linestretch": "the engine's own",
     "options.pandoc-memory": "off (no heap cap)",
+    "options.indent": "the writer's own (no first-line indent)",
     "options.paragraph-spacing": "the engine's own (none with indent: true)",
     "options.typst-line-spacing": "latex: LaTeX's line pitch",
     "options.bibliography-indent": "the writer's own (1.5em in Typst, which had none)",
@@ -95,7 +96,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 # change nothing. tests/test_setup_folder.py walks this list against the folder layers.
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
-    "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.pandoc-memory", "options.css-scope", "options.paragraph-spacing", "options.bibliography-indent",
+    "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.pandoc-memory", "options.css-scope", "options.indent", "options.paragraph-spacing", "options.bibliography-indent",
     "options.typst-line-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
@@ -232,6 +233,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("options.pandoc-memory", "Pandoc memory cap",
              "Optional heap size, e.g. 512m or 2g (whole k, m or g units). Empty: off. Passed to every Pandoc as "
              "+RTS -M<size> -RTS. A heap overflow names pdfmd-options.pandoc-memory.", "Every document (global metadata)"),
+        text("options.indent", "First-line paragraph indent",
+             "False or unset keeps the writer's default; true is 1.5em, or a length such as 0.5in, 3em, 1cm. "
+             "LaTeX, Typst, Word and HTML. Also indent: in front matter.", "Every document (global metadata)"),
         text("options.paragraph-spacing", "Space between paragraphs",
              "Added to the line spacing at a paragraph break: a length (6pt, 1em, 2mm; units pt, mm, cm, in, em), 0 for none, "
              "or auto. LaTeX and Typst; the HTML engines take it from a style sheet. Empty: each engine's own (none with "

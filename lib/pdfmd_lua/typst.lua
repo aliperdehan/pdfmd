@@ -265,7 +265,8 @@ local function page_rules(meta)
     changed = true
   end
   if indent_on(meta.indent) then
-    add_header(meta, "#set par(first-line-indent: " .. INDENT_DEFAULT .. ")")
+    add_header(meta, "#set par(first-line-indent: " .. (meta["pdfmd-document-indent-length"]
+      and pandoc.utils.stringify(meta["pdfmd-document-indent-length"]) or INDENT_DEFAULT) .. ")")
     changed = true
   end
   if changed then return meta end

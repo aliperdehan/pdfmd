@@ -315,6 +315,9 @@ def office_reference_document(md_path: Path, metadata_files: list[Path], variabl
     styled = not core.auto_disabled(no_auto, "officestyle") and str(options.get("style", "")).casefold() != "none"
     policy = "exact" if str(options.get("fonts", "")).casefold() == "exact" else "safe"
     explicit = {key: value for key, value in options.items() if key in OFFICE_OPTION_KEYS}
+    document_indent = core.first_pdfmd_option(md_path, metadata_files, "indent")
+    if document_indent is not None:
+        explicit.setdefault("indent", document_indent)
     if reference is not None:
         # a template decides its own page and fonts; only what `office:` names changes it
         spec = module.spec_from_metadata({}, explicit, policy)

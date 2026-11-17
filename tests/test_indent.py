@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -193,6 +195,77 @@ class Filter(unittest.TestCase):
                               capture_output=True, text=True, encoding="utf-8")
         self.assertIn("Inside.", done.stdout)
         self.assertIn("NOTE  indent: 2 indent settings left out: plain has no per-block paragraph indent", done.stderr)
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class DocumentIndent(unittest.TestCase):
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory(prefix="pdfmd-document-indent-")
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name)
+
+    def build(self, value, writer, options=False, extra=()):
+        metadata = ("pdfmd-options: {indent: " + value + "}") if options else ("indent: " + value)
+        source = self.root / "doc.md"
+        source.write_text("---\ntitle: Indent\n" + metadata + "\n---\n\n# Heading\n\nFirst.\n\nSecond.\n\n"
+                          "::: {indent=1cm}\nDiv.\n:::\n\n- List.\n", encoding="utf-8")
+        output = self.root / ("doc." + writer)
+        done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), str(source), "-t", writer,
+                               "-s", "-o", str(output), "--no-stamp", "--no-backup", *extra],
+                              cwd=self.root, capture_output=True, text=True, encoding="utf-8",
+                              env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+        return done, output
+
+    def text(self, value, writer, options=False):
+        done, output = self.build(value, writer, options)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        if writer == "docx":
+            with zipfile.ZipFile(output) as archive:
+                return archive.read("word/styles.xml").decode("utf-8")
+        return output.read_text(encoding="utf-8")
+
+    @staticmethod
+    def first_line(styles, identifier):
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        style = ET.fromstring(styles).find(f"w:style[@w:styleId='{identifier}']", ns)
+        indent = style.find("w:pPr/w:ind", ns)
+        return None if indent is None else indent.get("{" + ns["w"] + "}firstLine")
+
+    def test_lengths_in_front_matter_and_options_in_each_writer(self):
+        for options in (False, True):
+            for value, twips in (("0.5in", 720), ("3em", 720), ("1cm", 567), ('" 1.25 EM "', 300)):
+                length = "1.25em" if "EM" in value else value
+                for writer, expected in (
+                    ("latex", "\\setlength{\\parindent}{" + length + "}"),
+                    ("typst", "#set par(first-line-indent: " + length + ")"),
+                    ("html", "text-indent: " + length),
+                    ("docx", r'styleId="BodyText".*?<w:ind w:firstLine="' + str(twips) + '"')):
+                    with self.subTest(options=options, value=value, writer=writer):
+                        out = self.text(value, writer, options)
+                        if writer == "docx":
+                            self.assertEqual(self.first_line(out, "BodyText"), str(twips))
+                            self.assertEqual(self.first_line(out, "FirstParagraph"), "0")
+                        else:
+                            self.assertIn(expected, out)
+                        if writer == "latex":
+                            self.assertIn("\\begingroup\\setlength{\\parindent}{1cm}", out)
+
+    def test_true_remains_the_standard_indent_and_false_is_off(self):
+        for options in (False, True):
+            self.assertIn("\\setlength{\\parindent}{1.5em}", self.text("true", "latex", options))
+            self.assertIn("body { text-indent: 1.5em;", self.text("true", "html", options))
+            self.assertIn("#set par(first-line-indent: 1.5em)", self.text("true", "typst", options))
+            self.assertEqual(self.first_line(self.text("true", "docx", options), "BodyText"), "360")
+            self.assertNotIn("#set par(first-line-indent: 1.5em)", self.text("false", "typst", options))
+            self.assertNotIn("body { text-indent:", self.text("false", "html", options))
+
+    def test_invalid_lengths_are_rejected(self):
+        for options in (False, True):
+            for writer in ("latex", "typst", "docx", "html"):
+                with self.subTest(options=options, writer=writer):
+                    done, _ = self.build("banana", writer, options)
+                    self.assertNotEqual(done.returncode, 0)
+                    self.assertIn("indent must be", done.stdout + done.stderr)
 
 
 NAMES = ("Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot")

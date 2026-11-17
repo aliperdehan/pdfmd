@@ -179,6 +179,11 @@ With Pandoc's default LaTeX, Typst and HTML templates, author/date are not print
 pdfmd emits one NOTE: “author/date not printed: no title (add `title:`)”.
 Word, ODT and EPUB print them anyway. Custom templates, defaults files, kits and project filters are not diagnosed.
 
+Document-level `indent:` in front matter, or `pdfmd-options: {indent: 0.5in}`, accepts a length
+(`0.5in`, `3em`, `1cm`) in LaTeX, Typst, Word and HTML, using the indent div's length syntax.
+`true` remains 1.5em; false/unset keeps the writer's default. Invalid lengths stop the build.
+A div can still override the document's indent for its stretch; Word keeps its first paragraph after a heading unindented.
+
 ## Paragraph indent for a stretch of text (v3.30.0)
 
 a fenced div `::: {indent=false}` (also `indent=true`, `indent=2em`; `::: noindent`, `::: {.noindent}`, `.indent`;

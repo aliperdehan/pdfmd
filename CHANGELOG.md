@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.326 — 2026-11-17
+
+Pre-edit state: commit `d0b5592`. Document indent was only a switch: LaTeX treated a length as true, while Typst and Word ignored it. Document metadata and pdfmd-options.indent now accept the div's lengths through a shared Lua parser, rejecting invalid values. Set LaTeX's parindent in the body (pdfmd's include-in-header replaces metadata headers), Typst's first-line-indent and HTML's inherited text-indent; Word's generated reference converts the length to twips, preserving First Paragraph and div overrides. True retains 1.5em and false/unset retains defaults. Register the options key, setup row and help topic, and document the syntax in README/reference/recipes/agent guidance. Three pipeline regressions (37 baseline failing subcases) exercise four lengths including case/spacing, both metadata forms, each requested writer, true/false, invalid values and a div override. Both Pandoc results and full module checks are in the batch report. pdfmd.py remains 785 lines (version only).
+
 ## v3.33.325 — 2026-11-17
 
 Pre-edit state: commit `2d659c8`. Strip-comments previously removed HTML comments only from assembled and attached source, so private notes still reached a build's HTML/EPUB source. Apply the saved comment filter before markup draws comments, honouring the existing layered policy and command-line overrides, with the default unchanged. Preserve code examples and every marker family used by discovery, page breaks, contents and appendices; preserve contents/appendix markers in assembled source too. Correct README's account of private percent comments, unclosed comments and HTML comments, and update reference/help/setup/agent guidance. Four pipeline regressions cover HTML/EPUB on/off, metadata/CLI policy, parts and markers, show-comments in four writers, and gfm private/unclosed comments. Six subcases failed in the baseline run (the saved patch's original run recorded eight); results with Pandoc 3.1.3/3.13 and full module checks are in the batch report. pdfmd.py remains 785 lines (version only).

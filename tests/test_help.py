@@ -57,6 +57,10 @@ class TieredHelp(unittest.TestCase):
         for topic in ("output", "all"):
             self.assertIn("pdfmd-options.pandoc-memory", run("--help", topic).stdout)
 
+    def test_document_indent_key_has_a_help_topic(self):
+        for topic in ("output", "all"):
+            self.assertIn("pdfmd-options.indent", run("--help", topic).stdout)
+
     def test_every_topic_prints(self):
         for topic in [*pdfmd_help.TOPICS, "other"]:
             done = run("--help", topic)

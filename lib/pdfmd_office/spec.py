@@ -22,6 +22,7 @@ class OfficeSpec:
     stretch: float | None = None                # line spacing factor
     lang: str | None = None
     indent: bool = False
+    indent_length: int | None = None           # explicit document length in twips
     house: bool = True                          # pdfmd's own look (black headings, centred title...)
     aliases: dict[str, str] = field(default_factory=dict)   # Pandoc style -> the template's style it should look like
     replace: dict[str, str] = field(default_factory=dict)   # text of the template's headers and footers -> new text
@@ -33,7 +34,7 @@ class OfficeSpec:
         return bool(self.paper or self.margins or self.landscape)
 
     def has_text(self) -> bool:
-        return any((self.main, self.sans, self.mono, self.cjk, self.size, self.stretch, self.lang, self.indent,
+        return any((self.main, self.sans, self.mono, self.cjk, self.size, self.stretch, self.lang, self.indent, self.indent_length is not None,
                     self.aliases, self.replace, self.title_page, self.media))
 
     def page_size(self) -> tuple[int, int]:
@@ -96,7 +97,10 @@ def spec_from_metadata(meta: dict, office: dict | None = None, font_policy: str 
         spec.stretch = None
     lang = merged.get("lang")
     spec.lang = str(lang) if isinstance(lang, (str,)) and lang.strip() else None
-    spec.indent = str(merged.get("indent", "")).strip().lower() in ("true", "yes", "on", "1")
+    indent = str(merged.get("indent", "")).strip().lower()
+    spec.indent = indent in ("true", "yes", "on", "1")
+    if indent and indent not in ("true", "yes", "on", "1", "false", "no", "off", "0"):
+        spec.indent_length = length_to_twips(indent if re.search("[a-z%]", indent) else indent + "em")
     for attribute, key, role in (("main", "mainfont", "main"), ("sans", "sansfont", "sans"),
                                  ("mono", "monofont", "mono"), ("cjk", "CJKmainfont", "main")):
         name, note = office_font(merged.get(key) if isinstance(merged.get(key), str) else None, role, font_policy)

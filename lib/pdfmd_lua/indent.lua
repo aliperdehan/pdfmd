@@ -34,27 +34,12 @@ local OFFICE = {docx = true, odt = true, opendocument = true}
 local KEEP = {markdown = true, markdown_strict = true, markdown_phpextra = true, markdown_mmd = true, gfm = true,
   commonmark = true, commonmark_x = true, json = true, native = true}
 
-local DEFAULT = "1.5em"
-local UNITS = {em = true, ex = true, pt = true, cm = true, mm = true, ["in"] = true, bp = true, pc = true,
-  px = true, rem = true, ["%"] = true}
-local WORDS = {["false"] = "off", no = "off", off = "off", ["true"] = "on", yes = "on", on = "on"}
-
+local here = (PANDOC_SCRIPT_FILE or ""):gsub("[^/\\]*$", "")
+local lengths = dofile(here .. "indent_length.lua")
+local length, DEFAULT, UNITS = lengths.length, lengths.default, lengths.units
 local unsupported = 0
 local invalid = {}
 local nearmiss, nearly = {}, {}
-
--- "0pt" for off, a length for the rest, nil (and a WARN later) for something else
-local function length(value)
-  local word = WORDS[value:lower()]
-  if word == "off" then return "0pt" end
-  if word == "on" then return DEFAULT end
-  local number, unit = value:match("^(%-?%d*%.?%d+)%s*(%a*%%?)$")
-  if not number then return nil end
-  if unit == "" then unit = "em" end
-  if not UNITS[unit:lower()] then return nil end
-  if tonumber(number) == 0 then return "0pt" end
-  return number .. unit:lower()
-end
 
 -- What a class word means: nil (not this filter's business), {value = "1.5em"} (an indent class), {invalid = "banana"} (an
 -- `indent=` class with a value that is no length) or {near = true} (starts like an indent class, is none).

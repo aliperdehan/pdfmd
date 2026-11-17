@@ -3268,6 +3268,11 @@ that kind of engine. For example, a document full of chemical structures
 can require TeX, and a plain memo can skip the slow LaTeX run. `-e` on the
 command line always wins, and a bare `-e` means "try every engine".
 
+Document-level `indent:` in front matter, or `pdfmd-options: {indent: 0.5in}`, accepts a length
+(`0.5in`, `3em`, `1cm`) in LaTeX, Typst, Word and HTML, using the indent div's length syntax.
+`true` remains 1.5em; false/unset keeps the writer's default. Invalid lengths stop the build.
+A div can still override the document's indent for its stretch; Word keeps its first paragraph after a heading unindented.
+
 `paragraph-spacing:` is the space between paragraphs, added to the line spacing: a length (`6pt`, `1em`, `2mm`; pt, mm, cm,
 in, em), `0` for none, or `auto`, the default, each engine's own (LaTeX's half line, Typst's 0.55em more than a line; none
 with `indent: true`, in Typst too since 3.33.58). It is for LaTeX and Typst, the same gap in both; `--paragraph-spacing 6pt`

@@ -504,18 +504,29 @@ def calc_div_wants_indent_filter(files: list[Path], metadata_files: list[Path]) 
 
 
 def indent_filter_args(sources: Path | list[Path], metadata_files: list[Path] = ()) -> list[str]:
-    """``--lua-filter indent.lua`` when a source has an `indent=` / `.noindent` div (see INDENT_DIV_RE), or a `::: calc` div
-    while calc gives its divs no indent (the default; calc.lua sets `indent=false` on them, this filter acts on it)."""
+    """Document indentation and divs share length parsing; calc's noindent divs use it too."""
     files = sources if isinstance(sources, list) else [sources]
-    if not any(contains_indent_div(file) for file in files) and not calc_div_wants_indent_filter(files, metadata_files):
+    value = core.first_pdfmd_option(files[0], metadata_files, "indent") if files else None
+    metadata = core.effective_metadata(files[0], metadata_files, []) if files else {}
+    document = value is not None or metadata.get("indent") is not None
+    divs = any(contains_indent_div(file) for file in files) or calc_div_wants_indent_filter(files, metadata_files)
+    if not document and not divs:
         return []
     try:
         import pdfmd_lua
     except ImportError:
         core.pdfmd_lua_missing()
         return []
-    shipped = pdfmd_lua.path("indent")
-    return ["--lua-filter", str(shipped)] if shipped is not None else []
+    args = []
+    if document:
+        shipped = pdfmd_lua.path("document_indent")
+        if shipped is not None:
+            if value is not None:
+                shown = str(value).lower() if isinstance(value, bool) else str(value)
+                args += ["-M", "pdfmd-document-indent=" + shown]
+            args += ["--lua-filter", str(shipped)]
+    shipped = pdfmd_lua.path("indent") if divs else None
+    return args + (["--lua-filter", str(shipped)] if shipped is not None else [])
 
 
 def title_filter_args(sources: Path | list[Path], metadata_files: list[Path], pandoc_options: list[str] | None = None,
