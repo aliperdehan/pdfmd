@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.311 — 2026-11-17
+
+Pre-edit state: commit `69624b3`. CI's Windows LaTeX job found the NOTE of 3.33.291 missing ("the restored source will not define calculator names used outside stripped hidden content"): its calculator check ran Pandoc with `-o os.devnull`, which is `nul` on Windows and fails there, so the check returned nothing and no NOTE was printed. It now writes Pandoc's output to its scratch folder, as `pdfmd --check` does, decodes Pandoc's messages with replacement and reads the report as UTF-8. The stripping itself was not affected. Unverified on Windows locally; CI's Windows jobs run the regression (test_attach `test_stripped_definitions_used_outside_produce_one_note`). pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.310 — 2026-11-17
 
 Pre-edit state: commit `ba83f88`. The real install check, with Typst absent and LibreOffice turned off (`soffice-timeout: 0`), found resvg failing every conversion with "Error: failed to open the provided file.": 3.33.307 passed `--font-dirs`, which resvg does not have, and resvg reads an unknown option as the input file. resvg's option is `--use-fonts-dir`; the same SVG converts with it (checked with resvg 0.50.0). A test pins the resvg command line (zoom from the resolution, the font folder only when there is one). pdfmd.py stays at 785 lines (version only).

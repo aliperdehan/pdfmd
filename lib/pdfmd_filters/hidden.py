@@ -127,7 +127,6 @@ def attachment_warning(files, metadata_files, stripped):
 
 def stripped_calc_note(files, metadata_files):
     """Compare the calculator's own undefined-name reports, without evaluating a second parser."""
-    import os
     import subprocess
     import sys
     import tempfile
@@ -156,12 +155,14 @@ def stripped_calc_note(files, metadata_files):
         report = Path(scratch) / "names.tsv"
 
         def undefined(source):
-            done = subprocess.run([pandoc, "-f", "markdown", "-t", "native", "-o", os.devnull,
+            # A scratch file, not os.devnull: `-o nul` fails on Windows (as `pdfmd --check` does it).
+            done = subprocess.run([pandoc, "-f", "markdown", "-t", "native", "-o", str(Path(scratch) / "out.native"),
                                    *clean, "-V", "pdfmd-calc-check=" + str(report)], input=source,
-                                  capture_output=True, text=True, encoding="utf-8", cwd=files[0].parent)
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  cwd=files[0].parent)
             if done.returncode or not report.is_file():
                 return None
-            return {line.split("\t")[1] for line in report.read_text().splitlines() if line.startswith("U\t")}
+            return {line.split("\t")[1] for line in report.read_text(encoding="utf-8").splitlines() if line.startswith("U\t")}
 
         try:
             before, after = undefined(text), undefined(strip_hidden(text))
