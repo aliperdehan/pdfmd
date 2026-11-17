@@ -3283,7 +3283,8 @@ command line always wins, and a bare `-e` means "try every engine".
 
 Document-level `indent:` in front matter, or `pdfmd-options: {indent: 0.5in}`, accepts a length
 (`0.5in`, `3em`, `1cm`) in LaTeX, Typst, Word and HTML, using the indent div's length syntax.
-`true` remains 1.5em; false/unset keeps the writer's default. Invalid lengths stop the build.
+`true` keeps each writer's standard indent, as before lengths existed (LaTeX the class's own `\parindent`, Typst
+1.5em, Word 0.25in, HTML none); false/unset keeps the writer's default. Invalid lengths stop the build.
 A div can still override the document's indent for its stretch; Word keeps its first paragraph after a heading unindented.
 
 `paragraph-spacing:` is the space between paragraphs, added to the line spacing: a length (`6pt`, `1em`, `2mm`; pt, mm, cm,

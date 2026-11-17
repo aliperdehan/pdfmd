@@ -250,10 +250,15 @@ class DocumentIndent(unittest.TestCase):
                         if writer == "latex":
                             self.assertIn("\\begingroup\\setlength{\\parindent}{1cm}", out)
 
-    def test_true_remains_the_standard_indent_and_false_is_off(self):
+    def test_true_keeps_each_writers_indent_and_false_is_off(self):
+        # `true` is what it was before lengths: LaTeX keeps the class's \\parindent (Pandoc's template drops its 0pt),
+        # HTML gets no indent, Typst 1.5em, Word 0.25in (360 twips); a document's layout does not move (v3.33.326)
         for options in (False, True):
-            self.assertIn("\\setlength{\\parindent}{1.5em}", self.text("true", "latex", options))
-            self.assertIn("body { text-indent: 1.5em;", self.text("true", "html", options))
+            latex = self.text("true", "latex", options)
+            self.assertNotIn("\\setlength{\\parindent}{1.5em}", latex)
+            self.assertNotIn("\\setlength{\\parindent}{0pt}", latex)
+            self.assertIn("\\setlength{\\parindent}{0pt}", self.text("false", "latex", options))
+            self.assertNotIn("body { text-indent", self.text("true", "html", options))   # (the 1cm div has its own)
             self.assertIn("#set par(first-line-indent: 1.5em)", self.text("true", "typst", options))
             self.assertEqual(self.first_line(self.text("true", "docx", options), "BodyText"), "360")
             self.assertNotIn("#set par(first-line-indent: 1.5em)", self.text("false", "typst", options))

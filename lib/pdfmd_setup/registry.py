@@ -234,7 +234,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "Optional heap size, e.g. 512m or 2g (whole k, m or g units). Empty: off. Passed to every Pandoc as "
              "+RTS -M<size> -RTS. A heap overflow names pdfmd-options.pandoc-memory.", "Every document (global metadata)"),
         text("options.indent", "First-line paragraph indent",
-             "False or unset keeps the writer's default; true is 1.5em, or a length such as 0.5in, 3em, 1cm. "
+             "False or unset keeps the writer's default; true keeps each writer's standard indent (LaTeX the class's, Typst 1.5em, Word 0.25in, HTML none), or a length such as 0.5in, 3em, 1cm. "
              "LaTeX, Typst, Word and HTML. Also indent: in front matter.", "Every document (global metadata)"),
         text("options.paragraph-spacing", "Space between paragraphs",
              "Added to the line spacing at a paragraph break: a length (6pt, 1em, 2mm; units pt, mm, cm, in, em), 0 for none, "

@@ -144,7 +144,7 @@ def uncovered(parser: argparse.ArgumentParser) -> list[str]:
 
 def _full(parser: argparse.ArgumentParser) -> str:
     return parser.format_help() + ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
-                                 "pdfmd-options.indent (or indent:): false/unset = writer default; true = 1.5em; lengths: 0.5in, 3em, 1cm.\n")
+                                 "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n")
 
 
 def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
@@ -165,7 +165,7 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
         text = parser.format_help()
         if topic == "output":
             text += ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
-                     "pdfmd-options.indent (or indent:): false/unset = writer default; true = 1.5em; lengths: 0.5in, 3em, 1cm.\n")
+                     "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n")
         return text
     finally:
         parser.description = previous
