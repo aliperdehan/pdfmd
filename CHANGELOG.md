@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.292 — 2026-11-17
+
+Pre-edit state: commit `0bc4506`. Metadata and config accepted cache-location aliases, but argparse rejected the same
+words on the command line. Use the existing location normaliser as argparse's type before checking canonical choices.
+All nine aliases, the two canonical words, case and surrounding spaces now have the same meanings everywhere; unknown
+words still fail. Help and the reference/README list them. The parser regression failed before with twenty rejected
+spellings. Full cache-location and the five required safety modules pass; Ruff F and whitespace checks pass. No new
+setting; pdfmd.py stays at 784 lines (version only). No TODO changes.
+
 ## v3.33.291 — 2026-11-17
 
 Pre-edit state: commit `76b85c1`. An attached source can disclose answers removed from the printed document. After a

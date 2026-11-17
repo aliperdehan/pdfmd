@@ -71,6 +71,17 @@ class Location(CacheCase):
         pdfmd.CACHE_LOCATION_CLI = "global"
         self.assertEqual(pdfmd.cache_location(plain, []), "global")             # the command line beats both
 
+    def test_cli_accepts_the_same_location_words_as_metadata(self):
+        parser = pdfmd.build_parser()
+        words = {**pdfmd.pdfmd_cache.CACHE_LOCATION_NAMES, "global": "global", "document": "document"}
+        for word, expected in words.items():
+            for spelling in (word, " " + word.upper() + " "):
+                with self.subTest(spelling=spelling):
+                    args = parser.parse_args(["--cache-location", spelling])
+                    self.assertEqual(args.cache_location, expected)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--cache-location", "moon"])
+
     def test_a_bad_location_is_an_error(self):
         doc = self.document("a", front="pdfmd-options:\n  cache: {location: moon}\n")
         with self.assertRaises(SystemExit):

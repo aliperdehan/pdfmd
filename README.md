@@ -2136,7 +2136,8 @@ pdfmd-options:
 puts it in a `.cache/pdfmd` folder beside the document (with a `CACHEDIR.TAG`, so
 backup tools skip it, and a `.gitignore`), which travels with the folder. It is
 yours to choose per document, in the config file for everything, or with
-`--cache-location`. `--clear-cache` clears both places. (The colour-emoji pictures
+`--cache-location`. Every level accepts the same aliases: root/user/home/central for global;
+local/folder/here/doc/self-contained for document, ignoring case and surrounding spaces. `--clear-cache` clears both places. (The colour-emoji pictures
 LaTeX uses are in the same cache.) A word other than `global` or `document` stops a build
 that uses the cache; with the cache off it is a warning.
 

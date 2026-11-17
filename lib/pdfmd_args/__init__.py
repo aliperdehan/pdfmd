@@ -811,10 +811,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "document built alone can reference the last full build's numbers "
                              "(pdfmd-options: {cache: {aux: true}} does this by default)")
     parser.add_argument("--cache-location", metavar="WHERE", choices=core.CACHE_LOCATIONS,
+                        type=core.deferred("pdfmd_cache", "location_word"),
                         help="where the cache lives: global (~/.cache/pdfmd; default; a moved document still "
                              "finds its folder by what it recorded) or document (a .cache/pdfmd folder beside "
                              "the document, so it travels with it). Also `pdfmd-options: {cache: {location: "
-                             "document}}` or the config file")
+                             "document}}` or the config file. Aliases: root/user/home/central = global; "
+                             "local/folder/here/doc/self-contained = document (case and surrounding spaces ignored)")
     parser.add_argument("--cache-plots", action="store_true",
                         help="also cache the pictures of a package that takes part in the picture cache (nulabreport >= 1.26.0 does; LuaLaTeX): each "
                              "plot is stored as a PDF after the build that first typesets it and reused by "

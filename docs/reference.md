@@ -1194,6 +1194,9 @@ same folder name when only one fits; a copy never takes the original's. document
 is a `.cache/pdfmd` folder beside the document (CACHEDIR.TAG, .gitignore) that
 travels with it. Plot-cache entries record the folders they were made in and
 are re-pointed at the new ones after a move. --clear-cache clears both.
+The same location words work in metadata, config and `--cache-location`: global (also root, user, home, central),
+document (also local, folder, here, doc, self-contained). Case and surrounding spaces are ignored.
+
 `pdfmd --cache-info` (v3.33.74, lib/pdfmd_cache/manage.py) shows each part's size and the stale part (a
 document cache or build records whose recorded document is gone); `--clear-cache builds|documents|stale|all`
 clears one part, never following a link; `--doctor` notes a cache over `cache.max-mb` (config, default 1000).
