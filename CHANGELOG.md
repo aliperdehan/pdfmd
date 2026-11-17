@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.301a — 2026-11-17
+
+Pre-edit state: commit `b995587`. The watcher test needs Pandoc, which native macOS CI deliberately omits. Follow the existing skipUnless(shutil.which("pandoc")) pattern for watcher tests, and tolerate ProcessLookupError during cleanup when the child has already exited. Fake regressions fail before for both the missing skip and the cleanup exception. Tests only: PDFMD_VERSION stays 3.33.301 and pdfmd.py stays at 784 lines; no TODO changes. Both fake regressions pass after (including an actual skipped suite with Pandoc hidden); the real watcher and five required safety modules pass: 117 tests, zero failures/errors, one skip. Ruff F and whitespace checks pass.
+
 ## v3.33.301 — 2026-11-17
 
 Pre-edit state: commit `ce473b7`. Without a terminal or with PDFMD_NO_PROMPT=1, Calibre installation took the non-default download answer. DECISION 97 makes it take the same package-manager default as Y, including failure reporting; the SHA-256-checked download remains the fallback when no manager exists or the interactive answer is d. Print the selected method. Fake regressions fail in six subcases before, covering non-terminal/no-prompt/default success, manager failures and the named download. Existing download fixtures explicitly exclude package managers. Update README, reference and the agent guide. pdfmd.py remains 784 lines (version only); no settings or TODO changes. Installer and the five required safety modules: 136 tests, one sandbox failure (hdiutil: create failed - Device not configured), zero errors, two skips; all new fake regressions pass. No real package manager or network was used. Ruff F and whitespace checks pass.

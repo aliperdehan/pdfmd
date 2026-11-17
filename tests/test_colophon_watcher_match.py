@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @unittest.skipUnless(sys.platform == 'darwin' and shutil.which('swiftc'), 'Colophon is a Mac app: this check compiles Swift against macOS frameworks')
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class WatcherMatch(unittest.TestCase):
     def test_different_canonical_source_is_not_the_watcher(self):
         source = (ROOT / 'gui/Sources/Editor/Build.swift').read_text()
@@ -74,5 +75,8 @@ exit(PdfmdBuild.watcher(for: file, listing: other) == nil ? 0 : 1)
                         self.assertEqual(result.returncode, 0, f"{project}: {expected}\n" + result.stdout + result.stderr)
                 finally:
                     # Stop any initial build too, even if the probe failed before it finished.
-                    os.killpg(watcher.pid, signal.SIGTERM)
+                    try:
+                        os.killpg(watcher.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
                     watcher.wait(timeout=30)
