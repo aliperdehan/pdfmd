@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.330 — 2026-11-17
+
+Pre-edit state: commit `ee6d7bf`. `pdfmd --install batchocr` installed batchocr from the tag `BATCHOCR_TAG`, still
+`v1.2.4`, while reading a `.txt` file as Markdown (`--text-to-markdown`) needs batchocr 1.2.5 or newer
+(`BATCHOCR_TEXT_MIN`): after a fresh install the option failed with batchocr's own version message. batchocr's
+repository now has the tag `v1.2.6` (its current release), and `BATCHOCR_TAG` names it. Checked for real: a fresh venv
+with pdfmd and a PATH without Homebrew, `pdfmd --install batchocr` fetched batchocr 1.2.6 from that tag, and
+`pdfmd notes.txt --text-to-markdown auto -o notes.md` wrote the Markdown (a heading, a paragraph, a numbered list).
+Test: tests/test_pdf_input.py `test_the_installed_batchocr_reads_text_files` (the tag is at least `BATCHOCR_TEXT_MIN`),
+failing before and passing after. TODO's "Tag a batchocr release" line is done and removed.
+
 ## v3.33.329 — 2026-11-17
 
 Pre-edit state: commit `0a556c8`. Build history kept no Pandoc reader, so a source changing dialect between builds went unnoticed. Successful full builds with file history now record the effective `reader=` and warn once when it differs from the latest compiled entry, naming the reason when known. First builds and legacy entries are silent; explicit readers and fixed flavours, disabled reader discovery and disabled history do not warn. Keep file history available to output provenance, restoring its previous bytes on a failed final result so strict failures also leave the reader baseline alone; partial entries carry no reader. Prepend the latest entry and refresh same-second duplicates so a timestamp collision cannot repeat the warning. Regression coverage includes output stability, front matter added/removed, unchanged and legacy entries, CLI/document/metadata/config overrides, batches, partial and failed builds, strict failures, both report routes and timestamp ties. Both Pandoc versions and required module results are in the batch report. pdfmd.py stays at 785 lines (version only).

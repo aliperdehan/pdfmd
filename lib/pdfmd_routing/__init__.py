@@ -57,7 +57,7 @@ def tessdata_environment(extra: list[str]) -> dict[str, str] | None:
 
 
 BATCHOCR_REPOSITORY = "https://github.com/aliperdehan/batchocr.git"
-BATCHOCR_TAG = "v1.2.4"
+BATCHOCR_TAG = "v1.2.6"
 
 
 BATCHOCR_TEXT_MIN = (1, 2, 5)      # reads a .txt file as Markdown (--text-to-markdown)

@@ -152,6 +152,13 @@ class Install(unittest.TestCase):
         self.assertIn(pdfmd.BATCHOCR_TAG, pdfmd.batchocr_spec())
         self.assertIn("[md]", pdfmd.batchocr_spec())
 
+    def test_the_installed_batchocr_reads_text_files(self):
+        # `--install batchocr` fetches BATCHOCR_TAG: a tag older than the version that reads .txt as Markdown left
+        # `--text-to-markdown` failing after a fresh install (v3.33.330)
+        tag = tuple(int(part) for part in pdfmd.BATCHOCR_TAG.lstrip("v").split("."))
+        from pdfmd_routing import BATCHOCR_TEXT_MIN
+        self.assertGreaterEqual(tag, BATCHOCR_TEXT_MIN)
+
 
 if __name__ == "__main__":
     unittest.main()
