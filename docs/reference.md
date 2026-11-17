@@ -498,6 +498,12 @@ PDF/EPS pictures) is compiled in the document's own preamble (fragments.py: one 
 beside the PNG, baseline, width). A house style's macros are declared in `office.lua` / `<name>-office.lua`
 (`office: {profile: F}`, `--no-auto officeprofile`): ignore = {...}, commands = {name = function(args)...},
 pandoc = function(doc).
+The office replace mapping may use metadata in its values:
+`office: {replace: {NULAB-KICKER: "$course$ $term$"}}`. Word XML parts (headers and footers included) and
+OpenDocument content/styles use the built document's metadata, including an office profile's changes;
+effective metadata supplies other writer variables. `$$` gives a literal dollar; missing/empty fields give
+empty text, spaces collapse to one and ends are trimmed in values containing dollars. Values without dollars
+keep their literal text and spacing. Metadata text is XML-escaped.
 
 Targeting `latex`, `beamer`, or `context` (--to, or an -o/--out file
 ending `.tex`) produces a complete, standalone document -- the same

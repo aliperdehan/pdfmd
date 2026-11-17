@@ -141,6 +141,17 @@ def office_properties(arguments, md_path: Path, data: dict) -> None:
     if module is None or output is None or Path(output).suffix.lower() not in (".docx", ".odt", ".pptx") \
             or not Path(output).is_file():
         return
+    context = arguments.context
+    if Path(output).suffix.lower() in (".docx", ".odt"):
+        options = core.office_options(md_path, context["metadata_files"], context["no_auto"])
+        replacements = options.get("replace")
+        if isinstance(replacements, dict) and any("$" in str(value) for value in replacements.values()):
+            from .replacements import finish_replacements
+            metadata = core.effective_metadata(md_path, context["metadata_files"], context["variables"])
+            try:
+                finish_replacements(Path(output), replacements, metadata)
+            except (OSError, ValueError, zipfile.BadZipFile) as error:
+                print(f"WARN  could not replace the template text of {Path(output).name} ({error})", file=sys.stderr)
     kept = data.get("properties") if isinstance(data.get("properties"), dict) else {}
     title = kept.get("title") if isinstance(kept.get("title"), str) else None
     authors = [name for name in kept.get("author") or [] if isinstance(name, str)] if isinstance(

@@ -89,3 +89,8 @@ names the citeproc list.
 | the Markdown of a PDF, a Word file or an e-book | `pdfmd file.pdf`, `file.docx`, `book.epub` |
 | a self-contained, restorable PDF | `--attach-source` (off unless asked, or `attach-source: true` in `pdfmd-options:`): the source goes into the PDF; `--restore` writes it back |
 | what is wrong with this machine | `pdfmd --doctor --deep` |
+
+For a template's running head, `pdfmd-options: {office: {replace: {KICKER: "$course$ $term$"}}}` reads
+metadata from the built Word/OpenDocument file, including office profile changes. `$$` is a dollar;
+missing/empty values disappear and spaces collapse with ends trimmed. Literal values without dollars keep
+their spacing; metadata text is XML-escaped.

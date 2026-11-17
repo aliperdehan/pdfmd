@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.33.303 — 2026-11-17
+
+Pre-edit state: commit `8ad6a65`. Office replacement values were literal and applied to the reference document
+before Pandoc, so a running head could not use document metadata or an office profile's computed course name.
+Resolve dollar-valued replacements after the build from Word/ODT custom and standard properties, with effective
+metadata for other writer variables. Support `$course$ $term$`, `$$`, empty/missing fields, collapsed spaces and
+XML-escaped metadata; keep literal Word replacements unchanged. Cover headers and footers, profile and metadata-file
+values, the LaTeX filter off and Pandoc's ODT route. Update README, reference, help and the agent guide. No settings
+or TODO changes; pdfmd.py stays at 784 lines (version only).
+
+Regression proof: the four Word subcases fail before with Pandoc 3.13 and 3.1.3. The office module and five required safety modules pass: 151 tests, zero failures/errors, two expected skips.
+The new Word and ODT builds also pass with Pandoc 3.1.3. Ruff F and whitespace checks pass; start-up stays
+at 182 modules (the checkout launcher reports the version in 0.19 s). No network, installs or GUI checks were run.
+
 ## v3.33.302 — 2026-11-17
 
 Pre-edit state: commit `f0d1505`. Bibliography accumulation restores an inherited source even when an uncited document

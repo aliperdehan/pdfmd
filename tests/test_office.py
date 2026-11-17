@@ -211,6 +211,87 @@ class Discovery(unittest.TestCase):
         document = zipfile.ZipFile(path).read("word/document.xml").decode()
         return re.search(r"<w:pgSz[^>]*/>", document).group(0)
 
+    def replacement_reference(self):
+        """A real reference document with a running header and footer."""
+        with zipfile.ZipFile(io.BytesIO(self.reference)) as source:
+            entries = {name: source.read(name) for name in source.namelist()}
+        namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        for kind in ("header", "footer"):
+            tag = "hdr" if kind == "header" else "ftr"
+            entries[f"word/{kind}1.xml"] = (
+                f'<w:{tag} xmlns:w="{namespace}"><w:p><w:r><w:t>KICKER</w:t></w:r></w:p>'
+                f'<w:p><w:r><w:t>LITERAL</w:t></w:r></w:p></w:{tag}>').encode()
+            entries["word/_rels/document.xml.rels"] = entries["word/_rels/document.xml.rels"].replace(
+                b"</Relationships>",
+                (f'<Relationship Id="pdfmd{kind}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/{kind}" '
+                 f'Target="{kind}1.xml"/></Relationships>').encode())
+            entries["[Content_Types].xml"] = entries["[Content_Types].xml"].replace(
+                b"</Types>", (f'<Override PartName="/word/{kind}1.xml" '
+                              f'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.{kind}+xml"/></Types>').encode())
+        entries["word/document.xml"] = entries["word/document.xml"].replace(
+            b"<w:sectPr>", b'<w:sectPr><w:headerReference w:type="default" r:id="pdfmdheader"/>'
+            b'<w:footerReference w:type="default" r:id="pdfmdfooter"/>')
+        with zipfile.ZipFile(self.root / "reference.docx", "w") as target:
+            for name, data in entries.items():
+                target.writestr(name, data)
+
+    def test_header_replacements_use_built_metadata_and_keep_literal_values(self):
+        self.replacement_reference()
+        for origin in ("front", "file", "profile", "off"):
+            with self.subTest(origin=origin):
+                metadata = 'course: "A & B < C > D"\nterm: ""\n'
+                front = metadata if origin in ("front", "off") else ""
+                arguments = []
+                if origin == "file":
+                    (self.root / "values.yaml").write_text(metadata)
+                    arguments = ["-y", "values.yaml"]
+                if origin == "profile":
+                    front = 'course: Old\nterm: Old\n'
+                    (self.root / "profile.lua").write_text(
+                        'return {pandoc = function(doc) doc.meta.course = "A & B < C > D"; '
+                        'doc.meta.term = ""; return doc end}')
+                office = '    replace: {KICKER: "  $course$   $term$ $absent$ $$  ", LITERAL: "  Literal & text  "}\n'
+                if origin == "profile":
+                    office += '    profile: profile.lua\n'
+                elif origin == "off":
+                    office += '    latex: off\n'
+                (self.root / "doc.md").write_text('---\n' + front + 'pdfmd-options:\n  office:\n' + office + '---\n\nText.\n')
+                result = self.build("-o", "doc.docx", "--rewrite", *arguments)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                with zipfile.ZipFile(self.root / "doc.docx") as archive:
+                    for kind in ("header", "footer"):
+                        xml = archive.read(f"word/{kind}1.xml").decode()
+                        tree = ElementTree.fromstring(xml)
+                        texts = list(tree.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t"))
+                        self.assertEqual(texts[0].text, "A & B < C > D $")
+                        self.assertEqual(texts[1].text, "  Literal & text  ")
+                        self.assertNotIn("$course$", xml)
+
+    def test_odt_header_replacements_use_the_profile_metadata(self):
+        data = docx.default_reference("odt")
+        with zipfile.ZipFile(io.BytesIO(data)) as source:
+            entries = {name: source.read(name) for name in source.namelist()}
+        styles = entries["styles.xml"].decode()
+        styles = re.sub(r"(<style:master-page[ >][^>]*>)",
+                        r"\1<style:header><text:p>KICKER</text:p></style:header>", styles, count=1)
+        self.assertIn("KICKER", styles)
+        entries["styles.xml"] = styles.encode()
+        with zipfile.ZipFile(self.root / "reference.odt", "w") as target:
+            for name, content in entries.items():
+                target.writestr(name, content)
+        (self.root / "profile.lua").write_text(
+            'return {pandoc = function(doc) doc.meta.course = "Built & course"; return doc end}')
+        (self.root / "doc.md").write_text(
+            '---\ncourse: Old\npdfmd-options:\n  office:\n    profile: profile.lua\n'
+            '    replace: {KICKER: "$course$ $absent$ $$"}\n---\n\nText.\n')
+        result = self.build("-o", "doc.odt")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.root / "doc.odt") as archive:
+            styles = archive.read("styles.xml").decode()
+            ElementTree.fromstring(styles)
+            self.assertIn("Built &amp; course $", styles)
+            self.assertNotIn("KICKER", styles)
+
     def test_metadata_sets_the_page_without_a_reference_document(self):
         self.assertEqual(self.build("-o", "doc.docx").returncode, 0)
         self.assertIn('w:w="11906"', self.page(self.root / "doc.docx"))

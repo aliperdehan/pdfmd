@@ -1452,6 +1452,13 @@ makes the Heading 1, Body Text and table Pandoc writes look like the template's 
 wording"}}` rewrites text in the template's headers and footers; `office: {title-page: true}` gives the first
 page a page of its own, without header or footer.
 
+Replacement values may name metadata: `office: {replace: {NULAB-KICKER: "$course$ $term$"}}` fills the running
+head from the built document, including front matter, metadata files and values set by the office profile's
+`pandoc` hook. `$$` writes a literal dollar. Missing or empty fields give empty text; values containing dollars
+have their spaces collapsed and ends trimmed. Values without dollars keep their literal text and spacing.
+Metadata text is XML-escaped. Metadata replacements also work in Word's other XML parts and in OpenDocument
+headers and footers (including the Pandoc ODT route).
+
 **A LaTeX package can tell pdfmd about itself.** Beside a package's `.sty` (or in an `office/` or `pdfmd/` folder there)
 pdfmd looks for `<package>-pdfmd.yaml`, and for its Word support: `<package>-reference.docx`/`.dotx`,
 `<package>-office.lua` (the profile above) and `<package>-office.yaml` (the `office:` defaults, with `by-option:`

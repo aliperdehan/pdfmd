@@ -422,6 +422,8 @@ def patch_docx(data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:
             elif spec.replace and re.match(r"word/(header|footer)\d*\.xml$", item.filename):
                 text = content.decode("utf-8")
                 for old, new in spec.replace.items():
+                    if "$" in new:  # resolved from the built document, after profile filters ran
+                        continue
                     # a key with markup in it is XML for XML (a run's colour); any other is text
                     text = text.replace(old, new if "<" in old else new.replace("&", "&amp;").replace("<", "&lt;"))
                 content = text.encode("utf-8")

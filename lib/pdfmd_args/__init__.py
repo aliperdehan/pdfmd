@@ -476,7 +476,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--init-reference", nargs="?", const="docx", metavar="FORMAT",
                         help="write reference.docx (or odt, pptx) into this folder: Pandoc's own reference document "
                              "with pdfmd's look, to restyle in Word; pdfmd then uses it for every .docx/.odt/.pptx "
-                             "it writes beside it (or below it, or in a metadata/ folder)")
+                             "it writes beside it (or below it, or in a metadata/ folder). office.replace values may use "
+                             "metadata ($course$ $term$, $$ for a dollar), including office profile changes")
     parser.add_argument("--completion", choices=("bash", "zsh", "fish"), metavar="SHELL",
                         help="print a tab-completion script for bash, zsh or fish (generated from this command "
                              "line, so it is never out of date), e.g. pdfmd --completion zsh > ~/.zfunc/_pdfmd")
