@@ -81,11 +81,13 @@ class Environment(unittest.TestCase):
             self.assertEqual((one["PDFMD_CONFIG"], one["PDFMD_NO_PROMPT"]), ("", "1"))
 
 
-# The runner kills at once (SIGKILL, no grace period). These bounds only keep a heavily loaded machine (the full
-# suite beside other jobs: 3 s and 2 s were missed there, 2026-11-17) from being read as a hang: a runner that does not
-# stop still fails after STOP_WITHIN seconds, and a detached child that is not killed marks itself after SURVIVAL_DELAY.
+# The runner kills at once (SIGKILL, no grace period). A runner that does not stop fails after STOP_WITHIN seconds,
+# and a detached child that is not killed marks itself after SURVIVAL_DELAY.
 STOP_WITHIN = 20
 SURVIVAL_DELAY = 8
+# A shell runs a background job (`cmd &`) with SIGINT ignored, and a child inherits that: Python then installs no
+# KeyboardInterrupt handler and the runner under test never hears the interrupt. It asks for the default itself.
+RESTORE_SIGINT = "import signal; signal.signal(signal.SIGINT, signal.default_int_handler); "
 
 
 def alive(pid: int) -> bool:
@@ -112,7 +114,7 @@ class Interrupt(unittest.TestCase):
             (base / "tests" / "test_blocked.py").write_text(
                 "import os, time, unittest\nfrom pathlib import Path\n"
                 f"class Blocked(unittest.TestCase):\n def test_wait(self):\n  Path({str(marker)!r}).write_text(str(os.getpid()))\n  time.sleep(60)\n")
-            code = ("import sys; from pathlib import Path; "
+            code = (RESTORE_SIGINT + "import sys; from pathlib import Path; "
                     f"sys.path.insert(0, {str(ROOT / 'scripts')!r}); import test_parallel as r; "
                     f"r.ROOT=Path({folder!r}); r.TESTS=r.ROOT/'tests'; r.STATE=r.ROOT/'state'; "
                     "r.real_folders=lambda: []; sys.exit(r.main(['-j', '1']))")
@@ -154,7 +156,7 @@ class Interrupt(unittest.TestCase):
                 f"  Path({str(marker)!r}).write_text(str(os.getpid()) + ' ' + str(child.pid))\n"
                 "  time.sleep(60)\n")
             # This sandbox may deny ps; supply its process snapshot while using real processes and signals.
-            code = ("import sys, subprocess; from pathlib import Path; "
+            code = (RESTORE_SIGINT + "import sys, subprocess; from pathlib import Path; "
                     f"sys.path.insert(0, {str(ROOT / 'scripts')!r}); import test_parallel as r; "
                     f"r.ROOT=Path({folder!r}); r.TESTS=r.ROOT/'tests'; r.STATE=r.ROOT/'state'; "
                     "r.real_folders=lambda: []; "
