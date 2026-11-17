@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.33.285a — 2026-11-17
+
+No shipped code (SPLIT.md and this entry); PDFMD_VERSION stays 3.33.285.
+Pre-edit state: commit `eea2b90`. Phase 2 wave 5, step 5f: SPLIT.md becomes the record of both phases.
+The opening now records the completed extraction, verified line counts (30,872 before phase 1,
+17,149 after it, 5,655 at wave 4's start and 783 at 3.33.285), the actual launchpad inventory,
+and the reasons for departures from the plan. Per-move sections remain the detailed record;
+the methods explain how the moves were done. The final full-suite review remains outstanding.
+The whole CLAUDE.md rewrite is prepared separately as a draft for the author, not committed here.
+Commit subject: `v3.33.285a: SPLIT.md becomes the record of both phases`.
+Checked: all 84 per-move sections are byte-identical and retain their parser inventories; the final
+inventory matches the source (13 definitions, 980 table names, nine aliases, 76 state names).
+The four split-tools section-lookup tests and whitespace checks pass. No full suite was run.
+
 ## v3.33.285 — 2026-11-17
 
 Pre-edit state: commit `9e96e50`. Phase 2 wave 5, step 5a: phase 1's function and constant re-exports
