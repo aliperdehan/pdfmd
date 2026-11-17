@@ -63,6 +63,11 @@ class TieredHelp(unittest.TestCase):
             self.assertEqual(done.returncode, 0, topic)
             self.assertIn(topic, done.stdout)
 
+    def test_setup_help_explains_the_install_catalogue_and_diagram_group(self):
+        text = run("--help", "setup").stdout
+        self.assertIn("diagram:all", text)
+        self.assertIn("source, target and removal", " ".join(text.split()))
+
     def test_an_unknown_topic_is_an_error_that_lists_them(self):
         done = run("--help", "nonsense")
         self.assertNotEqual(done.returncode, 0)

@@ -1223,7 +1223,14 @@ never closed, front matter that does not parse. The reading is in the pdfmd_chec
 error (a warning too with `--strict`); `--check-ignore`, `pdfmd-options.check-ignore` and
 `<!-- pdfmd-check: ignore CODE -->` turn checks off.
 
-`pdfmd --install diagram` fetches D2, Graphviz and resvg; `--install diagram:resvg` fetches only resvg
+A bare `pdfmd --install` prints every install kind with its approximate size, what it fetches and from where,
+its target folder and removal command. It fetches nothing. Bare `--install diagram` lists the tools;
+`--install diagram:d2`, `diagram:dot` and `diagram:resvg` install one each, and `--install diagram:all`
+installs all three (like the `fonts:all` group). Python packages are removed with the Python environment's
+`python -m pip uninstall`; `--uninstall` handles managed fonts, OCR languages and kits. For downloaded tools,
+the table names the file or folder to delete; shared node can stay.
+
+`pdfmd --install diagram:all` fetches D2, Graphviz and resvg; `--install diagram:resvg` fetches only resvg
 (about 3 MB). Its release executable for this OS/architecture is checked against GitHub’s SHA-256
 and kept in pdfmd’s tools folder; delete that executable to remove it (as for D2).
 

@@ -140,7 +140,6 @@ is low priority. [3di]
 - [ ] The `pdfmd_cli` namespace for 4.0 and one event log; the split itself is [3fi] [3bh]
 - [ ] Lean install: a core distribution plus extras (`pdfmd-cli` stays the full default); optional packages survive their absence with one message; a CI leg for the core only [3dx]
 - [ ] `--install full|core|cortex` also fetch the default fonts (`fonts:core`: STIX Two, JetBrains Mono, Noto Serif, symbols; about 8 MB), sizes table updated [3ei]
-- [ ] Bare `--install` prints the table of every kind (size, source, target, removal) instead of usage; bare `diagram` lists, `diagram:d2|dot` installs [3ei]
 - [ ] Docs: a table of every install kind (pip or download, size, `--uninstall`, `--check-dependencies`), decided together with the lean install [3ei, 3dg, 3dx]
 - [ ] The pre-4.0 pass (code review, edge cases, documentation) reads pdfmd as an agent would, not only as a human: exit codes, output size, non-TTY, name guessing, untrusted documents; then tested with the author's local models on real tasks [3ff, 3dg]
 - [ ] 4.0

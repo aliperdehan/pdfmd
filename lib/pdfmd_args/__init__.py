@@ -400,15 +400,15 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Pandoc source format override (no short flag: -f is --font). Only needed "
                              "when Pandoc's own extension-based guess is wrong, e.g. a .txt file that "
                              "is actually reStructuredText: --from rst")
-    parser.add_argument("--install", type=core.install_kind, metavar="KIND",
-                        help="install an optional piece for pdfmd to use: 'pandoc' (the real Pandoc from "
+    parser.add_argument("--install", nargs="?", const="", type=core.install_kind, metavar="KIND",
+                        help="alone: list every kind, size, source, target and removal; with KIND, install an optional piece for pdfmd to use: 'pandoc' (the real Pandoc from "
                              "PyPI's pypandoc_binary, about 35 MB), 'typst' (Typst's release binary from "
                              "GitHub, into pdfmd's own tools folder), 'core' (also 'core:typst' and 'full': Pandoc and Typst, "
                              "about 50 MB, a complete Markdown-to-PDF setup with no admin rights), 'math' (md2pdf with offline math, about 150 MB, "
                              "Python 3.11+), 'math:mathjax' (MathJax 4 and its STIX Two math font, about 12 MB to download, and node "
                              "when there is none, about 30 MB: WeasyPrint's PDFs then have their math typeset by MathJax), "
                              "'math:katex' (KaTeX, about 1.5 MB, and node when there is none, "
-                             "about 30 MB: WeasyPrint's PDFs then typeset math, KaTeX alone or what MathJax cannot read), 'diagram' (D2's release binary, 17 MB, and Graphviz as "
+                             "about 30 MB: WeasyPrint's PDFs then typeset math, KaTeX alone or what MathJax cannot read), 'diagram' (alone: list tools; diagram:all installs D2's release binary, 17 MB, and Graphviz as "
                              "WebAssembly run by node, 2 MB, plus resvg (about 3 MB, SVG to PNG); diagram:d2, diagram:dot or diagram:resvg "
                              "alone), 'core:tex' (also 'cortex': Pandoc and Tectonic, the self-contained LaTeX engine, "
                              "Pandoc 35 MB and Tectonic 10 to 22 MB download), 'calibre' (Calibre, 190 to 360 MB: ebooks as output and input; offers Homebrew or winget "

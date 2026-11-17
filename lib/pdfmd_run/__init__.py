@@ -384,7 +384,7 @@ def run_main() -> None:
         raise SystemExit("--print and --path go with --doc: pdfmd --doc readme --print")
     if args.setup is not None:
         raise SystemExit(0 if core.setup_command(args.setup) else 1)
-    if args.install:
+    if args.install is not None:
         raise SystemExit(0 if core.install_extra(args.install, bool(getattr(args, "yes", False))) else 1)
     if args.uninstall:
         if args.uninstall.startswith("kit"):

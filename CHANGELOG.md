@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.33.322 — 2026-11-17
+
+Pre-edit state: commit `d53d4ae`. Bare --install required an argument, and bare diagram fetched every tool. Add a read-only catalogue for every INSTALL_SIZES kind, naming size, source, target and removal; bare diagram lists its tools, diagram:d2|dot|resvg install one, and diagram:all follows fonts:all. Full/core remain Pandoc plus Typst, as before. Fake-installer regressions fail before and pass after; help, install modules and required safety checks are in the batch report. No new setting; setup does not list install kinds. pdfmd.py stays at 785 lines (version only).
+
 ## v3.33.321 — 2026-11-17
 
 Pre-edit state: commit `2583b26`. The shallow doctor report named the first engine without saying it had only checked discovery. Add a short hint to --doctor --deep, which test-compiles a page with each engine; deep mode itself is unchanged. The hint regression fails before and passes after. Doctor and required safety-module results are in the batch report. pdfmd.py stays at 785 lines (version only).

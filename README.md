@@ -265,6 +265,13 @@ sudo pacman -S python-pipx pandoc-cli typst texlive   # Arch
 
 On any Linux, `pdfmd --install full` (Pandoc and Typst) needs no package manager and no root.
 
+A bare `pdfmd --install` prints every install kind with its approximate size, what it fetches and from where,
+its target folder and removal command. It fetches nothing. Bare `--install diagram` lists the tools;
+`--install diagram:d2`, `diagram:dot` and `diagram:resvg` install one each, and `--install diagram:all`
+installs all three (like the `fonts:all` group). Python packages are removed with the Python environment's
+`python -m pip uninstall`; `--uninstall` handles managed fonts, OCR languages and kits. For downloaded tools,
+the table names the file or folder to delete; shared node can stay.
+
 The extras that are Python packages (`pdfmd --install math`, `tui`, `translit`, `batchocr` ...) go into the Python pdfmd runs
 from; when that Python is managed by the system (Homebrew's, Debian's: "externally-managed-environment", PEP 668) pdfmd puts
 them in its own folder instead, `~/.local/share/pdfmd/python/3.14` (one per Python version), which it adds to the end of
@@ -2600,7 +2607,7 @@ keep their default 300. Vector PDFs keep their size.
 
 ### Diagrams written as code
 
-`pdfmd --install diagram` fetches D2, Graphviz and resvg; `--install diagram:resvg` fetches only resvg
+`pdfmd --install diagram:all` fetches D2, Graphviz and resvg; `--install diagram:resvg` fetches only resvg
 (about 3 MB), checked against GitHub’s SHA-256, into pdfmd’s tools folder. Delete its `resvg` executable
 (`resvg.exe` on Windows) there to remove it, as for D2.
 

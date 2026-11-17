@@ -718,7 +718,14 @@ def install_resvg() -> bool:
 
 def install_diagram(which_one: str = "") -> bool:
     """`--install diagram` (D2, Graphviz, resvg), or one named tool."""
-    wanted = [which_one] if which_one else list(DIAGRAM_INSTALLS)
+    if not which_one:
+        from .catalogue import table
+        lines = table().splitlines()
+        print("Diagram tools (nothing installed):")
+        print("\n".join(line for line in lines if line.startswith("Kind |") or line.startswith("diagram:")))
+        print("Install all: pdfmd --install diagram:all")
+        return True
+    wanted = list(DIAGRAM_INSTALLS) if which_one == "all" else [which_one]
     done = True
     for name in wanted:
         done = {"d2": install_d2, "dot": install_graphviz, "resvg": install_resvg}[name]() and done
@@ -996,11 +1003,13 @@ def install_tectonic(fetch=None, release: dict | None = None) -> bool:
 
 def install_kind(value: str) -> str:
     """argparse type of --install: a kind, or `fonts:NAME[,NAME...]` / `ocr:LANG[,LANG...]` / `math:katex` / `diagram:d2|dot`."""
+    if value == "":
+        return value
     kind = value.partition(":")[0]
     if (kind not in core.INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math", "diagram", "core", "kit"))
             or (kind == "core" and ":" in value and value not in ("core:tex", "core:typst"))
             or (kind == "math" and ":" in value and value not in ("math:katex", "math:mathjax"))
-            or (kind == "diagram" and ":" in value and value.partition(":")[2] not in DIAGRAM_INSTALLS)):
+            or (kind == "diagram" and ":" in value and value.partition(":")[2] not in (*DIAGRAM_INSTALLS, "all"))):
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(core.INSTALL_KINDS)}; "
                                          "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz; "
                                          "math:mathjax is MathJax and math:katex is KaTeX, for math in WeasyPrint's PDFs; diagram:d2 and "
@@ -1155,6 +1164,10 @@ def preserve_md2pdf_launcher():
 def install_extra(kind: str, assume_yes: bool = False) -> bool:
     """Install an optional piece: pip packages into the Python environment pdfmd runs
     from (math, emoji, pandoc), or Typst's own binary into pdfmd's tools folder."""
+    if kind == "":
+        from .catalogue import table
+        print(table())
+        return True
     if kind == "kit" or kind.startswith("kit:"):
         return install_kits(kind.partition(":")[2], assume_yes)
     if kind == "full":

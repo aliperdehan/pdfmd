@@ -57,7 +57,7 @@ class Names(unittest.TestCase):
         self.assertIsNone(name("v0.9.0", "Linux", "riscv64"))
 
     def test_the_kinds_are_accepted_and_a_wrong_one_is_refused(self):
-        for good in ("diagram", "diagram:d2", "diagram:dot", "diagram:resvg"):
+        for good in ("diagram", "diagram:d2", "diagram:dot", "diagram:resvg", "diagram:all"):
             self.assertEqual(pdfmd.install_kind(good), good)
         for bad in ("diagram:mermaid", "diagram:", "diagrams"):
             with self.assertRaises(Exception):
@@ -210,12 +210,47 @@ class Resvg(unittest.TestCase):
         download.assert_not_called()
         self.assertIn("SHA-256", err.getvalue())
 
-    def test_bare_diagram_installs_all_three_tools(self):
+    def test_bare_diagram_lists_without_installing(self):
+        installer = pdfmd.pdfmd_install
+        with unittest.mock.patch.object(installer, "install_d2") as d2, \
+                unittest.mock.patch.object(installer, "install_graphviz") as dot, \
+                unittest.mock.patch.object(installer, "install_resvg") as resvg, \
+                unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as shown:
+            self.assertTrue(pdfmd.install_extra("diagram"))
+        for call in (d2, dot, resvg):
+            call.assert_not_called()
+        for kind in ("d2", "dot", "resvg", "all"):
+            self.assertIn("diagram:" + kind, shown.getvalue())
+
+    def test_each_diagram_kind_installs_only_its_tool(self):
+        installer = pdfmd.pdfmd_install
+        for wanted in ("d2", "dot", "resvg"):
+            with self.subTest(wanted=wanted), \
+                    unittest.mock.patch.object(installer, "install_d2", return_value=True) as d2, \
+                    unittest.mock.patch.object(installer, "install_graphviz", return_value=True) as dot, \
+                    unittest.mock.patch.object(installer, "install_resvg", return_value=True) as resvg:
+                self.assertTrue(pdfmd.install_extra("diagram:" + wanted))
+                for name, call in (("d2", d2), ("dot", dot), ("resvg", resvg)):
+                    self.assertEqual(call.call_count, int(name == wanted))
+
+    def test_bare_install_lists_every_size_without_installing(self):
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--install"],
+                              capture_output=True, text=True, env={**os.environ, "PDFMD_CONFIG": ""})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        for kind, size in pdfmd.INSTALL_SIZES.items():
+            self.assertIn(kind + " |", done.stdout)
+            self.assertIn(size, done.stdout)
+        for heading in ("Kind", "Size", "Fetch / source", "Target", "Removal"):
+            self.assertIn(heading, done.stdout)
+        self.assertIn("pip", done.stdout)
+        self.assertIn("--uninstall", done.stdout)
+
+    def test_diagram_all_installs_all_three_tools(self):
         installer = pdfmd.pdfmd_install
         with unittest.mock.patch.object(installer, "install_d2", return_value=True) as d2, \
                 unittest.mock.patch.object(installer, "install_graphviz", return_value=True) as dot, \
                 unittest.mock.patch.object(installer, "install_resvg", return_value=True) as resvg:
-            self.assertTrue(pdfmd.install_extra("diagram"))
+            self.assertTrue(pdfmd.install_extra("diagram:all"))
         for call in (d2, dot, resvg):
             call.assert_called_once_with()
 
