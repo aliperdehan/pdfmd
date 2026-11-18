@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.33.333d — 2026-11-18
+
+Pre-edit state: commit `892c408`. `gui-win/` starts Colophon's Windows trial: a thin .NET 8 shell around the web
+UI and `pdfmd --serve`, not a port of the Swift app. WPF with WebView2 was chosen over WinUI 3 because it needs no
+Windows App SDK and no extra runtime beyond the WebView2 that Windows 11 carries. This commit adds the project, the
+window with its WebView2 page and the light/dark resources, a window-placement helper and `--selftest` (4 checks:
+placement, settings, theme). `gui-win/` ships nothing in the PyPI package and `PDFMD_VERSION` stays 3.33.333.
+`dotnet build` passes and `--selftest` reports 4 passed, 0 failed. Not verified by hand: the window on screen.
+
 ## v3.33.333c — 2026-11-18
 
 Pre-edit state: commit `3ef873d`. The release run of 3.33.333 built no container image: the `full` and `office` builds for
