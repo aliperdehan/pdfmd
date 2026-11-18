@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.34.8 — 2026-11-18
+
+Pre-edit state: commit `1113e1c`. Repeated excerpt citations always reached the citation engine in full
+because the approved repeat setting was missing. With `excerpt-repeat: page`, a repeated source in
+the same block uses the literal page form when pagecite selects it. The default is `full`.
+Detach uses the local CSL and literal locators in Markdown paragraphs. Plain Markdown cannot reliably
+model every Pandoc container or command-line CSL and citation engine override, so detach can retain
+an ordinary citation in those cases.
+
+- Regression tests cover the text resolver, byte-identical default and explicit full output, and
+  author–date, note and numeric styles through pdfmd.
+
 ## v3.34.7a — 2026-11-18
 
 Pre-edit state: commit `fbf494b`. GitHub moved `ubuntu-latest` to Ubuntu 26.04, and `actions/setup-python` has no Python

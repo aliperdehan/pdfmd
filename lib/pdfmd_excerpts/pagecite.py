@@ -167,6 +167,22 @@ def style_settings(mode: str, sources: list[Path], metadata: list[Path], options
     return ("style" if locator else "drop"), opening, closing, not locator
 
 
+def excerpt_repeat(sources, metadata, options=(), no_auto=None):
+    """Return the CSL brackets only when repeated excerpts have a literal page form."""
+    document = sources[0]
+    value = core.first_pdfmd_option(document, metadata, "excerpt-repeat")
+    mode = "full" if value is None else str(value).strip().casefold()
+    if mode not in ("full", "page"):
+        raise SystemExit("excerpt-repeat must be full or page")
+    if mode == "full" or not enabled(document, metadata, no_auto):
+        return None
+    page_mode, _ = settings(document, metadata)
+    if page_mode not in ("auto", "page"):
+        return None
+    effective, opening, closing, _ = style_settings(page_mode, sources, metadata, options)
+    return (opening, closing) if effective == "page" else None
+
+
 def filter_args(sources: Path | list[Path], metadata: list[Path], options: list[str], no_auto=None) -> list[str]:
     files = sources if isinstance(sources, list) else [sources]
     if not files or not enabled(files[0], metadata, no_auto):

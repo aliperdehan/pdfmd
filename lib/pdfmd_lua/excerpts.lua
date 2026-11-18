@@ -180,7 +180,7 @@ local function strip_separator(inlines)
   return stripped
 end
 
-local function suffix(citation, record, page)
+local function suffix(citation, record, page, literal)
   local original = citation.suffix
   local typed = pandoc.text.lower(pandoc.utils.stringify(original):gsub(" ", " "):gsub("^[,%s]+", ""))
   if typed:match("^[0-9]") then return original end
@@ -191,7 +191,7 @@ local function suffix(citation, record, page)
   local locator = record.locator
   if locator == "" and page ~= "" then
     local plural = page:find("[,;]") or page:gsub("–", "-"):gsub("—", "-"):find("%S%s*%-+%s*%S")
-    locator = config.page_terms[plural and 2 or 1] .. " " .. page
+    locator = literal and page or config.page_terms[plural and 2 or 1] .. " " .. page
   end
   if locator == "" then return original end
   local out = pandoc.List()
@@ -241,7 +241,7 @@ local function rewrite(el)
     if resolved[index] then changed = true end
   end
   if not changed then return el end
-  local out, index = pandoc.List(), 1
+  local out, index, repeated = pandoc.List(), 1, nil
   while index <= #citations do
     local citation, record = citations[index], resolved[index]
     index = index + 1
@@ -261,13 +261,52 @@ local function rewrite(el)
           if merged then page = merged else index = following end
         end
       end
+      if config.repeat_brackets and citation.mode ~= "AuthorInText" and config.bibliography[record.key] then
+        local words = strip_separator(suffix(citation, record, page, true))
+        if #words > 0 then
+          local literal = pandoc.List({pandoc.Str(config.repeat_brackets[1])})
+          if #citation.prefix > 0 then literal:extend(citation.prefix); literal:insert(pandoc.Space()) end
+          literal:extend(words)
+          literal:insert(pandoc.Str(config.repeat_brackets[2]))
+          repeated = pandoc.Span(literal, pandoc.Attr("", {"pagecite"}))
+        end
+      end
       citation.id = record.key
       citation.suffix = suffix(citation, record, page)
       out:insert(citation)
     end
   end
   if #out == 0 then return nil end
-  return pandoc.Cite(content(out), out)
+  local cite = pandoc.Cite(content(out), out)
+  if repeated and #out == 1 then
+    return pandoc.Span({cite, repeated}, pandoc.Attr("", {"pdfmd-excerpt-repeat"}))
+  end
+  return cite
+end
+
+local function repeat_candidate(item)
+  return item.t == "Span" and item.classes:includes("pdfmd-excerpt-repeat") and
+    #item.content == 2 and item.content[1].t == "Cite"
+end
+
+local function repeat_inlines(items, state)
+  local out = pandoc.List()
+  for _, item in ipairs(items) do
+    local candidate = repeat_candidate(item)
+    local cite = candidate and item.content[1] or item
+    if cite.t == "Cite" then
+      out:insert(candidate and cite.citations[1].id == state.key and item.content[2] or cite)
+      for _, citation in ipairs(cite.citations) do
+        if not references[citation.id:match("^([^:]+):")] then state.key = citation.id end
+      end
+    else
+      if item.content and item.t ~= "Note" and item.t ~= "Image" then
+        item.content = repeat_inlines(item.content, state)
+      end
+      out:insert(item)
+    end
+  end
+  return out
 end
 
 local function inlines(items)
@@ -297,6 +336,17 @@ end
 
 function Pandoc(doc)
   local result = doc:walk({Inlines = inlines})
+  if config.repeat_brackets then
+    local function block(el)
+      el.content = repeat_inlines(el.content, {})
+      return el
+    end
+    result = result:walk({Para = block, Plain = block})
+    -- Citations in other contexts (e.g. nocite or a heading) keep their ordinary form.
+    result = result:walk({Span = function(el)
+      if repeat_candidate(el) then return el.content[1] end
+    end})
+  end
   if missing > 0 and config.missing then
     warn(tostring(missing) .. " excerpt marker" .. (missing == 1 and "" or "s") ..
       " but no excerpts.json (looked in " .. config.missing .. ")")

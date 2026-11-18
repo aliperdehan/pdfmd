@@ -97,7 +97,8 @@ process = function(inlines, state, linked)
     else
       -- Inline containers share the surrounding block's source. A Note's blocks were walked separately;
       -- code, math and raw inlines are opaque. Links may carry citations, but never page markers.
-      if el.content and el.t ~= "Note" and el.t ~= "Image" then
+      if el.content and el.t ~= "Note" and el.t ~= "Image" and
+          not (el.t == "Span" and el.classes:includes("pagecite")) then
         el.content = process(el.content, state, linked or el.t == "Link")
       end
       out:insert(el)

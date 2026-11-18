@@ -157,7 +157,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "pdfmd-options.excerpt-prefix (default x; --setup) sets the short marker prefix. "
                              "Both : and # are read in either form; canonical forms are @x:ID and @KEY#ID. "
                              "Builds resolve citations using the local record. pdfmd-options.excerpt-page-terms sets the singular and "
-                             "plural page terms (p., pp. by default; --setup). Markup kind: excerpts. "
+                             "plural page terms (p., pp. by default; --setup). "
+                             "pdfmd-options.excerpt-repeat: page uses the pagecite page form for repeated sources; default full. "
+                             "Markup kind: excerpts. "
                              "`pdfmd --excerpts --help` lists command options")
     parser.add_argument("--serve", nargs="?", const="", metavar="FOLDER",
                         help="the web UI's local server for the project FOLDER (default: the working folder): 127.0.0.1, a random port, "

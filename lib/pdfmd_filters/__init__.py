@@ -734,7 +734,7 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     args += raw_filter_args(inputs, no_auto, metadata_files, flat_pictures=flat_pictures, preamble=preamble, flat_text=flat_text)
     sources = inputs if isinstance(inputs, list) else [inputs]
     args += core.deferred("pdfmd_excerpts.runtime", "filter_args")(
-        sources, metadata_files, pandoc_options, no_auto, named_reader, temporary_filter_directory)
+        sources, metadata_files, pandoc_options, no_auto, named_reader, temporary_filter_directory, citation_engine)
     pagecite_options = [*pandoc_options, f"--{citation_engine}"] if citation_engine in ("natbib", "biblatex") else pandoc_options
     args += core.deferred("pdfmd_excerpts.pagecite", "filter_args")(inputs, metadata_files, pagecite_options, no_auto)
     args += core.crossref_filter_args(crossref_sources or inputs, pandoc_options, no_auto, label or str(md_path))

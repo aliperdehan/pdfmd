@@ -525,6 +525,20 @@ class ResolverFixture(CommandFixture):
 
 
 class TextResolver(ResolverFixture, unittest.TestCase):
+    def test_repeat_page_detaches_to_literal_locator(self):
+        path = self.write("draft.md", """---
+pdfmd-options: {excerpt-repeat: page, pagecite: auto}
+---
+
+First [@glass, p. 41]. Next [@x:2, Table 4]. Again [@x#3].
+
+Separate [@x:2].
+""")
+        self.command("detach", "--all", "draft.md")
+        self.assertIn("First [@glass, p. 41]. Next (42, Table 4). Again (45).",
+                      path.read_text(encoding="utf-8"))
+        self.assertIn("Separate [@glass, p. 42].", path.read_text(encoding="utf-8"))
+
     def test_shared_detach_cases(self):
         from pdfmd_excerpts.detach import text_for
         for source, expected in CASES:
@@ -554,6 +568,34 @@ class TextResolver(ResolverFixture, unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class PandocResolver(ResolverFixture, unittest.TestCase):
+    def test_repeat_page_uses_the_csl_mode_and_preserves_the_default(self):
+        from test_pagecite import csl
+
+        for kind in ("author-date", "note", "numeric"):
+            with self.subTest(kind=kind):
+                self.write("style.csl", csl(kind))
+                outputs = {}
+                for repeat in ("", ", excerpt-repeat: full", ", excerpt-repeat: page"):
+                    self.write("draft.md", f"""---
+bibliography: refs.bib
+csl: style.csl
+pdfmd-options: {{pagecite: auto{repeat}}}
+---
+
+First [@x:1]. Next [@glass#2, Table 4]. Again [@x#3].
+
+Separate [@x:2].
+""")
+                    self.build("draft.md", "--to", "plain", "-o", "out.txt", "--no-stamp", "--no-backup")
+                    outputs[repeat] = (self.root / "out.txt").read_bytes()
+                self.assertEqual(outputs[""], outputs[", excerpt-repeat: full"])
+                actual = outputs[", excerpt-repeat: page"]
+                if kind == "author-date":
+                    self.assertIn(b"Next (42, Table 4). Again (45).", actual)
+                    self.assertIn(b"Separate (Tester, p. 42).", actual)
+                else:
+                    self.assertEqual(actual, outputs[""])
+
     def test_shared_pandoc_cases(self):
         import re
         for source, expected in CASES:

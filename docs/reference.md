@@ -1081,6 +1081,15 @@ by key and records by id, one source/record per line, fixed field order and boxe
 rounded to 0.1 point. A stable sibling `.lock` file serialises atomic writes;
 records are reread inside the lock. `next-id` only rises, even after deletion.
 
+`pdfmd-options: {excerpt-repeat: page}` uses a literal locator for a repeated
+excerpt source in the same paragraph or plain block when `pagecite: page`, or
+`pagecite: auto` with a page-style result, is active. For example, a second
+citation can print as `(42, Table 4)`. Narrative citations and groups with
+multiple remaining citations keep their ordinary form. The default is `full`.
+Set it in document, metadata, folder or user settings, or through `--setup`.
+Detach writes literal locators where the Markdown scanner can identify the
+scope and local citation style. It keeps plain citations where it cannot.
+
 **Page markers after citations** (`markup: pagecite`). Off by default. With
 `pdfmd-options: {pagecite: auto}`, `Claim [@alpha, p. 2]. Next [p. 5].` uses the last
 source in that paragraph for the second claim. `--pagecite MODE` wins over the

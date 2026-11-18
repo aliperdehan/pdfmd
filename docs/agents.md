@@ -115,7 +115,9 @@ The cross-reference prefixes `fig`, `tbl`, `eq`, `sec` and `lst` are reserved.
 Builds in the pdfmd and Obsidian flavours resolve markers against the record
 file before citation processing. Real bibliography keys take precedence.
 Set `pdfmd-options.excerpt-page-terms` (default `[p., pp.]`) to change generated
-locators. Use `--no-auto excerpts` to disable resolution. Run
+locators. `excerpt-repeat: page` uses a literal locator after the same source
+in a paragraph when pagecite selects its page form. The default is `full`.
+Use `--no-auto excerpts` to disable resolution. Run
 `pdfmd --excerpts detach --all draft.md` or specify IDs before the Markdown
 files to write plain citations. Source exports and attachments do this
 automatically. Builds never copy record passages, notes, quotation details or

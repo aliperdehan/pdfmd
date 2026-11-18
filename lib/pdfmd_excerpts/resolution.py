@@ -83,6 +83,8 @@ class Resolution:
     missing: str | None = None
     missing_count: int = 0
     messages: set[str] = field(default_factory=set)
+    arguments: tuple[str, ...] = ()
+    no_auto: list[str] | None = None
 
     def message(self, message):
         if message not in self.messages:
@@ -184,7 +186,8 @@ def prepare(sources, metadata, arguments=(), no_auto=None, *, diagnostics=False,
             return None
     page, locators = terms(document, metadata) if found is not None else ([], ())
     keys = bibliography_keys(sources, metadata, arguments, no_auto, extra_layers)
-    return Resolution(prefix, found, keys, page, tuple(sorted(locators)), missing)
+    return Resolution(prefix, found, keys, page, tuple(sorted(locators)), missing,
+                      arguments=tuple(arguments), no_auto=no_auto)
 
 
 def candidate_keys(sources, metadata, keys, known, no_auto, layers):

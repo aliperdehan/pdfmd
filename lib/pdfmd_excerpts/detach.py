@@ -8,7 +8,8 @@ import re
 
 from pdfmd_base import core
 
-from .markers import CITATION, citation_mask, marker
+from .markers import CITATION, REFERENCE_PREFIXES, citation_mask, marker
+from .pagecite import excerpt_repeat
 from .pages import roman, roman_number
 from .resolution import prepare
 from .record import RecordError, read
@@ -63,13 +64,15 @@ def page_list(pages):
     return ", ".join(printed(first) if first == last else f"{printed(first)}--{printed(last)}" for first, last in joined)
 
 
-def locator(page, whole, suffix, state):
+def locator(page, whole, suffix, state, *, literal=False):
     typed = suffix.lstrip(", \t\n\u00a0").casefold()
     if re.match(r"[0-9]", typed) or any(typed == term.casefold() or typed.startswith(term.casefold() + " ")
                                         for term in state.locator_terms):
         return suffix
     plural = bool(re.search(r"[,;]|\S\s*[-–—]+\s*\S", page))
-    generated = whole or (state.page_terms[int(plural)] + " " + page if page else "")
+    generated = whole
+    if not generated and page:
+        generated = page if literal else state.page_terms[int(plural)] + " " + page
     if generated:
         return ", " + generated + (", " + suffix.lstrip(", \t\n") if suffix.strip(", \t\n") else "")
     return suffix
@@ -97,6 +100,36 @@ class Citation:
         page = self.record["page"] if merged is None else merged
         suffix = locator(page, self.record["locator"], self.suffix, state)
         return name + (" [" + suffix.lstrip(", \t\n") + "]" if narrative and suffix.strip() else suffix)
+
+    def repeated(self, state, brackets, merged):
+        if not self.record or self.record["key"] not in state.bibliography:
+            return None
+        page = self.record["page"] if merged is None else merged
+        words = locator(page, self.record["locator"], self.suffix, state, literal=True).lstrip(", \t\n")
+        if not words:
+            return None
+        prefix = self.prefix.strip()
+        opening, closing = brackets
+        if opening == "[":
+            opening = r"\["
+        words = words.replace("--", "–")
+        return opening + (prefix + " " if prefix else "") + words + closing
+
+
+def repeat_edits(scanned, groups, replacements):
+    """Track plain Markdown paragraphs conservatively when there is no Pandoc AST."""
+    boundaries = [match.start() for match in re.finditer(
+        r"(?m)^[ \t]*(?:$|[#>|]|(?:[-+*]|[0-9]+[.)])(?=\s)|\[\^[^\]]+\]:)", scanned)]
+    previous, previous_block = None, None
+    for start, end, keys, literal in sorted(groups):
+        block = bisect_right(boundaries, start)
+        if block != previous_block:
+            previous = None
+        if keys:
+            if literal is not None and keys[0] == previous:
+                replacements[start, end] = literal
+            previous = keys[-1]
+        previous_block = block
 
 
 def brackets(scanned):
@@ -128,8 +161,22 @@ def rewrite(text, document, metadata, state, ids=None, *, diagnostics=False, fin
         return hits[bisect_right(starts, first):bisect_left(starts, last)]
 
     pairs = brackets(scanned)
-    replacements = []
+    repeat = excerpt_repeat([document], metadata, state.arguments, state.no_auto) if state.records else None
+    footnotes = [(start, end) for start, (end, _) in pairs.items() if scanned[start - 1:start] == "^"] if repeat else []
+    replacements, groups = {}, []
     count = 0
+
+    def remember(start, end, members, literal=None):
+        if not repeat or any(first <= start < last for first, last in footnotes):
+            return
+        keys = []
+        for member in members:
+            if member.record and member.record["remark"]:
+                continue
+            key = member.record["key"] if member.record else member.key
+            if not any(key.startswith(prefix + ":") for prefix in REFERENCE_PREFIXES):
+                keys.append(key)
+        groups.append((start, end, keys, literal))
 
     def citation(start, end, found, narrative):
         nonlocal count
@@ -160,8 +207,9 @@ def rewrite(text, document, metadata, state, ids=None, *, diagnostics=False, fin
             members = [citation(first, last, hit, False) for first, last, hit in items]
             consumed.update(hit.start() for _, _, hit in items)
             if not any(member.record for member in members):
+                remember(start, end + 1, members)
                 continue
-            rendered = []
+            rendered, literal = [], None
             index = 0
             while index < len(members):
                 member = members[index]
@@ -181,7 +229,10 @@ def rewrite(text, document, metadata, state, ids=None, *, diagnostics=False, fin
                 if merged is None:
                     index = following_index
                 rendered.append(member.rendered(state, merged=merged).strip())
-            replacements.append((start, end + 1, "[" + "; ".join(rendered) + "]" if rendered else ""))
+                if repeat and len(rendered) == 1:
+                    literal = member.repeated(state, repeat, merged)
+            replacements[start, end + 1] = "[" + "; ".join(rendered) + "]" if rendered else ""
+            remember(start, end + 1, members, literal if len(rendered) == 1 else None)
 
     for hit in hits:
         if hit.start() in consumed:
@@ -200,11 +251,15 @@ def rewrite(text, document, metadata, state, ids=None, *, diagnostics=False, fin
         member = citation(start, hit.end(), hit, not suppressed)
         if member.record:
             member.suffix = suffix
-            replacements.append((start, end, "" if member.record["remark"] else member.rendered(state, narrative=True)))
+            replacements[start, end] = "" if member.record["remark"] else member.rendered(state, narrative=True)
+        literal = member.repeated(state, repeat, None) if repeat and suppressed else None
+        remember(start, end, [member], literal)
 
     if diagnostics and finish:
         state.finish()
-    for start, end, replacement in sorted(replacements, reverse=True):
+    if repeat:
+        repeat_edits(scanned, groups, replacements)
+    for (start, end), replacement in sorted(replacements.items(), reverse=True):
         if not replacement:
             if text[end:end + 1] in (" ", "\t"):
                 end += 1
