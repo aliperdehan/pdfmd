@@ -167,7 +167,7 @@ and the reason when known. Successful full builds record the reader; first build
 An explicit `--from` or `pdfmd-options: {reader: ...}` suppresses this warning.
 Use `--from md` to read Markdown from a file with any extension.
 A .tex fragment can be compiled with a discovered project preamble or
-with `--include-in-header FILE`.
+with Pandoc's own `-H FILE`, which pdfmd passes on.
 
 Use `--crop` or `pdfmd-options: {crop: true}` to crop the PDF of a build
 to its ink. The default is off. `--no-crop` overrides a saved setting.

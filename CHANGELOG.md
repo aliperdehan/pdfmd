@@ -43,7 +43,7 @@ multiline LaTeX command, use the Markdown reader and preserve the balanced
 arguments as one raw block when line breaks would split them. The checkout
 regressions exercise the reader override with inspection off and on, the
 fragment with and without preamble discovery, and two multiline spellings
-through the LaTeX writer.
+through the LaTeX writer. Fix before release: the agent guide named `--include-in-header` as a pdfmd flag; it now names Pandoc's `-H FILE`, which pdfmd passes on.
 
 ## v3.34.18 — 2026-11-18
 
