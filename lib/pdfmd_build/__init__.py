@@ -240,7 +240,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     handle.write(source_override[0])
                 first = Path(handle.name)
                 temporaries.append(first)
-            with core.scaffold_inputs([first, *parts_inputs], bool(parts_inputs)) as scaffold_files, \
+            with core.scaffold_inputs([first, *parts_inputs], bool(parts_inputs), metadata_files=metadata_files) as scaffold_files, \
                     NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix, prefix=f".{md_path.stem}.pdfmd-native-",
                                        dir=md_path.parent, delete=False) as handle:
                 handle.write(core.assemble_markdown_text(scaffold_files, False, None, partial, False))
@@ -392,7 +392,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             {part: core.part_key(part, parts_root) for part in parts_inputs}
                             if part_markers and parts_root else None,
                             selection if isinstance(selection, (set, frozenset)) else None,
-                            core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format)) as scaffold_files, \
+                            core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format),
+                            metadata_files=metadata_files) as scaffold_files, \
             linked_inputs([title_source, *scaffold_files[1:]], [md_path, *parts_inputs], effective_from, metadata_files,
                           "pdf" if link_output else target_format, link_output or output,
                           not core.auto_disabled(no_auto, "title")) as (linked, effective_from):
@@ -402,7 +403,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
             all_inputs or [md_path], metadata_files, pandoc_options, no_auto, from_format)
         if any_citations is None:
-            any_citations = any(core.contains_citations(item) for item in [md_path, *parts_inputs])
+            any_citations = any(core.contains_citations(item, metadata_files) for item in [md_path, *parts_inputs])
         any_citations = any_citations or bool(before_citeproc)
         any_code_spans = any(core.has_code_spans(item.read_text(encoding="utf-8-sig"))
                              for item in [md_path, *parts_inputs])

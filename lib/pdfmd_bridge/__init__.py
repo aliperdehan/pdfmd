@@ -129,7 +129,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
                 sources, metadata_files, pandoc_options, no_auto, named_reader)
             if any_citations is None:
-                any_citations = core.contains_citations(md_path)
+                any_citations = any(core.contains_citations(path, metadata_files) for path in sources)
             if (any_citations or before_citeproc) and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
                 cmd.append("--citeproc")
             cmd += core.csl_args(

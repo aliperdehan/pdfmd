@@ -1305,6 +1305,10 @@ In the Obsidian flavour, `[[#Heading]]` links to a heading in the note. `[[Note]
 A missing note leaves the display text and produces one warning, which fails a `--strict` build.
 The pdfmd flavour continues to render wikilinks as display text.
 
+The Obsidian and pdfmd flavours hide `%%comments%%` in single documents, report and book chapters, and split-document
+parts. `--show-comments` displays them as HTML comments or as the writer's comment boxes. Heading listings, section
+selection and citation detection ignore their contents. Percent delimiters in indented and fenced code stay literal.
+
 ## CSV/TSV table inclusion
 
 A fenced Div with class `csv` --

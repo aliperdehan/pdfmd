@@ -66,6 +66,15 @@ class HideComments(unittest.TestCase):
         unclosed_fence = "```\n%% never closed\n"
         self.assertEqual(self.hidden(unclosed_fence), unclosed_fence)
 
+    def test_indented_code_keeps_percent_delimiters(self):
+        text = ("# Heading\n    %% code after heading %%\n\n"
+                "Paragraph\n    continuation %%prose%%\n\n"
+                "    %% literal %%\n\n\t%% also literal\n\nEnd %%hidden%%\n")
+        text += "\n- Item\n\n    Text %%list prose%%\n\n      %% list code %%\n"
+        expected = text.replace(" %%prose%%", "").replace(" %%hidden%%", "").replace(" %%list prose%%", "")
+        self.assertEqual(self.hidden(text), expected)
+        self.assertEqual(self.shown(text).count("<!--"), 3)
+
     def test_a_percent_pair_with_no_mate_hides_the_rest_as_obsidian_does(self):
         # checked in Obsidian's reading view: the rest of the note is the comment, and a later `%%` closes an earlier one
         result = hide_comments("one\n%% oops\ntwo\nthree\n")
@@ -171,6 +180,85 @@ class CommandLine(unittest.TestCase):
                               text=True, encoding="utf-8", cwd=self.directory / folder, env=self.env)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         return (self.directory / folder / "n.html").read_text(encoding="utf-8"), done.stdout + done.stderr
+
+    def run_pdfmd(self, *arguments):
+        return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *arguments],
+                              capture_output=True, text=True, encoding="utf-8",
+                              cwd=self.directory / "vault", env=self.env)
+
+    def write_note(self, name, text):
+        path = self.directory / "vault" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_report_chapters_follow_the_comment_policy(self):
+        first = "---\ntitle: First\nchapter: 1\n{}---\n\nVisible first.\n"
+        self.write_note("second.md", "---\ntitle: Second\nchapter: 2\n---\n\n"
+                        "%%\n\n# Private chapter heading\n\n%%\n\nVisible second.\n")
+        for route in ("route", "patch"):
+            self.write_note("first.md", first.format(f"pdfmd-options: {{report-build: {route}}}\n"))
+            for flag in ((), ("--show-comments",), ("--flavour", "pandoc")):
+                with self.subTest(route=route, flag=flag):
+                    done = self.run_pdfmd("-r", "first.md", "second.md", "-o", "book.html", *flag)
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    html = (self.directory / "vault" / "book.html").read_text(encoding="utf-8")
+                    self.assertIn("Visible second.", html)
+                    self.assertEqual("Private chapter heading" in html, bool(flag))
+                    self.assertEqual('id="private-chapter-heading"' in html, flag == ("--flavour", "pandoc"))
+
+    def test_split_document_parts_follow_their_flavour(self):
+        self.write_note("doc.md", "---\ntitle: Parts\npdfmd-options: {parts: auto}\n---\n")
+        self.write_note("parts/10-first.md", "Start %%private text%% end.\n")
+        self.write_note("parts/20-second.md", "---\npdfmd-options: {flavour: pandoc}\n---\n\n"
+                        "Start %%literal text%% end.\n")
+        done = self.run_pdfmd("doc.md", "-o", "doc.html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        html = (self.directory / "vault" / "doc.html").read_text(encoding="utf-8")
+        self.assertNotIn("private text", html)
+        self.assertIn("%%literal text%%", html)
+
+    def test_section_and_heading_scanners_skip_private_headings(self):
+        body = "# Visible\n\nBefore.\n\n%%\n# Secret\n\n[hidden]{#private}\n%%\n\nAfter.\n\n# Last\n\nEnd.\n"
+        for parts in (False, True):
+            with self.subTest(parts=parts):
+                options = "pdfmd-options: {parts: auto}\n" if parts else ""
+                first = f"---\ntitle: Sections\n{options}---\n\n"
+                self.write_note("doc.md", first if parts else first + body)
+                if parts:
+                    self.write_note("parts/10-first.md", body)
+                listed = self.run_pdfmd("doc.md", "--list-parts")
+                self.assertEqual(listed.returncode, 0, listed.stdout + listed.stderr)
+                self.assertIn("# Visible", listed.stdout)
+                self.assertNotIn("Secret", listed.stdout)
+                self.assertNotIn("private", listed.stdout)
+                for flag in ((), ("--show-comments",)):
+                    done = self.run_pdfmd("doc#visible", "-o", "doc.html", *flag)
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    html = (self.directory / "vault" / "doc.html").read_text(encoding="utf-8")
+                    self.assertIn("After.", html)
+                    self.assertEqual("Secret" in html, bool(flag))
+                    self.assertNotIn('id="secret"', html)
+
+    def test_metadata_only_flavour_reaches_citation_detection(self):
+        self.write_note("n.md", "Visible.\n\n%% [@missing]\n")
+        self.write_note("meta.yaml", "pdfmd-options: {flavour: pandoc}\n")
+        done = self.run_pdfmd("n.md", "--metadata-file", "meta.yaml", "-o", "n.html", "--verbose")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Citeproc: citation missing not found", done.stdout + done.stderr)
+        self.write_note("meta.yaml", "pdfmd-options: {flavour: obsidian}\n")
+        hidden = self.run_pdfmd("n.md", "--metadata-file", "meta.yaml", "-o", "n.html")
+        self.assertEqual(hidden.returncode, 0, hidden.stdout + hidden.stderr)
+        self.assertNotIn("Citeproc: citation missing not found", hidden.stdout + hidden.stderr)
+
+    def test_split_does_not_create_a_part_from_a_commented_out_heading(self):
+        self.write_note("doc.md", "---\ntitle: Sections\n---\n\n# One\n\n"
+                        "%%\n\n# Private\n\n%%\n\n# Two\n\nEnd.\n")
+        done = self.run_pdfmd("doc.md", "--split", "split")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        parts = self.directory / "vault" / "split" / "parts"
+        self.assertEqual(sorted(item.name for item in parts.iterdir()), ["10-one.md", "20-two.md"])
+        self.assertIn("# Private", (parts / "10-one.md").read_text(encoding="utf-8"))
 
     def test_in_a_vault_the_comments_are_hidden_and_what_is_in_them_decides_nothing(self):
         html, said = self.build("vault", self.NOTE, "-v")

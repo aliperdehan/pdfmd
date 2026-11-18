@@ -186,7 +186,7 @@ def run(core, *,
     any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
         files, metadata_files, pandoc_options, report_no_auto, args.from_format)
     if any_citations is None:
-        any_citations = any(contains_citations(file) for file in files)
+        any_citations = any(contains_citations(file, metadata_files) for file in files)
     from pdfmd_filters.lua import pre_citeproc_args
     before_citeproc = pre_citeproc_args(files[0], metadata_files, report_no_auto)
     any_citations = any_citations or bool(before_citeproc)

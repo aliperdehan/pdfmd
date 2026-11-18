@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.34.26 — 2026-11-18
+
+Pre-edit state: commit `6b3fdcb`. Report chapters and split-document parts
+bypassed the percent-comment pass, heading scans saw commented-out sections,
+and citation detection omitted linked flavour settings. Apply the same
+flavour rules to those inputs and scans, and protect indented code from the
+comment pass.
+
+- Synthetic regressions cover both report routes, split sources, section
+  selection and listings, list indentation and linked metadata for citations.
+  The launchpad stays at 785 lines.
+
 ## v3.34.25 — 2026-11-18
 
 Pre-edit state: commit `6b0119a`. Obsidian wikilinks printed only their labels.

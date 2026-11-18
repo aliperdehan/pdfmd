@@ -241,11 +241,14 @@ class Hidden:
     def copies(self, core, inputs: list[Path], files: list[Path], chapters: dict[Path, Chapter],
                metadata_files=(), reader: str | None = None) -> list[Path]:
         from pdfmd_reader import dialect
+        from pdfmd_flavours.markup import comment_source
 
         out = []
         for path, original in zip(inputs, files):
             raw = path.read_text(encoding="utf-8-sig")
             text = dialect.prepare(raw, original, metadata_files, dialect.EXTENSIONS in (reader or ""))
+            if original.suffix.lower() in core.MARKDOWN_LIKE_SUFFIXES:
+                text = comment_source(text, original, metadata_files)
             if original in chapters:
                 text = apply(core, text, chapters[original])
             if text == raw:

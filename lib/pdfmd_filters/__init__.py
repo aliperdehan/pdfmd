@@ -737,7 +737,7 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
         sources, metadata_files, pandoc_options, no_auto, named_reader, temporary_filter_directory, citation_engine)
     pagecite_options = [*pandoc_options, f"--{citation_engine}"] if citation_engine in ("natbib", "biblatex") else pandoc_options
     args += core.deferred("pdfmd_excerpts.pagecite", "filter_args")(inputs, metadata_files, pagecite_options, no_auto)
-    args += core.crossref_filter_args(crossref_sources or inputs, pandoc_options, no_auto, label or str(md_path))
+    args += core.crossref_filter_args(crossref_sources or inputs, pandoc_options, no_auto, label or str(md_path), metadata_files)
     return args + core.fullcite_pre_args(inputs, metadata_files, pandoc_options)
 
 

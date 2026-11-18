@@ -46,15 +46,17 @@ def old_spelling_in(text: str) -> bool:
     return "[[fullcite:" in text and bool(OLD_SPELLING_RE.search(text))
 
 
-def fullcite_old_spelling(md_path: Path) -> bool:
+def fullcite_old_spelling(md_path: Path, metadata_files=()) -> bool:
     """Whether the file has `[[fullcite:KEY]]` and the document may use it (the `fullcite` markup kind is on for its flavour)."""
     try:
         text = core.read_text_best_effort(md_path)
     except OSError:
         return False
-    if "[[fullcite:" not in text or not old_spelling_in(core.EMBED_BLOCK_RE.sub("", text)):
+    if "[[fullcite:" not in text:
         return False
-    return KIND in core.markup_kinds(md_path, [])
+    from pdfmd_flavours.markup import comment_source
+    text = comment_source(text, md_path, metadata_files, show=False)
+    return old_spelling_in(core.EMBED_BLOCK_RE.sub("", text)) and KIND in core.markup_kinds(md_path, list(metadata_files))
 
 
 def command_line_value(value: str) -> str:

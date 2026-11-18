@@ -3139,14 +3139,15 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
 
 - **`%%comments%%`** (v3.32.20, in `obsidian` and `pdfmd`). Obsidian hides them in its reading view, and so does pdfmd, in every
   output: `A %%a note%% b` prints `A  b`, and a `%%` on a line of its own opens a comment of many lines (paragraphs, headings and
-  lists included) up to the next `%%`. A comment is not looked into inside fenced code, inline code, math, the front matter or an
-  HTML comment, so `` `%% x %%` `` stays as it is. A `%%` with no closing `%%` is a warning naming the line, since it is usually a
+  lists included) up to the next `%%`. Percent delimiters stay literal in fenced and indented code, inline code, math, front matter
+  and HTML comments. A `%%` with no closing `%%` is a warning naming the line, since it is usually a
   forgotten closer. In an Obsidian vault it hides the rest of the note, as it does in Obsidian's reading view (checked there); in the
   `pdfmd` flavour, outside a vault, it stays text (a lone `%%` can be TeX or plain text). `pdfmd-options: {unclosed-comment: hide}`
   or `keep` (`--unclosed-comment`, also a row in `pdfmd --setup`) chooses either way. A later `%%` closes the earlier one, and an
   `<!-- HTML comment -->` hides the same way. With `show-comments` (`--show-comments`) they are drawn like HTML comments, as a box
   labelled *Comment*. What is in a comment decides nothing: a `\ref{x}` or an `@key` inside one does not switch the reader or turn
-  on citations.
+  on citations. The same rules apply in report and book chapters and in split-document parts. Section selection and heading
+  listings ignore commented-out headings.
 
 - **Typography, figures, bare links and emoji** (v3.32.23, in `obsidian` and `pdfmd`). The gfm that pdfmd picks for a file with no
   front matter also reads `+smart` (curly quotes, `--` and `---` as dashes, `...` as an ellipsis) and `+implicit_figures` (a picture
@@ -3188,9 +3189,8 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   (`![[note]]`, `![[doc.pdf]]`) and anything in code, math, the front matter or an HTML comment are left as they are for now. All three
   settings are rows of `pdfmd --setup`.
 
-`flavour: pandoc` (or `gfm`, `commonmark`) turns all of this off: `%%` is the text it looks like, and the markup and page-break spellings are left to Pandoc. Not covered yet: the chapters of a report or
-book build (`-r`, `-b`), the parts of a split document and a `doc#section` build do not see `%%comments%%` in a file that is not the
-main one.
+`flavour: pandoc` (or `gfm`, `commonmark`) turns all of this off. Pandoc reads the markup and page-break spellings, and `%%`
+stays literal.
 
 ### Not just Markdown
 

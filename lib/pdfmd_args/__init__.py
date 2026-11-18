@@ -692,7 +692,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="print plain hide blocks and spans (off by default); calc hide stays silent. "
                              "Also pdfmd-options.show-hidden and pdfmd --setup")
     parser.add_argument("--show-comments", action="store_true", default=None,
-                        help="show the <!-- comments --> of the text in the output instead of dropping them: a box labelled "
+                        help="show HTML comments and the active flavour's %%%%comments%%%% in documents, chapters and parts: a box labelled "
                              "Comment (LaTeX, Typst, HTML, EPUB), a real Word comment (docx); the Markdown family keeps them as "
                              "they are. pdfmd's own markers (<!-- pdfmd: ... -->, <!-- pagebreak -->) stay invisible. Off by "
                              "default; also pdfmd-options.show-comments and pdfmd --setup")

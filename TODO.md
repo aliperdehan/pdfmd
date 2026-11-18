@@ -100,7 +100,6 @@ wait for an answer before any code.
 
 ## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]
 
-- [ ] Gaps of `%%comments%%` (3.32.20): report/book chapters, split-document parts, the section and heading scanners, indented code blocks, a `flavour` set only in a metadata file for the citation scan [3ee]
 - [ ] The rest of Obsidian's syntax: note embeds (`![[note#Heading]]`, `#^block`), links between notes, tags, block ids, properties, foldable and custom callouts, extra task statuses [3ee]
 - [ ] Every part of a flavour adjustable: presets are tables a user overrides piece by piece or defines their own ("frankenstein") [3ex]
 - [ ] Other flavours as `flavour` values, one at a time after Obsidian: MyST, MkDocs/pymdown, CriticMarkup, Logseq/Roam, Quarto extras, MultiMarkdown, Djot [3eo]

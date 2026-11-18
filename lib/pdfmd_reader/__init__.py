@@ -24,12 +24,13 @@ from pdfmd_base import pandoc_run
 _MARKDOWN_FEATURES: dict[tuple, tuple[bool, bool] | None] = {}
 
 
-def markdown_features(md_path: Path) -> tuple[bool, bool] | None:
+def markdown_features(md_path: Path, metadata_files=()) -> tuple[bool, bool] | None:
     """(has citations, uses pandoc-crossref) of a Markdown file, from its Pandoc AST; None when Pandoc is not
     there to say (the callers then fall back to a pattern)."""
     try:
         stat = md_path.stat()
-        key = (str(md_path), stat.st_mtime_ns, stat.st_size)
+        key = (str(md_path), stat.st_mtime_ns, stat.st_size, core.flavour_of(md_path, metadata_files),
+               core.unclosed_comment_mode(md_path, metadata_files))
     except OSError:
         return None
     if key in _MARKDOWN_FEATURES:
@@ -38,7 +39,8 @@ def markdown_features(md_path: Path) -> tuple[bool, bool] | None:
     pandoc = core.which("pandoc")
     if pandoc:
         try:
-            text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, show=False))
+            text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(
+                md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, show=False))
             command = [pandoc, "-f", "markdown", "-t", "json"]
             if core.md_macro_in(text):
                 # the Markdown inside `\md{...}` is part of the document: a citation there needs --citeproc
@@ -95,16 +97,17 @@ def ast_features(document) -> tuple[bool, bool]:
     return cited, crossref
 
 
-def contains_citations(md_path: Path) -> bool:
+def contains_citations(md_path: Path, metadata_files=()) -> bool:
     """Whether the document has Pandoc citations (`[@key]`, `@key`, `-@key`)."""
     if md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
         return False
-    features = markdown_features(md_path)
-    if features is not None and features[0] or core.fullcite_old_spelling(md_path):      # `[[fullcite:key]]` is a citation to be
+    features = markdown_features(md_path, metadata_files)
+    if features is not None and features[0] or core.fullcite_old_spelling(md_path, metadata_files):
         return True
     if features is not None:
         return False
-    text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, show=False))
+    text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(
+        md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, show=False))
     return bool(re.search(r"(?<![\w@])(?:-?@[-\w:.]+)", text))
 
 
@@ -117,7 +120,7 @@ CROSSREF_RE = re.compile(
 )
 
 
-def contains_crossref(md_path: Path) -> bool:
+def contains_crossref(md_path: Path, metadata_files=()) -> bool:
     """Detect pandoc-crossref's own attribute/reference syntax.
 
     Two shapes: a numbered-element attribute definition (``{#fig:setup}``
@@ -134,10 +137,11 @@ def contains_crossref(md_path: Path) -> bool:
     """
     if md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
         return False
-    features = markdown_features(md_path)
+    features = markdown_features(md_path, metadata_files)
     if features is not None:
         return features[1]
-    text = core.EMBED_BLOCK_RE.sub("", md_path.read_text(encoding="utf-8-sig"))
+    text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(
+        md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, show=False))
     return bool(CROSSREF_RE.search(text))
 
 
@@ -153,7 +157,7 @@ def crossref_built_for(executable: str) -> tuple[int, ...] | None:
 
 
 def crossref_filter_args(sources: Path | list[Path], pandoc_options: list[str],
-                         no_auto: list[str] | None, label: str) -> list[str]:
+                         no_auto: list[str] | None, label: str, metadata_files=()) -> list[str]:
     """``--filter pandoc-crossref``, added before --citeproc, when needed.
 
     Ordering matters: pandoc-crossref resolves/numbers `@fig:`/`@eq:`/
@@ -172,7 +176,7 @@ def crossref_filter_args(sources: Path | list[Path], pandoc_options: list[str],
     if core.auto_disabled(no_auto, "crossref") or "pandoc-crossref" in pandoc_options:
         return []
     files = sources if isinstance(sources, list) else [sources]
-    if not any(contains_crossref(file) for file in files):
+    if not any(contains_crossref(file, metadata_files) for file in files):
         return []
     if core.which("pandoc-crossref") is None:
         print(f"WARN  {label}: uses pandoc-crossref syntax (@fig:/@eq:/@tbl:/@sec:/@lst: or a "
@@ -345,7 +349,7 @@ def pdfmd_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str | 
         names = ", ".join(metadata_file.name for metadata_file in linked_files)
         return None, (f"{md_path}: no YAML front matter, but {names} is linked; "
                       "keeping the default markdown reader instead of gfm")
-    if contains_citations(md_path) or ("@-" in text and core.deferred(
+    if contains_citations(md_path, metadata_files) or ("@-" in text and core.deferred(
             "pdfmd_excerpts.resolution", "protect_hyphen_prefix")(
                 text, md_path, metadata_files, core.effective_no_auto(md_path, core.NO_AUTO_CLI)) != text):
         return None, (f"{md_path}: no YAML front matter, but it uses @citation syntax "

@@ -212,7 +212,7 @@ def citation_use(sources, metadata, arguments=(), no_auto=None, named_reader=Non
     from .markers import citation_mask
     for file in sources:
         text = core.read_text_best_effort(file)
-        if core.fullcite_old_spelling(file):
+        if core.fullcite_old_spelling(file, metadata):
             return True
         if any(state.key(found[1] or found[2]) is not None
                for found in CITATION.finditer(citation_mask(text, file, metadata, include_metadata=True))):

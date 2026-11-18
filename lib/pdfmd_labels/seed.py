@@ -286,7 +286,7 @@ def build_calc_seed(md_path: Path, metadata_files: list[Path], selected: list[Pa
     core.log_cmd(cmd, cwd, verbose)
     started = time.time()
     try:
-        with core.scaffold_inputs(inputs, True) as prepared:
+        with core.scaffold_inputs(inputs, True, metadata_files=metadata_files) as prepared:
             cmd[1:1 + len(inputs)] = [str(path.resolve()) for path in prepared]
             done = pandoc_run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
     except OSError as error:

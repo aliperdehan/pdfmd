@@ -31,6 +31,7 @@ from tempfile import NamedTemporaryFile
 from pdfmd_lookup import LOOKUP_TIERS, LookupAmbiguous, rank_lookup
 
 from pdfmd_base import core
+from pdfmd_flavours.markup import comment_source
 
 from pdfmd_base import pandoc_run
 
@@ -195,7 +196,7 @@ def select_parts(parts: list[Path], directory: Path, requests: list[str]) -> lis
 
 
 def select_parts_and_sections(parts: list[Path], directory: Path,
-                              requests: list[str]) -> tuple[list[Path], dict[Path, list[Heading]]]:
+                              requests: list[str], metadata_files=()) -> tuple[list[Path], dict[Path, list[Heading]]]:
     """select_parts, and then a heading inside a part for every name that is no
     part's: `report#sampling` builds the Sampling section of whichever part has
     it. A name starting with `#` (`report##sampling`) means a heading from the
@@ -218,7 +219,8 @@ def select_parts_and_sections(parts: list[Path], directory: Path,
         spans: list[tuple[int, Path, int]] = []      # (offset, part, lines): where each part sits in `headings`' numbering
         offset = 0
         for part in parts:
-            lines = core.strip_part_front_matter(part.read_text(encoding="utf-8-sig")).split("\n")
+            text = comment_source(part.read_text(encoding="utf-8-sig"), part, metadata_files)
+            lines = core.strip_part_front_matter(text).split("\n")
             headings += [heading._replace(line=heading.line + offset, end=heading.end + offset)
                          for heading in scan_items(lines)]
             spans.append((offset, part, len(lines)))
@@ -371,7 +373,7 @@ def plan_scaffold(source: Path, sections: list[str], cli_no_auto: list[str] | No
         parts = collect_parts(directory)
         if not parts:
             raise SystemExit(f"{core.display_path(directory)} has no Markdown parts")
-        selected, cuts = select_parts_and_sections(parts, directory, sections) if sections else (None, {})
+        selected, cuts = select_parts_and_sections(parts, directory, sections, mfiles) if sections else (None, {})
         warn_shared_parts_folder(source, directory, setting)
         return ScaffoldPlan(source, directory, parts, selected, mfiles, cuts)
     for ancestor in list(source.parents)[:4]:
@@ -383,7 +385,7 @@ def plan_scaffold(source: Path, sections: list[str], cli_no_auto: list[str] | No
             if probed is not None:
                 candidate_meta, candidate_setting, candidate_dir, parts = probed
                 warn_shared_parts_folder(candidate, candidate_dir, candidate_setting)
-                more, cuts = select_parts_and_sections(parts, candidate_dir, sections) if sections else ([], {})
+                more, cuts = select_parts_and_sections(parts, candidate_dir, sections, candidate_meta) if sections else ([], {})
                 chosen = {source, *more}
                 selected = sorted(chosen, key=lambda part: parts.index(part) if part in parts else len(parts))
                 return ScaffoldPlan(candidate, candidate_dir, parts, selected, candidate_meta,
@@ -421,7 +423,8 @@ def wrap_runs(text: str, kept: list[tuple[int, int]]) -> str:
 def scaffold_inputs(files: list[Path], active: bool,
                     markers: dict[Path, str] | None = None,
                     select: "set[Path] | None" = None,
-                    transform: "Callable[[str, Path], str] | None" = None) -> Iterator[list[Path]]:
+                    transform: "Callable[[str, Path], str] | None" = None,
+                    metadata_files=()) -> Iterator[list[Path]]:
     """Yield the files to hand Pandoc: the scaffold as is, each part with its
     front matter removed (a hidden temp copy beside it, deleted afterwards;
     a part with nothing to remove is passed through untouched). ``markers``
@@ -438,7 +441,7 @@ def scaffold_inputs(files: list[Path], active: bool,
     try:
         for part in files[1:]:
             text = part.read_text(encoding="utf-8-sig")
-            cleaned = core.strip_part_front_matter(text)
+            cleaned = core.strip_part_front_matter(comment_source(text, part, metadata_files))
             if transform is not None:
                 cleaned = transform(cleaned, part)     # a rewrite of the part's text (ASCII tables), before it is cut or wrapped
             if part in chapters:
@@ -474,14 +477,14 @@ def scaffold_inputs(files: list[Path], active: bool,
             path.unlink(missing_ok=True)
 
 
-def split_top_level_sections(body: str, level: int = 1) -> list[list[str]]:
+def split_top_level_sections(body: str, level: int = 1, scan: str | None = None) -> list[list[str]]:
     """Cut Markdown at its headings of exactly `level` (1 = `# ` or a line
     underlined with `===`; 2 = `## ` or `---`; see scan_headings, which also
     leaves alone a `#` line inside a fenced code block or an HTML comment).
     Element 0 is whatever comes before the first one (often a comment block);
     each later element starts with a heading's own first line."""
     lines = body.split("\n")
-    cuts = [heading.line for heading in scan_headings(lines) if heading.level == level]
+    cuts = [heading.line for heading in scan_headings(lines if scan is None else scan.split("\n")) if heading.level == level]
     bounds = [0, *cuts, len(lines)]
     return [lines[start:end] for start, end in zip(bounds, bounds[1:])]
 
@@ -769,12 +772,13 @@ def section_source(source: Path, cli_no_auto: list[str] | None,
     """(front matter, body lines, shifted) of ``source`` as pdfmd would give it
     to Pandoc: the same bare-`# Title` promotion first, so headings are cut
     from the text that is actually built."""
-    raw = source.read_text(encoding="utf-8-sig")
+    metadata_files = core.scaffold_metadata_files(source, requested_metadata)
+    raw = comment_source(source.read_text(encoding="utf-8-sig"), source, metadata_files)
     if core.auto_disabled(core.effective_no_auto(source, cli_no_auto), "title"):
         promoted, shifted = raw, False
     else:
         promoted, shifted = core.promote_bare_title(
-            raw, has_external_metadata=bool(core.scaffold_metadata_files(source, requested_metadata)))
+            raw, has_external_metadata=bool(metadata_files))
     front = core.LEADING_FRONT_MATTER_RE.match(promoted)
     end = front.end() if front else 0
     return promoted[:end], promoted[end:].split("\n"), shifted
@@ -823,7 +827,9 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
         raise SystemExit(f"{source}: --split needs YAML front matter (it becomes the scaffold)")
     if destination.exists() and any(destination.iterdir()):
         raise SystemExit(f"{destination} exists and is not empty; --split writes to a new folder")
-    sections = split_top_level_sections(text[front.end():])
+    metadata_files = core.scaffold_metadata_files(source, None)
+    masked = comment_source(text, source, metadata_files, preserve_lines=True)
+    sections = split_top_level_sections(text[front.end():], scan=masked[front.end():])
     if len(sections) < 2:
         raise SystemExit(f"{source}: no level-1 headings ('# Title', or a line underlined with ===) to split at")
     parts_dir = destination / "parts"
@@ -838,7 +844,9 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
         holds the heading and the text before its first subheading and whose
         other files are the subsections (selecting the folder selects all)."""
         slug = slug_of(section[0])
-        pieces = split_top_level_sections("\n".join(section), level + 1) if level < depth else [section]
+        body = "\n".join(section)
+        pieces = (split_top_level_sections(body, level + 1, comment_source(body, source, metadata_files, preserve_lines=True))
+                  if level < depth else [section])
         if len(pieces) < 2:
             part = directory / f"{number * 10:02d}-{slug}.md"
             part.write_text("\n".join(section).rstrip("\n") + "\n", encoding="utf-8")
@@ -973,12 +981,13 @@ def print_parts(plan: core.ScaffoldPlan) -> None:
     print(f"SCAFFOLD  {core.display_path(plan.scaffold)}")
     for part in plan.parts:
         text = part.read_text(encoding="utf-8-sig")
-        body = strip_part_front_matter(text)
-        heading = next((line.strip() for line in body.splitlines() if re.match(r"#{1,6}\s", line)), "")
+        body = strip_part_front_matter(comment_source(text, part, plan.metadata_files, show=False))
+        items = core.scan_items(body.split("\n"))
+        heading = next((f"{'#' * item.level} {item.text}" for item in items if item.level), "")
         mark = "*" if plan.selected is not None and part in plan.selected else " "
         print(f"  {mark} {str(part.relative_to(plan.directory)):<36} {len(text.splitlines()):>5} lines  {heading}")
         depth = 0
-        for inner in core.scan_items(body.split("\n"))[1:]:
+        for inner in items[1:]:
             depth = inner.level or depth
             ids = " ".join(f"{{#{identifier}}}" for identifier in inner.ids)
             if inner.level:

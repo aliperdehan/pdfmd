@@ -142,6 +142,17 @@ def hidden_comments(text: str, md_path: Path, metadata_files=(), show: bool | No
     return result.text
 
 
+def comment_source(text: str, path: Path, metadata_files=(), *, show: bool | None = None,
+                   preserve_lines: bool = False) -> str:
+    """Apply just the flavour's percent-comment rules, without rewriting links or embeds."""
+    if "%%" not in text or not core.FLAVOUR_PRESETS[flavour_of(path, metadata_files)].comments:
+        return text
+    if preserve_lines:
+        from pdfmd_obsidian.comments import mask_comments
+        return mask_comments(text, unclosed_comment_mode(path, metadata_files))
+    return hidden_comments(text, path, metadata_files, show)
+
+
 def markup_kinds(md_path: Path, metadata_files: list[Path]) -> list[str]:
     """The kinds of universal markup this build carries: the command line's, else pdfmd-options' (less a chosen kit's
     `markup-off:`, pdfmd_kits.markup); with the comments (`comments`, which no list names) when they are to be shown."""
