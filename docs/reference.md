@@ -1107,6 +1107,7 @@ IDs. Use `--json` to get the array of previewed or newly created records.
 authenticated clients. `GET /api/excerpts` returns `record`, `locations` (citing
 places with record IDs) and `problems`. `GET /api/excerpts/check` returns the
 same `problems` array. Citing and check paths are relative to the served folder.
+In every JSON response, the top-level `api` field is the API version.
 
 `POST /api/excerpts` takes excerpt fields as JSON and returns the new ID and
 markers. `PUT /api/excerpts?id=ID` updates the supplied fields and returns the

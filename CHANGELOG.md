@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.14 — 2026-11-18
+
+Pre-edit state: commit `99115e0`. The shared JSON handler merged returned
+fields after its API version, so editing an excerpt with a saved `api` field
+could report the wrong version. The handler now sets the version after merging,
+for both HTTP and `--api`. A synthetic record with `api`, `ok` and `id`
+fields reproduced the fault in both entry points. The regression covers
+editing, creating and listing records, including the rejected attempt to set
+response fields on creation. `pdfmd.py` only changes its version.
+
 ## v3.34.13 — 2026-11-18
 
 Pre-edit state: commit `eac1a4a`. Saved PDF annotations had to be copied

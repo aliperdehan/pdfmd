@@ -194,6 +194,39 @@ class Handlers(Folder):
 
 
 class ExcerptHandlers(Folder):
+    def test_excerpt_response_fields_are_owned_by_the_api(self):
+        target = "/api/excerpts"
+        fields = {"api": 99, "ok": False, "id": 7}
+        record = {**fields, "kind": "remark", "note": "A saved note"}
+        path = self.root / "excerpts.json"
+
+        def request(method, route, body=None):
+            if transport == "handler":
+                status, answer = self.core.handle(method, route, body)
+                return status < 400, answer
+            done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--api", method, route,
+                                   *([json.dumps(body)] if body is not None else [])], cwd=self.root,
+                                  capture_output=True, timeout=30)
+            return done.returncode == 0, json.loads(done.stdout)
+
+        for transport in ("handler", "--api"):
+            with self.subTest(transport=transport):
+                path.write_text(json.dumps({"pdfmd-excerpts": 1, "next-id": 8, "sources": {},
+                                            "excerpts": [record]}), encoding="utf-8")
+                ok, edited = request("PUT", target + "?id=7", {"note": "Edited"})
+                self.assertTrue(ok, edited)
+                self.assertEqual(edited, {**record, "api": API_VERSION, "note": "Edited"})
+                ok, rejected = request("POST", target, {**fields, "kind": "remark"})
+                self.assertFalse(ok, rejected)
+                self.assertEqual((rejected["api"], rejected["code"]), (API_VERSION, "body"))
+                ok, made = request("POST", target, {"kind": "remark", "note": "New"})
+                self.assertTrue(ok, made)
+                self.assertEqual(made, {"api": API_VERSION, "id": 8, "markers": ["[@x:8]"]})
+                ok, listing = request("GET", target)
+                self.assertTrue(ok, listing)
+                self.assertEqual(listing["api"], API_VERSION)
+                self.assertEqual(listing["record"]["excerpts"][0], {**record, "note": "Edited"})
+
     def test_excerpt_requests_and_cli_share_the_record_operations(self):
         document = self.root / "report.md"
         source = self.root / "sub" / "source.pdf"

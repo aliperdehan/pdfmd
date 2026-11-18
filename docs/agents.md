@@ -130,6 +130,7 @@ optional `pages`. The file must be inside the project.
 `GET /api/source?key=KEY` returns the registered primary PDF, with single byte
 ranges supported over HTTP. From the project folder, `--api METHOD PATH [JSON]`
 uses the same handlers and writes a successful source response as PDF bytes.
+The top-level `api` field in a JSON answer is the API version.
 
 `pdfmd-options.excerpts` names the record file relative to the file setting it;
 `off` disables discovery. Otherwise it is the nearest `excerpts.json` beside the

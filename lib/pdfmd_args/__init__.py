@@ -187,6 +187,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "`pdfmd --api GET /api/project`, `pdfmd --api GET '/api/file?path=report.md'`, "
                              "`pdfmd --api POST /api/render '{\"text\": \"# Hi\"}'`; JSON `-` reads it from standard input. "
                              "Answers are JSON, with PDF bytes on success for GET /api/source?key=KEY. "
+                             "JSON answers carry the API version in the top-level api field. "
                              "GET /api/excerpts and GET /api/excerpts/check read the local excerpt records and checks")
     parser.add_argument("--time-format", metavar="STYLE",
                         help="how a time is written: auto (0.42 s, 12.4 s, 3:07, 1:02:03, 1 d 02:03:04), clock (03:07), "

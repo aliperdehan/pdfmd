@@ -170,7 +170,7 @@ class Core:
             if isinstance(error, OSError):
                 error = filesystem_error(error)
             status, answer = error.status, {"error": error.message, "code": error.code, **error.extra}
-        return status, {"api": API_VERSION, **answer}
+        return status, {**answer, "api": API_VERSION}
 
     # ---- paths ------------------------------------------------------------------------------------------------------------------
 
