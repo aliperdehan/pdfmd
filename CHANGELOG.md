@@ -50,7 +50,7 @@ Pre-edit state: commit `6b0119a`. Obsidian wikilinks printed only their labels.
 The Obsidian flavour now resolves local headings and other parts of a build
 using Pandoc's heading identifiers. An external note links to its same-format
 output. A missing note keeps its label and warns once, including under
-`--strict`. The pdfmd flavour still shows wikilinks as text.
+`--strict`. The pdfmd flavour still shows wikilinks as text. Fix before release: import the shared `core` proxy on its own line so the split invariant recognises it.
 
 - Synthetic builds exercise HTML, LaTeX, Typst, Markdown, Word and OpenDocument,
   both report routes, duplicate headings and a split scaffold.

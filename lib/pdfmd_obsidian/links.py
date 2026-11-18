@@ -12,7 +12,8 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from urllib.parse import quote
 
-from pdfmd_base import core, pandoc_run
+from pdfmd_base import core
+from pdfmd_base import pandoc_run
 from pdfmd_obsidian.wikilinks import wikilinks_as_text
 
 
