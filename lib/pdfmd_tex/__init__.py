@@ -377,6 +377,8 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         result = run(cmd, work_dir, env=engine_env)
         if result.returncode != 0 or not (output_dir / f"{tex_path.stem}.pdf").exists():
             return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
+        from pdfmd_lua.figure_fit import diagnostics
+        diagnostics(result.stdout + "\n" + result.stderr + "\n" + log_text(), tex_path)
         return True, ""
 
     result = run(cmd, work_dir, env=engine_env)
@@ -430,6 +432,8 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
     # every run of the engine: `passes` starts at the run after bibtex/biber, so the one before it is added (v3.33.47)
     core.vprint(verbose, f"AUTO TEXDIRECT  {tex_path}: {engine}, {passes + (1 if bib_tool else 0)} pass(es)"
           + (f" + {bib_tool}" if bib_tool else ""))
+    from pdfmd_lua.figure_fit import diagnostics
+    diagnostics(result.stdout + "\n" + result.stderr + "\n" + log_text(), tex_path)
     return True, ""
 
 

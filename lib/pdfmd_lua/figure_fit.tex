@@ -1,0 +1,96 @@
+% Keep native floats and typeset their captions once. Delimit the caption in the float's vertical list
+% so we can take it out of the part that is scaled. The two boundary boxes keep the original glue when
+% TeX splits the list. On a fitting float the only additions are zero-size boxes and inert penalties.
+\makeatletter
+\ifdefined\pdfmdFitBegin\else
+\newbox\pdfmd@fitfloat
+\newbox\pdfmd@fitbefore
+\newbox\pdfmd@fitcaption
+\newbox\pdfmd@fitafter
+\newdimen\pdfmd@fitroom
+\newdimen\pdfmd@fitimages
+\newdimen\pdfmd@fitdepth
+\newif\ifpdfmd@fitmarked
+
+\def\pdfmd@fitboundary{%
+  \par\pdfmd@fitdepth\prevdepth
+  \penalty-10000 \nointerlineskip\hbox{}\prevdepth\pdfmd@fitdepth
+}
+\def\pdfmd@fittype{figure}
+\NewDocumentCommand\pdfmd@fitcaptioncmd{s o +m}{%
+  \IfBooleanTF{#1}{\pdfmd@fitoriginalcaption*{#3}}{%
+    \ifx\@captype\pdfmd@fittype
+      \global\pdfmd@fitmarkedtrue\pdfmd@fitboundary
+    \fi
+    \IfNoValueTF{#2}{\pdfmd@fitoriginalcaption{#3}}{\pdfmd@fitoriginalcaption[#2]{#3}}%
+    \ifx\@captype\pdfmd@fittype\pdfmd@fitboundary\fi
+  }%
+}
+\def\pdfmd@fitnatural#1{\setbox#1\vbox{\unvbox#1}}
+\def\pdfmd@fitheight#1{\dimexpr\ht#1+\dp#1\relax}
+\def\pdfmd@fitscaled#1{%
+  \ifdim\pdfmd@fitheight#1>\z@
+    \nointerlineskip\hbox to \wd#1{\hfil\scalebox{\pdfmd@fitfactor}{\box#1}\hfil}%
+  \else
+    \unvbox#1%
+  \fi
+}
+\def\pdfmd@fitendfloatbox{%
+  % Run after the inner vbox closes, before LaTeX closes its outer colour box.
+  \ifpdfmd@fitmarked\aftergroup\pdfmd@fitbox\fi
+  \pdfmd@fitoriginalend
+}
+\def\pdfmd@fitbox{%
+  \setbox\pdfmd@fitfloat\lastbox
+  \ifdim\pdfmd@fitheight\pdfmd@fitfloat>\textheight
+    \begingroup
+    \splittopskip\z@skip\splitmaxdepth\maxdimen\vbadness\@M\vfuzz\maxdimen
+    \setbox\pdfmd@fitafter\copy\pdfmd@fitfloat
+    \setbox\pdfmd@fitbefore\vsplit\pdfmd@fitafter to \maxdimen
+    \setbox\pdfmd@fitcaption\vsplit\pdfmd@fitafter to \maxdimen
+    \pdfmd@fitnatural\pdfmd@fitbefore
+    \pdfmd@fitnatural\pdfmd@fitcaption
+    \pdfmd@fitnatural\pdfmd@fitafter
+    \pdfmd@fitroom\dimexpr\textheight-\pdfmd@fitheight\pdfmd@fitcaption\relax
+    \pdfmd@fitimages\dimexpr\pdfmd@fitheight\pdfmd@fitbefore+\pdfmd@fitheight\pdfmd@fitafter\relax
+    \ifdim\pdfmd@fitroom>\z@
+      \def\pdfmdFitStatus{s}\pdfmd@fitreport
+      \pdfmdFitFactor
+      \nointerlineskip\vbox{%
+        \pdfmd@fitscaled\pdfmd@fitbefore
+        \unvbox\pdfmd@fitcaption
+        \pdfmd@fitscaled\pdfmd@fitafter
+      }%
+    \else
+      \def\pdfmdFitStatus{c}\pdfmd@fitreport
+      \nointerlineskip\box\pdfmd@fitfloat
+    \fi
+    \endgroup
+  \else
+    \nointerlineskip\box\pdfmd@fitfloat
+  \fi
+}
+% Round down in TeX's fixed-point units, so graphicx's scaling cannot push the float over the body.
+\ExplSyntaxOn
+\cs_new_protected:Npn \pdfmdFitFactor {
+  \edef\pdfmd@fitfactor{\fp_eval:n{
+    max(0, floor(65536 * \dim_to_fp:n{\pdfmd@fitroom} / \dim_to_fp:n{\pdfmd@fitimages}) - 1) / 65536
+  }}
+}
+\ExplSyntaxOff
+
+% Pandoc forwards missing-character diagnostics from successful TeX runs. pdfmd decodes this
+% marker before checking for missing glyphs, and prints the figure diagnostic in its own format.
+\newcommand*\pdfmdFitMessage[1]{\typeout{Missing character: There is no pdfmd-fit-#1}}
+\newcommand*\pdfmdFitBegin[1]{%
+  \begingroup
+  \global\pdfmd@fitmarkedfalse
+  \def\pdfmd@fitreport{#1}%
+  \let\pdfmd@fitoriginalcaption\caption
+  \let\caption\pdfmd@fitcaptioncmd
+  \let\pdfmd@fitoriginalend\@endfloatbox
+  \let\@endfloatbox\pdfmd@fitendfloatbox
+}
+\newcommand*\pdfmdFitEnd{\endgroup}
+\fi
+\makeatother

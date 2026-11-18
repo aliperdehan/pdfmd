@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.4 — 2026-11-18
+
+Pre-edit state: commit `39dfced`. LaTeX bounded the image without reserving space for its caption, and
+Typst could also draw an explicitly sized image beyond its frame. Figure fitting now measures the typeset
+caption and page body in the existing engine run and reduces the image proportionally, with a warning.
+A caption that fills the body on its own keeps the original figure and is reported. Typst also caps plain
+images at the body height. `pdfmd-options.figure-fit` defaults to on, with a `--setup` row and a per-image
+`fit=on` or `fit=off` override for the figure. Tests cover named warnings, the unchanged opt-out exports
+and the page-fit probes through Pandoc 3.13 and 3.1.3.
+
 ## v3.34.3 — 2026-11-18
 
 Pre-edit state: commit `33f95e1`. Since v3.33.327 pdfmd has applied CSL bibliography line spacing automatically.

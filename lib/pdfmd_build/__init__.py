@@ -175,6 +175,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         if not verbose:
             core.AUTO_LOG.flush()
 
+    from pdfmd_lua import figure_fit
     metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     cli_no_auto = no_auto
     no_auto = core.effective_no_auto(md_path, no_auto)
@@ -618,6 +619,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
                 cmd += core.paragraph_spacing_typst_args(md_path, metadata_files, target_format)
                 cmd += core.typst_filter_args(target_format, cmd, pandoc_cwd)
+                cmd += figure_fit.arguments(target_format, md_path, metadata_files)
                 if target_format == "epub" and core.EBOOK_MATH.get("mode") == "text":
                     cmd += core.ebook_filter_args()                          # a Calibre ebook with no math: after \ce is converted
                 if flat_target:
@@ -890,6 +892,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         engine, pandoc_options,
                         selected_font or core.document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables),
                         no_auto)
+                    last_filters += figure_fit.arguments("beamer" if presentation else engine, md_path, metadata_files)
                     def measure_command(command):
                         from pdfmd_tables.measure import prepare
                         return prepare(command, engine, [md_path, *parts_inputs], metadata_files, pandoc_cwd,
@@ -948,7 +951,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     print(f"WARN  {md_path}: the fonts pdfmd chose for other scripts failed under {engine}; "
                           "building without them (--verbose shows which)", file=sys.stderr)
                     result = run(first_font, fallback=False, plain=True)
-                combined_output = result.stdout + result.stderr
+                combined_output = figure_fit.without_diagnostics(result.stdout + "\n" + result.stderr)
                 if (mainfont_auto and not explicit_font and result.returncode == 0
                         and core.missing_glyph_warning(combined_output)):
                     retry_font = font or core.fallback_font()
@@ -956,6 +959,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                           core.missing_glyph_codes(combined_output)), file=sys.stderr)
                     result = run(retry_font)
             if result.returncode == 0:
+                figure_fit.diagnostics(result.stdout + "\n" + result.stderr, md_path)
+                result.stderr = figure_fit.without_diagnostics(result.stderr)
                 core.record_engine(engine, failed_engines)
                 break
             failed_families.add(family)

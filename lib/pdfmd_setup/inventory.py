@@ -142,6 +142,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "attach-csl": "options.attach-csl",
     "css": "options.css", "css-scope": "options.css-scope",
     "typst-line-spacing": "options.typst-line-spacing",
+    "figure-fit": "options.figure-fit",
     "bibliography-line-spacing": "options.bibliography-line-spacing",
     "csl": Omitted("document", "a per-document CSL file or a mapping with a bibliography-line-spacing alias"),
     "csl.file": Omitted("document", "a per-document CSL file"),
@@ -261,7 +262,7 @@ OPTIONS: dict[str, str | Omitted] = {
 # The feature (pdfmd_help topic) of the rows no flag sets, by key prefix; a row's flags give the rest. A row whose
 # features are all switched off (`disabled:`) leaves the setup screen.
 ROW_TOPICS = {
-    "options.pagecite": "output",
+    "options.pagecite": "output", "options.figure-fit": "output",
     "options.office.": "office", "options.gfm.": "markdown", "options.txt.": "markdown", "options.ascii.": "markdown",
     "options.csv.": "tables", "options.table-keep": "tables", "options.table-caption": "tables", "options.calc.": "markdown", "options.smiles.": "markdown", "options.pager": "view", "options.stamp.": "history", "options.backup.": "history", "options.line-number-step": "code",
     "options.bundle-max-mb": "source", "options.cache.": "cache", "options.unicode": "fonts",

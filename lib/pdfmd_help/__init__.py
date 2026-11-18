@@ -143,9 +143,14 @@ def uncovered(parser: argparse.ArgumentParser) -> list[str]:
             and action.help != argparse.SUPPRESS]          # an internal option (--ascii-stdio) has no page
 
 
+FIGURE_FIT_HELP = ("pdfmd-options.figure-fit: on (default) or off. LaTeX and Typst fit images and their captions "
+                   "to the page body. A figure image can override it with fit=on or fit=off.\n")
+
+
 def _full(parser: argparse.ArgumentParser) -> str:
     return parser.format_help() + ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
-                                 "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n")
+                                 "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"
+                                 + FIGURE_FIT_HELP)
 
 
 def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
@@ -170,7 +175,8 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
         text = parser.format_help()
         if topic == "output":
             text += ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
-                     "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n")
+                     "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"
+                     + FIGURE_FIT_HELP)
         return text
     finally:
         parser.description = previous

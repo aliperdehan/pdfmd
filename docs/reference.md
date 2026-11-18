@@ -299,6 +299,17 @@ LaTeX and HTML only warn about a link to an anchor the document does not have; T
 PDF or a .typ file) pdfmd_lua/typst.lua runs last and makes such a link its text, with one WARN naming the anchors.
 Pandoc's Typst writer labels headings, divs, spans, figures and tables; a link to another element's id is text too.
 
+## Figures that fit the page
+
+`pdfmd-options: {figure-fit: on}` is the default in LaTeX and Typst. When an image and its caption together are too
+tall for the document's page body, pdfmd scales the image proportionally, keeps the caption at its original size on
+the same page and warns with the figure's ID or the start of its caption. The fit also applies to explicitly sized
+images and to figures with several images. If the caption alone cannot fit, pdfmd leaves the figure at its original
+size and warns. In Typst, plain images are also capped at the body height.
+
+Choose `figure-fit: off` in `pdfmd-options` or `--setup` to keep the writer's sizing. An attribute on a figure image,
+`{fit=off}` or `{fit=on}`, overrides the document setting for that figure.
+
 ## Images LaTeX cannot read (v3.25.7; the package pdfmd_images)
 
 LaTeX reads PDF, PNG and JPEG, not SVG. In a LaTeX build pdfmd converts each SVG a document names -- a Markdown

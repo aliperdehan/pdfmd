@@ -36,6 +36,9 @@ With two paths, a skipped PDF beside a selected input adds `to name the output, 
 Typst uses LaTeX’s line pitch by default. `pdfmd-options: {typst-line-spacing: pandoc}` (also `--setup`) keeps
 Pandoc’s own Typst spacing without pdfmd’s line rules.
 
+LaTeX and Typst fit tall figures to the page body and warn when they shrink the images. Captions keep their size.
+Use `pdfmd-options: {figure-fit: off}` for the document or `{fit=off}` on a figure image to keep its original size.
+
 With `--no-citeproc`, native Typst omits an uncited bibliography and its heading unless `nocite` or
 `full-bibliography: true` requests uncited entries. Cited lists keep Typst's automatic title; `reference-section-title`
 names the citeproc list.

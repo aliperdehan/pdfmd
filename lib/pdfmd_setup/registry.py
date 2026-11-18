@@ -39,6 +39,7 @@ UNSET = {
     "options.indent": "the writer's own (no first-line indent)",
     "options.paragraph-spacing": "the engine's own (none with indent: true)",
     "options.typst-line-spacing": "latex: LaTeX's line pitch",
+    "options.figure-fit": "on: fit images and their captions to one page",
     "options.pagecite-terms": "p., pp.",
     "options.bibliography-indent": "the writer's own (1.5em in Typst, which had none)",
     "options.bibliography-line-spacing": "off, writer defaults",
@@ -99,7 +100,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.pandoc-memory", "options.css-scope", "options.indent", "options.paragraph-spacing", "options.bibliography-indent",
-    "options.typst-line-spacing",
+    "options.typst-line-spacing", "options.figure-fit",
     "options.bibliography-line-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
@@ -235,6 +236,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.typst-line-spacing", "Typst line spacing", (("latex", "LaTeX"), ("pandoc", "Pandoc")), "latex",
                "LaTeX's line pitch (the default), or Pandoc's own Typst template spacing without pdfmd's text-edge, leading "
                "or paragraph-spacing rules.", "Every document (global metadata)"),
+        choice("options.figure-fit", "Figures that are too tall for the page", (("on", "shrink to fit"), ("off", "keep size")), "on",
+               "LaTeX and Typst shrink the images proportionally and keep the full-size caption on the same page. "
+               "An image's fit=on or fit=off overrides the document for its figure.", "Every document (global metadata)"),
         text("options.pandoc-memory", "Pandoc memory cap",
              "Optional heap size, e.g. 512m or 2g (whole k, m or g units). Empty: off. Passed to every Pandoc as "
              "+RTS -M<size> -RTS. A heap overflow names pdfmd-options.pandoc-memory.", "Every document (global metadata)"),

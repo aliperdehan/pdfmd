@@ -890,5 +890,55 @@ class TypstHeadingWrap(unittest.TestCase):
             self.assertEqual(typst.heading_args(), [])
 
 
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class FigureFit(unittest.TestCase):
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory(prefix="pdfmd-figure-")
+        self.addCleanup(scratch.cleanup)
+        self.directory = Path(scratch.name)
+        width, height = 400, 1600
+
+        def chunk(kind, data):
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+        png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0))
+        png += chunk(b"IDAT", zlib.compress((b"\0" + b"\x88" * width) * height)) + chunk(b"IEND", b"")
+        (self.directory / "tall.png").write_bytes(png)
+
+    def build(self, source, *options):
+        (self.directory / "doc.md").write_text(source, encoding="utf-8")
+        return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "doc.md", "--no-stamp",
+                               "--no-backup", *options], cwd=self.directory, capture_output=True, encoding="utf-8")
+
+    def test_fitted_figure_warns_once_and_off_keeps_native_rendering(self):
+        engines = [engine for engine in ("typst", "pdflatex") if shutil.which(engine)]
+        if not engines:
+            self.skipTest("needs Typst or pdfLaTeX")
+        caption = "Tall marker. " + "A folded length across the narrow page. " * 15
+        for engine in engines:
+            with self.subTest(engine=engine):
+                source = "Before.\n\n![" + caption + "](tall.png){#fig-tall width=100%}\n\nAfter.\n"
+                done = self.build(source, "-e", engine)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(sum("WARN" in line and "fig-tall" in line and "shrunk" in line
+                                     for line in (done.stdout + done.stderr).splitlines()), 1, done.stderr)
+                done = self.build(source.replace("width=100%", "width=100% fit=off"), "-e", engine)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertNotIn("fig-tall", done.stderr)
+
+    def test_figure_fit_off_leaves_exports_byte_identical(self):
+        for writer, suffix in (("latex", "tex"), ("typst", "typ")):
+            with self.subTest(writer=writer):
+                source = "Before.\n\n![A short caption.](tall.png){fit=off}\n\nAfter.\n"
+                target = self.directory / ("result." + suffix)
+                options = ("--standalone", "-t", writer, "-o", str(target))
+                done = self.build(source, *options)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                original = target.read_bytes()
+                done = self.build("---\npdfmd-options: {figure-fit: off}\n---\n\n" + source, *options)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(original, target.read_bytes())
+
+
 if __name__ == "__main__":
     unittest.main()
