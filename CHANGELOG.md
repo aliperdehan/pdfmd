@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.34.7a — 2026-11-18
+
+Pre-edit state: commit `fbf494b`. GitHub moved `ubuntu-latest` to Ubuntu 26.04, and `actions/setup-python` has no Python
+3.9 for it ("The version '3.9' with architecture 'x64' was not found for Ubuntu 26.04"), so the test workflow's native
+job for Linux and 3.9 failed before any test, also when re-run. That one combination now runs on `ubuntu-24.04`; every
+other job stays on `ubuntu-latest`, and Python 3.9 is still tested on all three systems. Workflow only.
+
 ## v3.34.7 — 2026-11-18
 
 Pre-edit state: commit `a579b0a`. Builds treated excerpt markers as bibliography keys because the P1b
