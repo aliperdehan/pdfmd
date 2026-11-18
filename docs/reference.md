@@ -1476,6 +1476,9 @@ never closed, front matter that does not parse. The reading is in the pdfmd_chec
 error (a warning too with `--strict`); `--check-ignore`, `pdfmd-options.check-ignore` and
 `<!-- pdfmd-check: ignore CODE -->` turn checks off.
 
+For a part's local file references, `--check` looks in the part's folder, then
+the scaffold's folder, then the accessory folders.
+
 `figure-too-tall` compares a figure and its caption to the body of the page at their original sizes. It names the
 figure, gives the source line when available, and says whether the build shrinks it or keeps its original size.
 The check uses a temporary PDF with the selected LaTeX or Typst engine. It measures opted-out figures too.

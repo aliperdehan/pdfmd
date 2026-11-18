@@ -376,8 +376,7 @@ def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore
     ids = document_ids(analyses, findings)
     headings(analyses, findings, ids)
     for analysis in analyses:
-        places = [analysis.source.path] if analysis.source.path else [Path.cwd()]
-        places += list(folders or [])
+        places = list(dict.fromkeys([analysis.source.path or Path.cwd(), *(folders or [])]))
         images_and_files(analysis, findings, places, asset_limit)
         links(analysis, findings, places, ids)
         structure(analysis, findings)

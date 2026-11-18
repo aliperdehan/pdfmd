@@ -173,7 +173,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
             except (OSError, UnicodeDecodeError) as error:
                 print(f"{core.display_path(path)}: cannot read it ({error})", file=sys.stderr)
                 status = 1
-        folders = [folder for folder in core.accessory_directories(document.parent, document.stem)[1:]]
+        folders = core.accessory_directories(document.parent, document.stem)
         limit = core.resolve_budget(document, metadata_files)[0]
         try:
             excerpts, citation_key = core.deferred("pdfmd_excerpts.checks", "lint_excerpts")(

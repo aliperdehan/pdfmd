@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.34.11 — 2026-11-18
+
+Pre-edit state: commit `e050ab9`. `--check` skipped the scaffold's folder
+when resolving local file references from its parts. A part could use an image
+the build found and still get `image-missing`. The checker now searches the
+part's folder first, then the scaffold's folder and the accessory folders, with
+duplicates removed.
+
+- A synthetic scaffold exercises Markdown images, LaTeX graphics, CSV files
+  and local links, including a missing image and a same-name file in two folders.
+  The single-file check still reports the same findings.
+
 ## v3.34.10 — 2026-11-18
 
 Pre-edit state: commit `79acd84`. The linter could resolve an excerpt key but had no checks specific to

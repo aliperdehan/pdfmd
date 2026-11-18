@@ -247,6 +247,30 @@ class CommandLine(unittest.TestCase):
         self.assertRegex(done.stdout, r"parts[\\/]10-intro\.md:3: error: image not found: gone\.png")
         self.assertNotIn("anchor-missing", done.stdout)                                  # #methods is in another part
 
+    def test_parts_check_references_against_own_folder_then_scaffold_root(self):
+        self.write("book.md", "---\npdfmd-options: {parts: true}\n---\n\n# Book\n")
+        part = ("## Part\n\n![c](figures/plot.png)\n\n"
+                "\\includegraphics{figures/plot.png}\n\n"
+                "[Open the data](data/sample.csv)\n\n"
+                '::: {.csv file="data/sample.csv"}\n:::\n\n'
+                "![local](local.png)\n\n![missing](gone.png)\n")
+        self.write("parts/10-a/part.md", part)
+        self.write("parts/10-a/local.png", "part image")
+        self.write("figures/plot.png", "root image")
+        self.write("data/sample.csv", "value\n1\n")
+        self.write("local.png", "x" * (1048576 + 1))
+        for name in ("book.md", "single.md"):
+            with self.subTest(name=name):
+                if name == "single.md":
+                    self.write("single.md", part.replace("## Part", "# Single"))
+                done = self.run_pdfmd(name, "--check", "--check-ignore", "figure-too-tall", "--max-asset-mb", "1")
+                self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+                self.assertIn("image not found: gone.png  [image-missing]", done.stdout)
+                self.assertEqual(done.stdout.count("[image-missing]"), 1, done.stdout)
+                self.assertNotIn("[file-missing]", done.stdout)
+                self.assertNotIn("[link-missing]", done.stdout)
+                self.assertEqual("[asset-large]" in done.stdout, name == "single.md", done.stdout)
+
     @needs_pandoc(3, 1, 3)
     @unittest.skipUnless(shutil.which("typst"), "needs Typst")
     def test_figure_height_check_reports_fit_and_opt_out_at_the_source(self):
