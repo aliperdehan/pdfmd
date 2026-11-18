@@ -34,7 +34,15 @@ caption and page body in the existing engine run and reduces the image proportio
 A caption that fills the body on its own keeps the original figure and is reported. Typst also caps plain
 images at the body height. `pdfmd-options.figure-fit` defaults to on, with a `--setup` row and a per-image
 `fit=on` or `fit=off` override for the figure. Tests cover named warnings, the unchanged opt-out exports
-and the page-fit probes through Pandoc 3.13 and 3.1.3.
+and the page-fit probes through Pandoc 3.13 and 3.1.3. Reviewer (Claude), after CI: the build, the report route, the
+TeX runs and `--check` imported `pdfmd_lua.figure_fit` directly, so a copy of pdfmd whose lib/ folder lacks the pdfmd_lua
+package stopped at that import instead of building without pdfmd's own filters; they now go through
+`pdfmd_filters.lua.figure_fit_module()`, which gives a stand-in that adds no filter (the usual one WARN), reads no
+diagnostics and leaves the engine's output alone. The packaging test in tests/test_table_widths.py compared the
+`pdfmd_lua` package-data line as a whole and now checks each pattern, the new `*.typ` included. tests/test_sections.py's partial
+builds of labelled elements must reproduce the full document's LaTeX; figure fit's engine messages carry each
+figure's place in the built text (a key that groups a message's pieces; warnings name the figure), so the test
+leaves those numbers out of the match.
 
 ## v3.34.3 — 2026-11-18
 

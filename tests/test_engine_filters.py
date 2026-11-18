@@ -910,6 +910,23 @@ class FigureFit(unittest.TestCase):
         return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "doc.md", "--no-stamp",
                                "--no-backup", *options], cwd=self.directory, capture_output=True, encoding="utf-8")
 
+    def test_without_pdfmd_lua_figure_fit_does_nothing_and_warns(self):
+        # a copy whose lib/ has no pdfmd_lua: the build, the report route, the TeX runs and --check reach figure fit through
+        # figure_fit_module(), which must not raise (CI on 3.34.5: every build of such a copy stopped at the import)
+        code = ("import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); sys.modules['pdfmd_lua'] = None\n"
+                "import pdfmd\n"
+                "from pdfmd_filters.lua import figure_fit_module\n"
+                "fit = figure_fit_module()\n"
+                "print(fit.arguments('latex', Path('d.md'), []), repr(fit.without_diagnostics('x')),"
+                " fit.diagnostics('y', Path('d.md')), fit.REPORT_ENV)\n")
+        done = subprocess.run([sys.executable, "-c", code, str(ROOT)], cwd=self.directory, capture_output=True,
+                              encoding="utf-8", env={**os.environ, "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.strip(), "[] 'x' None PDFMD_FIGURE_REPORT")
+        self.assertEqual(done.stderr.count("WARN  lua:"), 1, done.stderr)
+        shipped = (ROOT / "lib" / "pdfmd_lua" / "figure_fit.py").read_text(encoding="utf-8")
+        self.assertIn('REPORT_ENV = "PDFMD_FIGURE_REPORT"', shipped)     # the stand-in names the same variable
+
     def test_fitted_figure_warns_once_and_off_keeps_native_rendering(self):
         engines = [engine for engine in ("typst", "pdflatex") if shutil.which(engine)]
         if not engines:

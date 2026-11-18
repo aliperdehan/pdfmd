@@ -180,6 +180,35 @@ def pdfmd_lua_missing(name: str = "") -> None:
           "folders of the repository beside pdfmd.py", file=sys.stderr)
 
 
+class _NoFigureFit:
+    """Figure fit (v3.34.4) when pdfmd_lua is missing: no filter for Pandoc (one WARN, as for every other own filter), so
+    no engine diagnostics to read and the engine's output stays as it is."""
+    REPORT_ENV = "PDFMD_FIGURE_REPORT"
+
+    @staticmethod
+    def arguments(writer: str, source: Path, metadata: list[Path]) -> list[str]:
+        core.pdfmd_lua_missing()
+        return []
+
+    @staticmethod
+    def diagnostics(output: str, source: Path) -> None:
+        return None
+
+    @staticmethod
+    def without_diagnostics(output: str) -> str:
+        return output
+
+
+def figure_fit_module():
+    """pdfmd_lua.figure_fit, or a stand-in that does nothing when the package is not there (pdfmd.py
+    with its lib/ folder but no lib/pdfmd_lua: a deleted folder, or a repackaging that dropped it)."""
+    try:
+        from pdfmd_lua import figure_fit
+    except ImportError:
+        return _NoFigureFit
+    return figure_fit
+
+
 @contextmanager
 def lua_filter_file(name: str, prefix: str) -> Iterator[Path]:
     """The path of pdfmd's own Lua filter `name` (pdfmd_lua/NAME.lua) for --lua-filter.

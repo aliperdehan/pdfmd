@@ -298,8 +298,12 @@ class Packaging(unittest.TestCase):
         self.assertIsNone(pdfmd_lua.path("nope"))
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('"pdfmd_lua"', pyproject)
-        self.assertIn('pdfmd_lua = ["*.lua", "*.tex", "*.cjs"]', pyproject)     # *.cjs: katex.cjs (v3.28.11)
+        line = next(line for line in pyproject.splitlines() if line.startswith("pdfmd_lua = ["))
+        # *.cjs: katex.cjs (v3.28.11); *.typ: figure_fit.typ (v3.34.4)
+        for pattern in ("*.lua", "*.tex", "*.typ", "*.cjs"):
+            self.assertIn(f'"{pattern}"', line)
         self.assertTrue((pdfmd_lua.FILTERS / "katex.cjs").is_file())
+        self.assertTrue((pdfmd_lua.FILTERS / "figure_fit.typ").is_file())
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_a_copy_without_the_package_still_builds_a_table(self):

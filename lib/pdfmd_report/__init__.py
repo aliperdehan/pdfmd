@@ -334,7 +334,8 @@ def run(core, *,
                                         report_no_auto)
                 cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
                 cmd += typst_filter_args(target_format, cmd, pandoc_cwd)
-                from pdfmd_lua import figure_fit
+                from pdfmd_filters.lua import figure_fit_module
+                figure_fit = figure_fit_module()
                 cmd += figure_fit.arguments(target_format, files[0], metadata_files)
                 from pdfmd_tables.measure import prepare
                 cmd = prepare(cmd, target_format, list(files), metadata_files, pandoc_cwd, args.verbose,
@@ -486,7 +487,8 @@ def run(core, *,
                         engine, pandoc_options,
                         args.font or document_font_setting("mainfont", list(files), metadata_files, variables),
                         report_no_auto)
-                    from pdfmd_lua import figure_fit
+                    from pdfmd_filters.lua import figure_fit_module
+                    figure_fit = figure_fit_module()
                     report_last += figure_fit.arguments(engine, files[0], metadata_files)
 
                     def measure_command(command):

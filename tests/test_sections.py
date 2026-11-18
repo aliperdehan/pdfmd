@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import functools
 import os
 import re
 import shutil
@@ -428,7 +429,10 @@ class EndToEnd(unittest.TestCase):
         (self.root / "x.png").write_bytes(b"")
         (self.root / "y.png").write_bytes(b"")
         self.assertEqual(self.pdfmd("doc", "-o", "full.tex").returncode, 0)
-        full = (self.root / "full.tex").read_text(encoding="utf-8")
+        # figure fit (v3.34.4) numbers each figure in its engine messages, by its place in the built text: only a key that
+        # groups a message's pieces (warnings name the figure by caption or id), so the numbers are left out of the match
+        unnumbered = functools.partial(re.sub, r"\\pdfmdFitStatus-\d+-", r"\\pdfmdFitStatus-N-")
+        full = unnumbered((self.root / "full.tex").read_text(encoding="utf-8"))
         for request, needle in (("doc#fig:inside", "Inside the callout"), ("doc#eq:energy", "mc^2"),
                                 ("doc#tbl:values", "Measured values"), ("doc#tbl:above", "Caption above"),
                                 ("doc#note1", "Callout text."), ("doc#lst:code", "print"),
@@ -436,7 +440,7 @@ class EndToEnd(unittest.TestCase):
             with self.subTest(request=request):
                 result = self.pdfmd(request, "-o", "part.tex")
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                part = (self.root / "part.tex").read_text(encoding="utf-8")
+                part = unnumbered((self.root / "part.tex").read_text(encoding="utf-8"))
                 body = part.split("\\maketitle", 1)[1].rsplit("\\end{document}", 1)[0].strip()
                 self.assertIn(needle, body)
                 self.assertNotIn("Lead text", body)

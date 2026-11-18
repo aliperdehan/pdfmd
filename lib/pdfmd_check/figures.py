@@ -12,7 +12,9 @@ from pathlib import Path
 
 from pdfmd_base import core
 from pdfmd_check.lint import Analysis, Findings, Problem, Source
-from pdfmd_lua.figure_fit import REPORT_ENV
+from pdfmd_filters.lua import figure_fit_module
+
+REPORT_ENV = figure_fit_module().REPORT_ENV
 
 
 CODE = "figure-too-tall"

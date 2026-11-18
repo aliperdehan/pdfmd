@@ -175,7 +175,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         if not verbose:
             core.AUTO_LOG.flush()
 
-    from pdfmd_lua import figure_fit
+    from pdfmd_filters.lua import figure_fit_module
+    figure_fit = figure_fit_module()
     metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
     cli_no_auto = no_auto
     no_auto = core.effective_no_auto(md_path, no_auto)
