@@ -54,7 +54,11 @@ RUN for attempt in 1 2 3 4 5 6; do \
     done
 
 # Pandoc and Typst (`full`), Tectonic (`core:tex`), Calibre when asked.
-RUN mkdir -p "$XDG_DATA_HOME" "$XDG_CACHE_HOME" \
+# The release lookups ask GitHub's API, which refuses anonymous callers from busy runners (the amd64 builds of 3.33.333 got
+# no Tectonic with a checksum): CI hands its token in as a build secret, mounted for this step only, never in the image.
+RUN --mount=type=secret,id=github_token,required=false \
+    mkdir -p "$XDG_DATA_HOME" "$XDG_CACHE_HOME" \
+    && if [ -s /run/secrets/github_token ]; then GITHUB_TOKEN="$(cat /run/secrets/github_token)"; export GITHUB_TOKEN; fi \
     && pdfmd --install full \
     && pdfmd --install core:tex \
     && if [ "$OFFICE" = 1 ]; then pdfmd --install calibre; fi

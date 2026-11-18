@@ -68,6 +68,8 @@ jobs:
             PDFMD_VERSION=${{ inputs.version }}
             TEX=${{ matrix.tex }}
             OFFICE=${{ matrix.office }}
+          secrets: |
+            github_token=${{ secrets.GITHUB_TOKEN }}
           load: true
           tags: pdfmd-test:${{ matrix.variant }}
           cache-from: type=gha,scope=${{ env.SCOPE }}
@@ -94,6 +96,8 @@ jobs:
             PDFMD_VERSION=${{ inputs.version }}
             TEX=${{ matrix.tex }}
             OFFICE=${{ matrix.office }}
+          secrets: |
+            github_token=${{ secrets.GITHUB_TOKEN }}
           cache-from: type=gha,scope=${{ env.SCOPE }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
       - name: Keep the digest

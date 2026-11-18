@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.33.333c — 2026-11-18
+
+Pre-edit state: commit `3ef873d`. The release run of 3.33.333 built no container image: the `full` and `office` builds for
+amd64 failed three times at `pdfmd --install core:tex` with "GitHub lists no Tectonic download for this machine with a
+SHA-256 (offline, or a rate limit?)" (the arm64 builds and every other variant passed, and the same install passes in
+the test workflow, which sets `GITHUB_TOKEN`). The Docker build asked GitHub's API anonymously from busy runners (Typst
+in the same step also got no checksum and fell back to an unchecked download, which pdfmd allows for Typst and refuses
+for Tectonic), and the image tags wait for every variant. docker.yml now hands the workflow's token to both builds as a
+BuildKit secret, and docker/Dockerfile mounts it for the install step only (`required=false`: a local build without it
+works as before), so the token never enters the image. Tried before the push: docker.yml dispatched from the CI branch
+with the push off built and smoke-tested all eight images. Workflow and Docker only.
+
 ## v3.33.333b — 2026-11-18
 
 Pre-edit state: commit `ca82f2f`. The branch CI's windows-latex job on v3.33.333a: (1) two tests of test_table_measure
