@@ -9,7 +9,7 @@ import re
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory, mkdtemp
 from textwrap import dedent
 from typing import Iterator
 
@@ -446,7 +446,8 @@ def document_preambles(md_path: Path, pandoc_options: list[str], no_auto: list[s
     """The preambles of a document: the ones found beside it (not for off or explicit-only) and the ones it names (not for off)."""
     found = [] if core.discovery_disabled(no_auto, "preamble") else find_preambles(md_path.parent, md_path.stem, pandoc_options)
     named = [] if core.auto_disabled(no_auto, "preamble") else core.frontmatter_extra_preambles(md_path, metadata_files)
-    return core.deferred("pdfmd_metadata", "with_parent_preambles")(found, md_path, pandoc_options, no_auto, metadata_files) + named
+    chosen = core.deferred("pdfmd_metadata", "with_parent_preambles")(found, md_path, pandoc_options, no_auto, metadata_files) + named
+    return [path for path in chosen if path != md_path.resolve()] if md_path.suffix.casefold() == ".tex" else chosen
 
 
 def announce_preambles(preambles: list[Path]) -> None:
@@ -457,11 +458,103 @@ def announce_preambles(preambles: list[Path]) -> None:
               file=sys.stderr)
 
 
+TEX_COMMAND_START = re.compile(r"^(?:[ \t]*\n)* {0,3}\\[A-Za-z@]+\*?")
+TEX_ARGUMENT_TOKENS = re.compile(r"\\[^\n]|%[^\n]*|[{}\]]")
+
+
+def multiline_tex_command(body: str) -> bool:
+    """A whole Markdown body consisting of one command whose arguments Pandoc could split."""
+    start = TEX_COMMAND_START.match(body)
+    if start is None:
+        return False
+    arguments = body[start.end():].rstrip()
+    if not arguments or "\n" not in arguments or re.search(r"\n[ \t]*\n", arguments):
+        return False
+    position = 0
+    split = False
+    braced = False
+    while position < len(arguments):
+        unspaced = arguments[position:].lstrip()
+        opening = unspaced[0]
+        if opening not in "{[":
+            return False
+        begin = len(arguments) - len(unspaced)
+        depth = int(opening == "{")
+        braced |= opening == "{"
+        for token in TEX_ARGUMENT_TOKENS.finditer(arguments, begin + 1):
+            value = token.group()
+            depth += (value == "{") - (value == "}")
+            if depth < 0:
+                return False
+            if depth == 0 and value == ("}" if opening == "{" else "]"):
+                split |= "\n" in arguments[position:begin] or (opening == "[" and "\n" in arguments[begin:token.end()])
+                position = token.end()
+                break
+        else:
+            return False
+    return split and braced
+
+
+def fence_multiline_tex(text: str) -> str:
+    front = core.LEADING_FRONT_MATTER_RE.match(text)
+    offset = front.end() if front else 0
+    body = text[offset:]
+    if not multiline_tex_command(body):
+        return text
+    fence = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", body)), default=0))
+    return f"{text[:offset]}{fence}{{=latex}}\n{body.strip()}\n{fence}\n"
+
+
+TEX_DOCUMENT_RE = re.compile(r"\\(?:document(?:class|style)\b|begin\s*\{document\})")
+
+
+def compile_tex_source(source: Path, output: Path, engines: list[str], keep_aux: bool, verbose: bool,
+                       debug: bool, preambles: list[Path], metadata_files: list[Path], pandoc_options: list[str]
+                       ) -> tuple[bool, str, bool]:
+    """Compile .tex directly, including a discovered preamble around a fragment."""
+    text = core.read_text_best_effort(source)
+    fragment = not TEX_DOCUMENT_RE.search(re.sub(r"(?<!\\)%[^\n]*", "", text))
+    if fragment:
+        explicit = []
+        for index, arg in enumerate(pandoc_options):
+            if arg in ("-H", "--include-in-header") and index + 1 < len(pandoc_options):
+                explicit.append(pandoc_options[index + 1])
+            elif arg.startswith("--include-in-header="):
+                explicit.append(arg.split("=", 1)[1])
+            elif arg.startswith("-H") and len(arg) > 2:
+                explicit.append(arg[2:])
+        cwd = core.metadata_cwd(metadata_files, source.parent)
+        headers = [path.read_text(encoding="utf-8-sig") for path in preambles]
+        headers += [(cwd / name).read_text(encoding="utf-8-sig") for name in explicit]
+        if headers:
+            def compile_wrapped(folder: Path) -> tuple[bool, str, bool]:
+                wrapper = folder / source.name
+                wrapper.write_text("\n".join([r"\documentclass{article}", *headers, r"\begin{document}", text,
+                                             r"\end{document}", ""]), encoding="utf-8")
+                core.vprint(verbose, f"AUTO TEXFRAGMENT  {core.display_path(source)}: compiling with its project preamble")
+                env = tex_search_env(cwd, source.parent, source)
+                ok, reason = core.compile_tex_direct(wrapper, output, engines, keep_aux, verbose, debug,
+                                                     cwd=source.parent, env=env)
+                return ok, reason, True
+
+            if keep_aux:
+                folder = Path(mkdtemp(prefix="pdfmd-tex-fragment-"))
+                print(f"NOTE  LaTeX fragment and auxiliary files kept in {core.display_path(folder)}")
+                return compile_wrapped(folder)
+            with TemporaryDirectory(prefix="pdfmd-tex-fragment-") as folder:
+                return compile_wrapped(Path(folder))
+    ok, reason = core.compile_tex_direct(source, output, engines, keep_aux, verbose, debug)
+    if fragment and not ok and "undefined control sequence" in reason.casefold():
+        return False, ("This LaTeX fragment needs its project preamble. Put the macro definitions in a discovered "
+                       "preamble.tex or supply them with --include-in-header FILE."), True
+    return ok, reason, False
+
+
 @contextmanager
 def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
                           typst_engine: bool = False, doc_count: int = 1,
                           drop_embedded_preamble: bool = False,
-                          named_reader: str | None = None) -> Iterator[list[Path]]:
+                          named_reader: str | None = None, effective_reader: str | None = None) -> Iterator[list[Path]]:
     """Yield temporary, corrected inputs for LaTeX-family renders when
     needed -- or, with `typst_engine` instead, to make a margin setting
     written for the OTHER engine family reach Typst's own template (see
@@ -482,6 +575,9 @@ def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
     DOCUMENT (no delimiters at all) is definitely markdown body text,
     never YAML, and is always left alone regardless.
     """
+    reader = effective_reader or named_reader or "markdown"
+    latex_fences = (re.split(r"[+-]", reader, maxsplit=1)[0] == "markdown"
+                    and "-raw_attribute" not in reader and "-raw_tex" not in reader)
     temporary_paths: list[Path] = []
     prepared: list[Path] = []
     try:
@@ -497,6 +593,8 @@ def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
                     text, paths[0], paths[doc_count:], core.effective_no_auto(paths[0], core.NO_AUTO_CLI), named_reader)
             if latex_engine:
                 corrected = core.wrap_latex_header_includes(text)
+                if latex_fences and index < doc_count and path.suffix.lower() in (".md", ".markdown"):
+                    corrected = fence_multiline_tex(corrected)
             elif typst_engine:
                 corrected = core.fix_typst_margin(text, is_metadata=(index >= doc_count))
             else:

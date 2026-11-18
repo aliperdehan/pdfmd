@@ -260,16 +260,12 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     if (target_format == "pdf" and md_path.suffix.lower() == ".tex"
             and (from_format is None or from_format.casefold() in ("latex", "tex"))
             and not core.auto_disabled(no_auto, "texdirect")):
-        # A real .tex file is already a complete document -- compile it
-        # directly instead of round-tripping it through Pandoc's LaTeX
-        # reader/writer first (see compile_tex_direct()'s own comment).
-        # Checked before any of Pandoc's own reader/metadata/lua/font/
-        # stamp auto-discovery below runs, since none of it applies here
-        # -- --no-auto texdirect (or a bare --from other than latex/tex)
-        # opts back into the old Pandoc-mediated route for a document
-        # that specifically needs pdfmd's own injection applied to it.
-        ok, reason = core.compile_tex_direct(md_path, output, engines, keep_aux, verbose, debug)
-        if ok or not core.which("pandoc") or core.chain_stopped():
+        # Compile standalone TeX directly, and use the project preamble for a fragment.
+        # --no-auto texdirect or an explicit non-LaTeX reader goes through Pandoc.
+        from pdfmd_tex.inputs import compile_tex_source
+        ok, reason, handled_fragment = compile_tex_source(md_path, output, engines, keep_aux, verbose, debug,
+                                                         list(preamble_files or []), metadata_files, pandoc_options)
+        if ok or handled_fragment or not core.which("pandoc") or core.chain_stopped():
             flush_summary()
             return md_path, ok, reason[-3000:]
         # No LaTeX engine got it through (or none is installed): Pandoc can still read the file and any engine can
@@ -473,7 +469,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                               document_font, mainfont_auto, no_auto, note))
             with core.prepared_latex_inputs([title_source, *core.pandoc_metadata_order(metadata_files)], is_tex_target,
                                        typst_engine=(target_format == "typst"),
-                                       drop_embedded_preamble=not is_tex_target, named_reader=from_format) as prepared, \
+                                       drop_embedded_preamble=not is_tex_target, named_reader=from_format,
+                                       effective_reader=effective_from) as prepared, \
                     core.document_header_file(md_path, (bool(preamble_files) or core.has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
                                          and is_tex_target, metadata_files, no_auto) as header_file, \
                     core.pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file, \
@@ -759,7 +756,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 core.report_engine_failure(str(md_path), engine, result, remaining, debug)
                 continue
             with core.prepared_latex_inputs([title_source, *core.pandoc_metadata_order(metadata_files)], engine in core.LATEX_ENGINES,
-                                       typst_engine=(engine == "typst"), named_reader=from_format) as prepared, \
+                                       typst_engine=(engine == "typst"), named_reader=from_format,
+                                       effective_reader=effective_from) as prepared, \
                     core.document_header_file(md_path, (bool(preamble_files) or core.has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
                                          and engine in core.LATEX_ENGINES, metadata_files, no_auto) as header_file, \
                     core.pdf_metadata_header_file(pdf_meta_snippet_text if engine in core.LATEX_ENGINES else None) as pdf_meta_file:

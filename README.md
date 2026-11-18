@@ -3200,10 +3200,13 @@ and wkhtmltopdf, Prince, pagedjs-cli and LibreOffice come after. `-e edge` (or `
 pdfmd's defaults, since it is finished; `--apply-defaults` (also in `pdfmd --setup`) gives it the title, author, date,
 language, font, font size, paper and margin of its `metadata.yaml`, ahead of its own settings so those win. A `.tex`
 file that no LaTeX engine can compile is tried through Pandoc, with a warning.
+A .tex fragment can use a discovered project preamble or `--include-in-header FILE`.
+pdfmd compiles both together in a temporary article.
 
 The reader comes from the file's extension, as in Pandoc, and a bare name is looked up as `<name>.md`, so give the
 extension for anything else. The automatic decisions about Markdown (`READER`, `TITLE`, `citeproc`, `crossref` below)
 apply to Markdown files only.
+Use `--from md` to read Markdown from a file with any extension.
 
 **A plain-text file as Markdown (opt-in).** `pdfmd notes.txt --text-to-markdown` reads a `.txt` file the way a person typed it
 and guesses its structure: headings (capitals, `1.2 Title`, `====` underlines), bullet and numbered lists, tables from

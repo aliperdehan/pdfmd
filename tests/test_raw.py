@@ -223,6 +223,24 @@ class PdfImages(unittest.TestCase):
 
 @needs_pandoc(3, 0)
 class CommandLine(unittest.TestCase):
+    @unittest.skipUnless(PANDOC, "needs Pandoc")
+    def test_one_multiline_latex_command_keeps_every_argument(self):
+        with tempfile.TemporaryDirectory(prefix="pdfmd-raw-command-") as folder:
+            root = Path(folder)
+            (root / "preamble.tex").write_text(
+                r"\newcommand{\fixtureplot}[4][default]{Plot #1 #2 #3 #4}" + "\n", encoding="utf-8")
+            for options in ("[sample]", "[\n  sample\n]"):
+                with self.subTest(options=options):
+                    call = "\\fixtureplot" + options + "\n  {marks}\n  {\\textbf{first}}\n  {last}"
+                    (root / "command.md").write_text(call + "\n", encoding="utf-8")
+                    done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "command.md",
+                                           "--to", "latex", "-o", "out.tex", "--no-backup", "--no-stamp",
+                                           "--no-auto", "font"], cwd=root, capture_output=True, encoding="utf-8",
+                                          env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    tex = (root / "out.tex").read_text(encoding="utf-8")
+                    self.assertIn(call, tex)
+
     def setUp(self):
         self.folder = Path(tempfile.mkdtemp(prefix="pdfmd-rawcli-"))
         self.addCleanup(shutil.rmtree, self.folder, True)

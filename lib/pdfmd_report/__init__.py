@@ -245,7 +245,7 @@ def run(core, *,
                                                report_note))
             with prepared_latex_inputs([*files, *pandoc_metadata_order(metadata_files)], is_tex_target,
                                        typst_engine=(target_format == "typst"),
-                                       doc_count=len(files), named_reader=args.from_format,
+                                       doc_count=len(files), named_reader=args.from_format, effective_reader=report_from,
                                        drop_embedded_preamble=not is_tex_target) as prepared, \
                     document_header_file(files[0], (bool(report_preambles) or has_embedded_preamble(files[0]) or bool(report_pdf_meta_snippet_text))
                                          and is_tex_target, metadata_files, report_no_auto) as report_header_file, \
@@ -410,7 +410,8 @@ def run(core, *,
                     continue
                 with prepared_latex_inputs([*files, *pandoc_metadata_order(metadata_files)], engine in LATEX_ENGINES,
                                            typst_engine=(engine == "typst"),
-                                           doc_count=len(files), named_reader=args.from_format) as prepared, \
+                                           doc_count=len(files), named_reader=args.from_format,
+                                           effective_reader=report_from) as prepared, \
                         pdf_metadata_header_file(
                             report_pdf_meta_snippet_text if engine in LATEX_ENGINES else None
                         ) as report_pdf_meta_file, \

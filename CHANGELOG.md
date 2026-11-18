@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.34.19 — 2026-11-18
+
+Pre-edit state: commit `9d695ef`. Direct LaTeX compilation ran a fragment
+with no document preamble, and a Pandoc fallback could discard its macros.
+Compile fragments with the discovered or explicitly named preamble inside
+a temporary article, and explain where to supply definitions when a bare
+fragment fails on an undefined macro. Treat `--from md` as `--from markdown`
+regardless of the filename. For a Markdown body containing a single
+multiline LaTeX command, use the Markdown reader and preserve the balanced
+arguments as one raw block when line breaks would split them. The checkout
+regressions exercise the reader override with inspection off and on, the
+fragment with and without preamble discovery, and two multiline spellings
+through the LaTeX writer.
+
 ## v3.34.18 — 2026-11-18
 
 Pre-edit state: commit `6761adc`. Project Lua filters ran after citeproc, so a

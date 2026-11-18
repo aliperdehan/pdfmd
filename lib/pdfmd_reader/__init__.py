@@ -221,6 +221,11 @@ PANDOC_KNOWN_SUFFIXES = frozenset({".typ"})
 MARKDOWN_LIKE_SUFFIXES = (".md", ".markdown", ".mdown", ".mkd", ".txt", "")
 
 
+def markdown_reader_alias(value: str) -> str:
+    """The .md name for Pandoc's markdown reader, including extension modifiers."""
+    return re.sub(r"^md(?=$|[+-])", "markdown", value, flags=re.IGNORECASE)
+
+
 def resolve_from_format(md_path: Path, cli_from: str | None,
                         metadata_files: list[Path] = ()) -> tuple[str | None, str | None]:
 
@@ -282,7 +287,7 @@ def resolve_from_format(md_path: Path, cli_from: str | None,
     based reader inference would have picked anyway.
     """
     if cli_from:
-        return cli_from, None
+        return markdown_reader_alias(cli_from), None
     suffix = md_path.suffix.lower()
     if suffix in SUFFIX_READERS:
         # said outright: an extension Pandoc does not know is read as Markdown, and an old Pandoc that has no
@@ -345,6 +350,9 @@ def pdfmd_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str | 
         return None, (f"{md_path}: no YAML front matter, but it has `\\md{{...}}` (Markdown inside raw LaTeX), which only Pandoc's "
                       "markdown reader keeps as raw LaTeX for pdfmd to read; keeping the default markdown reader instead of gfm")
     needs = reader_needs(text)
+    from pdfmd_tex.inputs import multiline_tex_command
+    if multiline_tex_command(text):
+        return None, (f"{md_path}: it consists of a multi-line LaTeX command; keeping the default markdown reader")
     pandoc_only = [name for name, extension in needs if extension is None]
     if pandoc_only:
         return None, (f"{md_path}: no YAML front matter, but it uses {', '.join(pandoc_only)}, which gfm cannot read; "

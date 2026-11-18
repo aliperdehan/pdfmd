@@ -305,6 +305,44 @@ class TexFallback(unittest.TestCase):
                                capture_output=True, text=True, env=env)
         self.assertNotIn("direct compilation failed", again.stderr)
 
+    def test_fragment_is_compiled_with_its_project_preamble(self):
+        with tempfile.TemporaryDirectory(prefix="pdfmd-tex-fragment-") as folder:
+            root = Path(folder)
+            (root / "preamble.tex").write_text(
+                r"\newcommand{\fixturemacro}[1]{\input{#1}}" + "\n", encoding="utf-8")
+            (root / "body.txt").write_text("From the fragment.\n", encoding="utf-8")
+            (root / "fragment.tex").write_text(r"\fixturemacro{body.txt}" + "\n", encoding="utf-8")
+            engine = next(name for name in ("pdflatex", "xelatex", "lualatex") if shutil.which(name))
+            command = [sys.executable, str(ROOT / "scripts/pdfmd"), "fragment.tex", "--verbose", "--no-backup",
+                       "-e", engine]
+            env = {**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+            done = subprocess.run(command, cwd=root, env=env, capture_output=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn("TEXFRAGMENT", done.stdout)
+            self.assertNotIn("trying it through Pandoc", done.stderr)
+            self.assertTrue((root / "fragment.pdf").is_file())
+            done = subprocess.run([*command, "--no-auto", "preamble", "-o", "missing.pdf"], cwd=root, env=env,
+                                  capture_output=True, encoding="utf-8")
+            self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn("LaTeX fragment needs its project preamble", done.stdout + done.stderr)
+            self.assertFalse((root / "missing.pdf").exists())
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class MarkdownReaderOverride(unittest.TestCase):
+    def test_md_means_markdown_even_with_a_tex_suffix(self):
+        with tempfile.TemporaryDirectory(prefix="pdfmd-reader-md-") as folder:
+            root = Path(folder)
+            (root / "read.tex").write_text("# Heading\n\nA **strong** word.\n", encoding="utf-8")
+            for args in ((), ("--no-auto", "reader")):
+                with self.subTest(args=args):
+                    done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "read.tex",
+                                           "--from", "md", "--to", "html", "-o", "read.html", *args],
+                                          cwd=root, capture_output=True, encoding="utf-8",
+                                          env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    self.assertIn("<strong>strong</strong>", (root / "read.html").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

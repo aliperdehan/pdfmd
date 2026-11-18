@@ -354,7 +354,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     os.close(fd)
     tex_path = Path(tex_path_str)
     try:
-        with core.prepared_latex_inputs([title_source, *core.pandoc_metadata_order(metadata_files)], True, named_reader=named_reader) as prepared, \
+        with core.prepared_latex_inputs([title_source, *core.pandoc_metadata_order(metadata_files)], True,
+                                       named_reader=named_reader, effective_reader=effective_from) as prepared, \
                 core.document_header_file(md_path, bool(preamble_files) or core.has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text),
                                          metadata_files, no_auto) as header_file, \
                 core.pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file, \

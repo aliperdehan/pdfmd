@@ -492,9 +492,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "Also png, jpg, tiff, eps, ps, svg (pictures; see --crop), and a list without spaces: "
                              "--to png,docx,tex (one run each; -o is then a folder)")
     parser.add_argument("--from", dest="from_format", default=None, metavar="FORMAT",
+                        type=lambda reader: core.load_package("pdfmd_reader").markdown_reader_alias(reader),
                         help="Pandoc source format override (no short flag: -f is --font). Only needed "
                              "when Pandoc's own extension-based guess is wrong, e.g. a .txt file that "
-                             "is actually reStructuredText: --from rst. With .hst history on, changes of the automatic "
+                             "is actually reStructuredText: --from rst. Use --from md to read any extension as Markdown. "
+                             "With .hst history on, changes of the automatic "
                              "reader warn; an explicit --from or pdfmd-options reader never warns")
     parser.add_argument("--install", nargs="?", const="", type=core.install_kind, metavar="KIND",
                         help="alone: list every kind, size, source, target and removal; with KIND, install an optional piece for pdfmd to use: 'pandoc' (the real Pandoc from "

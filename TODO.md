@@ -98,7 +98,7 @@ wait for an answer before any code.
 
 ## Raw TeX inputs, a standalone `.tex`, `--crop` as a build mode [3fg]
 
-- [ ] Paths inside an `\input`-ed `.tex` resolve against that file's folder; `pdfmd x.tex` with a project macro gives a clear message or builds with the preamble; `--from md` on a `.tex`; a `.md` that is one multi-line raw `\labplot` fails; `--crop` as a build mode plus a `pdfmd-options` key and a `--setup` row [3fg]
+- [ ] Paths inside an `\input`-ed `.tex` resolve against that file's folder; `--crop` as a build mode plus a `pdfmd-options` key and a `--setup` row [3fg]
 
 ## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]
 

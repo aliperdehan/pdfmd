@@ -165,6 +165,9 @@ use citation fields alone.
 With `.hst` history enabled, a change of the automatic Pandoc reader prints one WARN naming the old and new readers
 and the reason when known. Successful full builds record the reader; first builds and legacy entries are silent.
 An explicit `--from` or `pdfmd-options: {reader: ...}` suppresses this warning.
+Use `--from md` to read Markdown from a file with any extension.
+A .tex fragment can be compiled with a discovered project preamble or
+with `--include-in-header FILE`.
 
 Set `pdfmd-options.lua-filter-before-citeproc` to run a trusted Lua filter before citations are resolved. The list is empty by default and follows the same layers and relative paths as `lua-filter`.
 

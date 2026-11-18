@@ -30,18 +30,15 @@ Only .md is ever searched for automatically (bare-name lookup, -b/--batch,
 filename with its real extension, e.g. `pdfmd notes.tex`. Pandoc infers
 the reader from that extension on its own; --from overrides it for the
 rare case Pandoc guesses wrong (no short flag: -f is already --font).
+Use `--from md` (short for `--from markdown`) to read Markdown with any
+extension, for example `pdfmd notes.tex --from md`.
 .qmd (Quarto) is a special case: it's handed off to the `quarto` CLI
 instead of Pandoc, since Pandoc can't execute Quarto's R/Python/Julia
 code chunks and would silently drop figures and computed output.
 
-A real .tex file targeting PDF is another special case, as of v3.1.0:
-it is already a complete, independently compilable document (its own
-`\documentclass`...`\begin{document}`...`\end{document}`), so instead
-of handing it to Pandoc -- which would read it with Pandoc's own LaTeX
-reader and regenerate it through Pandoc's LaTeX writer before an engine
-ever saw it, a lossy round-trip for hand-written LaTeX macros (chemfig,
-tikz, ...) that don't survive re-serialization -- pdfmd runs a LaTeX
-engine on it directly. The -e/--engine fallback chain (or a document's
+pdfmd builds a complete .tex file directly with a LaTeX engine. This
+preserves hand-written macros and environments such as chemfig and TikZ.
+The -e/--engine fallback chain (or a document's
 own `pdf-engine:`/`engine:` setting) still applies, restricted to its
 LaTeX-family members (lualatex, xelatex, pdflatex, latexmk, tectonic --
 not context, whose CLI and markup are unrelated to the other five).
@@ -65,6 +62,14 @@ path, since none of it goes through Pandoc -- a document that actually
 needs pdfmd's own injection applied to raw LaTeX should keep going
 through Pandoc instead, via `--no-auto texdirect` or an explicit
 `--from` other than latex/tex.
+
+A .tex fragment without its own document class or document environment
+can use a project preamble. pdfmd places the preamble and fragment in a
+temporary article for the LaTeX engine. A missing macro definition in a
+fragment without a preamble prompts you to supply one.
+For a Markdown document that consists of one multiline LaTeX command,
+LaTeX output preserves its bracketed options and braced arguments across
+line breaks.
 
 An office document (.docx, .doc, .odt, .ott, .rtf, .pptx, .ppt, .odp,
 .xlsx, .xls, .ods) targeting PDF is a third special case, as of
