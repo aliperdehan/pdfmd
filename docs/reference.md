@@ -1291,9 +1291,16 @@ when both are there. The delimiter is a character or its name (`comma`,
 guessed from the first line (, ; tab |). Alignment: `align="lcr"` or
 `align="left,center,right"`, or a second row of `---`, `:--`, `:-:`, `--:` (a
 separator row, as in a pipe table; the attribute wins; `separator="none"`
-keeps such a row as data). `widths="5,1,1"` are relative column widths, kept
-as given (a separator row's unequal dashes are widths too, counted as Pandoc
-counts them). Quoted fields may hold line breaks. The native tier (no Pandoc)
+keeps such a row as data). `widths="5,1,1"` gives relative column widths,
+and `widths="30%,60%"` gives shares of the text width. A wrong count emits
+one warning per table. Surplus entries are ignored and omitted widths act
+as `*`. A free column gets a weight from its longest field, including its
+header. With percentages, free columns divide the space left. If the
+percentages use all the space, the numbers and free weights are treated as
+relative widths. Every field fits into the table's column layout, with
+empty cells where a record is short. The existing row and column display
+caps still apply. A separator row's unequal dashes are also widths, counted
+as Pandoc counts them. Quoted fields may hold line breaks. The native tier
 reads the same forms except `widths=`. Works for any output format
 (not LaTeX-specific, unlike the table-width filter above) -- Markdown/
 Pandoc input, single-file/batch/report modes, and the soffice PDF-

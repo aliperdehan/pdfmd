@@ -371,6 +371,13 @@ class Expand(unittest.TestCase):
         self.assertIn('{widths="25% 75%"}', result.text)
         self.assertIn(': Results', result.text)
 
+    def test_expansion_keeps_repaired_widths_and_extra_fields(self):
+        source = '::: {.csv widths="40% *"}\n```\nA,B\nx,xx,xxxx\n```\n:::\n'
+        result = tables.expand(source, Path("."))
+        self.assertIn('| x | xx | xxxx |', result.text)
+        self.assertIn('{widths="40% 20% 40%"}', result.text)
+        self.assertEqual(sum("CSV widths: repaired" in line for line in result.report), 1)
+
     @unittest.skipUnless(PANDOC, "needs Pandoc")
     def test_expanded_widths_survive_the_checkout_pipeline(self):
         from pdfmd_tables.celltags import normalise

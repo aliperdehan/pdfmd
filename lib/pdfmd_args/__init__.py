@@ -678,7 +678,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--csv", action=argparse.BooleanOptionalAction, default=None,
                         help="build a table from a `::: {.csv}` div (on by default); --no-csv leaves the div as written, "
                              "a plain div with its text. Also `pdfmd-options: {csv: off}` (or `csv: {enabled: false}`), "
-                             "or --setup")
+                             "or --setup. With Pandoc, widths= on the div takes numbers, percentages and * for free columns. "
+                             "A wrong width count is repaired with one warning")
     parser.add_argument("--csv-note", type=csv_note_argument, default=None, metavar="MODE",
                         help="the note under a `::: {.csv}` table that was cut: short (default; the fact only: \"showing the first 7 "
                              "and the last 3 of 11 rows\"), off (none; the \u2026 row still marks the cut) or full (adds how to show "

@@ -2245,7 +2245,9 @@ Water,18.015,1.20
   the guess is not what the file's name says (a `;` file named `.csv`), the build warns and says how to name it.
 - Columns are aligned with `align="lcr"` (or `align="left,center,right"`), or by a second row in the data made of
   `---`, `:--`, `:-:`, `--:` as in a pipe table; `align=` wins. If such a row is really data, say `separator="none"`.
-  `widths="5,1,1"` sets relative widths, and a second row with unequal dashes does too. Without either, pdfmd picks
+  `widths="5,1,1"` sets relative widths, and a second row with unequal dashes does too. Use `*` in `widths=` to size a
+  column by its content. A wrong count gives one warning, ignores surplus widths and sizes the omitted columns by
+  content. Fields beyond a short header get columns of their own. Without explicit widths, pdfmd picks
   widths that suit the contents.
 - **A spreadsheet** (v3.29) works as the file: `::: {.csv file="results.xlsx" sheet="Run 2"}` (`.xlsx`, `.xlsm`, `.xls`, `.ods`;
   `sheet=` is a name or a number counted from 1, the first sheet when it is left out). The sheet is read by `openpyxl` (xlsx and

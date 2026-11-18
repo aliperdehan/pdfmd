@@ -261,7 +261,7 @@ def tables_command(args) -> int:
             continue
         print(f"{core.display_path(document)}:")
         for line in result.report:
-            print(f"  {line}")
+            print(f"  {line}", file=sys.stderr if line.startswith("WARN  ") else sys.stdout)
         if not result.changed:
             continue
         if args.dry_run:

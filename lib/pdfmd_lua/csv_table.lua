@@ -294,20 +294,50 @@ local function read_align(value)
 end
 
 -- `widths="2,5,1"`: relative widths of the columns; with a % on every number (`widths="30%,60%"`) the share of the
--- text width itself, so the table may be narrower than the text (what a grid table's column layout asks for)
-local function read_widths(value)
+-- text width itself. Free columns share the space left by percentages, or supply weights alongside relative widths.
+-- Keep the same calculation in pdfmd_tables.convert for --expand-tables, which can also run without Pandoc.
+local function read_widths(value, header, rows)
   if not value or value == "" then return nil end
-  local out, total, percent = {}, 0, true
+  local widths, count, total, percent = {}, 0, 0.0, true
   for word in value:gmatch("[^,%s]+") do
-    local number = tonumber((word:gsub("%%$", "")))
-    if not number or number <= 0 then return nil end
-    if not word:match("%%$") then percent = false end
-    out[#out + 1] = number
-    total = total + number
+    count = count + 1
+    if count <= #header and word ~= "*" then
+      local number = tonumber((word:gsub("%%$", "")))
+      if not number or number <= 0 or number == math.huge then return nil end
+      if not word:match("%%$") then percent = false end
+      widths[count] = number
+      total = total + number
+    end
   end
-  local divisor = (percent and total <= 100.5) and 100 or total
-  for i = 1, #out do out[i] = out[i] / divisor end
-  return out
+  if count == 0 then return nil end
+  local free, content = {}, 0
+  for i = 1, #header do
+    if not widths[i] then
+      local weight = math.max(1, utf8.len(header[i]) or #header[i])
+      for _, row in ipairs(rows) do
+        local cell = row[i] or ""
+        weight = math.max(weight, utf8.len(cell) or #cell)
+      end
+      widths[i] = weight
+      free[#free + 1] = i
+      content = content + weight
+    end
+  end
+  if percent and #free > 0 and total < 100 then
+    for _, i in ipairs(free) do widths[i] = widths[i] * (100 - total) / content end
+  end
+  local divisor = (percent and (total < 100 or (#free == 0 and total <= 100.5))) and 100 or total + content
+  if divisor == math.huge then
+    local largest = 0
+    for _, width in ipairs(widths) do largest = math.max(largest, width) end
+    divisor = 0
+    for i, width in ipairs(widths) do
+      widths[i] = width / largest
+      divisor = divisor + widths[i]
+    end
+  end
+  for i, width in ipairs(widths) do widths[i] = width / divisor end
+  return widths, count
 end
 
 -- a row of nothing but `---`, `:--`, `--:`, `:-:` is a separator row, as in a pipe table
@@ -435,7 +465,10 @@ local function csv_blocks(div)
   for i = #header_fields + 1, total_cols do header_fields[i] = "" end
   -- attributes win over a separator row; they name the columns of the file, like the separator row
   aligns = read_align(div.attributes["align"]) or aligns
-  local own_widths = read_widths(div.attributes["widths"])
+  local own_widths, width_words = read_widths(div.attributes["widths"], header_fields, all_rows)
+  if own_widths and width_words ~= #header_fields then
+    io.stderr:write(string.format("WARN  %s: CSV widths: repaired %d widths for %d columns\n", label, width_words, #header_fields))
+  end
   widths = own_widths or widths
 
   local kept_cols, col_head, col_tail = keep_indices(total_cols, max_cols, cut)

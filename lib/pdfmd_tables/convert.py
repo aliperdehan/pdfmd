@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -332,7 +333,33 @@ def guess_delimiter(text: str, name: str | None) -> str:
     return best
 
 
-def block_table(block: CsvBlock, base_dir: Path) -> tuple[list[str], list[list[str]], list[str], list[float] | None]:
+def csv_widths(words: list[str], header: list[str], rows: list[list[str]]) -> list[float] | None:
+    """Explicit widths as fractions, matching the CSV Lua filter."""
+    given = words[:len(header)]
+    try:
+        fixed = {index: float(word.removesuffix("%")) for index, word in enumerate(given) if word != "*"}
+    except ValueError:
+        return None
+    if not words or any(not math.isfinite(width) or width <= 0 for width in fixed.values()):
+        return None
+    free = {index: max(1, len(cell), max((len(row[index]) for row in rows), default=0))
+            for index, cell in enumerate(header) if index not in fixed}
+    total = sum(fixed.values())
+    percent = all(given[index].endswith("%") for index in fixed)
+    if percent and free and total < 100:
+        room, weight = 100 - total, sum(free.values())
+        free = {index: size * room / weight for index, size in free.items()}
+    widths = {**fixed, **free}
+    divisor = 100 if percent and (total < 100 or (not free and total <= 100.5)) else sum(widths.values())
+    if not math.isfinite(divisor):
+        largest = max(widths.values())
+        widths = {index: width / largest for index, width in widths.items()}
+        divisor = sum(widths.values())
+    return [widths[index] / divisor for index in range(len(header))]
+
+
+def block_table(block: CsvBlock, base_dir: Path, report: list[str] | None = None
+                ) -> tuple[list[str], list[list[str]], list[str], list[float] | None]:
     """(header, rows, alignments, widths) of a `.csv` block, as the Lua filter reads them (all rows, no caps)."""
     text, origin = read_csv_data(block, base_dir)
     delimiter = block.attributes.get("delimiter")
@@ -365,16 +392,12 @@ def block_table(block: CsvBlock, base_dir: Path) -> tuple[list[str], list[list[s
             aligns = [ALIGN_NAMES[letter] for letter in given.lower()]
         else:
             aligns = [ALIGN_NAMES.get(word, "default") for word in re.split(r"[,\s]+", given.lower()) if word]
-    given = block.attributes.get("widths")
-    if given:
-        try:
-            words = [word for word in re.split(r"[,\s]+", given.strip()) if word]
-            numbers = [float(word.rstrip("%")) for word in words]
-            if numbers and all(number > 0 for number in numbers):
-                percent = all(word.endswith("%") for word in words) and sum(numbers) <= 100.5
-                widths = [number / (100 if percent else sum(numbers)) for number in numbers]
-        except ValueError:
-            pass
+    words = re.findall(r"[^,\s]+", block.attributes.get("widths", ""))
+    own_widths = csv_widths(words, header, rows)
+    if own_widths:
+        widths = own_widths
+        if report is not None and len(words) != columns:
+            report.append(f"WARN  {origin}: CSV widths: repaired {len(words)} widths for {columns} columns")
     aligns = ((aligns or []) + ["default"] * columns)[:columns]
     if widths and len(widths) != columns:
         widths = None
@@ -415,8 +438,9 @@ def expand(text: str, base_dir: Path) -> Extracted:
         if block.ignored:
             result.report.insert(0, f"SKIP  {label}: marked <!-- pdfmd: ignore -->")
             continue
+        notes: list[str] = []
         try:
-            header, rows, aligns, widths = block_table(block, base_dir)
+            header, rows, aligns, widths = block_table(block, base_dir, notes)
         except TablesError as error:
             result.report.insert(0, f"SKIP  {label}: {error}")
             continue
@@ -431,7 +455,7 @@ def expand(text: str, base_dir: Path) -> Extracted:
             new += ["", f'{block.indent}{{widths="{percentages}"}}']
         lines[block.start:block.end] = new
         origin = block.attributes.get("file", "inline data")
-        result.report.insert(0, f"EXPAND  {label}: {origin} -> {len(rows)} rows")
+        result.report[:0] = [*notes, f"EXPAND  {label}: {origin} -> {len(rows)} rows"]
         result.changed += 1
     result.text = "\n".join(lines)
     return result

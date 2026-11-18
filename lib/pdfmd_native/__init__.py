@@ -729,6 +729,7 @@ def csv_div_table(attributes: str, base_dir: Path, source: Path | None, inline: 
     if (has_header and rows and options.get("separator", "auto").lower() not in ("none", "false")
             and all(CSV_SEPARATOR_CELL_RE.match(cell) for cell in rows[0])):
         alignments = csv_separator_alignments(rows.pop(0))
+    header += [""] * (total_columns - len(header))
     alignments = csv_alignments(options.get("align")) or alignments or []
     kept_columns, column_head, column_tail = csv_keep(total_columns, max_columns, cut)
     kept_rows, row_head, row_tail = csv_keep(len(rows), max_rows, cut)

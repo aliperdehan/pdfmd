@@ -193,6 +193,37 @@ class Limits(unittest.TestCase):
         return rows, len(re.findall(r"\bCell\b", header))
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_width_count_repairs_keep_all_fields(self):
+        data = "A,B\nx,xx,xxxx\na\n"
+        for widths, expected in (("40%", [0.4, 0.2, 0.4]), ("1,2,3,99", [1/6, 2/6, 3/6])):
+            with self.subTest(widths=widths):
+                native, said = self.build(f'::: {{.csv widths="{widths}"}}\n```\n{data}```\n:::\n')
+                self.assertEqual(said.count("CSV widths: repaired"), 1, said)
+                self.assertEqual(self.rows_and_columns(native), (2, 3))
+                self.assertIn('Str "xxxx"', native)
+                shares = re.findall(r"ColWidth ([0-9.]+)", native)
+                self.assertEqual(len(shares), 3)
+                for share, want in zip(shares, expected):
+                    self.assertAlmostEqual(float(share), want)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_star_columns_use_the_content_without_a_count_warning(self):
+        block = '::: {.csv widths="2, *  4" reader=gfm}\n```\nA,B,C\nx,xxxx,x\n```\n:::\n'
+        native, said = self.build(block)
+        shares = [float(width) for width in re.findall(r"ColWidth ([0-9.]+)", native)]
+        self.assertEqual(shares, [0.2, 0.4, 0.4])
+        self.assertNotIn("CSV widths: repaired", said)
+        disabled, said = self.build(block, "--no-csv")
+        self.assertNotIn("ColWidth", disabled)
+        self.assertNotIn("CSV widths: repaired", said)
+
+    def test_the_built_in_renderer_keeps_fields_beyond_the_header(self):
+        sys.path.insert(0, str(ROOT))
+        import pdfmd
+        lines = pdfmd.csv_div_table(".csv", Path("."), None, "A,B\nx,y,z\na\n")
+        self.assertEqual(lines, ["| A | B |  |", "| --- | --- | --- |", "| x | y | z |", "| a |  |  |"])
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_the_default_cap_and_its_note(self):
         native, stderr = self.build('::: {.csv file="d.csv"}\n:::\n')
         self.assertEqual(self.rows_and_columns(native), (11, 8))           # 7 + a row of … + 3; 5 + … + 2

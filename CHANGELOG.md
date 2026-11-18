@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.34.16 — 2026-11-18
+
+Pre-edit state: commit `2afa3d8`. **[tables] Repair CSV width lists.** Extra widths
+used to consume part of the table's share, while omitted widths went to the
+writer without a size. A wrong count now warns once, keeps the widths belonging
+to existing columns and sizes the others by their content. `*` explicitly
+asks for a free column. The built-in tier pads a short header to keep every
+field, and `--expand-tables` carries repaired widths into the pipe table.
+Synthetic regressions cover short and long lists, relative and percentage
+widths, GFM cells, disabling CSV tables, ragged records and expansion.
+`pdfmd.py` only changes its version.
+
 ## v3.34.15 — 2026-11-18
 
 Pre-edit state: commit `c5d0b28`. Without a readable Skim archive, import
