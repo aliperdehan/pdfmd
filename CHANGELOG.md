@@ -38,7 +38,7 @@ builds keep their existing default. The launchpad adds one CLI state line for ba
 Regressions cover header preservation, title pages, Word and OpenDocument fields, crop and
 the CLI override with Pandoc 3.13 and 3.1.3.
 Fix before release: Restore the standalone shared-core import in the page-number helper,
-whose CLI override is a launchpad global so batch workers inherit it through `worker_state()`.
+whose CLI override is a launchpad global so batch workers inherit it through `worker_state()`. Fix before release: pdfmd.py grows by one line (786), `PAGE_NUMBERS_CLI`, the command line's `--page-numbers` choice: run state that must stay a module global, as the other command-line overrides.
 
 ## v3.34.21 — 2026-11-18
 
