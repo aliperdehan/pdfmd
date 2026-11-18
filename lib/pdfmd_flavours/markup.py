@@ -99,7 +99,8 @@ def flavour_default(md_path: Path, metadata_files, column: str) -> str:
     return getattr(preset, column, "") if preset else ""
 
 
-def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | None = None) -> str:
+def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | None = None,
+                    keep_wikilinks: bool = False) -> str:
     """``text`` as Pandoc should read it in the flavour's own syntax: %%comments%% hidden (obsidian, pdfmd), or (``show``, by default
     `show-comments`) turned into HTML comments the writers draw as Comment boxes; then each `![[picture|300]]` written as a Markdown
     image (see embed_source). Unchanged when the flavour has neither or the text has none of them. A `%%` that never closes is told
@@ -111,7 +112,7 @@ def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | No
         text = hidden_comments(text, md_path, metadata_files, show)
     if preset.embeds and "![[" in text:
         text = core.embed_source(text, md_path, metadata_files)
-    if preset.wikilinks and "[[" in text:
+    if preset.wikilinks and "[[" in text and not (keep_wikilinks and flavour_of(md_path, metadata_files) == "obsidian"):
         try:
             from pdfmd_obsidian import wikilinks_as_text
             text = wikilinks_as_text(text).text

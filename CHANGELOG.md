@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.34.25 — 2026-11-18
+
+Pre-edit state: commit `6b0119a`. Obsidian wikilinks printed only their labels.
+The Obsidian flavour now resolves local headings and other parts of a build
+using Pandoc's heading identifiers. An external note links to its same-format
+output. A missing note keeps its label and warns once, including under
+`--strict`. The pdfmd flavour still shows wikilinks as text.
+
+- Synthetic builds exercise HTML, LaTeX, Typst, Markdown, Word and OpenDocument,
+  both report routes, duplicate headings and a split scaffold.
+
 ## v3.34.24 — 2026-11-18
 
 Pre-edit state: commit `51b7a0d`. Front matter selected Pandoc's Markdown even when

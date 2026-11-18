@@ -166,6 +166,9 @@ use citation fields alone.
 
 ## When a build fails
 
+In the Obsidian flavour, wikilinks can target local headings, other parts of the build or a note's same-format output.
+A missing note produces a warning and leaves the display text.
+
 Use `pdfmd-options: {dialect-detect: deep}` for GFM-style blocks that follow prose in documents with front matter,
 or for a leading Hugo-style TOML metadata block. The default `basic` warns about TOML and keeps it in the body.
 

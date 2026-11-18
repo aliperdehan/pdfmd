@@ -182,6 +182,7 @@ def run(core, *,
 
     measurement_state = {}
     from pdfmd_filters import document_filter_scope
+    from pdfmd_obsidian.links import linked_inputs
     any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
         files, metadata_files, pandoc_options, report_no_auto, args.from_format)
     if any_citations is None:
@@ -191,7 +192,8 @@ def run(core, *,
     any_citations = any_citations or bool(before_citeproc)
     from pdfmd_crop.build import prepare as prepare_crop
     with (document_filter_scope(), table_width_filter() as width_filter, csv_table_filter() as csv_filter,
-          titles.Hidden() as hidden, prepare_crop(files[0], output, metadata_files, target_format, args.verbose) as crop):
+          titles.Hidden() as hidden, prepare_crop(files[0], output, metadata_files, target_format, args.verbose) as crop,
+          contextlib.ExitStack() as link_scope):
         if target_format != "pdf":
             # See convert_one's matching comment: a TEX_STANDALONE_FORMATS
             # writer here still gets --standalone plus the same
@@ -260,14 +262,16 @@ def run(core, *,
                     office_reference(files[0], metadata_files, variables, target_format, output,
                                      pandoc_options, report_no_auto, report_note) as report_office_arguments:
                 prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters, metadata_files, report_from)
+                prepared_files, linked_reader = link_scope.enter_context(
+                    linked_inputs(prepared_files, files, report_from, metadata_files, target_format, output))
                 prepared_metadata = prepared[len(files):]
                 cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "-t", target_format]
                 if is_tex_target and report_standalone_auto:
                     report_note("STANDALONE", f"REPORT: --to {target_format} needs a complete, "
                                               "independently compilable document; adding --standalone")
                     cmd.append("--standalone")
-                if report_from:
-                    cmd += ["-f", report_from]
+                if linked_reader:
+                    cmd += ["-f", linked_reader]
                 if metadata is not AUTO_METADATA_DISABLED:
                     for metadata_file in prepared_metadata:
                         cmd += ["--metadata-file", str(metadata_file)]
@@ -429,12 +433,14 @@ def run(core, *,
                                                         or bool(report_pdf_meta_snippet_text))
                                              and engine in LATEX_ENGINES, metadata_files, report_no_auto) as report_header_file:
                     prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters, metadata_files, report_from)
+                    prepared_files, linked_reader = link_scope.enter_context(
+                        linked_inputs(prepared_files, files, report_from, metadata_files, "pdf", output))
                     prepared_metadata = prepared[len(files):]
                     cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "--pdf-engine=" + engine]
                     if engine == "prince":                # it names only the page's first author (v3.33.66)
                         cmd += core.prince_author_options(files[0], metadata_files, variables)
-                    if report_from:
-                        cmd += ["-f", report_from]
+                    if linked_reader:
+                        cmd += ["-f", linked_reader]
                     if metadata is not AUTO_METADATA_DISABLED:
                         for metadata_file in prepared_metadata:
                             cmd += ["--metadata-file", str(metadata_file)]

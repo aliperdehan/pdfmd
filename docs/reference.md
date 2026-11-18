@@ -1300,6 +1300,11 @@ Title` also gets that heading promoted into real Pandoc title metadata
 numbered top-level section), with the rest of its headings shifted up a
 level to match.
 
+In the Obsidian flavour, `[[#Heading]]` links to a heading in the note. `[[Note]]`, `[[Note#Heading]]` and
+`[[Note|text]]` link to a part of the same build or the same-format output beside the note's Markdown source.
+A missing note leaves the display text and produces one warning, which fails a `--strict` build.
+The pdfmd flavour continues to render wikilinks as display text.
+
 ## CSV/TSV table inclusion
 
 A fenced Div with class `csv` --

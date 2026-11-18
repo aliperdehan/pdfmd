@@ -499,7 +499,7 @@ def promote_bare_title(text: str, has_external_metadata: bool = False) -> tuple[
 def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
                           disabled: bool = False,
                           override: tuple[str, bool] | None = None,
-                          reader: str | None = None) -> Iterator[tuple[Path, bool]]:
+                          reader: str | None = None, keep_wikilinks: bool = False) -> Iterator[tuple[Path, bool]]:
     """Yield a temporary copy of ``md_path`` with promote_bare_title() applied,
     and whether that happened (the caller needs to know to also shift
     heading levels). Yields ``md_path`` itself, unchanged, when nothing to
@@ -518,7 +518,7 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
         text, shifted = override
         if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
             text = dialect.prepare(text, md_path, metadata_files, relax)
-            text = core.obsidian_source(text, md_path, metadata_files)
+            text = core.obsidian_source(text, md_path, metadata_files, keep_wikilinks=keep_wikilinks)
             text = core.repair_ascii_text(text, core.table_ascii_mode(md_path, list(metadata_files)), core.display_path(md_path))
             text = core.cell_tags_text(text, md_path, metadata_files, core.display_path(md_path))
         with NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix,
@@ -536,7 +536,7 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
         return
     original = md_path.read_text(encoding="utf-8-sig")
     text = dialect.prepare(original, md_path, metadata_files, relax)
-    text = core.obsidian_source(text, md_path, metadata_files)      # an Obsidian note's %%comments%% go first: a hidden heading is no title
+    text = core.obsidian_source(text, md_path, metadata_files, keep_wikilinks=keep_wikilinks)      # an Obsidian note's %%comments%% go first: a hidden heading is no title
     corrected, shifted = text, False
     if not disabled:
         corrected, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))

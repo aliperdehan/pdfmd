@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -72,7 +73,9 @@ class Build(unittest.TestCase):
         done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "n.md", "-t", target, "--no-stamp", *arguments],
                               capture_output=True, text=True, encoding="utf-8", cwd=self.directory, env=self.env)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        suffix = {"latex": "tex", "typst": "typ"}.get(target, target)
+        suffix = {"latex": "tex", "typst": "typ", "markdown": "markdown"}.get(target, target)
+        if "-o" in arguments:
+            return " ".join((self.directory / arguments[arguments.index("-o") + 1]).read_text(encoding="utf-8").split())
         return " ".join((self.directory / f"n.{suffix}").read_text(encoding="utf-8").split())
 
     def test_wikilinks_are_text_in_the_pdfmd_flavour_and_literal_in_pandoc(self):
@@ -102,6 +105,66 @@ class Build(unittest.TestCase):
                 if flavour in ("pdfmd", "obsidian"):
                     self.assertIn("Time: 10", text)
                     self.assertNotIn("[[Note", text)
+
+    def test_obsidian_resolves_local_and_built_note_links(self):
+        (self.directory / "Other Note.md").write_text("## Related {#custom}\n\nText.\n", encoding="utf-8")
+        source = ("---\ntitle: Index\n---\n\n"
+                  "[[#Local heading]] and [[Other Note#Related|read more]] and [[Other Note]].\n\n"
+                  "## Local heading {#local}\n\nHere.\n")
+        html = self.build(source, "html", "--flavour", "obsidian")
+        self.assertIn('<a href="#local">Local heading</a>', html)
+        self.assertIn('<a href="Other%20Note.html#custom">read more</a>', html)
+        self.assertIn('<a href="Other%20Note.html">Other Note</a>', html)
+        for target, expected in (("latex", r"(?:\\hyperref\[local\]|\\hyperlink\{local\})\{Local heading\}"),
+                                 ("typst", r"#link\(<local>\)\[Local heading\]"),
+                                 ("markdown", r"\[Local heading\]\(#local\)")):
+            with self.subTest(target=target):
+                self.assertRegex(self.build(source, target, "--flavour", "obsidian", "-o", f"n.{target}"), expected)
+
+    def test_obsidian_reports_one_missing_note_warning_and_strict_fails(self):
+        (self.directory / "n.md").write_text("[[Missing|first]] and [[Missing|second]].\n", encoding="utf-8")
+        args = [sys.executable, str(ROOT / "scripts" / "pdfmd"), "n.md", "-t", "html", "--flavour", "obsidian"]
+        done = subprocess.run(args, cwd=self.directory, env=self.env, capture_output=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr.count("wikilink note not found"), 1, done.stderr)
+        self.assertIn("<p>first and second.</p>", (self.directory / "n.html").read_text(encoding="utf-8"))
+        strict = subprocess.run([*args, "--strict"], cwd=self.directory, env=self.env, capture_output=True, encoding="utf-8")
+        self.assertNotEqual(strict.returncode, 0)
+        self.assertIn("wikilink note not found", strict.stderr)
+
+    def test_notes_that_are_parts_become_internal_links(self):
+        (self.directory / "Later.md").write_text(
+            "---\nchapter: 2\n---\n\n## Repeated\n\n[[#Repeated|self]].\n", encoding="utf-8")
+        (self.directory / "n.md").write_text(
+            "---\nchapter: 1\n---\n\n[[Later|part]] or [[Later#Repeated|section]].\n\n## Repeated\n",
+            encoding="utf-8")
+        for route in ("route", "patch"):
+            with self.subTest(route=route):
+                (self.directory / "metadata.yaml").write_text(
+                    f"pdfmd-options: {{report-build: {route}}}\n", encoding="utf-8")
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--report", "--flavour",
+                                       "obsidian", "-t", "html", "-o", "book.html"],
+                                      cwd=self.directory, env=self.env, capture_output=True, encoding="utf-8")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                html = " ".join((self.directory / "book.html").read_text(encoding="utf-8").split())
+                self.assertRegex(html, r'<a href="#pdfmd-wikilink-[^"]+">part</a>')
+                self.assertIn('<a href="#repeated-1">section</a>', html)
+                self.assertIn('<a href="#repeated-1">self</a>', html)
+
+    def test_scaffold_links_and_office_bookmarks(self):
+        parts = self.directory / "parts"
+        parts.mkdir()
+        (parts / "other.md").write_text("## Café\n\nPart body.\n", encoding="utf-8")
+        source = "---\ntitle: Index\npdfmd-options: {parts: auto, flavour: obsidian}\n---\n\n[[other#Café|Read it]].\n"
+        (self.directory / "n.md").write_text(source, encoding="utf-8")
+        for target, xml, anchor in (("docx", "word/document.xml", 'w:anchor="_?café"'),
+                                     ("odt", "content.xml", 'xlink:href="#caf')):
+            with self.subTest(target=target):
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "n.md", "-t", target],
+                                      cwd=self.directory, env=self.env, capture_output=True, encoding="utf-8")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                with zipfile.ZipFile(self.directory / f"n.{target}") as archive:
+                    self.assertRegex(archive.read(xml).decode("utf-8"), anchor)
 
     def test_underline_is_the_writers_own(self):
         source = "x <u>under</u> and <ins>ins</ins> y\n"

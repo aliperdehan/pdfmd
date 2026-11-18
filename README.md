@@ -3169,13 +3169,12 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   paragraph, and two spaces or a backslash at the end of a line is a break whatever the setting. For one run
   `--flavour gfm+hard_line_breaks` does it.
 
-- **Links between notes: `[[Note]]`** (v3.32.26, in `obsidian` and `pdfmd`). A printed document has no other notes to open, so a wikilink is
-  written as the text Obsidian shows for it: `[[Note|an alias]]` is `an alias`, `[[Note]]` is `Note`, `[[Note#Heading]]` is `Note > Heading`
+- **Links between notes: `[[Note]]`** (v3.32.26, in `obsidian` and `pdfmd`). In `obsidian`, wikilinks target the heading or part in the current build, or the note’s built file beside its source
+  in the same output format. A missing note shows its text and produces one warning. In `pdfmd`, the link is shown as text: `[[Note|an alias]]` is `an alias`, `[[Note]]` is `Note`, `[[Note#Heading]]` is `Note > Heading`
   and `[[#Heading]]`, a link inside the note, is `Heading`; `[[Note\|alias]]` works in a table. A name with `_` or `*` in it is kept as text.
   A target containing `:` (before any `|` alias or `#`/`^` anchor), such as `[[name:key]]`, is kept exactly as text in every
   flavour (`[[fullcite:key]]` is read by the built-in `fullcite`, below, in the flavours that have it); the same rule applies to `![[...]]` embeds. An alias may contain `:`, so `[[Note|Time: 10]]` still shows `Time: 10`.
   Left as they are: `![[note]]` (a note embed comes later), `[[_TOC_]]` (the contents marker) and `[[1]](url)` (a link whose text is `[1]`).
-  Links become real links to a heading of the same document in a later release.
 - **Pictures by name: `![[picture.png|300]]`** (v3.32.25, in `obsidian` and `pdfmd`). Obsidian's wikilink names a file, not a path: the
   vault finds it wherever it lies, so a picture can move without breaking the note, and every pasted picture is `![[Pasted image
   2026....png]]`. pdfmd reads the same spelling outside a vault as its own image embed. `|300` is the width in pixels, `|300x200` a

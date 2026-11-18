@@ -130,7 +130,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 self_contained: bool | None = None,
                 source_override: tuple[str, bool] | None = None,
                 label_scan: "LabelScan | None" = None,  # noqa: F821 -- quoted, never evaluated: pdfmd.py's LabelScan
-                selection: "set[Path] | bool | None" = None) -> tuple[Path, bool, str]:
+                selection: "set[Path] | bool | None" = None,
+                link_output: Path | None = None) -> tuple[Path, bool, str]:
     # selection: the inputs are ALL the parts (a set: those to keep) or the whole document (True), each wrapped in a part
     # div, and select.lua drops the rest after pandoc-crossref has numbered everything (see wrap_part).
     # label_scan: the headers that replay the whole document's labels (see build_label_scan).
@@ -379,8 +380,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     flat_target = flat_markdown or target_format == "txt"        # and flat text, which shares the pipeline (not those extras)
     flat = core.flat_settings(md_path, metadata_files, target_format) if flat_target else None
     from pdfmd_filters import document_filter_scope
+    from pdfmd_obsidian.links import linked_inputs
     with document_filter_scope(), core.prepared_title_source(md_path, metadata_files, disabled=core.auto_disabled(no_auto, "title") or flat_target or target_format == "ansi",
-                               override=source_override, reader=effective_from) \
+                               override=source_override, reader=effective_from, keep_wikilinks=True) \
             as (title_source, title_shifted), \
             core.embedded_lua_filters(md_path, not core.auto_disabled(cli_no_auto, "lua"), trust_embedded) \
             as embedded_filters, \
@@ -390,8 +392,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             {part: core.part_key(part, parts_root) for part in parts_inputs}
                             if part_markers and parts_root else None,
                             selection if isinstance(selection, (set, frozenset)) else None,
-                            core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format)) as scaffold_files:
-        part_files = scaffold_files[1:]
+                            core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format)) as scaffold_files, \
+            linked_inputs([title_source, *scaffold_files[1:]], [md_path, *parts_inputs], effective_from, metadata_files,
+                          "pdf" if link_output else target_format, link_output or output,
+                          not core.auto_disabled(no_auto, "title")) as (linked, effective_from):
+        title_source, *part_files = linked
         lua_filters = [*lua_filters, *embedded_filters]
         all_inputs = [md_path, *parts_inputs] if parts_inputs else None
         any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
@@ -1365,7 +1370,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                              skip_stamp=True, parts_root=parts_root,
                              part_markers=bool((persistent or (label_scan is not None and label_scan.markers))
                                                and parts_inputs),
-                             trust_embedded=trust_embedded, source_override=source_override)
+                             trust_embedded=trust_embedded, source_override=source_override, link_output=output)
         core.BUILD["output"], core.BUILD["sources"] = stage_build[0], stage_build[1]   # the .tex stage recorded its own file
         if not built[1]:
             return built

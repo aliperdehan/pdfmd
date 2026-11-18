@@ -10,7 +10,7 @@ are: ``![[...]]`` (a picture is embeds.py's, a note embed is a later step), ``[[
 from __future__ import annotations
 
 import re
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
 from .comments import _PROTECTED
 
@@ -29,13 +29,15 @@ def _plain(text: str) -> str:
     return _SPECIAL.sub(r"\\\1", text)
 
 
-def wikilinks_as_text(text: str) -> Wikilinks:
+def wikilinks_as_text(text: str, destination: Callable[[str, str], str | None] | None = None) -> Wikilinks:
     """``text`` with each wikilink replaced by what Obsidian shows for it (see the module's docstring)."""
     count = 0
 
     def replace(match: re.Match) -> str:
         nonlocal count
         if match.lastgroup != "link":
+            return match.group(0)
+        if destination is not None and match.start() and text[match.start() - 1] == "\\":
             return match.group(0)
         target = (match.group("target") or "").strip()
         if ":" in target.split("^", 1)[0]:
@@ -46,6 +48,8 @@ def wikilinks_as_text(text: str) -> Wikilinks:
         if not shown:
             return match.group(0)
         count += 1
-        return _plain(shown)
+        url = destination(target, heading) if destination is not None else None
+        label = _plain(shown)
+        return f"[{label}](<{url}>)" if url else label
 
     return Wikilinks(_SCAN.sub(replace, text), count)
