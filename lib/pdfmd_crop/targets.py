@@ -25,8 +25,14 @@ def picture_target(args) -> str | None:
 
 # the options of the command line that `picture_build` must not hand on to the build of the intermediate PDF, and how
 # many words each takes (-b and --recursive: the files are built one at a time here)
-PICTURE_OPTIONS = {"--crop": 0, "-d": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1, "--image-dpi": 1,
+PICTURE_OPTIONS = {"--crop": 0, "--no-crop": 0, "-d": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1, "--image-dpi": 1,
                    "--image-quality": 1, "--page-folder": 0, "--no-page-folder": 0, "-o": 1, "--out": 1, "--output": 1, "-t": 1, "--to": 1, "-b": 0, "--batch": 0, "--recursive": 0}
+
+
+def crop_flags(args) -> list[str]:
+    return [word for flag, value in (("--crop-pad", args.crop_pad), ("--crop-ignore-bottom", args.crop_ignore_bottom),
+                                     ("--crop-page", args.crop_page)) if value is not None
+            for word in (flag, str(value))]
 
 
 def picture_build(args, source: Path, scratch: Path) -> tuple[Path | None, str]:
@@ -47,6 +53,11 @@ def picture_build(args, source: Path, scratch: Path) -> tuple[Path | None, str]:
     built = scratch / "built.pdf"
     command = [sys.executable, str(Path(core.__file__).resolve()), *kept, str(source), "--to", "pdf", "-o", str(built),
                "--no-stamp", "--no-backup", "--rewrite"]
+    if args.crop is not None:
+        # Explicit cropping belongs to the picture command and must happen just once.
+        command.append("--no-crop")
+    else:
+        command += crop_flags(args)
     done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
     return (built if done.returncode == 0 and built.is_file() else None), done.stderr
 
@@ -149,7 +160,7 @@ def picture_one(args, source: Path, destination_for, pad: float, dpi: float, qua
 
 
 # the options of a picture run that a build of another format must not get (the rest of the command line it does)
-TARGET_ONLY_OPTIONS = {"--crop": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1, "--image-dpi": 1,
+TARGET_ONLY_OPTIONS = {"--crop": 0, "--no-crop": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1, "--image-dpi": 1,
                        "--image-quality": 1, "--page-folder": 0, "--no-page-folder": 0, "-t": 1, "--to": 1}
 
 
@@ -177,7 +188,10 @@ def multi_target_command(args) -> int:
     status = 0
     for name in others:
         sys.stdout.flush()
-        done = subprocess.run([sys.executable, str(Path(core.__file__).resolve()), *kept, "--to", name])
+        command = [sys.executable, str(Path(core.__file__).resolve()), *kept, "--to", name]
+        if name == "pdf":
+            command += ["--no-crop"] if args.crop is False else crop_flags(args)
+        done = subprocess.run(command)
         status = max(status, done.returncode)
     if pictures:
         args.to_many = pictures

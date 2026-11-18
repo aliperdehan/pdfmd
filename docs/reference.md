@@ -71,6 +71,14 @@ For a Markdown document that consists of one multiline LaTeX command,
 LaTeX output preserves its bracketed options and braced arguments across
 line breaks.
 
+`--crop` cuts a PDF build to the ink of each page. Set `pdfmd-options:
+{crop: true}` in the source or metadata, or use a folder or global setting
+or the `--setup` row. The default is off. `--no-crop` overrides the setting.
+With an existing PDF input, `--crop` writes `NAME-crop.pdf` by default.
+Ghostscript measures the ink and pypdf sets the page boxes. Use
+`--crop-pad PT` (default 2), `--crop-ignore-bottom PT` (default 0) and
+`--crop-page N` (default all pages) to adjust one run.
+
 An office document (.docx, .doc, .odt, .ott, .rtf, .pptx, .ppt, .odp,
 .xlsx, .xls, .ods) targeting PDF is a third special case, as of
 v3.2.0: it converts straight to PDF via headless LibreOffice

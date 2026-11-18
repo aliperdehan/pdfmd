@@ -188,7 +188,9 @@ def run(core, *,
     from pdfmd_filters.lua import pre_citeproc_args
     before_citeproc = pre_citeproc_args(files[0], metadata_files, report_no_auto)
     any_citations = any_citations or bool(before_citeproc)
-    with document_filter_scope(), table_width_filter() as width_filter, csv_table_filter() as csv_filter, titles.Hidden() as hidden:
+    from pdfmd_crop.build import prepare as prepare_crop
+    with (document_filter_scope(), table_width_filter() as width_filter, csv_table_filter() as csv_filter,
+          titles.Hidden() as hidden, prepare_crop(files[0], output, metadata_files, target_format, args.verbose) as crop):
         if target_format != "pdf":
             # See convert_one's matching comment: a TEX_STANDALONE_FORMATS
             # writer here still gets --standalone plus the same
@@ -545,6 +547,11 @@ def run(core, *,
                 remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
                 if core.chain_engine_failed("REPORT", engine, result, remaining, args.debug):   # engine-fallback stops here
                     break
+        if result is not None and result.returncode == 0 and crop is not None:
+            polish_pdf(output, list(files), args.verbose)
+            if problem := crop():
+                result.returncode = 1
+                result.stderr += "\n" + problem
     assert result is not None
     if result.returncode == 0:
         check_asset_budget(list(files), files[0], metadata_files)
@@ -561,7 +568,7 @@ def run(core, *,
             stamp_after_success(file, metadata_files, stamp_preambles, stamp_overrides,
                                 output, args.verbose, report_output=output)
             backup_after_success(file, metadata_files, args.backup, args.verbose, args.backup_format)
-        if target_format == "pdf":
+        if target_format == "pdf" and crop is None:
             polish_pdf(output, list(files), args.verbose)
         if target_format == "pdf" and resolve_attach(files[0], metadata_files):
             attach_source_after_success(

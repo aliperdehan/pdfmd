@@ -611,11 +611,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--check-docx", action="store_true",
                         help="say what a Word build of FILE would make native, draw as a picture or leave out, without "
                              "drawing or writing anything (the macro or environment behind each picture is named)")
-    parser.add_argument("--crop", action="store_true",
-                        help="cut each page to what it draws (the page stays vector; only its boxes change). FILE is a PDF "
-                             "(NAME-crop.pdf beside it) or a Markdown source (built first: NAME.pdf). With --to png or svg "
-                             "the cropped page is drawn as a picture. -o FILE (one source) or -o FOLDER. Needs Ghostscript "
-                             "and pypdf. Options: --crop-pad, --crop-ignore-bottom, --crop-page, --image-dpi")
+    parser.add_argument("--crop", action=argparse.BooleanOptionalAction, default=None,
+                        help="cut each PDF page to what it draws. With a source, crop the result of the normal PDF build. "
+                             "With an existing PDF, write NAME-crop.pdf. For pictures, crop before drawing them. "
+                             "Also pdfmd-options: {crop: true} and --setup (default off). --no-crop overrides the setting. "
+                             "Needs Ghostscript and pypdf. Options: --crop-pad, --crop-ignore-bottom, --crop-page")
     parser.add_argument("--crop-pad", type=float, default=None, metavar="PT",
                         help="with --crop: points of room left around the ink (default 2)")
     parser.add_argument("--crop-ignore-bottom", type=float, default=None, metavar="PT",

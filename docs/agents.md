@@ -169,6 +169,9 @@ Use `--from md` to read Markdown from a file with any extension.
 A .tex fragment can be compiled with a discovered project preamble or
 with `--include-in-header FILE`.
 
+Use `--crop` or `pdfmd-options: {crop: true}` to crop the PDF of a build
+to its ink. The default is off. `--no-crop` overrides a saved setting.
+
 Set `pdfmd-options.lua-filter-before-citeproc` to run a trusted Lua filter before citations are resolved. The list is empty by default and follows the same layers and relative paths as `lua-filter`.
 
 1. `pdfmd --doctor` says which engines exist. A missing one is not an error of the document.

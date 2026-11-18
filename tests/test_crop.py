@@ -204,8 +204,12 @@ class Pictures(unittest.TestCase):
         self.source = self.dir / "formula.pdf"
         draw(self.source, "50 30 60 20 rectfill showpage 10 10 20 20 rectfill showpage")
 
-    def run_pdfmd(self, *arguments: str, path: str | None = None):
-        env = None if path is None else {**os.environ, "PATH": path}   # keep the run's scratch XDG folders
+    def run_pdfmd(self, *arguments: str, path: str | None = None, config: str | None = None):
+        env = {**os.environ, "PDFMD_NO_PROMPT": "1"}
+        if path is not None:
+            env["PATH"] = path
+        if config is not None:
+            env["PDFMD_CONFIG"] = config
         return subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), *arguments], capture_output=True, encoding="utf-8",
                               cwd=self.dir, env=env)
 
@@ -346,6 +350,60 @@ class Pictures(unittest.TestCase):
         box = media(self.dir / "note.pdf")
         self.assertLess(box[3] - box[1], 100)   # two lines of text, not the page
         self.assertEqual(sorted(path.name for path in self.dir.glob("note*")), ["note.md", "note.pdf"])
+
+    def test_crop_is_a_build_mode_with_automatic_source_lookup(self):
+        (self.dir / "only.md").write_text("An automatic build.\n", encoding="utf-8")
+        done = self.run_pdfmd("--crop", "--crop-ignore-bottom", "60", "-e", "inkmd", "--no-stamp", "--no-backup",
+                              path=self.native_path())
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        box = media(self.dir / "only.pdf")
+        self.assertLess(box[3] - box[1], 100)
+
+    def test_crop_settings_follow_layers_and_the_cli_can_turn_them_off(self):
+        document = self.dir / "note.md"
+        document.write_text("One line.\n", encoding="utf-8")
+        config = self.dir / "config.yaml"
+        config.write_text("options: {crop: true}\n", encoding="utf-8")
+        done = self.run_pdfmd("note.md", "-e", "inkmd", "-o", "global.pdf", "--no-stamp", "--no-backup",
+                              "--crop-ignore-bottom", "60", path=self.native_path(), config=str(config))
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        box = media(self.dir / "global.pdf")
+        self.assertLess(box[3] - box[1], 100, box)
+        folder = self.dir / ".pdfmd"
+        folder.mkdir()
+        (folder / "config.yaml").write_text("options: {crop: false}\n", encoding="utf-8")
+        metadata = self.dir / "metadata.yaml"
+        metadata.write_text("pdfmd-options: {crop: true}\n", encoding="utf-8")
+        variants = [
+            ("folder.pdf", ("-y",), False),
+            ("metadata.pdf", ("-y", "metadata.yaml", "--crop-ignore-bottom", "60"), True),
+            ("off.pdf", ("--no-crop",), False),
+        ]
+        for name, arguments, cropped in variants:
+            with self.subTest(name=name):
+                done = self.run_pdfmd("note.md", "-e", "inkmd", "-o", name, "--no-stamp", "--no-backup", *arguments,
+                                      path=self.native_path(), config=str(config))
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                box = media(self.dir / name)
+                self.assertEqual(box[3] - box[1] < 100, cropped, box)
+        document.write_text("---\npdfmd-options: {crop: false}\n---\n\nOne line.\n", encoding="utf-8")
+        done = self.run_pdfmd("note.md", "-e", "inkmd", "-y", "metadata.yaml", "-o", "front.pdf", "--no-stamp", "--no-backup",
+                              path=self.native_path(), config=str(config))
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        box = media(self.dir / "front.pdf")
+        self.assertGreater(box[3] - box[1], 600)
+
+    def test_a_failed_build_crop_preserves_the_existing_pdf(self):
+        document = self.dir / "note.md"
+        document.write_text("Only one page.\n", encoding="utf-8")
+        before = document.read_bytes()
+        previous = self.source.read_bytes()
+        done = self.run_pdfmd("note.md", "-e", "inkmd", "--crop", "--crop-page", "3", "--rewrite",
+                              "-o", "formula.pdf", path=self.native_path())
+        self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("not a page 3", done.stdout + done.stderr)
+        self.assertEqual(self.source.read_bytes(), previous)
+        self.assertEqual(document.read_bytes(), before)
 
 
 if __name__ == "__main__":

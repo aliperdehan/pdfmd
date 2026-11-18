@@ -32,6 +32,14 @@ def resolve_build(core, first: Path, metadata_files: list[Path]) -> str:
 def output_path(core, args, target_format: str) -> Path:
     """Where the report is written: `book.EXT` in the current folder, or in/at what `-o` names."""
     extension = core.output_extension_for(target_format)
+    if target_format == "pdf" and args.crop and len(args.path or []) == 1:
+        source = args.path[0].resolve()
+        name = (source.name if source.is_dir() else source.stem) + extension
+        if args.out is None:
+            return (Path.cwd() if args.destination_cwd else source if source.is_dir() else source.parent) / name
+        if args.out.is_dir() or not args.out.suffix:
+            args.out.mkdir(parents=True, exist_ok=True)
+            return (args.out / name).resolve()
     if args.out:
         # Check is-a-directory BEFORE adding a default suffix -- a dot-less directory name (e.g. "out/") would otherwise
         # get ".pdf" appended to the directory's own name instead of being used as a directory.

@@ -366,7 +366,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                      partial, bool(cache["aux"]), full_scaffold, parts_root, note,
                                      flush_summary, plots=bool(cache["plots"]),
                                      trust_embedded=trust_embedded, source_override=source_override,
-                                     label_scan=label_scan)
+                                     label_scan=label_scan, skip_stamp=skip_stamp)
     if label_scan is not None:
         # the ordinary route: the replay goes in with the other LaTeX headers (the engine loop passes them to the LaTeX engines only)
         preamble_files = [*(preamble_files or []), *label_scan.headers]
@@ -1184,16 +1184,26 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
     if not output_resolved:
         planned = output_file or core.load_package("pdfmd_routing.output").planned(md_path, out_dir, target_format)
         output_file = core.load_package("pdfmd_routing.output").protected(md_path, planned, target_format, metadata_list)
+    from pdfmd_crop.build import prepare as prepare_crop
     try:
-        result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,
-                              pandoc_options, metadata_file, output_file, preamble_files,
-                              target_format=target_format, from_format=from_format, no_auto=no_auto,
-                              verbose=verbose, debug=debug, stamp_overrides=stamp_overrides,
-                              keep_aux=keep_aux, extra_inputs=pandoc_inputs, partial=partial,
-                              cache_cli=cache_cli, full_scaffold=(md_path if extra_inputs else None),
-                              parts_root=parts_root, embed=embed, trust_embedded=trust_embedded,
-                              self_contained=self_contained, source_override=source_override,
-                              label_scan=label_scan, selection=selection)
+        with prepare_crop(md_path, output_file, metadata_list, target_format, verbose) as crop:
+            result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,
+                                  pandoc_options, metadata_file, output_file, preamble_files,
+                                  target_format=target_format, from_format=from_format, no_auto=no_auto,
+                                  verbose=verbose, debug=debug, stamp_overrides=stamp_overrides,
+                                  keep_aux=keep_aux, extra_inputs=pandoc_inputs, partial=partial,
+                                  cache_cli=cache_cli, full_scaffold=(md_path if extra_inputs else None),
+                                  parts_root=parts_root, embed=embed, trust_embedded=trust_embedded,
+                                  self_contained=self_contained, source_override=source_override,
+                                  label_scan=label_scan, selection=selection, skip_stamp=crop is not None)
+            if result[1] and crop is not None:
+                if source_override is None and not partial:
+                    core.polish_pdf(output_file, [md_path, *(extra_inputs or [])], verbose)
+                if problem := crop():
+                    return md_path, False, problem
+                if md_path.suffix.lower() in core.MARKDOWN_LIKE_SUFFIXES:
+                    core.stamp_build(partial, False, md_path, metadata_list, preamble_files or [],
+                                     stamp_overrides or {}, output_file, verbose)
     finally:
         core.CALC_SEED = core.CALC_BELOW = None
         dump_text = ""
@@ -1236,7 +1246,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
             made_pdf = output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir else md_path.with_suffix(".pdf"))
             core.backup_pdf_after_success(md_path, made_pdf, metadata_files, backup,
                                      verbose, datetime.fromtimestamp(core.backup_sort_key(saved[0])[0]) if saved else None)
-        if target_format == "pdf" and source_override is None and not partial:
+        if target_format == "pdf" and crop is None and source_override is None and not partial:
             core.polish_pdf(output_file or ((out_dir / f"{md_path.stem}.pdf") if out_dir else md_path.with_suffix(".pdf")),
                        [md_path, *(extra_inputs or [])], verbose)
         if (target_format == "pdf" and source_override is None and not partial and not presentation
@@ -1278,7 +1288,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                       plots: bool = False,
                       trust_embedded: bool = False,
                       source_override: tuple[str, bool] | None = None,
-                      label_scan: "LabelScan | None" = None) -> tuple[Path, bool, str]:  # noqa: F821 -- quoted, never evaluated: pdfmd.py's LabelScan
+                      label_scan: "LabelScan | None" = None, skip_stamp: bool = False) -> tuple[Path, bool, str]:  # noqa: F821 -- quoted, never evaluated: pdfmd.py's LabelScan
     """Build a PDF the cache way: Pandoc writes the .tex, pdfmd compiles it.
     See the comment above CACHE_DEFAULTS. ``persistent`` False (the natbib +
     parts case without the cache switched on) uses a scratch folder instead
@@ -1400,7 +1410,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                           f"({time.time() - started:.0f} s)" + (f"; {failed} failed (typeset inline, "
                           "nothing lost)" if failed else ""))
         if ok:
-            core.stamp_build(partial, False, md_path, metadata_files, preamble_files or [], stamp_overrides,
+            core.stamp_build(partial, skip_stamp, md_path, metadata_files, preamble_files or [], stamp_overrides,
                                  output, verbose)
         flush_summary()
         return md_path, ok, reason[-3000:]

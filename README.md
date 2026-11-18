@@ -841,6 +841,12 @@ pdfmd formula.pdf --crop --to svg                 # formula.svg
 pdfmd report.pdf --to png                         # no --crop: the whole page(s) as pictures
 ```
 
+Set `pdfmd-options: {crop: true}` in the document or its metadata to crop
+as part of the normal PDF build. Folder settings, the configuration file
+and `pdfmd --setup` can also set the default. The default is off, and
+`--no-crop` overrides an inherited setting. With no filename,
+`pdfmd --crop` uses the normal source lookup.
+
 The ink is what Ghostscript's `bbox` device finds painted on the page; only the page's media and crop box change, so the page
 stays vector and nothing is redrawn. It is what [eqpop](https://github.com/aliperdehan/eqpop) does to a rendered formula, on any
 machine that has Ghostscript and pypdf. A rotated page is handled; a page that draws nothing is left as it is, with a NOTE.
@@ -854,14 +860,14 @@ machine that has Ghostscript and pypdf. A rotated page is handled; a page that d
   folder. A document cannot yet ask for this itself (`default-output` takes one format).
 - **Targets.** `--to pdf` (the default), `png`, `jpg` (`jpeg`), `tiff` (`tif`), `eps`, `ps` or `svg`; `-o x.png` picks the format by its suffix. PNG is drawn by
   Ghostscript on a transparent background at `--image-dpi` (default 300); JPEG the same on white, at `--image-quality` (default 90); `tiff` (LZW, white, all pages in one file), `eps` (vector; one file per page, its box is the ink) and `ps` (vector, all pages in one file); SVG by `pdftocairo` (poppler) or else `mutool` (MuPDF). `--to png|svg`
-  without `--crop` draws the whole page: a crop is asked for, never implied.
+  draws the whole page when cropping is off.
 - **Pages.** A PDF keeps all its pages, each cut to its own ink. A picture format is one picture per page (`tiff` and `ps` keep all pages in one file): `NAME.png` beside the
   document for a one-page result, a folder `NAME/` with `001.png`, `002.png` ... for several (with a NOTE); `--crop-page 1` gives
   the plain name. `-o a.png` with several pages gives the folder `a/`. `--no-page-folder` (or `pdfmd-options: {page-folder: false}`,
   or the `--setup` row) writes `NAME-001.png` ... beside the document instead.
-- **Names.** A Markdown source gives `NAME.pdf|png|svg` beside it (`-d`: in the current folder); a PDF source gives
-  `NAME-crop.pdf`, so the source is never overwritten unless `-o` names it. The intermediate PDF of a Markdown source is built
-  with your other options (`-e`, `-y` ...) but with no build stamp or backup.
+- **Names.** A normal PDF build writes its cropped result to the usual output
+  path. When an existing PDF is the source, the default output is `NAME-crop.pdf`.
+  Picture exports use a temporary PDF and leave the build stamp and backup alone.
 - `--crop` with `--to docx`, `odt`, `html` ... is an error: those have no page to cut.
 - **Many files.** Name them (`pdfmd *.tex --crop -o out/`, a PDF, Markdown or anything pdfmd builds), or use `-b` on a folder
   (`pdfmd notes -b --crop -o out/ -j 4`: its `*.md`, `--recursive` for subfolders; `-j` files at a time). `-r` makes one result

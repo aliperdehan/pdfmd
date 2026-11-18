@@ -199,6 +199,7 @@ def run_main() -> None:
                       footer=args.footer or configured.get("footer") or None,
                       bookmarks=args.bookmarks or bool(configured.get("bookmarks")),
                       attach_links=args.attach_links or bool(configured.get("attach-links")),
+                      crop=(args.crop, args.crop_pad, args.crop_ignore_bottom, args.crop_page),
                       info={POLISH_INFO_KEYS[name]: getattr(args, f"pdf_{name}")
                             for name in POLISH_INFO_KEYS if getattr(args, f"pdf_{name}")})
     if args.restore is not None:
@@ -327,8 +328,11 @@ def run_main() -> None:
         status = core.cache_command(args)                        # --cache-info, --clear-cache WHAT (pdfmd_cache.manage)
         if status is not None:
             raise SystemExit(status)
-    if (args.crop_pad is not None or args.crop_ignore_bottom is not None or args.crop_page is not None) and not args.crop:
-        raise SystemExit("--crop-pad, --crop-ignore-bottom and --crop-page go with --crop: pdfmd --crop formula.pdf --crop-pad 1")
+    pdf_input = any(path.suffix.casefold() == ".pdf" for path in args.path or [])
+    if (args.crop is False or (args.crop is None and pdf_input)) and any(
+            value is not None for value in (args.crop_pad, args.crop_ignore_bottom, args.crop_page)):
+        from pdfmd_crop.build import CROP_OPTIONS_REQUIRED
+        raise SystemExit(CROP_OPTIONS_REQUIRED)
     if args.image_quality is not None and not (args.crop or args.to_many or core.picture_target(args) in core.PICTURE_ONLY):
         raise SystemExit("--image-quality goes with --to png, jpg, tiff, eps, ps or svg")
     if (args.image_dpi is not None and args.path and all(path.suffix.lower() == ".pdf" for path in args.path)
@@ -336,7 +340,8 @@ def run_main() -> None:
         raise SystemExit("--image-dpi on a PDF input goes with --to png, jpg, tiff, eps, ps or svg")
     if args.to_many:
         raise SystemExit(core.multi_target_command(args))
-    if args.crop or core.picture_target(args) in core.PICTURE_ONLY:
+    picture = core.picture_target(args)
+    if picture in core.PICTURE_ONLY or (args.crop and (pdf_input or picture not in (None, "pdf"))):
         raise SystemExit(core.picture_command(args))
     if args.check_docx:
         raise SystemExit(core.check_docx_command(args, pandoc_options))
@@ -569,7 +574,7 @@ def run_main() -> None:
               "no PDF engine is involved", file=sys.stderr)
     # Explicit: the command line named a format (or a stage), so a document's
     # pdfmd-options.default-output does not apply.
-    target_explicit = (stop_at is not None or bool(args.to) or args.presentation
+    target_explicit = (stop_at is not None or bool(args.to) or args.presentation or args.crop is True
                        or bool(core.format_from_output(args.out) if args.out and not args.batch else None))
     engines: list[str] = []
     engines_error: SystemExit | None = None
@@ -768,7 +773,8 @@ def run_main() -> None:
             output_stem = scaffold_plan.output_stem
         elif section_plan is not None:
             output_stem = section_plan.output_stem
-        target_format = default_target(source, core.scaffold_metadata_files(source, args.metadata_file))
+        source_metadata = core.scaffold_metadata_files(source, args.metadata_file)
+        target_format = default_target(source, source_metadata)
         direct_kind = (core.direct_route(source, target_format, args.from_format, args.no_auto, args.engine)
                        if scaffold_plan is None and section_plan is None and not args.presentation else None)
         if direct_kind is None:
@@ -795,8 +801,11 @@ def run_main() -> None:
                                  "format in the document's own Quarto front matter instead")
             core.BUILD["engine"], core.BUILD["failed"] = None, []
             core.begin_timer()
-            with core.warning_capture() as seen:
+            from pdfmd_crop.build import prepare as prepare_crop
+            with core.warning_capture() as seen, prepare_crop(source, output, [], target_format, args.verbose) as crop:
                 built = core.convert_qmd(source, output, target_format, variables, pandoc_options)
+                if built[1] and crop is not None and (problem := crop()):
+                    built = source, False, problem
             results = [core.finish_build(built, seen, source, [])]
             if results[0][1]:
                 # Front matter only: Quarto has its own metadata system, so no
@@ -805,11 +814,15 @@ def run_main() -> None:
         elif direct_kind is not None:
             core.BUILD["engine"], core.BUILD["failed"] = None, []
             core.begin_timer()
-            with core.warning_capture() as seen:
+            from pdfmd_crop.build import prepare as prepare_crop
+            with core.warning_capture() as seen, prepare_crop(
+                    source, output, source_metadata, target_format, args.verbose) as crop:
                 built = core.convert_direct(direct_kind, source, output, args.engine, args.verbose, args.debug,
                                        apply_defaults=(core.config_options().get("apply-defaults", False) if args.apply_defaults is None
                                                        else args.apply_defaults) not in (False, "false", "False", 0, ""),
                                        metadata_request=args.metadata_file)
+                if built[1] and crop is not None and (problem := crop()):
+                    built = source, False, problem
             results = [core.finish_build(built, seen, source, [])]
             if results[0][1]:
                 core.backup_after_success(source, [], args.backup, args.verbose, args.backup_format)

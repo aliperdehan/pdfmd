@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.34.20 — 2026-11-18
+
+Pre-edit state: commit `eae99ed`. Cropping a source used the picture command's
+temporary PDF and could not be set in the document or via setup. Crop the
+normal build's PDF before recording a successful crop, and keep the previous
+output if cropping fails. Add the layered `crop` setting (off by default), a
+setup row and `--no-crop` to override an inherited setting. Standalone PDFs
+and picture exports keep the picture command. Regressions cover automatic
+source lookup, settings precedence, and preservation of the output and source
+after an out-of-range crop. Checked the Typst PDF route with Pandoc 3.1.3 and
+3.13.
+
 ## v3.34.19 — 2026-11-18
 
 Pre-edit state: commit `9d695ef`. Direct LaTeX compilation ran a fragment

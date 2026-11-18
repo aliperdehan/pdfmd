@@ -53,7 +53,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--emoji-fallback", "--paper")),
     "office": ("Word / OpenDocument output and direct .typ / .html builds", (
         "--check-docx", "--init-reference", "--apply-defaults", "--no-apply-defaults", "--hybrid")),
-    "crop": ("cutting a finished PDF to what it draws", ("--crop", "--crop-pad", "--crop-ignore-bottom", "--crop-page", "--image-dpi", "--image-quality", "--page-folder", "--no-page-folder")),
+    "crop": ("cutting PDF pages to what they draw", ("--crop", "--no-crop", "--crop-pad", "--crop-ignore-bottom", "--crop-page", "--image-dpi", "--image-quality", "--page-folder", "--no-page-folder")),
     "excerpts": ("local source records, citation resolution and detachment", ("--excerpts",)),
     "serve": ("the local server and JSON API behind the web UI (for the Mac app, a browser, or your own tools)", ("--serve", "--api")),
     "cache": ("faster rebuilds", ("--cache", "--cache-location", "--cache-plots", "--clear-cache", "--cache-info", "--no-cache", "--seed-labels", "--seed-calc")),
