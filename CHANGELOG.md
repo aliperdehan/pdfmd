@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.34.22 — 2026-11-18
+
+Pre-edit state: commit `f894974`. A Markdown crop kept the writer's page numbers as ink.
+`pdfmd-options.page-numbers`, `--setup` and `--page-numbers` / `--no-page-numbers` now control
+running page numbers in LaTeX, Typst, Calibre, Word and OpenDocument. LaTeX adds an empty
+page style alongside existing headers, Typst sets its template's numbering to none, and
+Office drops page-number fields. Markdown crops suppress numbering by default. Normal
+builds keep their existing default. The launchpad adds one CLI state line for batch workers.
+Regressions cover header preservation, title pages, Word and OpenDocument fields, crop and
+the CLI override with Pandoc 3.13 and 3.1.3.
+
 ## v3.34.21 — 2026-11-18
 
 Pre-edit state: commit `54095c7`. pdfmd showed American spellings for terminal colour, centred

@@ -78,7 +78,6 @@ wait for an answer before any code.
 - [ ] The post-build step: crop, layout and pictures read `pdfmd-options` at every level (front matter, metadata files, folder layers, config, `--setup` rows, command line) and work on the real output PDF; replaces 3.31.21's re-run of pdfmd in a scratch folder; `default-output` takes a list
 - [ ] Layouts `long` (pages stacked into one tall page, any engine; a seamless tall page via Typst `height: auto`, LaTeX to 16383 pt) and `grid` (fewest columns*width + rows*height), with gap and background, with and without `--crop`
 - [ ] Tools: a fallback chain for the ink box, PNG, SVG (gs, mutool, pdftocairo, pdftoppm, sips, pypdfium2), a tool-path setting, `--doctor` lines; `--install` and `--doctor` bring them from pip, brew, winget (Ghostscript on Windows: `gswin64c`, the installer)
-- [ ] A page-numbers setting (`pdfmd-options: {page-numbers: off}`, a flag and a `--setup` row), written per engine without replacing the document's `header-includes` (LaTeX `\pagestyle{empty}`, Typst `numbering: none`, the built-in renderer, Word); `--crop` of a Markdown source then builds without them
 - [ ] `--image-background`; webp (Pillow, pypdfium2 or ImageMagick); `--to pdf,docx` for formats that are not pictures (a loop of runs)
 - [ ] docx and odt with `--crop`: a lean page of the cropped size, or a document holding the cropped vector or PNG (`lib/pdfmd_office/fragments.py` has the pieces)
 - [ ] The equation popup (Colophon `Pop/`, once eqpop) calls `pdfmd --crop` when it can; its own AppKit crop stays as the fallback

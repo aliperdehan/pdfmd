@@ -73,6 +73,7 @@ UNSET = {
     "options.crop": "off",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
     "options.flavour": "auto: obsidian in a vault, pdfmd elsewhere", "options.embed-px-to-pt": "0.75 (1 CSS pixel)", "options.embed-fit": "text-width", "options.embed-search": "vault", "options.single-newline": "the flavour's: a line break in obsidian (or as the vault says), a space elsewhere", "options.unclosed-comment": "hide in an Obsidian vault (the rest of the note, as Obsidian does), keep elsewhere",
+    "options.page-numbers": "keep the writer's page numbering",
     "options.page-folder": "on", "options.report-build": "route", "options.report-titles": "chapters", "options.strict": "off", "options.build-time": "on", "options.time-format": "auto", "options.build-log": "on", "options.build-log-keep": "5", "options.build-log-max-size": "512 KB", "options.max-asset-mb": "no limit", "options.max-output-mb": "no limit", "options.soffice-timeout": "300 seconds", "options.diagram-timeout": "120 seconds", "options.image-dpi": "192 embedded SVG; 300 exported page", "options.serve-max-request-mb": "100 MB", "options.download-retries": "2 extra tries",
     "options.check-ignore": "none",
     "options.html.standalone": "off (a page fragment)", "options.html.css": "none",
@@ -108,7 +109,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.pandoc-memory", "options.css-scope", "options.indent", "options.paragraph-spacing", "options.bibliography-indent",
-    "options.typst-line-spacing", "options.figure-fit",
+    "options.typst-line-spacing", "options.figure-fit", "options.page-numbers",
     "options.bibliography-line-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
@@ -246,6 +247,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.typst-line-spacing", "Typst line spacing", (("latex", "LaTeX"), ("pandoc", "Pandoc")), "latex",
                "LaTeX's line pitch (the default), or Pandoc's own Typst template spacing without pdfmd's text-edge, leading "
                "or paragraph-spacing rules.", "Every document (global metadata)"),
+        choice("options.page-numbers", "Page numbers", on_off, "",
+               "Keep the writer's numbering by default. Off suppresses it in LaTeX, Typst, Calibre, Word and OpenDocument. "
+               "A Markdown --crop build suppresses it unless you give --page-numbers.", "Every document (global metadata)"),
         choice("options.figure-fit", "Figures that are too tall for the page", (("on", "shrink to fit"), ("off", "keep size")), "on",
                "LaTeX and Typst shrink the images proportionally and keep the full-size caption on the same page. "
                "An image's fit=on or fit=off overrides the document for its figure.", "Every document (global metadata)"),

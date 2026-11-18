@@ -14,6 +14,7 @@ from pathlib import Path
 from pdfmd_report import route, titles
 
 from pdfmd_base import pandoc_run
+from pdfmd_build import page_numbers
 from pdfmd_engines.memory import scoped
 
 
@@ -336,6 +337,7 @@ def run(core, *,
                 if is_tex_target:
                     cmd += code_filter_args(report_no_auto, list(files), metadata_files) + image_filter_args(report_no_auto, list(files), metadata_files)
                     cmd += core.paragraph_spacing_latex_args(list(files), metadata_files)
+                    cmd += page_numbers.arguments(target_format, files[0], metadata_files)
                     hoist_code_header(cmd)
                     keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                 cmd += core.paragraph_spacing_typst_args(files[0], metadata_files, target_format)
@@ -346,6 +348,8 @@ def run(core, *,
                                         target_format, bool(report_office_arguments.filter_arguments),
                                         report_no_auto)
                 cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
+                if target_format == "typst":
+                    cmd += page_numbers.arguments(target_format, files[0], metadata_files)
                 cmd += typst_filter_args(target_format, cmd, pandoc_cwd)
                 from pdfmd_filters.lua import figure_fit_module
                 figure_fit = figure_fit_module()
@@ -493,11 +497,14 @@ def run(core, *,
                     cmd += cellalign_args(files, metadata_files)
                     if engine in LATEX_ENGINES:
                         cmd += code_filter_args(report_no_auto, list(files), metadata_files) + image_filter_args(report_no_auto, list(files), metadata_files)
+                        cmd += page_numbers.arguments(engine, files[0], metadata_files)
                         hoist_code_header(cmd)
                         keep_header_includes(cmd, list(files), metadata_files, pandoc_options, report_header_file)
                     # as for one document (v3.28.2): last, after the LaTeX filter (v3.28.11)
                     cmd += core.paragraph_spacing_typst_args(files[0], metadata_files, engine)
                     report_last = core.deferred("pdfmd_filters.hidden", "finish_args")()
+                    if engine == "typst":
+                        cmd += page_numbers.arguments(engine, files[0], metadata_files)
                     report_last += typst_filter_args(engine, cmd, pandoc_cwd) + weasyprint_math_args(
                         engine, pandoc_options,
                         args.font or document_font_setting("mainfont", list(files), metadata_files, variables),
@@ -531,12 +538,13 @@ def run(core, *,
                             runner = ((lambda command, target: run_office_pandoc(
                                           command, target, office_arguments, pandoc_cwd, args.verbose, prepare_command=measure_command))
                                       if office_arguments.filter_arguments else run_report_pandoc)
-                            result = run_engine_command(cmd, engine, output, runner, report_page, args.verbose)
+                            result = run_engine_command(cmd, engine, output, runner, report_page, args.verbose,
+                                                        numbered=page_numbers.enabled(files[0], metadata_files))
                             office_finish(office_arguments, files[0], args.verbose)
                     else:
                         cmd += report_last
                         result = run_engine_command(cmd, engine, output, run_report_pandoc, report_page,
-                                                    args.verbose)
+                                                    args.verbose, numbered=page_numbers.enabled(files[0], metadata_files))
                 if result.returncode == 0:
                     figure_fit.diagnostics(result.stdout + "\n" + result.stderr, files[0])
                     result.stderr = figure_fit.without_diagnostics(result.stderr)

@@ -18,7 +18,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "output": ("where the result goes, in what format, with which engine", (
         "-o", "-d", "--rewrite", "--no-rewrite", "-e", "--engine-fallback", "-t", "--from", "--flavour", "--unclosed-comment", "--edit", "--init-vscode", "-f", "--editor", "-y", "--metadata-precedence", "--preset", "--presets", "--kit", "--kit-stack", "--kits", "--global-metadata", "-V", "--css", "--css-scope", "--open", "--bopen", "-w", "--keep-aux", "--self-contained",
         "--no-self-contained", "--paper", "--paragraph-spacing", "--pdf-title", "--pdf-subject", "--pdf-author", "--pdf-keywords",
-        "--bookmarks", "--header", "--footer", "--attach-links", "--shrink", "--no-shrink", "--no-citeproc", "--pagecite", "--fullcite-list", "--bibliography-indent", "--bibliography", "--extract", "--text-to-markdown",
+        "--bookmarks", "--header", "--footer", "--page-numbers", "--no-page-numbers", "--attach-links", "--shrink", "--no-shrink", "--no-citeproc", "--pagecite", "--fullcite-list", "--bibliography-indent", "--bibliography", "--extract", "--text-to-markdown",
         "--stylesheet", "--style", "--css-file", "--format", "--page-size", "--orientation", "--border",
         "--border-top", "--border-left", "--border-bottom", "--border-right", "--as-html",
         "--document-title", "--subject", "--author", "--keywords", "--input", "--workers")),
@@ -53,7 +53,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--emoji-fallback", "--paper")),
     "office": ("Word / OpenDocument output and direct .typ / .html builds", (
         "--check-docx", "--init-reference", "--apply-defaults", "--no-apply-defaults", "--hybrid")),
-    "crop": ("cutting PDF pages to what they draw", ("--crop", "--no-crop", "--crop-pad", "--crop-ignore-bottom", "--crop-page", "--image-dpi", "--image-quality", "--page-folder", "--no-page-folder")),
+    "crop": ("cutting PDF pages to what they draw", ("--crop", "--no-crop", "--crop-pad", "--crop-ignore-bottom", "--crop-page", "--image-dpi", "--image-quality", "--page-numbers", "--no-page-numbers", "--page-folder", "--no-page-folder")),
     "excerpts": ("local source records, citation resolution and detachment", ("--excerpts",)),
     "serve": ("the local server and JSON API behind the web UI (for the Mac app, a browser, or your own tools)", ("--serve", "--api")),
     "cache": ("faster rebuilds", ("--cache", "--cache-location", "--cache-plots", "--clear-cache", "--cache-info", "--no-cache", "--seed-labels", "--seed-calc")),

@@ -58,6 +58,11 @@ def picture_build(args, source: Path, scratch: Path) -> tuple[Path | None, str]:
         command.append("--no-crop")
     else:
         command += crop_flags(args)
+    markdown = args.report or source.suffix.lower() in core.MARKDOWN_LIKE_SUFFIXES
+    numbering_variables = ("pagestyle", "page-numbering")
+    explicit_style = any(value.split(":", 1)[0].split("=", 1)[0] in numbering_variables for value in args.variable)
+    if args.crop and markdown and args.page_numbers is None and not explicit_style:
+        command.append("--no-page-numbers")
     done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
     return (built if done.returncode == 0 and built.is_file() else None), done.stderr
 

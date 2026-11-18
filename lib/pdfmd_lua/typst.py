@@ -147,7 +147,10 @@ def template_args(writer: str, command: list[str], directory: Path | None = None
     """A cached template whose default rules yield separately to every custom setting."""
     if writer != "typst" or not command:
         return []
-    if "pdfmd-typst-line-spacing=pandoc" in option_values(command, "--metadata", "-M"):
+    metadata = option_values(command, "--metadata", "-M")
+    spacing = "pdfmd-typst-line-spacing=pandoc" not in metadata
+    unnumbered = "pdfmd-page-numbers=off" in metadata
+    if not (spacing or unnumbered):
         return []
     directory = directory or Path.cwd()
     try:
@@ -168,21 +171,35 @@ def template_args(writer: str, command: list[str], directory: Path | None = None
                                          capture_output=True, check=True,
                                          timeout=core.PROBE_TIMEOUT).stdout.decode("utf-8", errors="replace")
                 template = template.replace("$template.typst()$", partial)
-            original = "leading: linestretch * 0.65em"
-            if original in template:
-                template = template.replace(original, "leading: $pdfmd-typst-leading$, spacing: $pdfmd-typst-spacing$")
-            elif "set par(justify: true)" in template:
-                # Pandoc 3.1.3's conf has no linestretch parameter or leading rule.
-                template = template.replace("set par(justify: true)",
-                                            "set par(justify: true, leading: $pdfmd-typst-leading$, "
-                                            "spacing: $pdfmd-typst-spacing$)")
+            if spacing:
+                original = "leading: linestretch * 0.65em"
+                if original in template:
+                    template = template.replace(original, "leading: $pdfmd-typst-leading$, spacing: $pdfmd-typst-spacing$")
+                elif "set par(justify: true)" in template:
+                    # Pandoc 3.1.3's conf has no linestretch parameter or leading rule.
+                    template = template.replace("set par(justify: true)",
+                                                "set par(justify: true, leading: $pdfmd-typst-leading$, "
+                                                "spacing: $pdfmd-typst-spacing$)")
+                else:
+                    spacing = False
+                    if not unnumbered:
+                        return []
+        if unnumbered:
+            # Newer Pandoc passes this argument to conf; 3.1.3 hard-codes the setting inside conf.
+            template = re.sub(r'^([ \t]*)pagenumbering:[^\n]*\$page-numbering\$[^\n]*,$',
+                              r'\1pagenumbering: none,', template, flags=re.M)
+            if custom is None:
+                template = template.replace('numbering: "1",', 'numbering: none,')
             else:
-                return []
-        template = ('#set text(top-edge: $pdfmd-typst-top-edge$, bottom-edge: "baseline")\n'
-                    '#set par(leading: $pdfmd-typst-leading$, spacing: $pdfmd-typst-spacing$)\n' + template)
+                template = '#set page(numbering: none)\n' + template
+        if spacing:
+            template = ('#set text(top-edge: $pdfmd-typst-top-edge$, bottom-edge: "baseline")\n'
+                        '#set par(leading: $pdfmd-typst-leading$, spacing: $pdfmd-typst-spacing$)\n' + template)
         target = folder / (hashlib.sha256(template.encode()).hexdigest() + ".typ")
         if not target.is_file():
             target.write_text(template, encoding="utf-8")
+        if not spacing:
+            return ["--template", str(target)]
         marker = "pdfmd-typst-template-rules" if custom is not None else "pdfmd-typst-template-default"
         return ["--template", str(target), "-M", marker + "=true"]
     except (OSError, ValueError, subprocess.SubprocessError):

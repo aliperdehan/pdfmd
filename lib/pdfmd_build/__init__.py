@@ -37,6 +37,8 @@ from pdfmd_base import noted, timed
 from pdfmd_base import pandoc_run
 from pdfmd_engines.memory import scoped
 
+from . import page_numbers
+
 
 
 
@@ -67,7 +69,7 @@ WEASYPRINT_CSS_NOISE = re.compile(r"(?m)^WARNING: (?:Ignored `[^`\n]*` at \d+:\d
 @timed(lambda args, kwargs: "pandoc + " + str(kwargs["engine"] if "engine" in kwargs else args[1]))
 @noted(lambda args, kwargs: str(kwargs["engine"] if "engine" in kwargs else args[1]), engine=True)
 def run_engine_command(cmd: list[str], engine: str, output: Path, run_pandoc, page_options,
-                       verbose: bool) -> subprocess.CompletedProcess:
+                       verbose: bool, *, numbered: bool = True) -> subprocess.CompletedProcess:
     """Run one engine's Pandoc command: `run_pandoc(command, target)` as it is, or for "calibre" into an HTML
     page that ebook-convert then prints (`page_options()` gives its paper, margins and language). Pandoc's own
     warnings are kept in the result; WeasyPrint's about the CSS it ignores only with --verbose."""
@@ -88,7 +90,7 @@ def run_engine_command(cmd: list[str], engine: str, output: Path, run_pandoc, pa
         if html is None or result.returncode != 0:
             return result
         printed = (core.run_browser_print(html, output, engine, page_options(), verbose) if engine in core.BROWSER_ENGINES
-                   else core.run_calibre(html, output, page_options(), verbose))
+                   else core.run_calibre(html, output, page_options(), verbose, numbered=numbered))
         return subprocess.CompletedProcess(printed.args, printed.returncode, result.stdout,
                                            (result.stderr or "") + printed.stderr)
 
@@ -613,6 +615,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if is_tex_target:
                     cmd += core.tblr_header_args([md_path, *parts_inputs], metadata_files)
                     cmd += core.code_filter_args(no_auto, [md_path, *parts_inputs], metadata_files) + core.image_filter_args(no_auto, [md_path, *parts_inputs], metadata_files)
+                    cmd += page_numbers.arguments(target_format, md_path, metadata_files)
                     core.hoist_code_header(cmd)
                     core.keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
                 for lua_filter in lua_filters:
@@ -624,6 +627,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                         target_format, bool(office_arguments.filter_arguments), no_auto)
                 cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
                 cmd += core.paragraph_spacing_typst_args(md_path, metadata_files, target_format)
+                if target_format == "typst":
+                    cmd += page_numbers.arguments(target_format, md_path, metadata_files)
                 cmd += core.typst_filter_args(target_format, cmd, pandoc_cwd)
                 cmd += figure_fit.arguments(target_format, md_path, metadata_files)
                 if target_format == "epub" and core.EBOOK_MATH.get("mode") == "text":
@@ -890,6 +895,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if engine in core.LATEX_ENGINES:
                         cmd += core.tblr_header_args([md_path, *parts_inputs], metadata_files)
                         cmd += core.code_filter_args(no_auto, [md_path, *parts_inputs], metadata_files) + core.image_filter_args(no_auto, [md_path, *parts_inputs], metadata_files)
+                        cmd += page_numbers.arguments(engine, md_path, metadata_files)
                         core.hoist_code_header(cmd)
                         core.keep_header_includes(cmd, [md_path], metadata_files, pandoc_options, header_file)
                     for lua_filter in lua_filters:
@@ -898,6 +904,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # label for is a link Typst would stop on; WeasyPrint's math is typeset once its \ce is converted
                     cmd += core.paragraph_spacing_typst_args(md_path, metadata_files, engine)
                     last_filters = core.deferred("pdfmd_filters.hidden", "finish_args")()
+                    if engine == "typst":
+                        cmd += page_numbers.arguments(engine, md_path, metadata_files)
                     last_filters += core.typst_filter_args(engine, cmd, pandoc_cwd) + core.weasyprint_math_args(
                         engine, pandoc_options,
                         selected_font or core.document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables),
@@ -926,7 +934,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                     cmd, engine, output,
                                     lambda command, target: core.run_office_pandoc(command, target, office_arguments,
                                                                               pandoc_cwd, verbose, prepare_command=measure_command),
-                                    page_options, verbose)
+                                    page_options, verbose, numbered=page_numbers.enabled(md_path, metadata_files))
                                 core.office_finish(office_arguments, md_path, verbose)
                                 return answer
                     cmd += last_filters
@@ -937,7 +945,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         core.log_cmd(command, pandoc_cwd, verbose)
                         return pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
                                               env=core.tex_search_env(md_path.parent, pandoc_cwd, md_path))
-                    return run_engine_command(cmd, engine, output, run_pandoc, page_options, verbose)
+                    return run_engine_command(cmd, engine, output, run_pandoc, page_options, verbose,
+                                              numbered=page_numbers.enabled(md_path, metadata_files))
 
                 first_font = core.mainfont_choice([md_path, *parts_inputs], metadata_files, variables, font,
                                              document_font, mainfont_auto, no_auto, note)

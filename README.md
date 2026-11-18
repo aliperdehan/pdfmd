@@ -835,7 +835,7 @@ is for Markdown; the build's own `WARN` and `--strict` still catch what only a b
 pdfmd --crop formula.pdf                          # formula-crop.pdf: every page cut to its ink, 2 pt of room
 pdfmd --crop formula.pdf -o tight.pdf --crop-pad 0
 pdfmd --crop a.pdf b.pdf -o cropped/              # several: -o is a folder
-pdfmd formula.md --crop --crop-ignore-bottom 40   # a Markdown source is built first: formula.pdf, cropped
+pdfmd formula.md --crop                          # a Markdown source is built first: formula.pdf, cropped
 pdfmd formula.md --crop --to png --crop-page 1    # formula.png, the cropped first page, transparent, 300 dpi
 pdfmd formula.pdf --crop --to svg                 # formula.svg
 pdfmd report.pdf --to png                         # no --crop: the whole page(s) as pictures
@@ -852,8 +852,8 @@ stays vector and nothing is redrawn. It is what [eqpop](https://github.com/alipe
 machine that has Ghostscript and pypdf. A rotated page is handled; a page that draws nothing is left as it is, with a NOTE.
 
 - `--crop-pad PT` sets the room around the ink (default 2); `--crop-ignore-bottom PT` leaves the foot of each page out of the
-  measurement (a page number: a pdfmd page carries one, so a formula built from Markdown wants `--crop-ignore-bottom`);
-  `--crop-page N` keeps page N alone.
+  measurement (for example, a page number already in a PDF). `--crop-page N` keeps page N alone.
+  Markdown sources are built with page numbers suppressed for cropping. Give `--page-numbers` to keep the writer's numbering.
 - **Several at once.** `--to png,pdf`, `--to png,docx,tex` (no spaces, or quote the list): pdfmd runs once per format that is not a
   picture (the same command line with that `--to`: a plain `pdf` is an ordinary build, with its stamp and backup, unless `--crop`
   cuts it) and once for the pictures, which are cropped and drawn together. Each result sits beside the others; `-o` is then a

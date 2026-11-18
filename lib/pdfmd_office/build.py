@@ -145,6 +145,16 @@ def office_properties(arguments, md_path: Path, data: dict) -> None:
         return
     context = arguments.context
     if Path(output).suffix.lower() in (".docx", ".odt"):
+        from xml.parsers.expat import ExpatError
+
+        from pdfmd_build import page_numbers
+        from .page_numbers import remove
+
+        if not page_numbers.enabled(md_path, context["metadata_files"]):
+            try:
+                remove(Path(output))
+            except (OSError, zipfile.BadZipFile, ExpatError) as error:
+                print(f"WARN  could not remove page numbers from {Path(output).name} ({error})", file=sys.stderr)
         options = core.office_options(md_path, context["metadata_files"], context["no_auto"])
         replacements = options.get("replace")
         if isinstance(replacements, dict) and any("$" in str(value) for value in replacements.values()):

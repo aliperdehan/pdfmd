@@ -14,6 +14,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import zipfile
 import zlib
 from pathlib import Path
 from unittest import mock
@@ -91,6 +92,102 @@ class TypstLineSpacing(unittest.TestCase):
                 self.assertEqual(pdfmd.paragraph_spacing_typst_args(doc, [meta], "typst"), [])
                 doc.write_text("---\npdfmd-options: {typst-line-spacing: pandoc}\n---\n\nText.\n", encoding="utf-8")
                 self.assertIn("pdfmd-typst-line-spacing=pandoc", pdfmd.paragraph_spacing_typst_args(doc, [meta], "typst"))
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class PageNumbers(unittest.TestCase):
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory(prefix="pdfmd-page-numbers-")
+        self.addCleanup(scratch.cleanup)
+        self.directory = Path(scratch.name)
+        self.source = self.directory / "doc.md"
+
+    def build(self, text, *options, target="pdf"):
+        self.source.write_text(text, encoding="utf-8")
+        output = self.directory / f"result.{target}"
+        done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), str(self.source),
+                               "-o", str(output), "--no-stamp", "--no-backup", "--rewrite", "--no-auto", "crossref", *options],
+                              cwd=self.directory, capture_output=True, encoding="utf-8", timeout=60)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        return output
+
+    def check_pdf_numbering(self, engine, text):
+        try:
+            import pypdf
+        except ImportError:
+            self.skipTest("needs pypdf for PDF text extraction")
+
+        def content(out):
+            pages = pypdf.PdfReader(out).pages
+            self.assertEqual(len(pages), 1)
+            return (pages[0].extract_text() or "").splitlines()
+
+        default = self.build(text, "-e", engine)
+        expected = content(default)
+        self.assertIn("1", expected)
+        off = text.replace("---\n", "---\npdfmd-options: {page-numbers: off}\n", 1)
+        hidden = content(self.build(off, "-e", engine))
+        self.assertIn("Header kept", " ".join(hidden))
+        self.assertEqual(hidden, [line for line in expected if line != "1"])
+        self.assertEqual(content(self.build(off, "-e", engine, "--page-numbers")), expected)
+        self.assertEqual(content(self.build(text, "-e", engine, "--no-page-numbers")), hidden)
+
+    def test_latex_keeps_header_includes_when_it_adds_an_empty_page_style(self):
+        text = ("---\ntitle: Title\nheader-includes: |\n"
+                "  ```{=latex}\n  \\newcommand{\\ownheading}{Header kept}\n  ```\n---\n\n"
+                "`\\ownheading`{=latex}\n")
+        default = self.build(text, "-s", target="tex").read_bytes()
+        self.assertEqual(self.build(text, "-s", "--page-numbers", target="tex").read_bytes(), default)
+        disabled = self.build(text, "-s", "--no-page-numbers", target="tex").read_text(encoding="utf-8")
+        self.assertIn(r"\newcommand{\ownheading}{Header kept}", disabled)
+        self.assertIn(r"\pagestyle{empty}", disabled)
+        self.assertIn(r"\let\ps@plain\ps@empty", disabled)
+
+    @unittest.skipUnless(TYPST, "needs Typst")
+    def test_typst_title_page_and_header_includes(self):
+        self.check_pdf_numbering("typst", "---\ntitle: Title\npage-numbering: '1'\nheader-includes: |\n"
+                                 "  ```{=typst}\n  #let ownheading = [Header kept]\n  ```\n---\n\n"
+                                 "`#ownheading`{=typst}\n")
+
+    def test_word_removes_only_page_number_fields(self):
+        text = """```{=openxml}
+<w:p>
+<w:r><w:t>Footer kept</w:t></w:r>
+<w:fldSimple w:instr=" NUMPAGES "><w:r><w:t>Total kept</w:t></w:r></w:fldSimple>
+<w:fldSimple w:instr=" PAGE "><w:r><w:t>Simple removed</w:t></w:r></w:fldSimple>
+<w:r><w:fldChar w:fldCharType="begin"/><w:instrText> PA</w:instrText></w:r>
+<w:r><w:instrText>GE </w:instrText><w:fldChar w:fldCharType="separate"/></w:r>
+<w:r><w:t>Complex removed</w:t><w:fldChar w:fldCharType="end"/><w:t>After kept</w:t></w:r>
+</w:p>
+```
+"""
+        for flags in ((), ("--no-page-numbers",)):
+            output = self.build(text, "--from", "markdown", *flags, target="docx")
+            with zipfile.ZipFile(output) as archive:
+                document = archive.read("word/document.xml").decode("utf-8")
+            for kept in ("Footer kept", "Total kept", "After kept"):
+                self.assertIn(kept, document)
+            self.assertEqual("Simple removed" in document, not flags)
+            self.assertEqual("Complex removed" in document, not flags)
+
+    def test_opendocument_removes_the_page_number_field(self):
+        text = ('---\npdfmd-options: {odt: {engine: pandoc}}\n---\n\n'
+                '```{=opendocument}\n<text:p>Footer kept '
+                '<text:page-number text:select-page="current">Number removed</text:page-number>'
+                '</text:p>\n```\n')
+        for flags in ((), ("--no-page-numbers",)):
+            output = self.build(text, "--from", "markdown", *flags, target="odt")
+            with zipfile.ZipFile(output) as archive:
+                document = archive.read("content.xml").decode("utf-8")
+            self.assertIn("Footer kept", document)
+            self.assertEqual("Number removed" in document, not flags)
+
+    def test_typst_spacing_opt_out_works_with_page_numbers_off(self):
+        text = "---\npdfmd-options: {typst-line-spacing: pandoc}\npage-numbering: '1'\n---\n\nText."
+        output = self.build(text, "-s", "--no-page-numbers", target="typ")
+        source = output.read_text(encoding="utf-8")
+        self.assertRegex(source, r"(?m)^ +(?:page)?numbering: none,")
+        self.assertNotIn("bottom-edge:", source)
 
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")

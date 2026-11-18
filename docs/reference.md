@@ -448,6 +448,16 @@ value) always means the full, unrestricted fallback chain, overriding
 even a family restriction from either source -- the escape hatch when a
 family-restricted document needs output produced at all costs.
 
+**Page numbers.** `pdfmd-options: {page-numbers: off}` suppresses running page numbers in LaTeX, Pandoc's Typst template and Calibre.
+Word and OpenDocument output omit page-number fields, keeping the rest of their headers and footers. The built-in
+inkmd renderer already has no page numbers. The default keeps the writer's numbering. Set this in front matter,
+a metadata file or `--setup`. Use `--no-page-numbers` or `--page-numbers` to override the setting for one run.
+LaTeX and Typst keep the document's `header-includes`. Custom Typst templates can set their own page style.
+
+`--crop` of a Markdown source suppresses page numbers for the intermediate build; `--page-numbers` keeps the
+writer's numbering. A command-line `-V pagestyle=…` or `-V page-numbering=…` also keeps the writer's page style.
+To exclude part of a page already in a PDF, use `--crop-ignore-bottom PT`.
+
 Calibre (v3.28.0) is an engine when named: `-e calibre` (or `ebook-convert`, or `pdf-engine: calibre`); with no engine
 named (v3.29.1) it, and the browsers (headless Chrome, Chromium, Edge, Brave), are last resorts after the numbered
 engines and before LibreOffice (automatic_engines).

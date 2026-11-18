@@ -44,6 +44,10 @@ With `--no-citeproc`, native Typst omits an uncited bibliography and its heading
 `full-bibliography: true` requests uncited entries. Cited lists keep Typst's automatic title; `reference-section-title`
 names the citeproc list.
 
+Use `--no-page-numbers` to suppress a writer's running page numbers for one build, or set
+`pdfmd-options: {page-numbers: off}` in the document. Cropping Markdown already suppresses them.
+Use `--page-numbers` when a cropped result should keep them.
+
 ## Reading what pdfmd says
 
 - Every line begins with a word: `OK`, `FAIL`, `WARN`, `NOTE`, `NATIVE`, `FOUND`, `DEFAULTS`, `AUTO`. A document built is

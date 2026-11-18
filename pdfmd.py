@@ -47,7 +47,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.34.21"
+PDFMD_VERSION = "3.34.22"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
@@ -645,6 +645,7 @@ POLISH_CLI: dict = {}
 
 # --paper, also used by the native renderers
 PAPER_CLI: str | None = None
+PAGE_NUMBERS_CLI: bool | None = None
 
 # inkmd's own compile options, from the command line
 INKMD_CLI: dict = {}

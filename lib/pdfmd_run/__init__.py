@@ -215,6 +215,7 @@ def run_main() -> None:
         first_input = Path(first_input) / "x.md"
     core.PATH_STYLE, core.PATH_UP = core.path_style_settings(args.path_style, args.path_up, first_input, args.verbose)
     core.CITEPROC_DISABLED = args.no_citeproc
+    core.PAGE_NUMBERS_CLI = args.page_numbers
     # A CLI switch only: the document's own `pdfmd-options: no-auto` cannot
     # turn off the lookup that is still busy finding that document.
     core.FUZZY_LOOKUP = not core.auto_disabled(args.no_auto, "lookup")

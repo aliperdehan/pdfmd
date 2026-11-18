@@ -1322,11 +1322,11 @@ def report_messages(engine: str, messages: list[str], source: Path) -> None:
         native_note(engine, message + (f" (x{times})" if times > 1 else ""), source)
 
 
-def render_native(engine: str, md_path: Path, source: NativeSource, output: Path, verbose: bool) -> list[str]:
+def render_native(engine: str, md_path: Path, source: NativeSource, output: Path, verbose: bool, *, numbered: bool = True) -> list[str]:
     """Render one normalised document with one native engine, or raise.
     Returns the renderer's own warnings, for the caller to report."""
     if engine == "calibre":
-        return render_calibre_markdown(md_path, source, output, verbose)
+        return render_calibre_markdown(md_path, source, output, verbose, numbered=numbered)
     if engine == "inkmd":
         ink = load_inkmd()
         paper, landscape, _ = native_page(source.metadata)
@@ -1414,7 +1414,7 @@ def calibre_resource_paths(text: str, base: Path, scratch: Path) -> str:
     return "".join(pieces)
 
 
-def render_calibre_markdown(md_path: Path, source: NativeSource, output: Path, verbose: bool) -> list[str]:
+def render_calibre_markdown(md_path: Path, source: NativeSource, output: Path, verbose: bool, *, numbered: bool = True) -> list[str]:
     """Print a normalised Markdown document with Calibre's own Markdown reader (v3.29.1): `ebook-convert` of the text written
     to a scratch folder, with the title and author recorded and the paper of the document. Raises when it fails."""
     binary = core.resolve_calibre()
@@ -1428,6 +1428,8 @@ def render_calibre_markdown(md_path: Path, source: NativeSource, output: Path, v
         css = scratch / "pdfmd-calibre.css"
         css.write_text(core.CALIBRE_CSS, encoding="utf-8")
         options = list(core.CALIBRE_OPTIONS)
+        if not numbered:
+            options.remove("--pdf-page-numbers")
         del options[options.index("--max-levels"):options.index("--max-levels") + 2]       # an option of the HTML reader only
         cmd = [binary, str(page), str(produced), *options, "--extra-css", str(css),
                "--markdown-extensions", CALIBRE_MARKDOWN_EXTENSIONS, "--input-encoding", "utf-8",
@@ -1480,11 +1482,14 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
                                              md_path.resolve().parent, md_path)
     finally:
         NATIVE_NOTED = None
+    from pdfmd_build import page_numbers
+
+    numbered = page_numbers.enabled(md_path, metadata_files)
     order = native_order(engines, prepared[engines[0]][0])
     for position, engine in enumerate(order):
         source, counts = prepared[engine]
         try:
-            messages = render_native(engine, md_path, source, output, verbose)
+            messages = render_native(engine, md_path, source, output, verbose, numbered=numbered)
         except Exception as error:  # noqa: BLE001 -- try the next renderer, report them all
             if debug:
                 import traceback

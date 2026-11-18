@@ -633,6 +633,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "also pdfmd-options: {image-dpi: N} and --setup")
     parser.add_argument("--image-quality", type=int, default=None, metavar="1-100",
                         help="with --to jpg: the JPEG quality (default 90)")
+    parser.add_argument("--page-numbers", action=argparse.BooleanOptionalAction, default=None,
+                        help="keep the writer's page numbering (the default), or suppress it with --no-page-numbers. "
+                             "Also pdfmd-options: {page-numbers: off} and --setup. A Markdown --crop build suppresses "
+                             "page numbers unless --page-numbers is given")
     parser.add_argument("--page-folder", action=argparse.BooleanOptionalAction, default=None,
                         help="with a picture target of several pages: put them in a folder NAME/ (001.png ...; the default) "
                              "or, with --no-page-folder, beside the document as NAME-001.png ... (also `pdfmd-options: "

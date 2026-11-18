@@ -341,6 +341,15 @@ class Pictures(unittest.TestCase):
     def test_a_dpi_without_a_picture_is_refused(self):
         self.assertNotEqual(self.run_pdfmd("formula.pdf", "--image-dpi", "100").returncode, 0)
 
+    @unittest.skipUnless(shutil.which("pandoc") and shutil.which("typst"), "needs Pandoc and Typst")
+    def test_markdown_crop_ignores_the_engine_number_unless_requested(self):
+        (self.dir / "note.md").write_text("---\npage-numbering: '1'\n---\n\nOne synthetic line.\n", encoding="utf-8")
+        for flags in ((), ("--page-numbers",), ("-V", "page-numbering=1")):
+            done = self.run_pdfmd("note.md", "-e", "typst", "--crop", *flags)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            _, bottom, _, top = media(self.dir / "note.pdf")
+            self.assertEqual(top - bottom > 100, bool(flags))
+
     def test_a_markdown_source_is_built_then_cropped(self):
         # no Pandoc on the path: the built-in renderer makes the PDF, so the test needs no engine
         (self.dir / "note.md").write_text("# Title\n\nA line of text.\n", encoding="utf-8")

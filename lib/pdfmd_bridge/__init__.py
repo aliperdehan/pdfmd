@@ -274,7 +274,7 @@ def calibre_page_options(md_path: Path, metadata_files: list[Path], variables: l
 
 
 @timed("calibre")
-def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool) -> subprocess.CompletedProcess:
+def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool, *, numbered: bool = True) -> subprocess.CompletedProcess:
     """`ebook-convert` the HTML page into `output` (written beside the page first, so a failed run leaves no
     half-written PDF). Qt runs offscreen on macOS and Linux: no window, and no display needed on a server."""
     binary = core.resolve_calibre()
@@ -284,7 +284,8 @@ def run_calibre(html: Path, output: Path, page_options: list[str], verbose: bool
     head = html.read_text(encoding="utf-8", errors="replace").split("</head>", 1)[0]
     css.write_text(core.CALIBRE_CSS + (CALIBRE_TABLE_CSS if PANDOC_TABLE_STYLE_RE.search(head) else ""), encoding="utf-8")
     produced = html.with_name("document.pdf")
-    cmd = [binary, str(html), str(produced), *core.CALIBRE_OPTIONS, "--extra-css", str(css), *page_options]
+    options = [item for item in core.CALIBRE_OPTIONS if numbered or item != "--pdf-page-numbers"]
+    cmd = [binary, str(html), str(produced), *options, "--extra-css", str(css), *page_options]
     environment = dict(os.environ)
     if sys.platform != "win32":
         environment.setdefault("QT_QPA_PLATFORM", "offscreen")
