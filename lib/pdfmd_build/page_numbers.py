@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from pdfmd_base import atomic_write_text, core
+from pdfmd_base import atomic_write_text
+from pdfmd_base import core
 
 
 def enabled(source: Path, metadata: list[Path]) -> bool:
