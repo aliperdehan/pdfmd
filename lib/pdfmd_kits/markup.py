@@ -17,7 +17,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from pdfmd_base import core, spelling
+from pdfmd_base import core
+from pdfmd_base import spelling
 
 _TOLD: set[tuple[str, str]] = set()          # (what, where) already said: the list is worked out more than once a build
 

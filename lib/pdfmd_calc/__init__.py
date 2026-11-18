@@ -9,7 +9,8 @@ import os
 import re
 from pathlib import Path
 
-from pdfmd_base import core, spelling
+from pdfmd_base import core
+from pdfmd_base import spelling
 
 
 CALC_DIV_RE = re.compile(r"^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)", re.MULTILINE)

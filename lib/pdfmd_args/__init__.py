@@ -26,7 +26,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from pdfmd_base import core, spelling
+from pdfmd_base import core
+from pdfmd_base import spelling
 
 
 PASS_THROUGH = ("--bibliography",)      # Pandoc's options that are a unique start of a pdfmd one (tests/test_bibliography_indent.py)

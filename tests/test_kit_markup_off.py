@@ -138,7 +138,7 @@ class Builds(unittest.TestCase):
         self.assertEqual(kinds, ["toc"])
         self.kit("markup-off: [landscape]\n", "pdfmd-options:\n  markup: [center, landscape]\n")
         kinds, _ = self.kinds("pdfmd-options: {kit: house}")
-        self.assertEqual(kinds, ["center"])
+        self.assertEqual(kinds, ["centre"])
 
     def test_a_word_that_is_not_a_kind_warns_once_naming_the_kit(self):
         self.kit("markup-off: [landscape, comments]\n")

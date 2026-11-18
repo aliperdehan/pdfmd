@@ -7,7 +7,8 @@ import hashlib
 import sys
 from pathlib import Path
 
-from pdfmd_base import core, spelling
+from pdfmd_base import core
+from pdfmd_base import spelling
 
 
 try:

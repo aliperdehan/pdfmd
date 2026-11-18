@@ -6,7 +6,8 @@ from functools import lru_cache
 import os
 import re
 import sys
-from pdfmd_base import core, spelling
+from pdfmd_base import core
+from pdfmd_base import spelling
 
 
 def frontmatter_no_auto(md_path: Path) -> list[str] | None:

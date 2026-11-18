@@ -47,6 +47,8 @@ Both spellings work without a warning, including older settings and centred divs
 alignment already accepts both forms. Pandoc variables and the writers' own syntax keep their
 respective spellings. Added regressions for CLI actions, the option inventory, setup, calculator
 alignment, SMILES and centred HTML output.
+Fix before release: Restore standalone shared-core imports and check that the kit's
+`center` alias produces the canonical `centre` kind.
 
 ## v3.34.20 — 2026-11-18
 
