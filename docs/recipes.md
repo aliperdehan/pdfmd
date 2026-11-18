@@ -181,7 +181,7 @@ pdfmd --view --no-pager --width 80 report
 
 `--view` builds the document as usual (metadata, filters, citations, math as text) and shows it instead of making a
 file: bold, italic and code in colour, box-drawn tables wrapped to the window, lists, quotes, footnotes. The output stays
-styled when piped into `less -R`; `NO_COLOR` or `--color never` takes the styling away. `--to ansi` writes the same text to a
+styled when piped into `less -R`; `NO_COLOR` or `--colour never` takes the styling away. `--to ansi` writes the same text to a
 file (`report.ansi`), and `-o -` sends any format to standard output. Cells that span columns or rows are drawn across them,
 fenced code in a known language is coloured (python, bash, json, yaml, c, cpp, java, javascript, rust, go), and a `$$..$$` formula
 with a fraction, root, sum, product, integral or limit is stacked on several rows. The pager is `$PDFMD_PAGER`, else `$PAGER`, else
@@ -234,7 +234,7 @@ gives "Since 20 years have passed, the angle is 0.5.", the two lines with 20.60 
   gives the whole div the document's own. `indent=2em` on the div wins, and a nested `::: indent` or `::: noindent` div sets the
   paragraphs inside it. Both classes together: `::: {.calc .noindent}`; `::: calc noindent` is not a div.
 - A `::: calc` div has `0.75em` of room above and below it (LaTeX, Typst and HTML; `calc: {space: 6pt}`, `--calc-space off` for none) and
-  its lines flush left (`calc: {align: center}` or `--calc-align center` centres them). The room joins the paragraph spacing around it
+  its lines flush left (`calc: {align: centre}` or `--calc-align centre` centres them). The room joins the paragraph spacing around it
   instead of adding to it, so two calc divs in a row are not twice as far apart.
 - `calc: {typeset: true}` (`--calc-typeset`) prints the calculation lines as formulas: `c_s` becomes c with a subscript s, `*` a centred dot, the
   label before the first name and the unit after the value stay text. LaTeX, Typst, HTML, Word and OpenDocument; the plain-text writers keep the text.

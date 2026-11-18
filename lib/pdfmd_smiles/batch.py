@@ -91,10 +91,11 @@ def draw_one(item: dict, base: dict, cache: Path, target: str) -> dict:
         raise SmilesError("the block holds no structure")
     fmt = choose_format(target, settings)
     rdkit, Chem, rdMolDraw2D = _rdkit()
+    # Keep the previous cache identity for the coloured palette.
     key = hashlib.sha1(json.dumps({"v": VERSION, "engine": "rdkit", "engine-version": rdkit.__version__, "kind": kind,
                                    "molecules": molecules, "format": fmt, "cell": [settings["cell-width"], settings["cell-height"]],
                                    "per-row": settings["per-row"], "dpi": settings["dpi"],
-                                   "bond-length": settings["bond-length"], "palette": settings["palette"]},
+                                   "bond-length": settings["bond-length"], "palette": "bw" if settings["palette"] == "bw" else "color"},
                                   sort_keys=True).encode("utf-8")).hexdigest()[:24]
     count = len(molecules)
     columns = min(count, settings["per-row"])
@@ -116,7 +117,7 @@ def draw_one(item: dict, base: dict, cache: Path, target: str) -> dict:
     drawer.drawOptions().clearBackground = False
     drawer.drawOptions().fixedBondLength = settings["bond-length"] * (settings["dpi"] / 96.0 if fmt == "png" else 1)
     if settings["palette"] == "bw":
-        drawer.drawOptions().useBWAtomPalette()                  # RDKit's own atom colours are the `color` palette (the default)
+        drawer.drawOptions().useBWAtomPalette()                  # RDKit's own atom colours are the `colour` palette (the default)
     drawer.DrawMolecules(mols, legends=legends)
     drawer.FinishDrawing()
     data = drawer.GetDrawingText()

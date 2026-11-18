@@ -30,6 +30,57 @@ def template_has(writer: str, *variables: str) -> bool:
     return all(variable in text for variable in variables)
 
 
+class PdfmdSpellings(unittest.TestCase):
+    def test_flags_are_british_first_and_aliases_share_an_action(self):
+        from pdfmd_help import topics_of
+
+        parser = pdfmd.build_parser()
+        for british, american, value in (("--colour", "--color", "never"), ("--flavour", "--flavor", "pandoc")):
+            with self.subTest(flag=british):
+                action = parser._option_string_actions[american]
+                self.assertEqual(action.option_strings[0], british)
+                self.assertIs(parser._option_string_actions[british], action)
+                self.assertTrue(topics_of(action))
+                self.assertEqual(parser.parse_args([british, value]), parser.parse_args([american, value]))
+
+    def test_the_old_colour_abbreviation_still_works(self):
+        parser = pdfmd.build_parser()
+        self.assertEqual(parser.parse_args(["--colo=never"]), parser.parse_args(["--color=never"]))
+
+    def test_inventory_and_setup_choices_cover_the_spelling_pairs(self):
+        from pdfmd_base.spelling import ALIASES, spellings
+        from pdfmd_setup import inventory, registry
+
+        flags = pdfmd.build_parser()._option_string_actions
+        rows = registry.settings_for(())
+        for american, british in ALIASES.items():
+            if "--" + american in flags or "--" + british in flags:
+                self.assertEqual(flags["--" + british].option_strings,
+                                 ["--" + name for name in spellings(british)])
+            if american in inventory.OPTIONS or british in inventory.OPTIONS:
+                self.assertEqual(inventory.OPTIONS[american], inventory.OPTIONS[british])
+            for row in rows:
+                with self.subTest(row=row.key, spelling=american):
+                    self.assertNotIn(american, dict(row.choices))
+
+    def test_values_and_setup_show_the_same_british_spelling(self):
+        from pdfmd_setup import registry
+        from pdfmd_smiles import resolve
+        from pdfmd_tables.settings import CELL_ALIGN_WORDS
+
+        self.assertEqual(pdfmd.markup_value([" Center ", "centre"]), ["centre"])
+        parser = pdfmd.build_parser()
+        for spelling in ("center", "centre"):
+            self.assertEqual(parser.parse_args(["--calc-align", spelling]).calc_align, "centre")
+            self.assertEqual(CELL_ALIGN_WORDS[spelling], "c")
+        self.assertEqual(resolve({"palette": "color"}), resolve({"palette": "colour"}))
+        row = next(row for row in registry.settings_for(()) if row.key == "options.flavour")
+        stores = {"config": {"options": {"flavor": "pandoc"}}}
+        self.assertEqual(registry.read(stores, row), "pandoc")
+        registry.write(stores, row, None)
+        self.assertIsNone(registry.read(stores, row))
+
+
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Spellings(unittest.TestCase):
     def setUp(self):
@@ -54,6 +105,18 @@ class Spellings(unittest.TestCase):
                               check=False, cwd=self.root, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         return out.read_text(encoding="utf-8"), done.stdout + done.stderr
+
+    def test_both_markup_setting_and_fenced_div_spellings(self):
+        for spelling in ("centre", "center"):
+            self.write("metadata.yaml", "pdfmd-options: {flavor: pandoc, markup: " + spelling + "}\n")
+            source = self.write("d.md", "::: " + spelling + "\nCentred text\n:::\n")
+            out = self.root / "out.html"
+            done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), str(source), "-o", str(out),
+                                   "--rewrite", "--no-stamp", "--no-backup"],
+                                  cwd=self.root, env=self.env, capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn('style="text-align: center"', out.read_text(encoding="utf-8"))
+            self.assertNotIn("not a kind of universal markup", done.stderr)
 
     def test_front_matter_latex_hypersetup(self):
         text, _ = self.build("colourlinks: true\nlinkcolour: red\nurlcolour: blue\n")

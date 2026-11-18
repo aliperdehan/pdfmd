@@ -41,7 +41,7 @@ class Preset(NamedTuple):
     newline: str = "soft"
 
 
-OWN_SYNTAX = "callouts toc center highlight underline keep landscape appendix fullcite pagecite excerpts"      # `space` stays off: a lone <br> is often just a blank line
+OWN_SYNTAX = "callouts toc centre highlight underline keep landscape appendix fullcite pagecite excerpts"      # `space` stays off: a lone <br> is often just a blank line
 
 PRESETS: dict[str, Preset] = {
     "pandoc": Preset("default", False, "keep"),

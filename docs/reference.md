@@ -1325,7 +1325,7 @@ v3.25.1: the data may be written inside the div, in a fenced code block
 when both are there. The delimiter is a character or its name (`comma`,
 `semicolon`, `tab`, `pipe`, `space`, `colon`), else the extension's, else
 guessed from the first line (, ; tab |). Alignment: `align="lcr"` or
-`align="left,center,right"`, or a second row of `---`, `:--`, `:-:`, `--:` (a
+`align="left,centre,right"`, or a second row of `---`, `:--`, `:-:`, `--:` (a
 separator row, as in a pipe table; the attribute wins; `separator="none"`
 keeps such a row as data). `widths="5,1,1"` gives relative column widths,
 and `widths="30%,60%"` gives shares of the text width. A wrong count emits
@@ -1604,7 +1604,7 @@ one SMILES per line (a name after it is written under it), or a molfile, SD file
 beside the document. It is drawn with RDKit (pdfmd_smiles; one call per document, pictures kept by content, engine and
 settings) as a PDF for LaTeX, an SVG for HTML and Typst, a PNG for Word and OpenDocument (`office-format: svg` for SVG), an
 SVG beside flat Markdown, a figure when it has a caption (`{#fig:id}` works with pandoc-crossref). The settings are
-`pdfmd-options.smiles` (engine, format, office-format, palette, cell-width, cell-height, per-row, bond-length, dpi), each also an
+`pdfmd-options.smiles` (engine, format, office-format, palette (`colour` or `bw`), cell-width, cell-height, per-row, bond-length, dpi), each also an
 attribute of the block; `--no-auto smiles` leaves the blocks as code. Chemfig and Indigo as engines are to follow.
 
 `pdfmd --init [TEMPLATE] [NAME]` (v3.26.17) starts a document from a template (pdfmd_templates: article, report, notes,

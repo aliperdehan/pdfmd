@@ -16,7 +16,7 @@ import sys
 # topic -> (what it covers, option strings; a short form or any alias of an option names it)
 TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "output": ("where the result goes, in what format, with which engine", (
-        "-o", "-d", "--rewrite", "--no-rewrite", "-e", "--engine-fallback", "-t", "--from", "--flavour", "--flavor", "--unclosed-comment", "--edit", "--init-vscode", "-f", "--editor", "-y", "--metadata-precedence", "--preset", "--presets", "--kit", "--kit-stack", "--kits", "--global-metadata", "-V", "--css", "--css-scope", "--open", "--bopen", "-w", "--keep-aux", "--self-contained",
+        "-o", "-d", "--rewrite", "--no-rewrite", "-e", "--engine-fallback", "-t", "--from", "--flavour", "--unclosed-comment", "--edit", "--init-vscode", "-f", "--editor", "-y", "--metadata-precedence", "--preset", "--presets", "--kit", "--kit-stack", "--kits", "--global-metadata", "-V", "--css", "--css-scope", "--open", "--bopen", "-w", "--keep-aux", "--self-contained",
         "--no-self-contained", "--paper", "--paragraph-spacing", "--pdf-title", "--pdf-subject", "--pdf-author", "--pdf-keywords",
         "--bookmarks", "--header", "--footer", "--attach-links", "--shrink", "--no-shrink", "--no-citeproc", "--pagecite", "--fullcite-list", "--bibliography-indent", "--bibliography", "--extract", "--text-to-markdown",
         "--stylesheet", "--style", "--css-file", "--format", "--page-size", "--orientation", "--border",
@@ -45,7 +45,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "markdown": ("plain Markdown, text and ASCII output (--to gfm, txt, ascii), and Markdown that carries its source", (
         "--gfm-scripts", "--gfm-math", "--ascii-missing", "--keep-source", "--no-keep-source", "--restore", "--list")),
     "view": ("reading a document in the terminal: styled text, tables, math as text (--view, --to ansi)", (
-        "--view", "--pager", "--color", "--width")),
+        "--view", "--pager", "--colour", "--width")),
     "fonts": ("scripts, fonts, emoji, transliteration", (
         "--fallback", "--missing", "--check-fonts", "--translit", "--emoji-fallback", "-f")),
     "builtin": ("the built-in renderer used when there is no Pandoc or PDF engine", (

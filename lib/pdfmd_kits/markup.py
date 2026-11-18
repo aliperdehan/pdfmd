@@ -17,7 +17,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from pdfmd_base import core
+from pdfmd_base import core, spelling
 
 _TOLD: set[tuple[str, str]] = set()          # (what, where) already said: the list is worked out more than once a build
 
@@ -46,7 +46,8 @@ def kit_markup_off(md_path: Path, metadata_files: list[Path], kinds: list[str]) 
     """``kinds`` without the words of the chosen kits' `markup-off:`, unless a place above the kit set `markup` itself."""
     words: list[str] = []
     for item in core.active_kits(md_path, metadata_files, None):
-        for word in item.kit.markup_off:
+        for name in item.kit.markup_off:
+            word = spelling.british(name)
             if word in core.MARKUP_KINDS:
                 if word not in words:
                     words.append(word)

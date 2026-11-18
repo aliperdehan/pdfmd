@@ -9,7 +9,7 @@ import os
 import re
 from pathlib import Path
 
-from pdfmd_base import core
+from pdfmd_base import core, spelling
 
 
 CALC_DIV_RE = re.compile(r"^[ \t]*:{3,}[ \t]*(?:calc\b|\{[^}\n]*\.calc\b)", re.MULTILINE)
@@ -55,7 +55,7 @@ CALC_SPACE_DEFAULT = "0.75em"
 CALC_SPACE_RE = re.compile(r"^(?:\d+\.?\d*|\.\d+)(?:pt|mm|cm|in|em)$")
 
 
-CALC_ALIGNS = ("left", "center")
+CALC_ALIGNS = ("left", "centre")
 
 
 CALC_TYPESETS = ("off", "inline", "display")
@@ -198,13 +198,13 @@ def calc_space(md_path: Path, metadata_files: list[Path]) -> str | None:
 
 
 def calc_align(md_path: Path, metadata_files: list[Path]) -> str:
-    """`calc: {align: center}` centres the lines of a `::: calc` div; left (the default) leaves them flush left."""
+    """`calc: {align: centre}` centres the lines of a `::: calc` div; left (the default) leaves them flush left."""
     value = os.environ.get(CALC_ALIGN_ENV)
     if value is None:
         value = calc_option(md_path, metadata_files, "align")
-    text = str(value).strip().lower() if value is not None else "left"
+    text = spelling.british(str(value).strip().casefold()) if value is not None else "left"
     if text not in CALC_ALIGNS:
-        raise SystemExit(f"{core.display_path(md_path)}: pdfmd-options.calc.align must be left or center, not {value!r}")
+        raise SystemExit(f"{core.display_path(md_path)}: pdfmd-options.calc.align must be left or centre, not {value!r}")
     return text
 
 

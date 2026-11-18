@@ -6,7 +6,7 @@ from functools import lru_cache
 import os
 import re
 import sys
-from pdfmd_base import core
+from pdfmd_base import core, spelling
 
 
 def frontmatter_no_auto(md_path: Path) -> list[str] | None:
@@ -461,6 +461,7 @@ def first_pdfmd_option(md_path: Path, metadata_files: list[Path], *names: str, w
     """The value of the first of ``names`` that the document's own pdfmd-options, then its metadata files' (the later
     first, metadata_files_by_priority), then the config file's set; None if none does. A mapping is merged field by field with the mappings set below it
     (the first place to set a field wins, v3.27.1), down to a place that sets the key to something else."""
+    names = tuple(alias for name in names for alias in spelling.spellings(name))
     found: list[dict] = []
     for _, options in option_sources(md_path, metadata_files, with_config):
         for name in names:

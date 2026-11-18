@@ -1322,7 +1322,7 @@ pdfmd-options:
     noindent: lines   # the calculation lines of a ::: calc div have no first-line indent, its prose keeps the document's;
                       # true: no paragraph of the div is indented; false: the whole div gets the document's
     space: 0.75em     # room above and below a ::: calc div (pt, mm, cm, in, em); off for none
-    align: left       # or center: the lines of a ::: calc div centred
+    align: left       # or centre: the lines of a ::: calc div centred
     constants:        # a CSV of named values (name,value[,digits[,note]]), see 6
     export:           # a CSV the names are written to after a build (name,value,digits), the mirror of constants
 ```
@@ -1398,8 +1398,8 @@ Pandoc's AST; `--to ansi` writes the result to a file, `--view` to the screen). 
 document, a metadata file or the config, or a row in `pdfmd --setup`; the environment variables win over it), else `less -FRX`
 (it quits at once when the text fits the screen); `--no-pager`, `pdfmd-options: {pager: false}` or a row in `pdfmd --setup` turns
 the pager off. The styling is kept when the output is piped
-(`pdfmd --view x.md | less -R`) and removed by `--color never` or the `NO_COLOR` variable; `-o -` into a pipe is plain unless
-`--color always`. A link is `words (address)`, or a clickable link in a terminal that draws them (iTerm2, WezTerm, Ghostty,
+(`pdfmd --view x.md | less -R`) and removed by `--colour never` or the `NO_COLOR` variable; `-o -` into a pipe is plain unless
+`--colour always`. A link is `words (address)`, or a clickable link in a terminal that draws them (iTerm2, WezTerm, Ghostty,
 VS Code) when the text is not paged. The notes of the build (`OK`, `DEFAULTS`) stay off the screen unless it failed or you
 gave `--verbose`; everything else a build prints goes to standard error, so standard output is the document and nothing
 else. `--view -o x.ansi` saves the file and shows nothing; `--view` with another `--to` is refused.
@@ -2265,7 +2265,7 @@ Water,18.015,1.20
   `pdfmd-options: {csv: {delimiter: semicolon}}` for every table; without one it is guessed: whichever of `,` `;` tab `|`
   splits the first lines into the same number of fields (the extension's own, comma or tab for `.tsv`, on a tie). When
   the guess is not what the file's name says (a `;` file named `.csv`), the build warns and says how to name it.
-- Columns are aligned with `align="lcr"` (or `align="left,center,right"`), or by a second row in the data made of
+- Columns are aligned with `align="lcr"` (or `align="left,centre,right"`), or by a second row in the data made of
   `---`, `:--`, `:-:`, `--:` as in a pipe table; `align=` wins. If such a row is really data, say `separator="none"`.
   `widths="5,1,1"` sets relative widths, and a second row with unequal dashes does too. Use `*` in `widths=` to size a
   column by its content. A wrong count gives one warning, ignores surplus widths and sizes the omitted columns by
@@ -2503,7 +2503,7 @@ drawn yet. The Markdown writers write the line back. The native (no-Pandoc) rend
 
 ```yaml
 pdfmd-options:
-  table-align: right          # left, center, right: every cell with nothing more specific (default: the column's own)
+  table-align: right          # left, centre, right: every cell with nothing more specific (default: the column's own)
   table-valign: middle        # top, middle, bottom: setting it draws every table of a LaTeX build as a longtblr
 ```
 
@@ -2601,6 +2601,9 @@ query is read as a browser prints (v3.29): `print` and `all` apply, `screen` and
 `only` and `not` count, `(orientation: landscape)` is read against the sheet's own `@page` size, and a feature of the screen or of
 a width (`(min-width: 600px)`) is not for a printed page and is named. A body size LaTeX has no class for (anything but 10, 11
 and 12 pt) is named, not used. It is a small reader on purpose: a CSS cascade has no counterpart in LaTeX.
+
+pdfmd shows its own options in British spelling. Use `--colour`, `--flavour`, `markup: centre` and
+`smiles: {palette: colour}`, or their American spellings `--color`, `--flavor`, `center` and `color`.
 
 Pandoc's own variable names accept British spellings too: `colourlinks`, `linkcolour`, `urlcolour`, `citecolour`,
 `fontcolour`, `backgroundcolour` and the other `colour` variants, plus `centre`, `licence` and `organisation`.
@@ -2813,19 +2816,19 @@ for every other writer (HTML, EPUB, Markdown, OpenDocument ...), a nested list o
 bold "Contents" above it. `markup: [callouts, toc]` or `markup: true` for both; `--markup toc` for one run. A marker inside a
 sentence is text.
 
-**Centred text** (v3.29, `markup: center`). `<center>` ... `</center>` around blocks (the closing tag in its own paragraph),
-`<div align="center">`, `<div style="text-align: center">`, a fenced `::: center` and, for writers that are not LaTeX, a raw
+**Centred text** (v3.29, `markup: centre`). `<center>` ... `</center>` around blocks (the closing tag in its own paragraph),
+`<div align="center">`, `<div style="text-align: center">`, a fenced `::: centre` and, for writers that are not LaTeX, a raw
 `\begin{center}` ... `\end{center}` all centre what they hold: LaTeX's `center` environment, Typst's `#align(center)[...]`, a
 `text-align` div in HTML, EPUB and the HTML engines' PDFs, and in a Word file the paragraph style `PdfmdCenter` (centred; the style
 is formatted in the file, a style of that name in your own reference document keeps its own look). OpenDocument and PowerPoint keep
-the text as it is and say so once. `markup: [callouts, toc, center]` or `true` for all; `--markup center` for one run.
+the text as it is and say so once. `markup: [callouts, toc, centre]` or `true` for all; `--markup centre` for one run.
 
 **Highlighted text** (v3.29, `markup: highlight`). `==marked text==` (across several words, with emphasis inside, over a line
 break) is highlighted: LaTeX with `soul`'s `\hl` in a pale yellow (LuaLaTeX: `lua-ul`'s `\highLight`, with the `luacolor` it needs, when both are
 installed; plain text when `soul` is not installed either), Typst with
 `#highlight[...]`, HTML, EPUB and `--to gfm` with `<mark>`, Word with the character style `PdfmdHighlight` (a yellow shading);
 Pandoc's own Markdown output keeps `==...==`, and OpenDocument keeps the text and says once that it is not highlighted. A lone `==` or one inside code stays as written; a closing `==` followed by
-punctuation (`==end==.`) works. `markup: [callouts, toc, center, highlight]` or `true` for all; `--markup highlight` for one run.
+punctuation (`==end==.`) works. `markup: [callouts, toc, centre, highlight]` or `true` for all; `--markup highlight` for one run.
 
 **Underlined text** (v3.32.26, `markup: underline`). `<u>text</u>` and `<ins>text</ins>`, which a Markdown reader keeps as raw HTML that
 LaTeX, Typst and Word drop, become Pandoc's own underline: LaTeX `\ul` (`soul`, or `lua-ul` under LuaTeX), Typst `#underline[...]`,
@@ -3146,7 +3149,7 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   or a Pandoc-only syntax, also reads `+autolink_bare_uris` (`https://example.org` is a link) and `+emoji` (`:smile:`). Since 3.32.4
   a file without front matter had read as gfm with none of these; `flavour: gfm` or `pandoc` gives the strict readers back.
 
-- **pdfmd's own syntax on** (v3.32.24, in `obsidian` and `pdfmd`, for a Markdown file). `markup` is on for callouts, `toc`, `center`,
+- **pdfmd's own syntax on** (v3.32.24, in `obsidian` and `pdfmd`, for a Markdown file). `markup` is on for callouts, `toc`, `centre`,
   `highlight`, `underline`, `keep`, `landscape`, `appendix` and `fullcite` (`> [!note]`, `[TOC]`, `<center>`, `==text==`, `<u>text</u>`, `::: keep`, `::: landscape`,
   `\appendix`, `[@key]{.fullcite}`), and `pagebreak` for every family, with no setting. The `pagecite` kind is available too,
   but its shorthand stays off until `pagecite: auto` or another mode is set. `space` stays off (a lone `<br>` is often just a blank line), and
@@ -3816,7 +3819,7 @@ ignores the key with a warning. `pdfmd --kits NAME` shows it.
 
 **A kit that does a markup's job itself** (v3.33.68). `markup-off: [landscape]` in the `.kit` takes those kinds of universal markup
 (the kinds `markup:` names) out of the list for documents that use the kit, so a house style with its own landscape pages
-need not list every other kind. It may name any kind of `markup:` (`callouts`, `toc`, `center`, `highlight`, `underline`, `keep`,
+need not list every other kind. It may name any kind of `markup:` (`callouts`, `toc`, `centre`, `highlight`, `underline`, `keep`,
 `landscape`, `appendix`, `fullcite`, `pagecite`, `space`; a list or one string with commas); any other word, `comments` among them (that is
 `show-comments`), is a warning naming the kit file. Like `no-auto:`, the kit's switch is weaker than `--markup` and `--no-markup`,
 the document, its own metadata files and the folders' files: a `markup:` set there is used as it is. It is stronger than the

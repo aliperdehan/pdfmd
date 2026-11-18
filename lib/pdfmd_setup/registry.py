@@ -7,7 +7,10 @@ user chose, so deleting a line gives the default back.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
+
+from pdfmd_base import spelling
 
 
 @dataclass(frozen=True)
@@ -62,7 +65,7 @@ UNSET = {
     "options.backup.dir": ".backups (or an existing backup/)",
     "options.strip-comments": "off", "options.hybrid": "off",
     "options.shrink": "on: object streams and recompression, when qpdf, pikepdf or mutool is installed", "options.shrink-timeout": "120 seconds",
-    "options.smiles.engine": "auto", "options.smiles.format": "auto", "options.smiles.office-format": "png", "options.smiles.palette": "color", "options.smiles.cell-width": "250", "options.smiles.cell-height": "200", "options.smiles.per-row": "3", "options.smiles.bond-length": "40", "options.smiles.dpi": "300",
+    "options.smiles.engine": "auto", "options.smiles.format": "auto", "options.smiles.office-format": "png", "options.smiles.palette": "colour", "options.smiles.cell-width": "250", "options.smiles.cell-height": "200", "options.smiles.per-row": "3", "options.smiles.bond-length": "40", "options.smiles.dpi": "300",
     "options.raw": "off", "options.pagebreak": "every family, in the pdfmd and obsidian flavours", "options.markup": "all but space, in the pdfmd and obsidian flavours", "options.show-comments": "off", "options.show-hidden": "off", "options.calc.enabled": "on", "options.calc.digits": "as R prints (up to 7 figures)", "options.calc.round": "even", "options.calc.subs": "off", "options.calc.typeset": "off", "options.calc.typeset-upright": "none", "options.calc.typeset-italic": "none", "options.calc.noindent": "lines", "options.calc.space": "0.75em", "options.calc.align": "left", "options.calc.constants": "none", "options.calc.export": "none", "options.attach-source": "off",
     "options.bundle": "the files the text reads (LaTeX inputs, data), not images", "options.bundle-max-mb": "100",
     "options.cache.aux": "off", "options.text-to-markdown": "off",
@@ -168,7 +171,7 @@ AUTO_HELP = {
 MARKUP_CHOICES = (
     ("callouts", "> [!NOTE], > [!warning] Title, ::: note: a box (LaTeX, Typst), a styled div (HTML), a quote (the rest)"),
     ("toc", "[TOC], [[_TOC_]], <!-- toc -->: the table of contents where it stands"),
-    ("center", "<center>, <div align=center>, ::: center, \\begin{center}: centred text in LaTeX, Typst, HTML and Word"),
+    ("centre", "<center>, <div align=center>, ::: centre, \\begin{center}: centred text in LaTeX, Typst, HTML and Word"),
     ("highlight", "==marked text==: highlighted in LaTeX (soul), Typst, HTML and Word"),
     ("underline", "<u>text</u>, <ins>text</ins>: underlined in LaTeX (soul), Typst, HTML, Word and OpenDocument"),
     ("keep", "::: keep, break-inside: avoid, \\begin{samepage}: blocks held on one page in LaTeX, Typst and HTML"),
@@ -417,7 +420,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "Word and the rest use the cell's own alignment and spans; LaTeX gets `\\multicolumn`, `\\multirow` and raw TeX around "
                "the cell. The Markdown writers write the tags back as `&...&`.", "Tables"),
         choice("options.table-align", "Horizontal alignment of every table cell that has no other",
-               (("", "the column's own (its `:--:` in the separator row)"), ("left", "left"), ("center", "centred"), ("right", "right")), "",
+               (("", "the column's own (its `:--:` in the separator row)"), ("left", "left"), ("centre", "centred"), ("right", "right")), "",
                "The lowest tier, under a cell's tag, its row's and column's `{row2.align=r}` / `{col3.align=c}`, the column's `:--:` and the table's own "
                "`{align=c}`. Per table: the attribute line under it.", "Tables"),
         choice("options.table-valign", "Vertical alignment of every table cell that has no other",
@@ -648,7 +651,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "auto (obsidian inside an Obsidian vault, a folder with .obsidian/ above the document; pdfmd elsewhere), obsidian "
              "(%%comments%% hidden, more of its syntax in each release), pdfmd (%%comments%% hidden), pandoc (strict Pandoc), gfm, "
              "commonmark; or a Pandoc reader with +/- extensions (markdown, gfm+smart, commonmark_x), which is the reader with the "
-             "flavour on auto. `flavor` and `reader` are the same setting. Per run: --flavour, or --from for a reader.",
+             "flavour on auto. `reader` is another name for the setting. Per run: --flavour, or --from for a reader.",
              "Input"),
         choice("options.single-newline", "A single newline inside a paragraph of a Markdown file",
                (("hard", "a line break (Obsidian's way; the default of the obsidian flavour)"),
@@ -749,7 +752,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "A length (0.75em, 6pt, 2mm; units pt, mm, cm, in, em) or off. The default 0.75em keeps a block of calculation lines "
              "apart from the paragraphs around it (LaTeX, Typst and HTML). Empty: 0.75em. Per run: --calc-space.", "Calculations"),
         choice("options.calc.align", "Alignment of a ::: calc div",
-               (("left", "flush left (the default)"), ("center", "centred")), "left",
+               (("left", "flush left (the default)"), ("centre", "centred")), "left",
                "Centres the lines of a `::: calc` div. Per run: --calc-align.", "Calculations"),
         text("options.calc.constants", "A file of named values for the calculator",
              "A CSV file, columns name,value[,digits[,note]] (a header row is fine, # lines are skipped), read before the document: "
@@ -770,7 +773,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                (("png", "PNG (every Word, Google Docs, Pages)"), ("svg", "SVG (Word 365, LibreOffice)")), "png",
                "Used when the format above is auto. Per block: office-format=.", "Chemical structures"),
         choice("options.smiles.palette", "Atom colours of a structure",
-               (("color", "RDKit's: O red, N blue, S yellow... (the default)"), ("bw", "black and white, like a chemfig drawing")), "color",
+               (("colour", "RDKit's: O red, N blue, S yellow... (the default)"), ("bw", "black and white, like a chemfig drawing")), "colour",
                "Per block: palette=.", "Chemical structures"),
         text("options.smiles.cell-width", "Width of one structure, in pixels",
              "A whole number (default 250); a block of several structures is as many cells wide as it has per row. Per block: cell-width=.",
@@ -787,7 +790,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "A whole number (default 300). Per block: dpi=.", "Chemical structures"),
         Setting("options.markup", "Spellings of other Markdown dialects carried into every format", "multi", MARKUP_CHOICES, "",
                 "Callouts: GitHub's and Obsidian's `> [!NOTE]` and Quarto's `::: callout-tip`; toc: `[TOC]` where the "
-                "contents go; center: `<center>` and `::: center`; highlight: `==text==`; keep: `::: keep`; landscape: `::: landscape`; appendix: `\\appendix`; space: `\\vspace{1cm}`. Left unset: all but space, in the pdfmd and obsidian "
+                "contents go; centre: `<center>` and `::: centre`; highlight: `==text==`; keep: `::: keep`; landscape: `::: landscape`; appendix: `\\appendix`; space: `\\vspace{1cm}`. Left unset: all but space, in the pdfmd and obsidian "
                 "flavours (none with flavour: pandoc, gfm or commonmark). Per run: --markup / --no-markup.", "Universal markup"),
         choice("options.rewrite", "Replace an older output of the same name", on_off, "",
                "Off: a build that finds report.pdf already there writes report (1).pdf and leaves the old one. "
@@ -968,7 +971,19 @@ def read(stores: dict, setting: Setting):
     store = stores.setdefault(setting.store, {})
     if setting.key in AUTO_ROWS:                       # the kinds of `auto:` that are in this state
         return auto_kinds(store, AUTO_ROWS[setting.key]) or None
-    return get(store, setting.key)
+    value = get(store, setting.key)
+    if setting.key == "options.flavour":
+        options = store.get("options")
+        if isinstance(options, dict):
+            return next((options[key] for key in spelling.spellings("flavour") if key in options), None)
+    if setting.key in ("options.calc.align", "options.table-align", "options.smiles.palette") and isinstance(value, str):
+        return spelling.british(value)
+    if setting.key == "options.markup":
+        if isinstance(value, list):
+            return [spelling.british(item) if isinstance(item, str) else item for item in value]
+        if isinstance(value, str):
+            return re.sub(r"[\w-]+", lambda match: spelling.british(match[0]), value)
+    return value
 
 
 def write(stores: dict, setting: Setting, value) -> None:
@@ -982,6 +997,9 @@ def write(stores: dict, setting: Setting, value) -> None:
             mapping[kind] = "explicit-only" if state == "explicit" else "on"
         put(store, "options.auto", mapping or None)
         return
+    if setting.key == "options.flavour":
+        for alias in spelling.spellings("flavour")[1:]:
+            put(store, f"options.{alias}", None)
     put(store, setting.key, value)
 
 

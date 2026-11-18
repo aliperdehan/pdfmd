@@ -232,7 +232,8 @@ end
 
 local function is_center_div(div)
   for _, class in ipairs(div.classes) do
-    if class == "center" or class == "centered" or class == "centering" then return true end
+    if class == "centre" or class == "centred" or class == "centring"
+        or class == "center" or class == "centered" or class == "centering" then return true end
   end
   if (div.attributes["align"] or ""):lower() == "center" then return true end
   return (div.attributes["style"] or ""):lower():match("text%-align%s*:%s*center") ~= nil
@@ -743,7 +744,9 @@ function Pandoc(doc)
   local enabled_list = doc.meta["pdfmd-markup"]
   if enabled_list ~= nil then
     enabled = {}
-    for word in pandoc.utils.stringify(enabled_list):gmatch("[%w_%-]+") do enabled[word] = true end
+    for word in pandoc.utils.stringify(enabled_list):gmatch("[%w_%-]+") do
+      enabled[word == "centre" and "center" or word] = true
+    end
   end
   local used = {callouts = false}
   local walked = doc:walk({

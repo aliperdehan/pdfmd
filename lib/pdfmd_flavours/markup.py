@@ -7,7 +7,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-from pdfmd_base import core
+from pdfmd_base import core, spelling
 
 
 try:
@@ -15,7 +15,7 @@ try:
 except ImportError:      # a copy of pdfmd.py without its packages: strict Pandoc and nothing else
     FLAVOUR_PRESETS, FLAVOUR_WORDS = {}, ("auto",)
 
-MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "underline", "keep", "landscape", "appendix", "fullcite", "pagecite", "excerpts", "space")
+MARKUP_KINDS = ("callouts", "toc", "centre", "highlight", "underline", "keep", "landscape", "appendix", "fullcite", "pagecite", "excerpts", "space")
 
 
 def markup_value(value) -> list[str]:
@@ -26,7 +26,7 @@ def markup_value(value) -> list[str]:
     if value is True:
         return list(MARKUP_KINDS)
     items = value if isinstance(value, list) else str(value).replace(",", " ").split()
-    words = [str(item).strip().casefold() for item in items if str(item).strip()]
+    words = [spelling.british(str(item).strip().casefold()) for item in items if str(item).strip()]
     if any(word in ("all", "true", "yes", "on") for word in words):
         return list(MARKUP_KINDS)
     unknown = [word for word in words if word not in MARKUP_KINDS and word not in ("false", "no", "off", "none")]
@@ -75,7 +75,7 @@ def flavour_setting(md_path: Path, metadata_files=()) -> tuple[str, str | None]:
     other value is a Pandoc reader spec (`gfm+smart`): the flavour is auto's and the spec is the reader."""
     value = core.FLAVOUR_CLI["name"]
     if value is None:
-        value = core.first_pdfmd_option(md_path, list(metadata_files), "flavour", "flavor", "reader")
+        value = core.first_pdfmd_option(md_path, list(metadata_files), "flavour", "reader")
     text = "" if value is None else str(value).strip()
     word = text.casefold()
     if word in core.FLAVOUR_PRESETS:

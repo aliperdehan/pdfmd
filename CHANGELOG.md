@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.21 — 2026-11-18
+
+Pre-edit state: commit `54095c7`. pdfmd showed American spellings for terminal colour, centred
+markup and calculator alignment, and the SMILES palette. Its flag, setting and choice scan now
+uses one spelling table for pdfmd's own aliases, with British spellings first in help and setup.
+Both spellings work without a warning, including older settings and centred divs. Table
+alignment already accepts both forms. Pandoc variables and the writers' own syntax keep their
+respective spellings. Added regressions for CLI actions, the option inventory, setup, calculator
+alignment, SMILES and centred HTML output.
+
 ## v3.34.20 — 2026-11-18
 
 Pre-edit state: commit `eae99ed`. Cropping a source used the picture command's

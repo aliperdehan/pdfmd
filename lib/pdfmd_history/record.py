@@ -119,7 +119,7 @@ def set_reader(md_path: Path, reader: str | None, cli_from: str | None,
         return
     chosen = core.FLAVOUR_CLI["name"]
     if chosen is None:
-        chosen = core.first_pdfmd_option(md_path, metadata_files, "flavour", "flavor", "reader")
+        chosen = core.first_pdfmd_option(md_path, metadata_files, "flavour", "reader")
     word = str(chosen or "").strip().lower()
     preset = core.FLAVOUR_PRESETS.get(word)
     fixed = word not in ("", "auto") and (preset is None or preset.reader != "auto")

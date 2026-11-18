@@ -26,7 +26,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from pdfmd_base import core
+from pdfmd_base import core, spelling
 
 
 PASS_THROUGH = ("--bibliography",)      # Pandoc's options that are a unique start of a pdfmd one (tests/test_bibliography_indent.py)
@@ -60,6 +60,14 @@ def with_pass_through(arguments: list[str], extras: list[str]) -> list[str]:
 
 class Parser(argparse.ArgumentParser):
     """pdfmd's parser: the unknown options it returns (Pandoc's) include the `PASS_THROUGH` ones it registers."""
+
+    def _get_option_tuples(self, option_string):
+        matches = super()._get_option_tuples(option_string)
+        # Keep established abbreviations such as --colo unambiguous when both
+        # spellings name the same flag.
+        canonical = {(match[0], match[1]) for match in matches}
+        return [match for match in matches if match[1][2:] == spelling.british(match[1][2:])
+                or (match[0], "--" + spelling.british(match[1][2:])) not in canonical]
 
     def parse_known_args(self, args=None, namespace=None):
         arguments = sys.argv[1:] if args is None else list(args)
@@ -671,7 +679,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="carry spellings other Markdown dialects share into every output: callouts (> [!NOTE], "
                              "> [!warning] Title, ::: note) become a box (LaTeX, Typst), a styled div (HTML, EPUB) or a "
                              "quote with a bold title (the rest); toc ([TOC], [[_TOC_]], <!-- toc -->) is the table "
-                             "of contents where it stands; center (<center>, <div align=center>, ::: center) centres the "
+                             "of contents where it stands; centre (<center>, <div align=center>, ::: centre) centres the "
                              "text; highlight (==text==) marks it; underline (<u>text</u>) underlines it; keep (::: keep) holds blocks on one page; landscape (::: landscape) puts them on landscape pages; appendix (\\appendix, <!-- appendix -->, "
                              "{.appendix}) letters the sections after it; pagecite ([p. 5]) uses the previous citation (requires --pagecite MODE); excerpts ([@x:1]) resolves local excerpt records; space (\\vspace{1cm}, \\bigskip, <br>) is vertical space; bare: all kinds. On, except space, in the pdfmd and obsidian flavours (off with flavour: pandoc); also "
                              "pdfmd-options.markup (true, false or a list) and pdfmd --setup")
@@ -685,7 +693,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "default; also pdfmd-options.show-comments and pdfmd --setup")
     parser.add_argument("--no-show-comments", dest="show_comments", action="store_false",
                         help="do not show comments in this run, whatever pdfmd-options.show-comments says")
-    parser.add_argument("--flavour", "--flavor", dest="flavour", metavar="NAME", type=str.casefold,
+    parser.add_argument(*spelling.flags("flavour"), dest="flavour", metavar="NAME", type=str.casefold,
                         help="the flavour of Markdown the files are written in: obsidian (%%%%comments%%%% hidden, more of its syntax in "
                              "each release), pdfmd (%%%%comments%%%% hidden; the rest of pdfmd's own syntax follows), pandoc (strict "
                              "Pandoc: nothing added), gfm, commonmark, or auto (the default: obsidian inside a vault, a folder with "
@@ -801,9 +809,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--calc-space", metavar="LENGTH", default=None,
                         help="the room above and below a `::: calc` div: a length (0.75em, 6pt, 2mm; pt mm cm in em) or off. "
                              "Default 0.75em. Also `pdfmd-options: {calc: {space: 0.75em}}`, or --setup")
-    parser.add_argument("--calc-align", choices=core.CALC_ALIGNS, default=None,
+    parser.add_argument("--calc-align", choices=core.CALC_ALIGNS, type=spelling.british, default=None,
                         help="the lines of a `::: calc` div flush left (the default) or centred. Also "
-                             "`pdfmd-options: {calc: {align: center}}`, or --setup")
+                             "`pdfmd-options: {calc: {align: centre}}`, or --setup")
     parser.add_argument("--calc-constants", metavar="FILE", default=None,
                         help="a CSV file of named values the calculator knows before the document starts (columns "
                              "name,value[,digits[,note]]), looked for beside the document and its metadata files. Also "
@@ -813,7 +821,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "definition of each name, at full precision), beside the document unless the path is absolute: "
                              "the mirror of --calc-constants, and a file it can read back. Also "
                              "`pdfmd-options: {calc: {export: results.csv}}`, or --setup")
-    parser.add_argument("--color", choices=("auto", "always", "never"), default=None,
+    parser.add_argument(*spelling.flags("colour"), dest="color", choices=("auto", "always", "never"), default=None,
                         help="--to ansi / --view: escape codes always, never, or auto (a file and --view: yes; `-o -` "
                              "into a pipe: no; NO_COLOR turns auto off)")
     parser.add_argument("--width", type=core.ansi_width_argument, default=None, metavar="N",

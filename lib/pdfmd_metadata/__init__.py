@@ -285,7 +285,7 @@ def calc_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -> 
     space = core.calc_space(files[0], metadata_files)
     if space:
         arguments += ["-M", "pdfmd-calc-space=" + space]
-    if core.calc_align(files[0], metadata_files) == "center":
+    if core.calc_align(files[0], metadata_files) == "centre":
         arguments += ["-M", "pdfmd-calc-align=center"]
     constants = core.calc_constants_file(files[0], metadata_files)
     if constants is not None:
