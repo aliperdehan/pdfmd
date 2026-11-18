@@ -7,6 +7,8 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -211,6 +213,67 @@ class Md2pdfKeys(unittest.TestCase):
 
     def test_the_entry_point_exists(self):
         self.assertIn('md2pdf = "pdfmd:md2pdf_main"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+
+class PlainCompatibility(unittest.TestCase):
+    def test_aliases_share_pdfmd_settings_without_persona_defaults(self):
+        parser = pdfmd.build_parser()
+        args, extra = parser.parse_known_args([
+            "--input=one.md", "two.md", "--input", "three.md", "--format=Letter", "--orientation", "LANDSCAPE",
+            "--border=20mm", "--border-top", "10px", "--border-right=1in", "--workers=2", "--document-title", "Example",
+        ])
+        self.assertEqual(extra, [])
+        self.assertEqual(args.path, [Path("one.md"), Path("two.md"), Path("three.md")])
+        self.assertEqual(args.paper, "letter,landscape")
+        self.assertEqual(args.variable, ["geometry:margin=20mm", "geometry:top=7.5pt", "geometry:right=1in"])
+        self.assertEqual((args.jobs, args.pdf_title), (2, "Example"))
+        self.assertFalse(args.bookmarks or args.attach_links or args.report)
+
+    def test_stylesheets_keep_order_and_an_explicit_engine(self):
+        parser = pdfmd.build_parser()
+        args = parser.parse_args(["one.md", "--css", "a.css", "--style=b.css", "--stylesheet", "c.css"])
+        self.assertEqual(args.css, ["a.css", "b.css", "c.css"])
+        self.assertEqual(args.engine, "html")
+        args = parser.parse_args(["one.md", "--css-file", "a.css", "-e", "typst", "--as-html"])
+        self.assertEqual((args.css, args.engine, args.to), (["a.css"], "typst", "html"))
+
+    def test_collisions_and_literal_paths_keep_their_plain_meanings(self):
+        parser = pdfmd.build_parser()
+        args, extra = parser.parse_known_args([
+            "one.md", "--title=downstream", "-e", "typst", "--css", "style.css", "--header", ",,{page}",
+        ])
+        self.assertEqual(extra, ["--title=downstream"])
+        self.assertEqual((args.engine, args.css, args.header), ("typst", ["style.css"], ",,{page}"))
+        args = parser.parse_args(["--", "--as-html", "--input=one.md"])
+        self.assertEqual(args.path, [Path("--as-html"), Path("--input=one.md")])
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_registered_aliases_do_not_shadow_pandoc_options(self):
+        from pdfmd_args import PERSONA_ALIASES
+
+        parser = pdfmd.build_parser()
+        group = next(group for group in parser._action_groups if group.title == PERSONA_ALIASES)
+        aliases = {name for action in group._group_actions for name in action.option_strings}
+        self.assertTrue(aliases)
+        self.assertTrue(all(name.startswith("--") for name in aliases))
+        help_text = subprocess.check_output(["pandoc", "--help"], text=True, encoding="utf-8")
+        pandoc_flags = set(re.findall(r"(?<!\w)--[a-z][a-z0-9-]*", help_text))
+        self.assertEqual(aliases & pandoc_flags, set())
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_plain_cli_builds_html_with_the_style_sheet(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "input.md").write_text("---\ntitle: Example\n---\n\nText.\n", encoding="utf-8")
+            (root / "layout.css").write_text("body { color: navy }\n", encoding="utf-8")
+            done = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "pdfmd"), "--input", "input.md", "--as-html",
+                 "--stylesheet", "layout.css", "--standalone", "-o", "sample.html", "--no-backup", "--no-stamp"],
+                cwd=root, env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"},
+                capture_output=True, text=True, encoding="utf-8",
+            )
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertRegex((root / "sample.html").read_text(encoding="utf-8"), r'href="[^"]*layout\.css"')
 
 
 class InkmdKeys(unittest.TestCase):

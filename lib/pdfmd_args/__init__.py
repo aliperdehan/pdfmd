@@ -30,6 +30,7 @@ from pdfmd_base import core
 
 
 PASS_THROUGH = ("--bibliography",)      # Pandoc's options that are a unique start of a pdfmd one (tests/test_bibliography_indent.py)
+PERSONA_ALIASES = "long aliases from mdpdf, md2pdf and inkmd"
 
 
 class PassThrough(argparse.Action):
@@ -70,7 +71,54 @@ class Parser(argparse.ArgumentParser):
                 # The original switch can come immediately before a positional file.
                 parsed[index] += "=true"
         named, extras = super().parse_known_args(parsed, namespace)
+        orientation = getattr(named, "persona_orientation", None)
+        if orientation is not None:
+            size, _ = core.paper_words(named.paper)
+            named.paper = ",".join(filter(None, (size, orientation)))
+        if getattr(named, "_persona_stylesheet", False):
+            del named._persona_stylesheet
+            if named.engine is None and named.to != "html" and not any(
+                    token == "--pdf-engine" or token.startswith("--pdf-engine=") for token in extras):
+                named.engine = "html"
         return named, with_pass_through(arguments, extras)
+
+
+class PersonaStylesheet(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        namespace.css = [*namespace.css, values]
+        namespace._persona_stylesheet = True
+
+
+class PersonaBorder(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        from pdfmd_compat import MDPDF_BORDER_SIDES, mdpdf_npm_length
+
+        side = MDPDF_BORDER_SIDES[option_string]
+        namespace.variable = [*namespace.variable, f"geometry:{side}={mdpdf_npm_length(values)}"]
+
+
+def add_persona_aliases(parser: argparse.ArgumentParser) -> None:
+    """These long spellings have a conversion meaning and are free in the downstream command lines."""
+    from pdfmd_compat import MDPDF_BORDER_SIDES
+
+    group = parser.add_argument_group(PERSONA_ALIASES)
+    group.add_argument("--input", dest="path", default=argparse.SUPPRESS, action="append", type=Path, metavar="FILE",
+                       help="name an input file or folder, as a positional argument does (repeat for additional inputs)")
+    group.add_argument("--stylesheet", "--style", "--css-file", dest="css", default=argparse.SUPPRESS,
+                       action=PersonaStylesheet, metavar="FILE",
+                       help="add a style sheet (like --css) and select an HTML PDF engine unless an engine is named")
+    group.add_argument("--format", "--page-size", dest="paper", default=argparse.SUPPRESS, type=str.casefold, metavar="SIZE",
+                       help="paper size, like --paper")
+    group.add_argument("--orientation", dest="persona_orientation", type=str.casefold, choices=("portrait", "landscape"),
+                       help="set the orientation of the paper")
+    for flag, side in MDPDF_BORDER_SIDES.items():
+        group.add_argument(flag, dest="variable", default=argparse.SUPPRESS, action=PersonaBorder, metavar="LENGTH",
+                           help=f"set geometry:{side} (px are converted to points)")
+    group.add_argument("--as-html", dest="to", default=argparse.SUPPRESS, action="store_const", const="html",
+                       help="write HTML, like --to html")
+    group.add_argument("--workers", dest="jobs", default=argparse.SUPPRESS, type=int, metavar="N", help="alias for --jobs")
+    for flag, name in (("--document-title", "title"), ("--subject", "subject"), ("--author", "author"), ("--keywords", "keywords")):
+        group.add_argument(flag, dest=f"pdf_{name}", default=argparse.SUPPRESS, metavar="TEXT", help=f"alias for --pdf-{name}")
 
 
 def attach_source_argument(value: str) -> bool | str:
@@ -137,7 +185,8 @@ def build_parser() -> argparse.ArgumentParser:
     if TieredHelp is not None:
         parser.add_argument("-h", "--help", action=TieredHelp)
     parser.add_argument("--version", action="version", version=f"pdfmd {core.PDFMD_VERSION}")
-    parser.add_argument("path", type=Path, nargs="*", help="Markdown name, input files or folders; several paths build separately (default: current directory)")
+    parser.add_argument("path", type=Path, nargs="*", action="extend",
+                        help="Markdown name, input files or folders; several paths build separately (default: current directory)")
     parser.add_argument("-p", "--presentation", action="store_true", help="create Beamer slides")
     parser.add_argument("--slide-level", type=int, help="Beamer heading level used for slide breaks")
     parser.add_argument("-b", "--batch", action="store_true", help="build files and folders separately (folders select *.md); skip non-inputs")
@@ -1136,6 +1185,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "report_20260924-091500.md, suffix: report.md.20260924-091500.bak, short: "
                              "report.md.09-24_09-15-00.bak) or a template using {name}/{stem}/{ext} "
                              "plus strftime codes. Overrides pdfmd-options.backup.format")
+    add_persona_aliases(parser)
     return parser
 
 

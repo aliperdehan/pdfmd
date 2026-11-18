@@ -937,6 +937,19 @@ the PDF to standard output for `-o -`, or when standard output is not a terminal
 and no -o is given). Their page-size default is pdfmd's own, not Letter. `batchmd`
 is `pdfmd -b` on one folder, the current one when none is named.
 
+Plain `pdfmd` accepts these long compatibility aliases. `--input FILE` names
+an input and can be repeated, `--workers N` means `--jobs N`, and `--as-html`
+means `--to html`. `--stylesheet FILE`, `--style FILE` and `--css-file FILE` add to
+the style sheets in command-line order and select an HTML PDF engine if no
+engine was named. `--format SIZE` and `--page-size SIZE` mean `--paper SIZE`.
+`--orientation portrait|landscape` sets that paper's orientation.
+`--border LENGTH` supplies `geometry:margin` and `--border-top`,
+`--border-left`, `--border-bottom` and `--border-right` supply the matching
+geometry sides (CSS pixels are converted to points). `--document-title`,
+`--subject`, `--author` and `--keywords` set the corresponding `--pdf-*`
+properties. The `mdpdf` command's automatic bookmarks, linked attachments
+and report mode belong to that command.
+
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 

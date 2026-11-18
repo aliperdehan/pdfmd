@@ -61,6 +61,8 @@ FLAGS: dict[str, str | Omitted] = {
     "attach_links": "options.attach-links", "paper": "papersize", "paragraph_spacing": "options.paragraph-spacing", "fullcite_list": "options.fullcite-list", "bibliography_indent": "options.bibliography-indent",
     "pandoc_bibliography": Omitted("run", "Pandoc's own --bibliography, passed to it as written"),
     "css": "options.css", "css_scope": "options.css-scope",
+    # Other personas' long aliases share the existing destinations. Orientation is part of papersize.
+    "persona_orientation": "papersize",
     "family": BUILTIN, "no_autolinks": BUILTIN, "no_html": BUILTIN, "allow_unsafe_urls": BUILTIN,
     "allow_remote_images": BUILTIN, "emoji_fallback": BUILTIN,
     "pdf_title": PDF_INFO, "pdf_subject": PDF_INFO, "pdf_author": PDF_INFO, "pdf_keywords": PDF_INFO,

@@ -31,8 +31,9 @@ MDPDF_KEYS = {"-o": "--out", "--output": "--out", "-h": "--header", "--header": 
 
 # The npm `mdpdf` (Puppeteer; elliotblackburn) has other keys under the same command name (v3.30.41). They do not collide
 # with the PyPI mdpdf's, except --header/--footer: a template "left,middle,right" there, an HTML file here, told apart by the value.
-MDPDF_NPM_VALUE_KEYS = ("--style", "--h-height", "--f-height", "--border", "--border-top", "--border-left", "--border-bottom",
-                        "--border-right", "--format", "--orientation")
+MDPDF_BORDER_SIDES = {"--border": "margin", "--border-top": "top", "--border-left": "left",
+                      "--border-bottom": "bottom", "--border-right": "right"}
+MDPDF_NPM_VALUE_KEYS = ("--style", "--h-height", "--f-height", *MDPDF_BORDER_SIDES, "--format", "--orientation")
 MDPDF_NPM_FLAGS = ("--gh-style", "--no-emoji", "--debug")
 
 
@@ -128,8 +129,7 @@ def mdpdf_translate(argv: list[str]) -> list[str]:
         out += ["--paper", npm["--format"].casefold()]
     if npm.get("--orientation", "").casefold() == "landscape":
         out += ["-V", "geometry:landscape"]       # every engine reads it (paper_variables)
-    for side, key in (("margin", "--border"), ("top", "--border-top"), ("left", "--border-left"), ("bottom", "--border-bottom"),
-                      ("right", "--border-right")):
+    for key, side in MDPDF_BORDER_SIDES.items():
         if npm.get(key):
             out += ["-V", f"geometry:{side}={mdpdf_npm_length(npm[key])}"]
     for key in ("--h-height", "--f-height"):

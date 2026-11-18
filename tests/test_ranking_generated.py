@@ -182,6 +182,11 @@ class WatchPin(unittest.TestCase):
     def test_a_section_request_gets_the_document_in_front(self):
         self.assertEqual(pdfmd.pinned_watch_argv(["#intro", "-w"], [Path("#intro")], Path("/x/b.md")), [str(Path("/x/b.md")) + "#intro", "-w"])
 
+    def test_the_input_alias_pins_a_section_in_equals_form(self):
+        chosen = Path("b.md")
+        argv = pdfmd.pinned_watch_argv(["--input=#intro", "-w"], [Path("#intro")], chosen)
+        self.assertEqual(pdfmd.build_parser().parse_args(argv).path, [Path("b.md#intro")])
+
     def test_a_named_document_is_left_alone(self):
         self.assertEqual(pdfmd.pinned_watch_argv(["report", "-w"], ["report"], Path("/x/report.md")), ["report", "-w"])
 

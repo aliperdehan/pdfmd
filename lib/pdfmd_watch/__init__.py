@@ -67,8 +67,11 @@ def pinned_watch_argv(argv: list[str], given: list | None, chosen: Path) -> list
     if not given:
         return [*argv, "--", str(chosen)]
     token = str(given[0])
-    if len(given) == 1 and token[:1] in ("#", "@") and token in argv:
-        argv[argv.index(token)] = f"{chosen}{token}"
+    if len(given) == 1 and token[:1] in ("#", "@"):
+        if token in argv:
+            argv[argv.index(token)] = f"{chosen}{token}"
+        elif f"--input={token}" in argv:
+            argv[argv.index(f"--input={token}")] = f"--input={chosen}{token}"
     return argv
 
 

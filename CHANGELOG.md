@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.34.17 — 2026-11-18
+
+Pre-edit state: commit `4af94d0`. Plain pdfmd used to pass unambiguous long
+options from mdpdf, md2pdf and inkmd on as unknown flags. It now understands the
+aliases for input, workers, HTML output, stylesheets, paper, margins and PDF
+properties. The aliases use the same settings as their pdfmd counterparts.
+A watch pins a section named with `--input=#SECTION` as it does a positional
+section. Tests cover translation, collisions, the literal argument boundary,
+and the HTML build. The registered aliases have no overlap with `pandoc --help`
+on 3.1.3 and 3.13. Synthetic builds on both versions checked HTML stylesheets
+and the LaTeX paper, orientation and margin. `pdfmd.py` only changes its version.
+
 ## v3.34.16 — 2026-11-18
 
 Pre-edit state: commit `2afa3d8`. **[tables] Repair CSV width lists.** Extra widths

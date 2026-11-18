@@ -1964,6 +1964,15 @@ when you give `-o -`, or no `-o` while output is piped (at a terminal it writes
 installed too, whichever was installed last owns the command name; both accept the
 original's keys.
 
+Plain `pdfmd` also takes `--input FILE`, `--workers N`, and `--as-html` (HTML output).
+`--stylesheet FILE`, `--style FILE`, and `--css-file FILE` add a style sheet and
+select an HTML PDF engine when you leave the engine unspecified.
+`--format SIZE` and `--page-size SIZE` are paper sizes. `--orientation portrait|landscape`
+sets the orientation, and `--border` and its four side forms set the margins.
+`--document-title`, `--subject`, `--author`, and `--keywords` set PDF properties.
+Plain `pdfmd` keeps its existing meanings for `-h`, `-s`, `-c`, `-e`, `--css`,
+and `--header`.
+
 ### Slides
 
 ```sh
