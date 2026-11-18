@@ -35,6 +35,14 @@ can answer, otherwise the last state it reported.
 Settings are read from `%LOCALAPPDATA%\Colophon\settings.json` (all seconds; defaults in brackets):
 `BuildTimeoutSeconds` [600], `ServerStartTimeoutSeconds` [20], `SaveTimeoutSeconds` [15], `BuildPaneHeight` [260].
 
+## Package
+
+    powershell -ExecutionPolicy Bypass -File gui-win\publish.ps1
+
+runs `dotnet publish` for win-x64, self-contained, into `gui-win\publish\` (about 146 MB). That folder runs on a
+clean Windows 11 with only the WebView2 runtime, which Windows 11 carries by default; there is no installer. The
+executable is `colophon-win.exe`.
+
 ## Tests
 
     colophon-win.exe --selftest

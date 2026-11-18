@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.33.333h — 2026-11-18
+
+Pre-edit state: commit `8e51bbc`. `gui-win/publish.ps1` runs `dotnet publish` for win-x64, self-contained, into
+`gui-win/publish/` (about 146 MB); that folder runs on a clean Windows 11 carrying only the WebView2 runtime, with
+no installer, and `colophon-win.exe` is its entry point. `--selftest` passes in the published folder. Not verified by
+hand: the published folder on a clean machine.
+
 ## v3.33.333g — 2026-11-18
 
 Pre-edit state: commit `17b51e8`. Light and dark follow Windows and update live, the window's size and position are
