@@ -1,4 +1,4 @@
-"""The macOS Skim notes attribute, including keyed archives and bzip2 fragments."""
+"""Read Skim's archived notes and its macOS plain-text fallback."""
 from __future__ import annotations
 
 import bz2
@@ -13,6 +13,9 @@ from .import_pdf import Annotation, AREA, MARKUP, box, quad_boxes
 STEM = "net_sourceforge_skim-app"
 # Foundation serialises NSRect and NSPoint as strings of decimal coordinates.
 NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+# Skim exports one "* TYPE, page N" heading per note, with a blank line before its text.
+TEXT_HEADING = re.compile(r"^(\* [^,\n]+, page [0-9]+)[ \t]*(?:\n\n|\n|\Z)", re.M)
+READ_ERRORS = (OSError, ValueError, TypeError, KeyError, IndexError, RecursionError, EOFError, ExpatError)
 
 
 def get_attribute(file, name):
@@ -20,10 +23,18 @@ def get_attribute(file, name):
     return bytes.fromhex(done.stdout.decode("ascii")) if done.returncode == 0 else None
 
 
-def unpack(file, data, suffix):
-    if data.startswith(b"BZh"):
-        data = bz2.decompress(data)
-    notes = plistlib.loads(data)
+def unpack(file, data, suffix, *, plain_text=False):
+    def decode(data):
+        if data.startswith(b"BZh"):
+            data = bz2.decompress(data)
+        try:
+            return plistlib.loads(data)
+        except plistlib.InvalidFileException:
+            if not plain_text:
+                raise
+            return data.decode("utf-8-sig")
+
+    notes = decode(data)
     if isinstance(notes, dict) and notes.get(STEM + "_has_wrapper"):
         stem = notes[STEM + "_unique_key"]
         count = notes[STEM + "_number_of_fragments"]
@@ -35,8 +46,7 @@ def unpack(file, data, suffix):
             if part is None:
                 raise ValueError("missing Skim fragment")
             pieces.append(part)
-        data = b"".join(pieces)
-        notes = plistlib.loads(bz2.decompress(data) if data.startswith(b"BZh") else data)
+        notes = decode(b"".join(pieces))
     return notes
 
 
@@ -102,9 +112,25 @@ def skim_annotations(file, page_count):
             data = get_attribute(file, STEM + "_notes" + suffix)
             if data is not None:
                 items = archive_items(unpack(file, data, suffix))
-                return [item for fields in items if (item := note_annotation(fields, page_count)) is not None]
-        except (OSError, ValueError, TypeError, KeyError, IndexError, RecursionError, EOFError, ExpatError):
+                annotations = [item for fields in items if (item := note_annotation(fields, page_count)) is not None]
+                return annotations, []
+        except READ_ERRORS:
             unreadable = True
     if unreadable:
         print("WARN  excerpts: cannot read the Skim notes archive", file=sys.stderr)
-    return []
+    for suffix in ("#S", ""):
+        try:
+            data = get_attribute(file, STEM + "_text_notes" + suffix)
+            if data is not None:
+                text = unpack(file, data, suffix, plain_text=True)
+                if isinstance(text, str):
+                    chunks = TEXT_HEADING.split(text.replace("\r\n", "\n"))
+                    # Skim appends a space and blank line after each non-empty note.
+                    notes = [{"heading": heading, "text": content.rstrip("\n").removesuffix(" "),
+                              "status": "not imported: no position"}
+                             for heading, content in zip(chunks[1::2], chunks[2::2])]
+                    if notes:
+                        return [], notes
+        except READ_ERRORS:
+            continue
+    return [], []

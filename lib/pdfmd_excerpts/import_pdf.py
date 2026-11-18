@@ -113,12 +113,14 @@ def imported_records(data, path, file, key):
     source = matching[0]
     before = file.stat()
     pdf = reader(file)
+    not_imported = []
     try:
         annotations = list(pdf_annotations(pdf))
         if sys.platform == "darwin":
             from .skim import skim_annotations
 
-            annotations.extend(skim_annotations(file, len(pdf.pages)))
+            skim, not_imported = skim_annotations(file, len(pdf.pages))
+            annotations.extend(skim)
     except (core.pypdf.errors.PyPdfError, ValueError, AttributeError, TypeError, KeyError, IndexError):
         raise RecordError("cannot read source PDF annotations") from None
     seen = {position(part["pdf-page"], part["boxes"]) for record in data["excerpts"]
@@ -131,7 +133,7 @@ def imported_records(data, path, file, key):
             seen.add(at)
             additions.append(annotation)
     if not additions:
-        return []
+        return [], not_imported
 
     program = None
     if any(item.kind == "text" for item in additions):
@@ -158,7 +160,7 @@ def imported_records(data, path, file, key):
     after = file.stat()
     if (before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns):
         raise RecordError("source PDF changed during import")
-    return records
+    return records, not_imported
 
 
 def import_annotations(path, file, key, *, dry_run=False):
@@ -171,13 +173,13 @@ def import_annotations(path, file, key, *, dry_run=False):
             raise RecordError("register this key and PDF first with pdfmd --excerpts sources add KEY FILE") from None
         if data["pdfmd-excerpts"] != 1 and write:
             raise RecordError("newer record version cannot be written")
-        records = imported_records(data, target, file, key)
+        records, not_imported = imported_records(data, target, file, key)
         if write and records:
             data["excerpts"].extend(records)
             data["next-id"] += len(records)
             validate(data)
             core.atomic_write_text(target, canonical(data), newline="\n")
-        return records
+        return records, not_imported
 
     if dry_run:
         return run(path, False)

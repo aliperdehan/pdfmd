@@ -1103,6 +1103,13 @@ An annotation whose PDF page and boxes are already recorded for that source
 is skipped. `--dry-run` prints the records that would be added with provisional
 IDs. Use `--json` to get the array of previewed or newly created records.
 
+If Skim's archive is missing or unreadable, import lists the page heading and
+text of each note from Skim's plain-text attribute as “not imported: no position”.
+This also applies to `--dry-run`. When there are plain-text notes to list,
+`--json` returns an object with a `records` array and a separate
+`not-imported` array. Each entry in `not-imported` has `heading`, `text`
+and `status`. The command exits 0 when these notes are the only finding.
+
 **Local excerpts API.** `--serve FOLDER` serves the folder's active record to
 authenticated clients. `GET /api/excerpts` returns `record`, `locations` (citing
 places with record IDs) and `problems`. `GET /api/excerpts/check` returns the

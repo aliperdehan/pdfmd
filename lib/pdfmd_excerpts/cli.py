@@ -47,6 +47,8 @@ def parser():
             sub.add_argument("old")
             sub.add_argument("new")
         if action == "import":
+            sub.description = ("Import positioned PDF annotations and list Skim text notes without positions. "
+                               "When text notes are listed, --json gives separate records and not-imported arrays.")
             sub.add_argument("file", metavar="FILE.pdf")
             sub.add_argument("--key", required=True, help="the key already registered for this source PDF")
             sub.add_argument("--dry-run", action="store_true", help="preview the new records without writing")
@@ -275,7 +277,8 @@ def execute(args, arguments):
     path = discover(document, metadata, args.verbose)
     if args.action == "import":
         from .import_pdf import import_annotations
-        return import_annotations(path, args.file, args.key, dry_run=args.dry_run)
+        records, not_imported = import_annotations(path, args.file, args.key, dry_run=args.dry_run)
+        return {"records": records, "not-imported": not_imported} if not_imported else records
     if args.action == "reanchor":
         from .anchors import reanchor
         return reanchor(path, args.key)
@@ -423,6 +426,12 @@ def command(arguments):
             print("Excerpt review written.")
     elif args.action == "add":
         print(str(answer["id"]) + " " + " ".join(answer["markers"]))
+    elif args.action == "import" and isinstance(answer, dict):
+        if answer["records"]:
+            print(json.dumps(answer["records"], ensure_ascii=False, indent=2))
+        for note in answer["not-imported"]:
+            print(f"{note['heading']} ({note['status']})")
+            print(note["text"])
     elif args.action == "check":
         for item in answer:
             place = f"{item['file']}:{item['line']}" if item["line"] else item["file"]

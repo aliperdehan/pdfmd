@@ -108,8 +108,12 @@ Markdown review sheet containing passages and notes.
 
 Register the PDF before calling `--excerpts import FILE.pdf --key KEY`.
 Saved text markup and area annotations become excerpt records. On macOS,
-import also reads Skim's archived notes attribute. Use `--dry-run --json`
-to preview the records without writing them or reserving their IDs.
+import also reads Skim's archived notes attribute. If the archive is missing
+or unreadable, import lists each plain-text note with its heading and text as
+“not imported: no position”. Use `--dry-run --json` to preview the records
+without writing them or reserving their IDs. JSON returns an array of records,
+or an object with `records` and `not-imported` arrays when plain-text notes
+are listed. A report containing only those notes exits 0.
 
 `--check` verifies excerpt markers, source keys, locators and quotations
 without opening source PDFs. `--excerpts check --json` also checks PDF hashes

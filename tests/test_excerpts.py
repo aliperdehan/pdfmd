@@ -534,7 +534,8 @@ class SourcePDFs(CommandFixture, unittest.TestCase):
         records["sources"]["glass"]["more"] = {"si": {"file": extra.name, "pages": [[1, "S1"]]}}
         path.write_text(json.dumps(records), encoding="utf-8")
         with mock.patch.object(pdfmd, "which", return_value=None):
-            [area] = import_annotations(path, extra, "glass")
+            (area,), not_imported = import_annotations(path, extra, "glass")
+        self.assertEqual(not_imported, [])
         self.assertEqual((area["file"], area["page"], area["note"]), ("si", "S2", "An area"))
         self.assertEqual(area["parts"], [{"pdf-page": 2, "boxes": [[10, 20, 30, 40]]}])
 
@@ -589,6 +590,64 @@ class SourcePDFs(CommandFixture, unittest.TestCase):
         self.assertEqual(record["parts"], [{"pdf-page": 2, "boxes": [[8, 177, 66, 189]],
                                            "text": "Amber glass", "text-from": "pdf"}])
         self.assertEqual(self.command("import", path.name, "--key", "glass"), [])
+
+    @unittest.skipUnless(sys.platform == "darwin", "needs macOS xattr")
+    def test_import_lists_skim_text_notes_without_creating_records(self):
+        import plistlib
+
+        path = self.pdf("skim.pdf")
+        self.command("sources", "add", "glass", path.name, "--pages", '[[2,"41"]]')
+        record_path = self.root / "excerpts.json"
+        before = record_path.read_bytes()
+        operation = ("import", path.name, "--key", "glass")
+        stem = "net_sourceforge_skim-app"
+        archive = stem + "_notes#S"
+        text = ("* Highlight, page 1\n\nAmber glass\n\nA separate paragraph \n\n"
+                "* FreeText, page 2\n\nBlue clay — café \n\n")
+        entries = [{"heading": "* Highlight, page 1", "text": "Amber glass\n\nA separate paragraph",
+                    "status": "not imported: no position"},
+                   {"heading": "* FreeText, page 2", "text": "Blue clay — café",
+                    "status": "not imported: no position"}]
+
+        def attribute(name, data):
+            subprocess.run(["/usr/bin/xattr", "-wx", name, data.hex(), str(path)], check=True, capture_output=True)
+
+        attribute(stem + "_text_notes#S", plistlib.dumps(text, fmt=plistlib.FMT_BINARY))
+        for options in ((), ("--dry-run",)):
+            with self.subTest(options=options):
+                done = self.raw(*operation, *options)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                for entry in entries:
+                    self.assertIn(entry["heading"], done.stdout)
+                    self.assertIn(entry["text"], done.stdout)
+                self.assertEqual(done.stdout.count("not imported: no position"), len(entries))
+                self.assertEqual(self.command(*operation, *options), {"records": [], "not-imported": entries})
+                self.assertEqual(record_path.read_bytes(), before)
+
+        attribute(archive, b"unreadable archive")
+        self.assertEqual(self.command(*operation), {"records": [], "not-imported": entries})
+        self.assertEqual(record_path.read_bytes(), before)
+        attribute(archive, plistlib.dumps([
+            {"type": "Square", "pageIndex": 1, "bounds": "{{10, 20}, {20, 20}}", "contents": "An archived area"}
+        ], fmt=plistlib.FMT_BINARY))
+        [record] = self.command(*operation)
+        self.assertEqual((record["id"], record["page"], record["note"]), (1, "41", "An archived area"))
+        self.assertEqual(record["parts"], [{"pdf-page": 2, "boxes": [[10, 20, 30, 40]]}])
+        self.assertEqual(self.command(*operation), [])
+
+    @unittest.skipUnless(sys.platform == "darwin", "needs macOS xattr")
+    def test_import_lists_raw_skim_text_notes_beside_pdf_annotations(self):
+        path = self.pdf("marked.pdf", annotations=[(0, "Square", (10, 20, 30, 40), (), "A saved area")])
+        self.command("sources", "add", "glass", path.name)
+        text = "* Note, page 1\n\nAn unplaced note\n"
+        subprocess.run(["/usr/bin/xattr", "-wx", "net_sourceforge_skim-app_text_notes",
+                        text.encode("utf-8").hex(), str(path)], check=True, capture_output=True)
+        answer = self.command("import", path.name, "--key", "glass")
+        [record] = answer["records"]
+        self.assertEqual((record["id"], record["note"]), (1, "A saved area"))
+        self.assertEqual(answer["not-imported"], [{"heading": "* Note, page 1", "text": "An unplaced note",
+                                                   "status": "not imported: no position"}])
+        self.assertEqual(self.command("list"), [record])
 
     def test_source_identity_hash_state_labels_and_map_fill_only_on_add(self):
         path = self.pdf("glass.pdf")

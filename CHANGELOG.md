@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.34.15 — 2026-11-18
+
+Pre-edit state: commit `c5d0b28`. Without a readable Skim archive, import
+overlooked Skim's plain-text notes. It now lists each heading and note as
+“not imported: no position” in the normal run, `--dry-run` and a separate
+`not-imported` array in JSON. These notes reserve no IDs and are a successful
+result on their own. The JSON array of records remains the answer when there
+are no plain-text notes to list. Synthetic macOS fixtures reproduce the
+missing report and cover two pages, a readable archive taking precedence, an
+unreadable archive falling back to text, and a PDF annotation beside the text.
+`pdfmd.py` only changes its version.
+
 ## v3.34.14 — 2026-11-18
 
 Pre-edit state: commit `99115e0`. The shared JSON handler merged returned
