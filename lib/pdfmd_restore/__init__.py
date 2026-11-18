@@ -220,6 +220,10 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
         if not (compact and line.startswith("MADE WITH")):
             print(line)
     extras = manifest.get("extras") or []
+    private_record = manifest.get("private_excerpts") if is_pdf else None
+    private_record = private_record if isinstance(private_record, dict) else None
+    if private_record and not compact:
+        print("FILE      excerpts.json  (private excerpt records)")
     stored = {item["path"] for item in extras}
     absent: list[str] = []
     for image in manifest.get("images") or []:
@@ -260,6 +264,25 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
                   file=sys.stderr)
             status = 1
         files[str(where)] = data
+    redirect_excerpts = None
+    if private_record:
+        from pdfmd_attach.options import ATTACH_EXCERPTS
+
+        data = attachments.get(ATTACH_EXCERPTS)
+        if data is None or hashlib.sha256(data).hexdigest() != private_record.get("sha256"):
+            print("WARN  excerpts.json is missing from the PDF or does not match its recorded hash; skipped", file=sys.stderr)
+            status = 1
+        else:
+            files[str(name.with_name(ATTACH_EXCERPTS))] = data
+            redirect_excerpts = private_record.get("redirect")
+            if redirect_excerpts == "source" or (single and redirect_excerpts):
+                front, body = core.split_front_matter(files[str(name)])
+                options = front.get("pdfmd-options")
+                options = options if isinstance(options, dict) else {}
+                front["pdfmd-options"] = {**options, "excerpts": ATTACH_EXCERPTS}
+                dumped = yaml.dump(front, Dumper=core._EmbedDumper, sort_keys=False, allow_unicode=True,
+                                   default_flow_style=False, width=10**6)
+                files[str(name)] = f"---\n{dumped}---\n" + body
     if odf_name is not None:
         odf_target = str(name.with_suffix("." + odf_name[9:]))
         if odf_target not in files:
@@ -279,6 +302,13 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
     if renamed:
         files = {name: restored_image_paths(name, content, renamed) for name, content in files.items()}
     layers = (manifest.get("layers") or {}).get("options")
+    if redirect_excerpts == "folder" and not single:
+        root_config = f"{core.FOLDER_DIR}/config.yaml"
+        config = str(name.parent / root_config)
+        if config == root_config:
+            layers = {**(layers or {}), "excerpts": "../" + ATTACH_EXCERPTS}
+        else:
+            files[config] = yaml.safe_dump({"options": {"excerpts": "../" + ATTACH_EXCERPTS}})
     if layers and not single and yaml is not None:
         settings = f"{core.FOLDER_DIR}/config.yaml"
         if (target / settings).exists():

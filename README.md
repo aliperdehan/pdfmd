@@ -1656,8 +1656,14 @@ discovered beside the source, selects Pandoc's styling with a NOTE. `--setup` of
 `pdfmd --excerpts add --key glass --page 41` creates a record and prints citation
 markers such as `[@x:1]` and `[@glass#1]`. With the project’s `excerpts.json`,
 pdfmd uses the record’s source and page in citations. The record's passages
-and notes stay local. Run `pdfmd --excerpts detach --all draft.md` to replace
+and notes stay local by default. Run `pdfmd --excerpts detach --all draft.md` to replace
 the markers with plain citations when sharing the Markdown.
+
+For a personal restorable PDF, `--attach-source private` or
+`pdfmd-options: {attach-source: private}` preserves the markers and stores
+`excerpts.json` separately, also with `--bundle`. It warns that the record's
+passages and notes travel in the PDF. Giving that PDF to pdfmd restores the
+record beside the source. The setting is available in `--setup`.
 
 ### The PDF carries its own source
 

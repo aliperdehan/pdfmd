@@ -888,6 +888,47 @@ sys.meta_path.insert(0, OmitLua())
         self.scan_tree()
 
     @unittest.skipUnless(shutil.which("pdflatex"), "needs pdfLaTeX")
+    def test_private_attachment_round_trip_keeps_only_the_record_private(self):
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            self.skipTest("needs pypdf")
+        record = self.record.read_bytes()
+        self.record.unlink()
+        marker_text = "Citation [@x#1]. Next [@glass:2, Table 4]."
+        base = "---\nbibliography: refs.bib\npdfmd-options: {excerpts: records/reading.json"
+        flags = ("-e", "pdflatex", "--engine-fallback", "off")
+        warning = "excerpt records (passages and notes) travel inside the PDF"
+        for mode, args in (("command", ("--attach-source", "private")), ("bundle", ("--bundle", "all"))):
+            with self.subTest(mode=mode):
+                self.write(f"{mode}/records/reading.json", record.decode("utf-8"))
+                self.write(f"{mode}/refs.bib", (self.root / "refs.bib").read_text(encoding="utf-8"))
+                setting = ", attach-source: private" if mode == "bundle" else ""
+                self.write(f"{mode}/draft.md", base + setting + "}\n---\n\n" + marker_text + "\n")
+                name = f"{mode}.pdf"
+                result = self.run_build(f"{mode}/draft.md", *flags, *args, "-o", name)
+                self.assertEqual((result.stdout + result.stderr).count(warning), 1)
+                reader = PdfReader(self.root / name)
+                text = "".join(page.extract_text() for page in reader.pages)
+                self.assertIn("41", text)
+                self.scan("PDF text", text.encode("utf-8"))
+                self.scan("PDF metadata", str(reader.metadata).encode("utf-8"))
+                self.assertEqual(list(reader.attachments["excerpts.json"]), [record])
+                self.assertIn(marker_text.encode("utf-8"), reader.attachments[pdfmd.ATTACH_SOURCE][0])
+                for key, values in reader.attachments.items():
+                    if key != "excerpts.json":
+                        for data in values:
+                            self.scan(key, data)
+                self.run_build(name, "-o", f"restored-{mode}")
+                restored = self.root / f"restored-{mode}"
+                self.assertEqual((restored / "excerpts.json").read_bytes(), record)
+                self.assertIn(marker_text, (restored / "draft.md").read_text(encoding="utf-8"))
+                self.run_build(f"restored-{mode}/draft.md", *flags, "--no-attach-source", "-o", f"rebuilt-{mode}.pdf")
+                rebuilt = PdfReader(self.root / f"rebuilt-{mode}.pdf")
+                self.assertEqual("".join(page.extract_text() for page in rebuilt.pages), text)
+                self.assertFalse(rebuilt.attachments)
+
+    @unittest.skipUnless(shutil.which("pdflatex"), "needs pdfLaTeX")
     def test_latex_pdf_attachments_and_kept_intermediates(self):
         try:
             from pypdf import PdfReader

@@ -83,6 +83,11 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("--json", text)
         self.assertIn("--in PATH", text)
 
+    def test_private_attach_mode_has_source_help(self):
+        text = " ".join(run("--help", "source").stdout.split())
+        self.assertIn("--attach-source private", text)
+        self.assertIn("attach-source: private", text)
+
     def test_csl_line_spacing_is_in_output_help(self):
         text = " ".join(re.sub(r"-\n\s+", "-", run("--help", "output").stdout).split())
         self.assertIn("bibliography-line-spacing", text)

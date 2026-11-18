@@ -1050,10 +1050,17 @@ metadata. Code, raw blocks, maths and comments keep their text.
 
 `pdfmd --excerpts detach ID ... FILE.md ...` or
 `pdfmd --excerpts detach --all FILE.md ...` writes plain citations atomically
-and reports the changed files and marker counts. Assembled Markdown, source
-attachments, embedded metadata and the native renderer also use plain
-citations. Records' passages, notes, secondary quotations and coordinates stay
-local. Bundling skips the excerpts file by path and name.
+and reports the changed files and marker counts. Assembled Markdown, shared
+source attachments, embedded metadata and the native renderer also use plain
+citations. Shared bundles skip the excerpts file by path and name.
+
+For a personal copy, use `--attach-source private` or
+`pdfmd-options: {attach-source: private}` (also available in `--setup`).
+The setting works with `--bundle` and keeps the original markers in the PDF's
+stored Markdown. The active `excerpts.json` travels as a separate attachment,
+including passages and notes, and the build warns about this. Opening the PDF
+with pdfmd restores the record beside the source. The PDF's rendered pages and
+other output formats use the usual citation-only view.
 
 `sources` lists file hints and hash states (`ok`, `changed`, `missing`, `unknown`).
 `sources add KEY FILE` records the relative file hint, SHA-256 and size; `--pages`

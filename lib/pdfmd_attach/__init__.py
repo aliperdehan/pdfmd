@@ -622,7 +622,7 @@ def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path]
                     preamble_files: list[Path] | None, no_auto: list[str] | None,
                     strip: frozenset[str], prune_bibliography: bool = True,
                     report: bool = False, base: Path | None = None, with_csl: bool = False,
-                    named_reader=None, pandoc_options=()) -> tuple[str, dict]:
+                    named_reader=None, pandoc_options=(), *, keep_excerpt_markers=False) -> tuple[str, dict]:
     """The text to attach (the assembled file with everything embedded) and its manifest.
     ``report``: the files are the chapters of a -r/--report build, each keeping its own front matter."""
     plan = core.make_embed_plan(md_path, metadata_files, preamble_files, no_auto,
@@ -641,7 +641,7 @@ def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path]
             text = core.deferred("pdfmd_filters.hidden", "strip_hidden")(text)
         if "markdown" in strip:
             text = core.strip_markdown_comments(text)
-        if excerpt_state is not None:
+        if excerpt_state is not None and not keep_excerpt_markers:
             text = rewrite(text, md_path, metadata_files, excerpt_state)[0]
             head = rewrite(head, md_path, metadata_files, excerpt_state)[0]
         chunk = text.rstrip("\n") + "\n"
@@ -654,8 +654,9 @@ def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path]
                        "lead": len(body) - len(content), "lines": len(content.splitlines()),
                        "sha256": core.sha256_text(content), "front_matter": bool(front)})
     merged = core.assemble_markdown_text([md_path, *parts], bool(parts) and not report, plan, False, strip,
-                                        excerpt_state, metadata_files)
-    return merged, attachment_manifest(md_path, parts, plan, merged, strip, chunks, base, report, excerpt_state)
+                                        excerpt_state, metadata_files, keep_excerpt_markers=keep_excerpt_markers)
+    return merged, attachment_manifest(md_path, parts, plan, merged, strip, chunks, base, report,
+                                       None if keep_excerpt_markers else excerpt_state)
 
 
 def resolve_bibliography_pruning(md_path: Path, metadata_files: list[Path]) -> bool:
@@ -787,12 +788,15 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     or after a Markdown output (--keep-source); ``output`` is the file they will belong to."""
     base = Path(os.path.abspath(base or md_path.parent))
     is_pdf = output.suffix.lower() == ".pdf"
+    from .options import private_attach
+    keep_markers = is_pdf and private_attach(md_path, metadata_files)
     with contextlib.redirect_stdout(io.StringIO()):       # the embed notes are for --assemble-only
         merged, manifest = attached_source(md_path, parts, metadata_files, preamble_files, no_auto,
                                            core.resolve_strip_comments(md_path, metadata_files, default=True),
                                            resolve_bibliography_pruning(md_path, metadata_files),
                                            report=report, base=base, with_csl=resolve_csl_attach(md_path, metadata_files),
-                                           named_reader=named_reader, pandoc_options=pandoc_options)
+                                           named_reader=named_reader, pandoc_options=pandoc_options,
+                                           keep_excerpt_markers=keep_markers)
     from pdfmd_excerpts.discovery import private_paths
     private = private_paths([md_path, *parts], metadata_files)
     extras: dict[str, bytes] = {}
@@ -911,11 +915,32 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     if layers:
         manifest["layers"] = {"options": layers}
         manifest["format"] = core.ATTACH_FORMAT
+    record = excerpt_attachment(md_path, metadata_files, no_auto, named_reader, manifest) if keep_markers else {}
     attachments = {
         core.ATTACH_SOURCE: merged.encode("utf-8"),
         core.ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
-        **{core.extra_key(name): data for name, data in extras.items() if name not in inline}}
+        **{core.extra_key(name): data for name, data in extras.items() if name not in inline},
+        **record}
     return attachments, merged, manifest
+
+
+def excerpt_attachment(document, metadata, no_auto, named_reader, manifest):
+    from pdfmd_config import is_setup_layer
+    from pdfmd_excerpts.discovery import discover
+    from pdfmd_excerpts.record import RecordError
+    from pdfmd_excerpts.resolution import enabled
+    from .options import ATTACH_EXCERPTS
+
+    if not enabled(document, metadata, no_auto, named_reader):
+        return {}
+    try:
+        data = discover(document, metadata).read_bytes()
+    except (FileNotFoundError, RecordError):
+        return {}
+    where = next((where for where, options in core.option_sources(document, metadata) if "excerpts" in options), None)
+    redirect = ("folder" if is_setup_layer(where) else "source") if where else None
+    manifest["private_excerpts"] = {"sha256": hashlib.sha256(data).hexdigest(), "redirect": redirect}
+    return {ATTACH_EXCERPTS: data}
 
 
 @timed("attach source")
@@ -941,6 +966,11 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
         print(f"WARN  attach-source: could not attach the source to {core.display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
         return
+    from .options import private_attach
+    if private_attach(md_path, metadata_files):
+        suffix = "" if "private_excerpts" in manifest else " when present"
+        print("WARN  attach-source private: excerpt records (passages and notes) travel inside the PDF" + suffix,
+              file=sys.stderr)
     core.deferred("pdfmd_filters.hidden", "attachment_warning")([md_path, *parts], metadata_files,
                                                                 manifest["comments_stripped"])
     note = held_comments_note(manifest, merged)

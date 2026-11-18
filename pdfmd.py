@@ -47,7 +47,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.34.8"
+PDFMD_VERSION = "3.34.9"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
@@ -617,7 +617,7 @@ SEED_CALC_CLI: str | None = None
 CACHE_PLOTS_CLI: bool | None = None
 
 # Command-line source attachment override.
-ATTACH_CLI: bool | None = None
+ATTACH_CLI: bool | str | None = None
 
 # Command-line source bundle mode override.
 BUNDLE_CLI: str | None = None

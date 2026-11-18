@@ -83,7 +83,7 @@ PANDOC_CITE_RE = re.compile(r"(?<![\w@])@(?:\{([^}]+)\}|([A-Za-z0-9_](?:[\w:.#$%
 LATEX_CITE_RE = re.compile(r"\\[A-Za-z]*cite[A-Za-z]*\*?(?:\[[^\]]*\]){0,2}\{([^}]*)\}")
 
 
-def used_citation_keys(texts: list[str]) -> set[str] | None:
+def used_citation_keys(texts: list[str], citation_key=None) -> set[str] | None:
     """The citation keys the texts (the document, its metadata, the preamble) use, lower-cased,
     or None when everything is wanted (`nocite: '@*'`, `\\nocite{*}`)."""
     keys: set[str] = set()
@@ -91,7 +91,10 @@ def used_citation_keys(texts: list[str]) -> set[str] | None:
         if "@*" in text or re.search(r"\\nocite\{\s*\*\s*\}", text):
             return None
         for match in PANDOC_CITE_RE.finditer(text):
-            keys.add((match.group(1) or match.group(2)).strip().lower())
+            key = (match.group(1) or match.group(2)).strip()
+            key = citation_key(key) if citation_key is not None else key
+            if key is not None:
+                keys.add(key.lower())
         for match in LATEX_CITE_RE.finditer(text):
             keys.update(item.strip().lower() for item in match.group(1).split(",") if item.strip())
     return keys
@@ -139,7 +142,8 @@ def filter_bibliography(text: str, used: set[str] | None, strip_comments: bool) 
 def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
                            plan: "EmbedPlan | None" = None, partial: bool = False,
                            strip_comments: "bool | frozenset[str]" = False,
-                           excerpt_state=None, excerpt_metadata=(), excerpt_diagnostics=False) -> str:
+                           excerpt_state=None, excerpt_metadata=(), excerpt_diagnostics=False,
+                           *, keep_excerpt_markers=False) -> str:
     """The Markdown Pandoc is given for ``sources``, as ONE text: the first
     file as it is, every later one after it. In parts mode a part's own
     leading front matter is dropped first, exactly as scaffold_inputs() does
@@ -163,7 +167,7 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
             text = core.deferred("pdfmd_filters.hidden", "strip_hidden")(text)
         if "markdown" in kinds:
             text = core.strip_markdown_comments(text)
-        if excerpt_state is not None:
+        if excerpt_state is not None and not keep_excerpt_markers:
             from pdfmd_excerpts.detach import rewrite
             text = rewrite(text, sources[0], excerpt_metadata, excerpt_state, diagnostics=excerpt_diagnostics, finish=False)[0]
         chunks.append(text.rstrip("\n") + "\n")
@@ -171,7 +175,7 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
         excerpt_state.finish()
     joined = "\n".join(chunks)
     if plan is not None:
-        return embed_into_text(joined, sources[0], plan, partial, excerpt_state)
+        return embed_into_text(joined, sources[0], plan, partial, excerpt_state, keep_excerpt_markers=keep_excerpt_markers)
     return mark_assembled(joined, partial=partial)
 
 
@@ -793,7 +797,8 @@ def apply_lua_filters(front_text: str, body: str, filters: list[Path], first: Pa
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = False, excerpt_state=None) -> str:
+def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = False, excerpt_state=None,
+                    *, keep_excerpt_markers=False) -> str:
     """Fold what ``plan`` names into the joined assembled ``text`` (see the
     comment above EMBED_KINDS); ``first`` is the document whose own front
     matter is merged (the scaffold, or a report's first chapter)."""
@@ -917,7 +922,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     for key, value in core.merge_metadata_layers([*file_layers, (document, True)], append_names, core.display_path(first)).items():
         merged[key] = value
         owner[key] = "document"
-    if excerpt_state is not None:
+    if excerpt_state is not None and not keep_excerpt_markers:
         from pdfmd_excerpts.detach import metadata_values
         merged = metadata_values(merged, first, plan.metadata_files, excerpt_state)
     option_owner: dict[str, str] = {}
@@ -945,9 +950,10 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     if references and ("bibliography" in kinds or "csl" in kinds):
         cited: set[str] | None = None
         if plan.bib_prune:
+            citation_key = excerpt_state.key if keep_excerpt_markers and excerpt_state is not None else None
             cited = used_citation_keys([body, json.dumps(merged, default=str, ensure_ascii=False),
                                         *(item.read_text(encoding="utf-8-sig", errors="replace")
-                                          for item in plan.preamble_files)])
+                                          for item in plan.preamble_files)], citation_key)
         search: list[Path] = []
         for directory in ([plan.metadata_files[0].parent] if plan.metadata_files else []) + [
                 first.parent, *(item.parent for item in plan.metadata_files),

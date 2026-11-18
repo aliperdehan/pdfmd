@@ -591,7 +591,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "Copied into the backup folder after each PDF build (a rebuilt source cannot give an old PDF back). The newest n; "
              "0 keeps none (the default); a negative number keeps every one.", "Backups", "config", "number"),
         # -- the source inside the PDF
-        choice("options.attach-source", "Attach the source to the PDF", on_off, "",
+        choice("options.attach-source", "Attach the source to the PDF",
+               (*on_off, ("private", "keep excerpt markers and attach passages and notes")), "",
                "Anyone can read it back from the PDF (pdfmd --restore).", "Source inside the PDF"),
         choice("options.attach-csl", "The citation style attached with the source", on_off, "",
                "Off by default: a style is 10-90 KB (apa.csl is 86 KB) and the global metadata sets one for every document. "

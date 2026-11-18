@@ -119,9 +119,9 @@ locators. `excerpt-repeat: page` uses a literal locator after the same source
 in a paragraph when pagecite selects its page form. The default is `full`.
 Use `--no-auto excerpts` to disable resolution. Run
 `pdfmd --excerpts detach --all draft.md` or specify IDs before the Markdown
-files to write plain citations. Source exports and attachments do this
-automatically. Builds never copy record passages, notes, quotation details or
-coordinates. Source PDFs and review exports stay local.
+files to write plain citations. Source exports and default attachments do this
+automatically. With `--attach-source private`, the record travels in a separate
+attachment. Build text and metadata use citation fields alone.
 
 ## When a build fails
 
@@ -142,7 +142,7 @@ An explicit `--from` or `pdfmd-options: {reader: ...}` suppresses this warning.
 | the best PDF of a Markdown file | `pdfmd file.md` (Pandoc and a LaTeX or Typst engine) |
 | a Word, OpenDocument or e-book file | `-o file.docx`, `.odt`, `.epub`, `.azw3` (Calibre writes the Kindle formats) |
 | the Markdown of a PDF, a Word file or an e-book | `pdfmd file.pdf`, `file.docx`, `book.epub` |
-| a self-contained, restorable PDF | `--attach-source` (off unless asked, or `attach-source: true` in `pdfmd-options:`): the source goes into the PDF; `--restore` writes it back |
+| a self-contained, restorable PDF | `--attach-source` (off unless asked, or `attach-source: true` in `pdfmd-options:`): the source goes into the PDF; `--restore` writes it back. `--attach-source private` also carries local excerpt passages and notes. |
 | what is wrong with this machine | `pdfmd --doctor --deep` |
 
 For a template's running head, `pdfmd-options: {office: {replace: {KICKER: "$course$ $term$"}}}` reads

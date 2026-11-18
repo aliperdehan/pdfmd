@@ -62,8 +62,23 @@ class Parser(argparse.ArgumentParser):
 
     def parse_known_args(self, args=None, namespace=None):
         arguments = sys.argv[1:] if args is None else list(args)
-        named, extras = super().parse_known_args(arguments, namespace)
+        parsed = arguments.copy()
+        for index, token in enumerate(arguments):
+            if token in ("--", "--excerpts"):
+                break
+            if token in ("--attach-source", "--embed-source") and arguments[index + 1:index + 2] != ["private"]:
+                # The original switch can come immediately before a positional file.
+                parsed[index] += "=true"
+        named, extras = super().parse_known_args(parsed, namespace)
         return named, with_pass_through(arguments, extras)
+
+
+def attach_source_argument(value: str) -> bool | str:
+    if value == "true":
+        return True
+    if value == "private":
+        return value
+    raise argparse.ArgumentTypeError("use --attach-source or --attach-source private")
 
 
 def csv_note_argument(value: str) -> str:
@@ -256,12 +271,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "an assembled file")
     parser.add_argument("--no-attach-csl", dest="attach_csl", action="store_false",
                         help="attach no style, even where a document's pdfmd-options.attach-csl asks for it")
-    parser.add_argument("--attach-source", "--embed-source", dest="attach_source", action="store_true",
-                        default=None,
+    parser.add_argument("--attach-source", "--embed-source", dest="attach_source", nargs="?", const=True,
+                        type=attach_source_argument, default=None, metavar="private",
                         help="attach the document's whole source (the assembled Markdown, comments "
                              "stripped, plus a manifest of the original layout) to the PDF it builds, so "
                              "`pdfmd --restore FILE.pdf` can write the folder back. A document sets it with "
-                             "pdfmd-options.attach-source (alias embed-source)")
+                             "pdfmd-options.attach-source (alias embed-source). Use --attach-source private "
+                             "or attach-source: private to keep excerpt markers and attach their local passages and notes, "
+                             "including when --bundle is used")
     parser.add_argument("--no-attach-source", dest="attach_source", action="store_false",
                         help="attach nothing, even where a document's pdfmd-options.attach-source asks for it")
     parser.add_argument("--keep-source", nargs="?", const="packed", choices=("packed", "readable"), default=None,

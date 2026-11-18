@@ -18,6 +18,7 @@ ATTACH_MANIFEST = "pdfmd-manifest.json"
 
 ATTACH_SOURCE = "pdfmd-source.md"
 
+ATTACH_EXCERPTS = "excerpts.json"
 
 ATTACH_KEYS = ("attach-source", "embed-source")
 
@@ -44,9 +45,16 @@ def resolve_attach(md_path: Path, metadata_files: list[Path]) -> bool:
     line, else `pdfmd-options.attach-source` (or `embed-source`)."""
     if resolve_bundle(md_path, metadata_files):
         return core.ATTACH_CLI is not False           # a bundle is a source plus files; --no-attach-source still wins
-    if core.ATTACH_CLI is not None:
-        return core.ATTACH_CLI
-    return bool(core.option_flag(core.first_pdfmd_option(md_path, metadata_files, *ATTACH_KEYS)))
+    return private_attach(md_path, metadata_files) or bool(core.option_flag(attach_value(md_path, metadata_files)))
+
+
+def attach_value(md_path: Path, metadata_files: list[Path]):
+    value = core.ATTACH_CLI
+    return core.first_pdfmd_option(md_path, metadata_files, *ATTACH_KEYS) if value is None else value
+
+
+def private_attach(md_path: Path, metadata_files: list[Path]) -> bool:
+    return str(attach_value(md_path, metadata_files)).strip().casefold() == "private"
 
 
 def resolve_bundle(md_path: Path, metadata_files: list[Path]) -> str | None:

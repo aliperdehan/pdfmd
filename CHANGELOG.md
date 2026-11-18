@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.34.9 — 2026-11-18
+
+Pre-edit state: commit `d799204`. A PDF's attached source detached excerpt markers and left the record
+behind, so the author could restore the citations but could not reopen their source tracking. The opt-in
+`attach-source: private` or `--attach-source private` keeps markers in the attached Markdown and stores
+the active record as a separate attachment. It works with `--bundle`, warns about the passages and notes
+in the PDF, and restores the file where the project finds it. Rendered pages use the same citation data.
+The default attachment path remains byte-for-byte compatible apart from the normal manifest version.
+
+- A synthetic PDF test exercises the command-line and bundled modes, an explicitly named record, the
+  restore and rebuild, and scans every other attachment and the rendered text and PDF metadata for a canary.
+
 ## v3.34.8 — 2026-11-18
 
 Pre-edit state: commit `1113e1c`. Repeated excerpt citations always reached the citation engine in full
