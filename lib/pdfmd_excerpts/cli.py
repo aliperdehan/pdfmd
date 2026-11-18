@@ -280,6 +280,14 @@ def execute(args, arguments):
 
 
 def command(arguments):
+    # Records and answers are UTF-8 (passages in any script): a pipe on Windows is the ANSI code page otherwise, which
+    # cannot write Cyrillic or Greek and makes `—` a byte no UTF-8 reader takes (as `pdfmd --doc` already does)
+    for stream in (sys.stdout, sys.stderr):
+        if not stream.isatty() and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except (OSError, ValueError):
+                pass
     want_json = "--json" in arguments
     try:
         args = parser().parse_args(arguments)

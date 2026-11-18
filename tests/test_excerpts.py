@@ -124,6 +124,16 @@ class Commands(CommandFixture, unittest.TestCase):
         self.write("draft.md", "---\npdfmd-options:\n  flavour: obsidian\n---\n\n@x:1\n%% @x:1\n")
         self.assertEqual([item["line"] for item in self.command("where", "1")], [6])
 
+    def test_answers_are_utf8_whatever_the_pipe_encoding(self):
+        # a pipe on Windows has the ANSI code page: a passage in Cyrillic could not be written at all, and `—` came out
+        # as a byte no UTF-8 reader takes (the branch CI's Windows jobs, v3.34.1)
+        self.command("add", "--key", "glass", "--page", "2", "--text", "Выдуманный отрывок — invented.")
+        result = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--excerpts", "show", "1"], cwd=self.root,
+                                env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1", "PYTHONIOENCODING": "cp1252"},
+                                capture_output=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
+        self.assertIn("Выдуманный отрывок — invented.", result.stdout.decode("utf-8"))
+
     def test_export_and_every_action_json_and_plain_output(self):
         self.command("add", "--key", "glass", "--page", "24", "--text", "An invented fragment.", "--note", "A note.")
         self.write("draft.md", "[@glass#1]\n")
