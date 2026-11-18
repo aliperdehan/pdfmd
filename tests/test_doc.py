@@ -116,6 +116,7 @@ class Contents(unittest.TestCase):
         guide = (ROOT / "docs" / "agents.md").read_text(encoding="utf-8")
         flags = set(re.findall(r"(?<![\w-])(--[a-z][a-z0-9-]*)", guide))
         known = set(re.findall(r"(--[a-z][a-z0-9-]*)", run("--help", "all").stdout))
+        known |= set(re.findall(r"(--[a-z][a-z0-9-]*)", run("--excerpts", "--help").stdout))    # its actions' own options
         self.assertTrue(flags)
         self.assertEqual(sorted(flags - known), [])
 

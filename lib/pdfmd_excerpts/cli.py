@@ -29,7 +29,8 @@ def parser():
     common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="answer as JSON (also on failure)")
     common.add_argument("--in", dest="place", default=argparse.SUPPRESS, metavar="PATH", help="document or project folder")
     common.add_argument("--verbose", action="store_true", default=argparse.SUPPRESS, help="show further record files ignored")
-    result = Parser(prog="pdfmd --excerpts", parents=[common], description="Local excerpt records; no build changes in P1b.")
+    result = Parser(prog="pdfmd --excerpts", parents=[common], description="Local excerpt records; no build changes in P1b.",
+                    formatter_class=argparse.RawDescriptionHelpFormatter)
     actions = result.add_subparsers(dest="action", required=True, parser_class=Parser)
     for action in ("list", "show", "where", "add", "edit", "remove", "sources", "export"):
         sub = actions.add_parser(action, parents=[common])
@@ -62,7 +63,32 @@ def parser():
             match.add_argument("--apply", action="store_true")
         if action == "export":
             sub.add_argument("-o", "--out", metavar="FILE")
+    result.epilog = action_summary(actions)
     return result
+
+
+def action_summary(actions) -> str:
+    """Every action with its own options, made from the parsers themselves (so `pdfmd --excerpts --help` names every
+    option the guide does, and cannot drift from what the actions accept)."""
+    def words(sub):
+        found = []
+        for item in sub._actions:
+            if isinstance(item, argparse._SubParsersAction) or "--help" in item.option_strings:
+                continue
+            if not item.option_strings:
+                found.append(item.dest.upper())
+            elif max(item.option_strings, key=len) not in ("--json", "--in", "--verbose"):
+                name = max(item.option_strings, key=len)
+                found.append(f"[{name}]" if item.nargs == 0 else f"[{name} {(item.metavar or item.dest).upper()}]")
+        return " ".join(found)
+    lines = ["actions and their options (each also takes --json and --in PATH):"]
+    for name, sub in actions.choices.items():
+        verbs = [item for item in sub._actions if isinstance(item, argparse._SubParsersAction)]
+        if verbs:
+            lines += [f"  {name} {verb} {words(verb_parser)}".rstrip() for verb, verb_parser in verbs[0].choices.items()]
+        else:
+            lines.append(f"  {name} {words(sub)}".rstrip())
+    return "\n".join(lines)
 
 
 def parts(arguments):
