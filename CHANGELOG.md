@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.33.333e — 2026-11-18
+
+Pre-edit state: commit `2d7f0d9`. The shell opens a folder (`Ctrl+O`, and the page's Ctrl+O too) with the native folder
+dialogue, starts `pdfmd --serve` on the port the server itself picks and shows its page; `colophon-win.exe FILE.md`
+opens the file's folder on that file. The server runs in a job object limited to kill-on-close, so it dies with the
+shell even when the shell is killed; a stopped server is reported in the status bar. The page's native bridge is
+installed, so the page marks itself native and posts its state (title, unsaved dot). `--selftest` grows to 11 checks:
+the command line, pdfmd's location and its UTF-8 child environment join the earlier ones. `dotnet build` passes and
+`--selftest` reports 11 passed, 0 failed. Not verified by hand: the folder dialogue and the page on screen.
+
 ## v3.33.333d — 2026-11-18
 
 Pre-edit state: commit `892c408`. `gui-win/` starts Colophon's Windows trial: a thin .NET 8 shell around the web

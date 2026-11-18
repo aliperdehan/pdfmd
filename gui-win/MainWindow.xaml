@@ -4,18 +4,34 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Colophon" Width="1320" Height="840" MinWidth="720" MinHeight="480"
         WindowStartupLocation="CenterScreen" Background="{DynamicResource WindowBrush}"
-        Foreground="{DynamicResource ForegroundBrush}">
+        Foreground="{DynamicResource ForegroundBrush}" PreviewKeyDown="Window_PreviewKeyDown">
   <Grid>
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-    <wv2:WebView2 x:Name="Web" Grid.Row="0" />
+    <Border Grid.Row="0" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="0,0,0,1" Padding="10,6">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+          <Button x:Name="OpenButton" Content="Open Folder" Click="OpenFolder_Click" ToolTip="Open a folder (Ctrl+O)" />
+        </StackPanel>
+        <TextBlock x:Name="ProjectLabel" Margin="12,0,0,0" VerticalAlignment="Center"
+                   Foreground="{DynamicResource MutedBrush}" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
+    </Border>
 
-    <Border Grid.Row="1" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}"
+    <wv2:WebView2 x:Name="Web" Grid.Row="1" />
+
+    <Border Grid.Row="2" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,1,0,0" Padding="10,4">
-      <TextBlock x:Name="StatusText" Text="Ready." VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      <DockPanel>
+        <TextBlock x:Name="StatusText" Text="Ready." VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="StateText" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                   Foreground="{DynamicResource MutedBrush}" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
     </Border>
   </Grid>
 </Window>
