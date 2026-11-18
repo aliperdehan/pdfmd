@@ -270,28 +270,30 @@ def lint_excerpts(files, document, metadata, arguments, no_auto, named_reader):
     return problems, skip
 
 
-def metadata_sources(metadata):
-    return [(path, Source(core.display_path(path), path.parent, core.read_text_best_effort(path)), True) for path in metadata]
+def metadata_sources(metadata, show=None):
+    show = show or core.display_path
+    return [(path, Source(show(path), path.parent, core.read_text_best_effort(path)), True) for path in metadata]
 
 
 def file_problem(path, message):
     return Problem(core.display_path(path), 0, "excerpt-file", "excerpts.json: " + message)
 
 
-def project_checks(place, path, data):
+def project_checks(place, path, data, *, guard=None, show=None):
     from .anchors import pdf_problems
 
-    problems, affected = pdf_problems(data, path)
+    show = show or core.display_path
+    problems, affected = pdf_problems(data, path, show=show)
     used = set()
-    for document, metadata in project_documents(place, path):
+    for document, metadata in project_documents(place, path, guard=guard):
         no_auto = core.effective_no_auto(document, None)
         if not enabled(document, metadata, no_auto):
             continue
-        own = Source(core.display_path(document), document.parent, document.read_text(encoding="utf-8-sig"))
-        sources = [item for item in [(document, own, False), *metadata_sources(metadata)] if might_cite(item[1].text)]
+        own = Source(show(document), document.parent, document.read_text(encoding="utf-8-sig"))
+        sources = [item for item in [(document, own, False), *metadata_sources(metadata, show)] if might_cite(item[1].text)]
         if not sources:
             continue
-        keys = bibliography_keys([document], metadata, (), no_auto)
+        keys = bibliography_keys([document], metadata, (), no_auto, guard=guard)
         prefix = prefix_setting(document, metadata)
         for item, source, is_metadata in sources:
             found, ids, subject = marker_checks(item, source, document, metadata, prefix, keys, data, metadata_only=is_metadata)
@@ -300,5 +302,5 @@ def project_checks(place, path, data):
             affected.update(subject)
     for record in data["excerpts"]:
         if record["id"] not in used:
-            problems.append(Problem(core.display_path(path), 0, "excerpt-unused", f"excerpt {record['id']} is unused"))
+            problems.append(Problem(show(path), 0, "excerpt-unused", f"excerpt {record['id']} is unused"))
     return list(dict.fromkeys(problems)), used, affected

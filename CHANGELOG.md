@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.34.12 — 2026-11-18
+
+Pre-edit state: commit `b78dbde`. Excerpt records and their source PDFs were
+available to the local commands but had no project API. The authenticated
+server now lists, adds, edits, removes and checks records and registers sources
+through the same operations and file lock as `--excerpts`. It serves only named,
+project-contained source files with a PDF signature, with HTTP byte ranges.
+`--api` mirrors the routes and writes successful source responses as PDF bytes.
+Regression tests cover the routes, command parity, outside paths, token checks,
+concurrent writes and range responses. The route tests failed before the change
+and passed afterwards. Live HTTP testing is blocked by the sandbox's socket
+permissions. `pdfmd.py` only changes its version.
+
 ## v3.34.11 — 2026-11-18
 
 Pre-edit state: commit `e050ab9`. `--check` skipped the scaffold's folder

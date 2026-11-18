@@ -123,7 +123,7 @@ def serve_command(args) -> int:
 
 
 def api_command(words: list[str]) -> int:
-    """`pdfmd --api METHOD PATH [JSON]`: one request of the web UI's API, answered on stdout (the project is the working folder).
+    """`pdfmd --api METHOD PATH [JSON]`: answer from the working folder, as JSON or the requested source PDF on stdout.
     JSON may be `-` for standard input. Exit 1 when the answer is an error."""
     if len(words) not in (2, 3) or words[0].upper() not in ("GET", "POST", "PUT", "DELETE"):
         print("--api takes METHOD PATH [JSON]: pdfmd --api GET /api/project", file=sys.stderr)
@@ -134,6 +134,10 @@ def api_command(words: list[str]) -> int:
         print(f"--api: {error}", file=sys.stderr)
         return 2
     status, answer = serve_core(Path.cwd()).handle(words[0], words[1], body)
+    if not isinstance(answer, dict):
+        with answer.file:
+            answer.write_to(sys.stdout.buffer)
+        return 0
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     print(json.dumps(answer, ensure_ascii=False, indent=2))

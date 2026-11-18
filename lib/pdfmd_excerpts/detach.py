@@ -328,7 +328,7 @@ def metadata_values(mapping, document, metadata, state):
     return {key: value if key in structural else replace(value) for key, value in mapping.items()}
 
 
-def files(paths, ids=None, *, selected_path=None, data=None):
+def files(paths, ids=None, *, selected_path=None, data=None, guard=None):
     """Detach files atomically, after reading and validating every requested file."""
     from .discovery import context, discover
 
@@ -336,7 +336,7 @@ def files(paths, ids=None, *, selected_path=None, data=None):
     for path in dict.fromkeys(Path(name).resolve() for name in paths):
         if path.suffix.lower() not in (".md", ".markdown", ".qmd") or not path.is_file():
             raise RecordError("detach needs an existing Markdown file")
-        document, metadata = context(path)
+        document, metadata = context(path, guard=guard)
         record = discover(document, metadata)
         if selected_path is not None and selected_path != record:
             raise RecordError("a detach file uses a different excerpt record file")
@@ -349,7 +349,7 @@ def files(paths, ids=None, *, selected_path=None, data=None):
         newline = "\r\n" if core.is_crlf_text(original.encode("utf-8")) else "\n"
         text = original.replace("\r\n", "\n")
         state = prepare([document], metadata, no_auto=core.effective_no_auto(document, None),
-                        diagnostics=True, text=text, data=records)
+                        diagnostics=True, text=text, data=records, guard=guard)
         new, count = rewrite(text, document, metadata, state, ids, diagnostics=True)
         if count:
             changes.append((path, new, newline, count))

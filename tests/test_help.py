@@ -77,6 +77,7 @@ class TieredHelp(unittest.TestCase):
         text = " ".join(text.split())
         self.assertIn("--excerpts", text)
         self.assertIn("pdfmd-options.excerpts", text)
+
         self.assertIn("pdfmd-options.excerpt-repeat", text)
         self.assertIn("pdfmd-options.excerpt-prefix", text)
         self.assertIn("@x:ID and @KEY#ID", text)
@@ -86,6 +87,11 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("excerpt-overlap-words", text)
         for action in ("reanchor", "renumber", "rekey"):
             self.assertIn(action, text)
+
+    def test_serve_help_names_the_excerpt_api(self):
+        text = run("--help", "serve").stdout
+        self.assertIn("/api/excerpts", text)
+        self.assertIn("/api/source", text)
 
     def test_private_attach_mode_has_source_help(self):
         text = " ".join(run("--help", "source").stdout.split())

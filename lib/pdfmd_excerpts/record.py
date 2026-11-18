@@ -23,6 +23,21 @@ class RecordError(ValueError):
     """A safe diagnostic: never interpolate the file's passages or notes."""
 
 
+class RecordMissing(RecordError):
+    """A named record or source does not exist."""
+
+
+class RecordConflict(RecordError):
+    """The requested change conflicts with existing project data."""
+
+
+def check_source_paths(data, base, guard):
+    for source in data["sources"].values():
+        for entry in (source, *source.get("more", {}).values()):
+            if entry.get("file"):
+                guard(base / Path(entry["file"]).expanduser())
+
+
 def positive(value):
     return type(value) is int and value > 0
 
@@ -196,9 +211,13 @@ def locked(path):
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def update(path, change):
+def update(path, change, *, guard=None):
     with locked(path) as target:
+        if guard is not None:
+            guard(target)
         data = read(target, create=True)  # Always reread after acquiring the lock.
+        if guard is not None:
+            check_source_paths(data, target.parent, guard)
         if data["pdfmd-excerpts"] != 1:
             raise RecordError("newer record version cannot be written")
         result = change(data)

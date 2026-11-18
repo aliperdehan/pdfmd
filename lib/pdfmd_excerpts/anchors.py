@@ -58,8 +58,8 @@ def contains_box(bounds, box):
     return left <= x0 < x1 <= right and bottom <= y0 < y1 <= top
 
 
-def pdf_problems(data, path):
-    label = core.display_path(path)
+def pdf_problems(data, path, *, show=None):
+    label = (show or core.display_path)(path)
     results, affected = [], set()
     for source in source_files(data):
         file = source.path(path.parent)

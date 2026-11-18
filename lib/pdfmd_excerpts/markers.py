@@ -88,7 +88,7 @@ def project_root(place, record_path):
     return project if project == root or project in root.parents else root
 
 
-def project_contexts(place, record_path):
+def project_contexts(place, record_path, *, guard=None):
     from .discovery import context, discover
 
     root = project_root(place, record_path)
@@ -97,7 +97,7 @@ def project_contexts(place, record_path):
                 or any(part.startswith(".") for part in path.relative_to(root).parts)):
             continue
         # A nearer/explicit different record file makes this a different id namespace.
-        document, metadata = context(path)
+        document, metadata = context(path, guard=guard)
         try:
             namespace = discover(document, metadata).resolve()
         except ValueError:
@@ -105,23 +105,24 @@ def project_contexts(place, record_path):
         yield document, metadata, namespace
 
 
-def project_documents(place, record_path):
+def project_documents(place, record_path, *, guard=None):
     namespace = record_path.resolve()
-    return ((document, metadata) for document, metadata, found in project_contexts(place, record_path)
+    return ((document, metadata) for document, metadata, found in project_contexts(place, record_path, guard=guard)
             if found == namespace)
 
 
-def locations(place, record_path, bibliography, data=None):
+def locations(place, record_path, bibliography, data=None, *, guard=None, show=None):
     from .resolution import Resolution, project
+    show = show or core.display_path
     records = project(data) if data is not None else None
     warnings = set()
     result = []
-    for document, metadata in project_documents(place, record_path):
+    for document, metadata in project_documents(place, record_path, guard=guard):
         prefix = prefix_setting(document, metadata)
         text = document.read_text(encoding="utf-8")
         scanned = citation_mask(text, document, metadata, include_metadata=True)
         from .discovery import bibliography as document_bibliography
-        real_keys = {**bibliography, **document_bibliography(document, metadata)}
+        real_keys = {**bibliography, **document_bibliography(document, metadata, guard=guard)}
         state = Resolution(prefix, records, set(real_keys), [], (), messages=warnings)
         for found in CITATION.finditer(scanned):
             key = found[1] or found[2]
@@ -130,6 +131,6 @@ def locations(place, record_path, bibliography, data=None):
                 state.resolve(key, diagnostics=True)
             elif parsed is not None and (records is None or state.resolve(key) is not None):
                 ident, named = parsed
-                result.append({"id": ident, "key": named, "file": core.display_path(document),
+                result.append({"id": ident, "key": named, "file": show(document),
                                "line": text.count("\n", 0, found.start()) + 1, "marker": canonical(ident, named, prefix)})
     return result

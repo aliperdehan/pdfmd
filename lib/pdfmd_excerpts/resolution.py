@@ -53,7 +53,7 @@ def enabled(document, metadata, no_auto, named_reader=None):
             and "excerpts" in core.markup_kinds(document, metadata))
 
 
-def bibliography_keys(sources, metadata, arguments, no_auto, extra_layers=(), include_candidates=True):
+def bibliography_keys(sources, metadata, arguments, no_auto, extra_layers=(), include_candidates=True, *, guard=None):
     from pdfmd_bibliography.discovery import candidates
     from pdfmd_bibliography.sources import layers, locate, read_entries, resource_folders, values
 
@@ -67,6 +67,10 @@ def bibliography_keys(sources, metadata, arguments, no_auto, extra_layers=(), in
     if include_candidates and not core.discovery_disabled(no_auto, "bib"):
         files.update(candidates(sources, metadata))
     for path in files:
+        if guard is not None:
+            if not path.is_file():
+                continue
+            path = guard(path.absolute())
         parsed = read_entries(path)
         if parsed:
             keys.update(key for key, _ in parsed[0])
@@ -146,7 +150,7 @@ def project(data):
 
 
 def prepare(sources, metadata, arguments=(), no_auto=None, *, diagnostics=False, text=None, named_reader=None,
-            data=None, extra_layers=()):
+            data=None, extra_layers=(), guard=None):
     """Read only when the source or its metadata can use an excerpt."""
     document = sources[0]
     metadata = list(metadata)
@@ -159,6 +163,8 @@ def prepare(sources, metadata, arguments=(), no_auto=None, *, diagnostics=False,
     try:
         prefix = prefix_setting(document, metadata)
     except RecordError as error:
+        if guard is not None:
+            raise
         raise SystemExit(str(error)) from None
     if not enabled(document, metadata, no_auto, named_reader):
         return None
@@ -185,7 +191,7 @@ def prepare(sources, metadata, arguments=(), no_auto=None, *, diagnostics=False,
                 warn("excerpts.json: " + reason)
             return None
     page, locators = terms(document, metadata) if found is not None else ([], ())
-    keys = bibliography_keys(sources, metadata, arguments, no_auto, extra_layers)
+    keys = bibliography_keys(sources, metadata, arguments, no_auto, extra_layers, guard=guard)
     return Resolution(prefix, found, keys, page, tuple(sorted(locators)), missing,
                       arguments=tuple(arguments), no_auto=no_auto)
 

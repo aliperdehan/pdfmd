@@ -4,7 +4,9 @@ fixtures show (the page is built against the fixtures, so a drift here breaks th
 from __future__ import annotations
 
 import contextlib
+from concurrent.futures import ThreadPoolExecutor
 import http.client
+import io
 import json
 import os
 import shutil
@@ -16,6 +18,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+from urllib.parse import urlencode
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
 import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
@@ -25,6 +28,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "lib"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+import pdfmd as _pdfmd  # noqa: E402,F401  (binds the shared excerpt commands)
 from pdfmd_serve import API_VERSION, ApiError, Core, Server  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
@@ -187,6 +191,117 @@ class Handlers(Folder):
     def test_a_binary_file_is_not_text(self):
         (self.root / "x.png").write_bytes(b"\x89PNG\xff\xfe\x00")
         self.assertEqual(self.get("/api/file?path=x.png")[0], 415)
+
+
+class ExcerptHandlers(Folder):
+    def test_excerpt_requests_and_cli_share_the_record_operations(self):
+        document = self.root / "report.md"
+        source = self.root / "sub" / "source.pdf"
+        source.write_bytes(b"%PDF-1.4 synthetic")
+
+        def api(method, target, body=None, status=200):
+            actual, answer = self.core.handle(method, target, body)
+            self.assertEqual(actual, status, answer)
+            self.assertEqual(answer["api"], API_VERSION)
+            return answer
+
+        source_request = {"key": "a", "file": "sub/source.pdf", "pages": [[2, "41"]]}
+        api("POST", "/api/excerpts/sources", source_request, status=201)
+        made = api("POST", "/api/excerpts", {"key": "a", "parts": [{"pdf-page": 2, "text": "Café",
+                   "text-from": "pdf", "boxes": [[1, 2, 3, 4]]}]}, status=201)
+        self.assertEqual(made["markers"], ["[@x:1]", "[@a#1]"])
+        self.assertEqual(api("PUT", "/api/excerpts?id=1", {"note": "A note"})["page"], "41")
+        document.write_text("Cited [@a#1].\n", encoding="utf-8")
+        listing = api("GET", "/api/excerpts")
+        self.assertEqual(listing["record"]["excerpts"][0]["note"], "A note")
+        self.assertEqual(listing["locations"][0]["file"], "report.md")
+        self.assertEqual(listing["locations"][0]["id"], 1)
+        self.assertEqual(listing["problems"], api("GET", "/api/excerpts/check")["problems"])
+        self.assertIn("excerpt-box", {item["code"] for item in listing["problems"]})
+        api("DELETE", "/api/excerpts?id=1", status=409)
+        api("PUT", "/api/excerpts?id=0", {"note": "A note"}, status=400)
+        api("PUT", "/api/excerpts?id=7", {"note": "A note"}, status=404)
+
+        def cli(method, target, body=None):
+            return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--api", method, target,
+                                   *([json.dumps(body)] if body is not None else [])], cwd=self.root,
+                                  capture_output=True, timeout=30)
+
+        for target, expected in (("/api/excerpts", listing), ("/api/excerpts/check", api("GET", "/api/excerpts/check"))):
+            done = cli("GET", target)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual(json.loads(done.stdout), expected)
+        done = cli("GET", "/api/source?key=a")
+        self.assertEqual((done.returncode, done.stdout), (0, source.read_bytes()), done.stderr)
+        done = cli("DELETE", "/api/excerpts?id=1", {"detach": True})
+        self.assertEqual((done.returncode, json.loads(done.stdout)["removed"]), (0, 1), done.stderr)
+        self.assertEqual(document.read_text(encoding="utf-8"), "Cited [@a, p. 41].\n")
+        done = cli("POST", "/api/excerpts/sources", source_request)
+        self.assertEqual((done.returncode, json.loads(done.stdout)["pages"]), (0, [[2, "41"]]), done.stderr)
+        done = cli("POST", "/api/excerpts", {"key": "a"})
+        self.assertEqual((done.returncode, json.loads(done.stdout)["id"]), (0, 2), done.stderr)
+        done = cli("PUT", "/api/excerpts?id=2", {"note": "Edited from the API command"})
+        self.assertEqual((done.returncode, json.loads(done.stdout)["note"]), (0, "Edited from the API command"), done.stderr)
+        self.assertEqual(api("GET", "/api/excerpts")["record"]["excerpts"], [
+            {key: value for key, value in json.loads(done.stdout).items() if key != "api"}
+        ])
+
+    def test_excerpt_paths_outside_the_project_are_refused(self):
+        outside = self.root.parent / "outside.pdf"
+        outside.write_bytes(b"%PDF-1.4 private")
+        sources = "/api/excerpts/sources"
+        self.assertEqual(self.core.handle("POST", sources, {"key": "a", "file": "../outside.pdf"})[0], 403)
+        record = self.root / "excerpts.json"
+        record.write_text(json.dumps({"pdfmd-excerpts": 1, "next-id": 1, "excerpts": [],
+                                     "sources": {"a": {"file": str(outside)}}}), encoding="utf-8")
+        for method, target, body in (("GET", "/api/excerpts", None), ("GET", "/api/excerpts/check", None),
+                                     ("GET", "/api/source?key=a", None), ("POST", "/api/excerpts", {"key": "a"})):
+            status, answer = self.core.handle(method, target, body)
+            self.assertEqual((status, answer.get("code")), (403, "outside"), answer)
+            self.assertNotIn(str(outside), json.dumps(answer))
+        other = self.root.parent / "outside.json"
+        other.write_text("private", encoding="utf-8")
+        folder = self.root / "sub"
+        (folder / ".pdfmd").mkdir()
+        (folder / ".pdfmd" / "config.yaml").write_text("options: {excerpts: ../../outside.json}\n", encoding="utf-8")
+        self.assertEqual(Core(folder).handle("GET", "/api/excerpts")[0], 403)
+
+    def test_source_http_handler_sends_only_the_requested_pdf_bytes(self):
+        from pdfmd_serve.shell import Handler
+
+        contents = b"%PDF-1.4 synthetic"
+        (self.root / "named.pdf").write_bytes(contents)
+        self.core.handle("POST", "/api/excerpts/sources", {"key": "a", "file": "named.pdf"})
+        request = Handler.__new__(Handler)
+        request.path, request.command, request.wfile = "/api/source?key=a", "GET", io.BytesIO()
+        request.server = SimpleNamespace(core=self.core, token="test", hosts={"localhost:1234"})
+        request.headers = {"Host": "localhost:1234", "Range": "bytes=1-4"}
+        request.send_head, request.send_json, request.send = mock.Mock(), mock.Mock(), mock.Mock()
+        request.handle_any()
+        self.assertEqual(request.send.call_args.args[0], 403)
+        request.send_head.assert_not_called()
+        request.headers["Authorization"] = "Bearer test"
+        request.handle_any()
+        request.send_head.assert_called_once_with(206, 4, "application/pdf",
+                                                  {"Accept-Ranges": "bytes", "Content-Range": f"bytes 1-4/{len(contents)}"})
+        self.assertEqual(request.wfile.getvalue(), b"PDF-")
+        request.headers["Range"] = "bytes=100-"
+        request.handle_any()
+        status, body, headers = request.send_json.call_args.args
+        self.assertEqual((status, body["code"], headers["Content-Range"]), (416, "range", f"bytes */{len(contents)}"))
+
+    def test_concurrent_excerpt_writes_use_the_command_lock(self):
+        from pdfmd_excerpts.record import locked
+
+        record = self.root / "excerpts.json"
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            with locked(record):
+                writes = [pool.submit(self.core.handle, "POST", "/api/excerpts", {"key": "a"}) for _ in range(2)]
+                self.assertFalse(any(item.done() for item in writes))
+            answers = [item.result(timeout=15) for item in writes]
+        self.assertEqual([status for status, _ in answers], [201, 201], answers)
+        self.assertEqual(sorted(answer["id"] for _, answer in answers), [1, 2])
+        self.assertEqual(json.loads(record.read_text(encoding="utf-8"))["next-id"], 3)
 
 
 class PreviewCopies(Folder):
@@ -893,6 +1008,31 @@ class Http(Folder):
         self.assertEqual((status, json.loads(body)["main"]), (200, "report.md"))
         status, _, body = self.ask("GET", "/api/file?path=../x", headers=self.bearer())
         self.assertEqual((status, json.loads(body)["code"]), (403, "outside"))
+
+    def test_excerpt_source_verifies_the_token_magic_and_range(self):
+        contents = b"%PDF-1.4 synthetic"
+        (self.root / "signed.data").write_bytes(contents)
+        (self.root / "unsigned.pdf").write_bytes(b"not a PDF")
+        (self.root / "excerpts.json").write_text(json.dumps({
+            "pdfmd-excerpts": 1, "next-id": 1, "excerpts": [],
+            "sources": {"good": {"file": "signed.data"}, "bad": {"file": "unsigned.pdf"}},
+        }), encoding="utf-8")
+        target = "/api/source?" + urlencode({"key": "good"})
+        self.assertEqual(self.ask("GET", target)[0], 403)
+        self.assertEqual(self.ask("POST", "/api/excerpts", body='{"key":"good"}')[0], 403)
+        self.assertEqual(self.ask("GET", target, headers=self.bearer())[2], contents)
+        for value, start, end in (("bytes=1-4", 1, 4), ("bytes=7-", 7, len(contents) - 1),
+                                  ("bytes=-3", len(contents) - 3, len(contents) - 1)):
+            status, headers, payload = self.ask("GET", target, headers={**self.bearer(), "Range": value})
+            self.assertEqual((status, headers["Content-Type"], headers["Accept-Ranges"]), (206, "application/pdf", "bytes"))
+            self.assertEqual(headers["Content-Range"], f"bytes {start}-{end}/{len(contents)}")
+            self.assertEqual(payload, contents[start:end + 1])
+        status, headers, payload = self.ask("HEAD", target, headers=self.bearer())
+        self.assertEqual((status, headers["Content-Length"], payload), (200, str(len(contents)), b""))
+        status, headers, _ = self.ask("GET", target, headers={**self.bearer(), "Range": "bytes=100-"})
+        self.assertEqual((status, headers["Content-Range"]), (416, f"bytes */{len(contents)}"))
+        self.assertEqual(self.ask("GET", "/api/source?key=bad", headers=self.bearer())[0], 415)
+        self.assertEqual(self.ask("GET", "/api/source?key=signed.data", headers=self.bearer())[0], 404)
 
 
 class CommandLine(unittest.TestCase):

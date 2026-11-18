@@ -116,21 +116,24 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- answers ----------------------------------------------------------------------------------------------------------------
 
-    def send(self, status: int, data: bytes, mime: str, headers: dict | None = None) -> None:
+    def send_head(self, status: int, length: int, mime: str, headers: dict | None = None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", mime)
-        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Length", str(length))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy", CSP)
         for key, value in (headers or {}).items():
             self.send_header(key, value)
         self.end_headers()
+
+    def send(self, status: int, data: bytes, mime: str, headers: dict | None = None) -> None:
+        self.send_head(status, len(data), mime, headers)
         if self.command != "HEAD":
             self.wfile.write(data)
 
-    def send_json(self, status: int, answer: dict) -> None:
-        self.send(status, json.dumps(answer, ensure_ascii=False).encode("utf-8"), MIME[".json"])
+    def send_json(self, status: int, answer: dict, headers: dict | None = None) -> None:
+        self.send(status, json.dumps(answer, ensure_ascii=False).encode("utf-8"), MIME[".json"], headers)
 
     def refuse(self, status: int, code: str, message: str) -> None:
         self.send_json(status, {"api": API_VERSION, "error": message, "code": code})
@@ -235,8 +238,15 @@ class Handler(BaseHTTPRequestHandler):
     def api(self, parts) -> None:
         raw = self.body
         target = parts.path + ("?" + parts.query if parts.query else "")
-        status, answer = self.server.core.handle("GET" if self.command == "HEAD" else self.command, target, raw)
-        self.send_json(status, answer)
+        status, answer = self.server.core.handle("GET" if self.command == "HEAD" else self.command, target, raw,
+                                                range_header=self.headers.get("Range") if self.command == "GET" else None)
+        if isinstance(answer, dict):
+            headers = {"Content-Range": f"bytes */{answer['size']}", "Accept-Ranges": "bytes"} if status == 416 else None
+            return self.send_json(status, answer, headers)
+        with answer.file:
+            self.send_head(status, answer.length, MIME[".pdf"], answer.headers)
+            if self.command != "HEAD":
+                answer.write_to(self.wfile)
 
     def static(self, path: str) -> None:
         name = path.lstrip("/") or "index.html"

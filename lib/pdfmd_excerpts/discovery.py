@@ -18,14 +18,18 @@ class FolderDocument(type(Path())):
         return Path(str(super().parent))
 
 
-def context(place):
-    place = Path(place).expanduser().resolve()
+def context(place, *, guard=None):
+    place = Path(place).expanduser()
+    place = guard(place) if guard is not None else place.resolve()
     if not place.exists():
         raise RecordError("--in path does not exist")
     document = place if place.is_file() else FolderDocument(place / "__excerpts__.md")
     folder = document.parent
     found = core.find_metadata(folder, None, document=document, document_stem=document.stem, kits=False)
     metadata = found if isinstance(found, list) else [found] if isinstance(found, Path) else []
+    if guard is not None:
+        for path in metadata:
+            guard(path)
     return document, metadata
 
 
@@ -72,7 +76,7 @@ def discover(document, metadata, verbose=False):
     return found[0] if found else document.parent / "excerpts.json"
 
 
-def bibliography(document, metadata):
+def bibliography(document, metadata, *, guard=None):
     """Case-preserving entries for collision checks and source matching, without Pandoc."""
     from pdfmd_bibliography.sources import read_entries, locate, values
     folders = [document.parent, *core.accessory_directories(document.parent, document.stem)]
@@ -85,6 +89,10 @@ def bibliography(document, metadata):
                 result.setdefault(str(entry["id"]), (entry, origin.parent))
         for name in values(mapping.get("bibliography")):
             path = locate(name, [origin.parent, *folders])
+            if guard is not None:
+                if not path.is_file():
+                    continue
+                path = guard(path.absolute())
             parsed = read_entries(path)
             if parsed:
                 for key, item in parsed[0]:
@@ -92,6 +100,8 @@ def bibliography(document, metadata):
     # Bibliography discovery also finds local .bib files for fragments with no declaration.
     from pdfmd_bibliography.discovery import candidates
     for path in candidates([document], metadata):
+        if guard is not None:
+            guard(path)
         parsed = read_entries(path)
         if parsed:
             for key, item in parsed[0]:

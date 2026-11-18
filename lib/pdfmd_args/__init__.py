@@ -180,11 +180,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "`pdfmd --excerpts --help` lists command options")
     parser.add_argument("--serve", nargs="?", const="", metavar="FOLDER",
                         help="the web UI's local server for the project FOLDER (default: the working folder): 127.0.0.1, a random port, "
-                             "a token. Prints one JSON line {api, url, port, token, root}; open the url. Stops with Ctrl-C")
+                             "a token. Prints one JSON line {api, url, port, token, root}; open the url. "
+                             "/api/excerpts manages local excerpts; /api/source serves their PDFs. Stops with Ctrl-C")
     parser.add_argument("--api", nargs="+", metavar="METHOD PATH [JSON]",
-                        help="one request of the web UI's API, answered as JSON on stdout, for the project in the working folder: "
+                        help="one request of the web UI's API for the project in the working folder, on stdout: "
                              "`pdfmd --api GET /api/project`, `pdfmd --api GET '/api/file?path=report.md'`, "
-                             "`pdfmd --api POST /api/render '{\"text\": \"# Hi\"}'`; JSON `-` reads it from standard input")
+                             "`pdfmd --api POST /api/render '{\"text\": \"# Hi\"}'`; JSON `-` reads it from standard input. "
+                             "Answers are JSON, with PDF bytes on success for GET /api/source?key=KEY. "
+                             "GET /api/excerpts and GET /api/excerpts/check read the local excerpt records and checks")
     parser.add_argument("--time-format", metavar="STYLE",
                         help="how a time is written: auto (0.42 s, 12.4 s, 3:07, 1:02:03, 1 d 02:03:04), clock (03:07), "
                              "seconds (12.4 s), words (3 min 7 s), or a template with {d} {h} {hh} {m} {mm} {s} {ss} {s1} "

@@ -114,6 +114,18 @@ and bounds and reports unused records. Quotation and overlap checks default to
 threshold of 0 turns overlap checking off. `reanchor` uses Poppler
 `pdftotext`. Ambiguous anchors and duplicate identifiers need review.
 
+For local API access, start `--serve FOLDER` and send the printed token as
+`Authorization: Bearer TOKEN`. `GET /api/excerpts` returns `record`,
+`locations` and `problems`. `GET /api/excerpts/check` returns `problems`.
+Use `POST /api/excerpts` to add record fields and `PUT /api/excerpts?id=ID`
+to update them. To delete a cited record, send `DELETE /api/excerpts?id=ID`
+with `{"detach":true}` or `{"force":true}`. Register a source with
+`POST /api/excerpts/sources` and a JSON object with `key`, `file` and
+optional `pages`. The file must be inside the project.
+`GET /api/source?key=KEY` returns the registered primary PDF, with single byte
+ranges supported over HTTP. From the project folder, `--api METHOD PATH [JSON]`
+uses the same handlers and writes a successful source response as PDF bytes.
+
 `pdfmd-options.excerpts` names the record file relative to the file setting it;
 `off` disables discovery. Otherwise it is the nearest `excerpts.json` beside the
 document, in `metadata/`, then parent/folder layers. Records keep unknown fields,

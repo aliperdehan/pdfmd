@@ -1,7 +1,7 @@
 """The handlers of `pdfmd --serve` and `pdfmd --api` (entry 3do of the maintainer's notes): a request goes in (method, target, JSON body),
-a status and a JSON object come out. No sockets here, so a test, a script (`pdfmd --api GET /api/project`) and the HTTP shell see the one thing.
+a status and a JSON object or an opened source PDF come out. No sockets here, so the command line and the HTTP shell use the same handlers.
 
-The API is a public contract: every answer carries `api: 1`, an addition keeps the number, a change of meaning raises it. A list is never
+The API is a public contract: every JSON answer carries `api: 1`, an addition keeps the number, a change of meaning raises it. A list is never
 an answer by itself (`{"api": 1, "items": [...]}`), so the number always has a place to be.
 
 What belongs to pdfmd itself (which file a bare `pdfmd` builds and why, which metadata files it finds, how a file is written to disk) is passed
@@ -23,12 +23,15 @@ import threading
 import time
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 from .contain import contained
 
 from pdfmd_base import pandoc_run
+
+if TYPE_CHECKING:
+    from pdfmd_excerpts.api import SourcePDF
 
 API_VERSION = 1
 
@@ -140,14 +143,15 @@ class Core:
 
     # ---- dispatch ---------------------------------------------------------------------------------------------------------------
 
-    def handle(self, method: str, target: str, body: object = None) -> tuple[int, dict]:
+    def handle(self, method: str, target: str, body: object = None, *, range_header: str | None = None) -> tuple[int, dict | SourcePDF]:
         parts = urlsplit(target)
         query = {key: values[-1] for key, values in parse_qs(parts.query, keep_blank_values=True).items()}
         route = (method.upper(), parts.path.rstrip("/") or "/")
         try:
             handler = ROUTES.get(route)
-            if handler is None:
-                known = {m for (m, p) in ROUTES if p == route[1]}
+            excerpt = EXCERPT_ROUTES.get(route)
+            if handler is None and excerpt is None:
+                known = {m for (m, p) in ROUTES.keys() | EXCERPT_ROUTES.keys() if p == route[1]}
                 if known:
                     raise ApiError(405, "method", f"{route[1]} answers {', '.join(sorted(known))}, not {route[0]}")
                 raise ApiError(404, "no_route", f"no such endpoint: {route[0]} {route[1]}")
@@ -155,7 +159,13 @@ class Core:
                 body = parse_body(bytes(body))
             if body is not None and not isinstance(body, dict):
                 raise ApiError(400, "body", "the body must be a JSON object")
-            status, answer = handler(self, query, body or {})
+            if excerpt is not None:
+                from pdfmd_excerpts.api import dispatch
+                status, answer = dispatch(self, excerpt, query, body or {}, range_header)
+                if not isinstance(answer, dict):
+                    return status, answer
+            else:
+                status, answer = handler(self, query, body or {})
         except (ApiError, OSError) as error:
             if isinstance(error, OSError):
                 error = filesystem_error(error)
@@ -470,6 +480,16 @@ ROUTES: dict = {
     ("POST", "/api/file"): Core.create_file,
     ("GET", "/api/outline"): Core.outline,
     ("POST", "/api/render"): Core.render,
+}
+
+EXCERPT_ROUTES = {
+    ("GET", "/api/excerpts"): "list",
+    ("POST", "/api/excerpts"): "create",
+    ("PUT", "/api/excerpts"): "edit",
+    ("DELETE", "/api/excerpts"): "remove",
+    ("POST", "/api/excerpts/sources"): "add_source",
+    ("GET", "/api/excerpts/check"): "check",
+    ("GET", "/api/source"): "source",
 }
 
 

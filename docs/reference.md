@@ -1090,6 +1090,28 @@ PDF page is a cover). `--apply` writes unique matches by file, DOI, title or exa
 name; ambiguous or merely similar names need a choice with `sources add`.
 Existing different source files are never silently replaced.
 
+**Local excerpts API.** `--serve FOLDER` serves the folder's active record to
+authenticated clients. `GET /api/excerpts` returns `record`, `locations` (citing
+places with record IDs) and `problems`. `GET /api/excerpts/check` returns the
+same `problems` array. Citing and check paths are relative to the served folder.
+
+`POST /api/excerpts` takes excerpt fields as JSON and returns the new ID and
+markers. `PUT /api/excerpts?id=ID` updates the supplied fields and returns the
+record. Parts use the same structure as the record file. For a remark, send
+`{"kind":"remark","note":"..."}`. `DELETE /api/excerpts?id=ID` returns the
+removed ID. A cited record requires `{"detach":true}` to rewrite its citations
+or `{"force":true}` to keep the markers. `POST /api/excerpts/sources` takes
+`key`, a project-relative `file` and optional `pages` (anchors or `labels`).
+Source registration returns the source entry. The API refuses paths outside
+the project, including symlinks that point outside it.
+
+`GET /api/source?key=KEY` serves the primary file registered for that key when
+it starts with `%PDF-`. HTTP supports a single byte range in the `Range`
+header, including open-ended and suffix ranges. `--api METHOD PATH [JSON]`
+uses the same handlers from the working folder. It prints JSON answers and
+errors. A successful `--api GET '/api/source?key=KEY'` writes the full PDF to
+standard output.
+
 `pdfmd FILE.md --check` checks excerpt references and prose. It reports
 `excerpt-unknown`, `excerpt-key-mismatch` and `excerpt-file` as errors, and
 `excerpt-bib`, `excerpt-locator-differs`, `excerpt-quote`, `excerpt-overlap`

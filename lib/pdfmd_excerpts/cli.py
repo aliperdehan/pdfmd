@@ -11,7 +11,7 @@ from pdfmd_base import core
 from .discovery import context, discover, bibliography
 from .markers import canonical, locations, prefix_setting
 from .pages import printed_page
-from .record import RecordError, positive, read, update
+from .record import RecordConflict, RecordError, RecordMissing, positive, read, update, validate
 from . import sources
 
 
@@ -139,35 +139,89 @@ def parts(arguments):
 def find(data, ident):
     record = next((item for item in data["excerpts"] if item["id"] == ident), None)
     if record is None:
-        raise RecordError(f"excerpt {ident} is not in excerpts.json")
+        raise RecordMissing(f"excerpt {ident} is not in excerpts.json")
     return record
 
 
-def make_record(args, arguments, data, path, original=None):
-    record = dict(original) if original else {"id": data["next-id"], "kind": "text", "page": "", "parts": []}
-    for key in ("key", "page", "locator", "note", "label", "quoting", "kind", "file"):
-        value = getattr(args, key)
-        if value is not None:
-            record[key] = value
+def record_fields(args, arguments):
+    fields = {key: value for key in ("key", "page", "locator", "note", "label", "quoting", "kind", "file")
+              if (value := getattr(args, key)) is not None}
     if args.remark is not None:
         if args.key is not None or args.kind not in (None, "remark"):
             raise UsageError("--remark cannot name a source or another kind")
-        record["kind"], record["note"] = "remark", args.remark
-        record.pop("key", None)
-        record.pop("page", None)
+        fields.update(kind="remark", note=args.remark)
     if any(getattr(args, key) is not None for key in ("text", "pdf_page", "box")):
-        record["parts"] = parts(arguments)
-    if record["kind"] != "remark" and not record.get("key"):
-        raise UsageError("add needs --key or --remark")
-    if args.page is None and not original and record.get("parts"):
-        number = record["parts"][0].get("pdf-page")
-        source = data["sources"].get(record.get("key"), {})
-        if record.get("file"):
-            source = source.get("more", {}).get(record["file"], {})
-        if number is not None:
-            hint = Path(source["file"]).expanduser() if source.get("file") else None
-            record["page"] = printed_page(source.get("pages"), number, path.parent / hint if hint else None)
-    return record
+        fields["parts"] = parts(arguments)
+    return fields
+
+
+def save_record(path, fields, prefix, *, ident=None, remark=False, guard=None):
+    def save(data):
+        original = find(data, ident) if ident is not None else None
+        record = {**(original if original is not None else
+                     {"id": data["next-id"], "kind": "text", "page": "", "parts": []}), **fields}
+        if remark:
+            record.pop("key", None)
+            record.pop("page", None)
+        if record["kind"] != "remark" and not record.get("key"):
+            raise UsageError("add needs --key or --remark")
+        if original is not None:
+            original.clear()
+            original.update(record)
+            return original
+        data["excerpts"].append(record)
+        data["next-id"] += 1
+        validate(data)
+        if "page" not in fields and record.get("parts"):
+            number = record["parts"][0].get("pdf-page")
+            if number is not None:
+                source = data["sources"].get(record.get("key"), {})
+                if record.get("file"):
+                    source = source.get("more", {}).get(record["file"], {})
+                hint = Path(source["file"]).expanduser() if source.get("file") else None
+                file = path.parent / hint if hint else None
+                record["page"] = printed_page(source.get("pages"), number, file)
+        current = record["id"]
+        markers = [f"[{canonical(current, None, prefix)}]"]
+        if record.get("key"):
+            markers.append(f"[{canonical(current, record['key'], prefix)}]")
+        return {"id": current, "markers": markers}
+    return update(path, save, guard=guard)
+
+
+def add_source(path, key, file, mapping, *, guard=None):
+    source = sources.identity(file, path.parent, mapping)
+
+    def add(data):
+        old = data["sources"].get(key, {})
+        # An extra file needs a supplement name; never silently replace the primary.
+        if old.get("file") and (path.parent / old["file"]).resolve() != file:
+            raise RecordConflict("key already has a different source; name a supplement in excerpts.json")
+        data["sources"][key] = {**old, **source}
+        return data["sources"][key]
+    return update(path, add, guard=guard)
+
+
+def remove_record(path, ident, place, entries, *, force=False, detach=False, guard=None):
+    def remove(current):
+        from .detach import files
+        record = find(current, ident)
+        # Re-scan inside the record lock, so concurrent record writers cannot race this decision.
+        if not force:
+            cited = locations(Path(place).expanduser().resolve(), path, entries, current, guard=guard, show=str)
+            documents = [Path(item["file"]) for item in cited if item["id"] == ident]
+            if documents and not detach:
+                raise RecordConflict(f"excerpt {ident} is cited; use --detach or --force")
+            if documents:
+                files(documents, {ident}, selected_path=path, data=current, guard=guard)
+        current["excerpts"].remove(record)
+        return {"removed": ident}
+    return update(path, remove, guard=guard)
+
+
+def problem_answers(problems):
+    return [{"file": item.file, "line": item.line, "severity": item.severity, "code": item.code,
+             "message": item.message} for item in problems]
 
 
 def sheet(data, places):
@@ -213,8 +267,7 @@ def execute(args, arguments):
             problems = [file_problem(document, "cannot read the record file")]
         else:
             problems = project_checks(args.place, path, data)[0]
-        return [{"file": item.file, "line": item.line, "severity": item.severity, "code": item.code,
-                 "message": item.message} for item in problems]
+        return problem_answers(problems)
     path = discover(document, metadata, args.verbose)
     if args.action == "reanchor":
         from .anchors import reanchor
@@ -223,40 +276,15 @@ def execute(args, arguments):
         from .repairs import renumber, rekey
         return renumber(args.place, path) if args.action == "renumber" else rekey(args.place, path, args.old, args.new)
     prefix = prefix_setting(document, metadata)
-    entries = bibliography(document, metadata)
-    if args.action == "add":
-        def add(data):
-            record = make_record(args, arguments, data, path)
-            data["excerpts"].append(record)
-            data["next-id"] += 1
-            ident = record["id"]
-            markers = [f"[{canonical(ident, None, prefix)}]"]
-            if record.get("key"):
-                markers.append(f"[{canonical(ident, record['key'], prefix)}]")
-            return {"id": ident, "markers": markers}
-        return update(path, add)
-    if args.action == "edit":
-        def edit(data):
-            record = find(data, args.id)
-            replacement = make_record(args, arguments, data, path, record)
-            record.clear()
-            record.update(replacement)
-            return record
-        return update(path, edit)
+    if args.action in ("add", "edit"):
+        return save_record(path, record_fields(args, arguments), prefix,
+                           ident=getattr(args, "id", None), remark=args.remark is not None)
     if args.action == "sources" and args.verb == "add":
         try:
             mapping = ("labels" if args.pages == "labels" else json.loads(args.pages)) if args.pages is not None else None
         except ValueError:
             raise UsageError("--pages needs JSON anchors or labels") from None
-        source = sources.identity(Path(args.file).expanduser().resolve(), path.parent, mapping)
-        def add_source(data):
-            old = data["sources"].get(args.key, {})
-            # An extra file needs a supplement name; never silently replace the primary.
-            if old.get("file") and (path.parent / old["file"]).resolve() != Path(args.file).expanduser().resolve():
-                raise RecordError("key already has a different source; name a supplement in excerpts.json")
-            data["sources"][args.key] = {**old, **source}
-            return data["sources"][args.key]
-        return update(path, add_source)
+        return add_source(path, args.key, Path(args.file).expanduser().resolve(), mapping)
 
     data = read(path, create=args.action == "sources" and args.verb == "match")
     if args.action == "show":
@@ -267,7 +295,7 @@ def execute(args, arguments):
         directory = Path(args.directory).expanduser().resolve() if args.directory else document.parent
         if not directory.is_dir():
             raise RecordError("source search directory does not exist")
-        proposals = sources.match(entries, directory, path.parent)
+        proposals = sources.match(bibliography(document, metadata), directory, path.parent)
         if args.apply:
             if any(not proposal["apply"] for proposal in proposals):
                 raise RecordError("source matches need a choice; review sources match and use sources add")
@@ -289,26 +317,12 @@ def execute(args, arguments):
                 if item["id"] in affected and (args.key is None or args.key == item.get("key"))
                 and (not args.unused or item["id"] not in used)]
     if args.action == "remove":
-        def remove(current):
-            from .detach import files
-            record = find(current, args.id)
-            # Re-scan inside the record lock, so concurrent record writers cannot race this decision.
-            if not args.force:
-                cited = locations(Path(args.place).expanduser().resolve(), path, entries, current)
-                documents = [Path(place["file"]).expanduser() for place in cited if place["id"] == args.id]
-                if documents and not args.detach:
-                    raise RecordError(f"excerpt {args.id} is cited; use --detach or --force")
-                if documents:
-                    if current["pdfmd-excerpts"] != 1:
-                        raise RecordError("newer record version cannot be written")
-                    files(documents, {args.id}, selected_path=path, data=current)
-            current["excerpts"].remove(record)
-            return {"removed": args.id}
-        return update(path, remove)
+        return remove_record(path, args.id, args.place, bibliography(document, metadata) if not args.force else {},
+                             force=args.force, detach=args.detach)
     if args.action == "list" and not args.unused:
         return [item for item in sorted(data["excerpts"], key=lambda item: item["id"])
                 if args.key is None or args.key == item.get("key")]
-    places = locations(Path(args.place).expanduser().resolve(), path, entries, data)
+    places = locations(Path(args.place).expanduser().resolve(), path, bibliography(document, metadata), data)
     if args.action == "where":
         find(data, args.id)
         return [place for place in places if place["id"] == args.id]
