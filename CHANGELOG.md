@@ -42,6 +42,14 @@ The default attachment path remains byte-for-byte compatible apart from the norm
 - A synthetic PDF test exercises the command-line and bundled modes, an explicitly named record, the
   restore and rebuild, and scans every other attachment and the rendered text and PDF metadata for a canary.
 
+Fix before release: the author made excerpt records an `excerpts` kind of `strip-comments`.
+An explicit PDF bundle keeps comments, excerpt markers and the active record by default and notes
+what travels. A plain source attachment still detaches markers and omits the record by default.
+Keeping `excerpts` attaches the record for restore. `attach-source: private` is a shortcut that
+an explicit strip policy for excerpts overrides. Stripping excerpts from a bundle also skips PDFs
+that carry them. Hidden content still requires explicit stripping. Synthetic tests cover both bundle
+modes, comment settings and earlier PDFs in the sweep.
+
 ## v3.34.8 — 2026-11-18
 
 Pre-edit state: commit `1113e1c`. Repeated excerpt citations always reached the citation engine in full

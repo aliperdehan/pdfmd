@@ -234,20 +234,22 @@ def build_parser() -> argparse.ArgumentParser:
                         help="remove every <!-- --> comment from the Markdown that leaves your hands: "
                              "the build, the assembled file (--stop-at markdown) and the source attached to a PDF. "
                              "Comments inside code blocks and code spans are text and stay, and so do "
-                             "pdfmd's own markers (<!-- pdfmd-... -->, <!-- pagebreak -->). A document "
+                             "pdfmd's own markers (<!-- pdfmd-... -->, <!-- pagebreak -->). In a PDF bundle, "
+                             "also detach excerpt citations and omit the local records and PDFs carrying them. A document "
                              "sets it with pdfmd-options.strip-comments")
     parser.add_argument("--keep-comments", dest="strip_comments", action="store_false",
                         help="keep comments, even where a document's pdfmd-options.strip-comments says to "
                              "strip them")
     parser.add_argument("--strip-comments-in", default="", metavar="KINDS",
                         help="strip comments from just these kinds of source (comma-separated: markdown, "
-                             "preamble, bibliography, csl, metadata, hidden; hide aliases hidden), whatever the rest do. "
+                             "preamble, bibliography, csl, metadata, excerpts, hidden; hide aliases hidden), whatever the rest do. "
                              "Plain hide blocks/spans "
                              "are stripped only when named, never by --strip-comments alone. Kept, the YAML "
                              "files come back as written; Lua filters are never touched")
     parser.add_argument("--keep-comments-in", default="", metavar="KINDS",
                         help="keep the comments of these kinds of source (comma-separated, as "
-                             "--strip-comments-in), where the rest are stripped")
+                             "--strip-comments-in). Keeping excerpts in attached PDF source preserves their markers "
+                             "and stores the record file")
     parser.add_argument("--attach-bibliography", choices=("used", "all"), default=None,
                         help="what the attached bibliography holds (and the one --assemble-only and --merge "
                              "embed): 'used' (default) only the entries the "
@@ -279,8 +281,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "stripped, plus a manifest of the original layout) to the PDF it builds, so "
                              "`pdfmd --restore FILE.pdf` can write the folder back. A document sets it with "
                              "pdfmd-options.attach-source (alias embed-source). Use --attach-source private "
-                             "or attach-source: private to keep excerpt markers and attach their local passages and notes, "
-                             "including when --bundle is used")
+                             "or attach-source: private as a shortcut to keep excerpts. An explicit strip-comments "
+                             "setting that strips excerpts overrides the shortcut")
     parser.add_argument("--no-attach-source", dest="attach_source", action="store_false",
                         help="attach nothing, even where a document's pdfmd-options.attach-source asks for it")
     parser.add_argument("--keep-source", nargs="?", const="packed", choices=("packed", "readable"), default=None,
@@ -297,7 +299,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "read, never images (the PDF holds those and --restore takes them out), "
                              "'referenced' (default for --bundle alone) those and the image files, 'all' every file in the "
                              "document's folder except output and housekeeping (hidden files, .aux/.log, "
-                             "backups). Implies --attach-source; --restore puts them back. A document sets it "
+                             "backups). A PDF bundle keeps comments and excerpt records by default. "
+                             "Implies --attach-source. --restore puts the files back. A document sets it "
                              "with pdfmd-options.bundle (sources | true | all | false); pdfmd-options.bundle-max-mb (default "
                              f"{core.BUNDLE_MAX_MB}) caps the size")
     parser.add_argument("--bundle-packages", dest="bundle_packages", action="store_true", default=None,

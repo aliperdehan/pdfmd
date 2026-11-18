@@ -473,14 +473,16 @@ def first_pdfmd_option(md_path: Path, metadata_files: list[Path], *names: str, w
     return merge_option_dicts(found) if found else None
 
 
-def resolve_strip_comments(md_path: Path, metadata_files: list[Path], default: bool = False) -> frozenset[str]:
+def resolve_strip_comments(md_path: Path, metadata_files: list[Path], default: bool = False,
+                           *, default_keep: frozenset[str] = frozenset()) -> frozenset[str]:
     """The kinds of source whose comments are stripped (see COMMENT_KINDS): the command
     line (--strip-comments / --keep-comments, then --strip-comments-in / --keep-comments-in),
-    else `pdfmd-options.strip-comments`, else ``default`` for every kind."""
+    else `pdfmd-options.strip-comments`, else ``default`` except for kinds in ``default_keep``."""
     if core.STRIP_COMMENTS_CLI is not None:
         policy = core.CommentPolicy(core.STRIP_COMMENTS_CLI)
     else:
-        policy = core.parse_comment_policy(first_pdfmd_option(md_path, metadata_files, "strip-comments"), default)
+        policy = core.parse_comment_policy(first_pdfmd_option(md_path, metadata_files, "strip-comments"), default,
+                                           default_keep=default_keep)
     return policy.adjusted(core.STRIP_KINDS_CLI, core.KEEP_KINDS_CLI).kinds()
 
 

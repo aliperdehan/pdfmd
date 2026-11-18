@@ -1661,11 +1661,12 @@ pdfmd uses the record’s source and page in citations. The record's passages
 and notes stay local by default. Run `pdfmd --excerpts detach --all draft.md` to replace
 the markers with plain citations when sharing the Markdown.
 
-For a personal restorable PDF, `--attach-source private` or
-`pdfmd-options: {attach-source: private}` preserves the markers and stores
-`excerpts.json` separately, also with `--bundle`. It warns that the record's
-passages and notes travel in the PDF. Giving that PDF to pdfmd restores the
-record beside the source. The setting is available in `--setup`.
+An explicit PDF bundle keeps the markers and stores `excerpts.json` separately
+by default. For a plain source attachment, use `--keep-comments-in excerpts`
+or the shortcut `--attach-source private` (also available in `--setup`). A NOTE
+says when passages and notes travel in the PDF. Giving that PDF to pdfmd restores
+the record beside the source. `--strip-comments` strips both comments and excerpts
+from a bundle and skips other PDFs that carry excerpt records.
 
 ### The PDF carries its own source
 
@@ -1721,7 +1722,8 @@ style, a compound library, a shared bibliography and parts.
   also those only your own TeX tree resolves (`\input{library}` from `texmf-home`). A restored report builds
   again; only images are left out (the PDF has them). Over 100 MB (`bundle-max-mb`) only the source is
   attached. `bundle: false` (or `--no-bundle`) keeps the source alone; `--bundle` (`bundle: true`) stores the
-  image files too, `--bundle all` the whole folder except output and housekeeping. Data whose file name a
+  image files too, `--bundle all` the whole folder except output and housekeeping. An explicit PDF bundle
+  keeps comments and excerpt records by default. Data whose file name a
   macro builds cannot be found: use `all`. A Markdown output (`--keep-source`) keeps the same files, but has no PDF to
   take pictures from: they come with `--bundle`.
 - **`--restore` and `--unpack` stay short.** They count what they write by folder; `--verbose` lists every
@@ -1751,10 +1753,11 @@ style, a compound library, a shared bibliography and parts.
 - **A newer source is refused, not half restored.** The manifest has a format number (2 since v3.28.45, when the chain of
   folders, the text files as blocks and the `..` files came in). A pdfmd that reads up to 1 stops with `was made by a
   newer pdfmd (...); upgrade pdfmd to restore it`, and this one restores both 1 and 2.
-- **Comments.** Notes to yourself do not travel: the attached source loses its
+- **Comments.** A plain source attachment strips its
   `<!-- -->` comments, the LaTeX preamble's `%` comments, the text between a
   `.bib`'s entries, a CSL file's XML comments and the `#` comments of YAML
-  files. Choose per kind: `strip-comments: [preamble, bibliography]` or
+  files. An explicit PDF bundle keeps them by default. Choose per kind with
+  `strip-comments: [preamble, bibliography]` or
   `{markdown: false}` (`--strip-comments-in`, `--keep-comments-in`). Code
   blocks, `\verb`, `\url` and verbatim environments are never touched, and a
   `%` that closes a line keeps a bare `%`, because it swallows the line break.

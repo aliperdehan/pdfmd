@@ -130,8 +130,13 @@ in a paragraph when pagecite selects its page form. The default is `full`.
 Use `--no-auto excerpts` to disable resolution. Run
 `pdfmd --excerpts detach --all draft.md` or specify IDs before the Markdown
 files to write plain citations. Source exports and default attachments do this
-automatically. With `--attach-source private`, the record travels in a separate
-attachment. Build text and metadata use citation fields alone.
+automatically. An explicit PDF bundle keeps comments, excerpt markers and the
+record, which travels in a separate attachment. Use `--strip-comments` with
+the bundle to strip comments and excerpts, including any PDFs in the sweep
+that carry excerpt records. In a plain attachment, `--keep-comments-in excerpts`
+or `--attach-source private` keeps the markers and record. An explicit strip
+setting for excerpts overrides the private shortcut. Build text and metadata
+use citation fields alone.
 
 ## When a build fails
 
@@ -152,7 +157,7 @@ An explicit `--from` or `pdfmd-options: {reader: ...}` suppresses this warning.
 | the best PDF of a Markdown file | `pdfmd file.md` (Pandoc and a LaTeX or Typst engine) |
 | a Word, OpenDocument or e-book file | `-o file.docx`, `.odt`, `.epub`, `.azw3` (Calibre writes the Kindle formats) |
 | the Markdown of a PDF, a Word file or an e-book | `pdfmd file.pdf`, `file.docx`, `book.epub` |
-| a self-contained, restorable PDF | `--attach-source` (off unless asked, or `attach-source: true` in `pdfmd-options:`): the source goes into the PDF; `--restore` writes it back. `--attach-source private` also carries local excerpt passages and notes. |
+| a self-contained, restorable PDF | `--attach-source` (off unless asked, or `attach-source: true` in `pdfmd-options:`) puts the source into the PDF. `--restore` writes it back. `--bundle` and `--attach-source private` carry local excerpt passages and notes by default. |
 | what is wrong with this machine | `pdfmd --doctor --deep` |
 
 For a template's running head, `pdfmd-options: {office: {replace: {KICKER: "$course$ $term$"}}}` reads

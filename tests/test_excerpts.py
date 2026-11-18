@@ -1071,16 +1071,18 @@ sys.meta_path.insert(0, OmitLua())
         marker_text = "Citation [@x#1]. Next [@glass:2, Table 4]."
         base = "---\nbibliography: refs.bib\npdfmd-options: {excerpts: records/reading.json"
         flags = ("-e", "pdflatex", "--engine-fallback", "off")
-        warning = "excerpt records (passages and notes) travel inside the PDF"
-        for mode, args in (("command", ("--attach-source", "private")), ("bundle", ("--bundle", "all"))):
+        note = "excerpt records (passages and notes) travel inside the PDF"
+        for mode, args in (("command", ("--attach-source", "private")), ("bundle", ("--bundle",)),
+                           ("all", ("--bundle", "all"))):
             with self.subTest(mode=mode):
                 self.write(f"{mode}/records/reading.json", record.decode("utf-8"))
                 self.write(f"{mode}/refs.bib", (self.root / "refs.bib").read_text(encoding="utf-8"))
-                setting = ", attach-source: private" if mode == "bundle" else ""
-                self.write(f"{mode}/draft.md", base + setting + "}\n---\n\n" + marker_text + "\n")
+                self.write(f"{mode}/draft.md", base + "}\n---\n\n" + marker_text + "\n")
                 name = f"{mode}.pdf"
                 result = self.run_build(f"{mode}/draft.md", *flags, *args, "-o", name)
-                self.assertEqual((result.stdout + result.stderr).count(warning), 1)
+                notices = [line for line in (result.stdout + result.stderr).splitlines() if note in line]
+                self.assertEqual(len(notices), 1, notices)
+                self.assertTrue(notices[0].startswith("NOTE "), notices)
                 reader = PdfReader(self.root / name)
                 text = "".join(page.extract_text() for page in reader.pages)
                 self.assertIn("41", text)
@@ -1101,6 +1103,80 @@ sys.meta_path.insert(0, OmitLua())
                 self.assertEqual("".join(page.extract_text() for page in rebuilt.pages), text)
                 self.assertFalse(rebuilt.attachments)
 
+    def test_pdf_bundle_and_plain_attachment_comment_policies(self):
+        try:
+            from pypdf import PdfReader, PdfWriter
+        except ImportError:
+            self.skipTest("needs pypdf")
+        record = self.record.read_bytes()
+        comment = b"<!-- A draft comment. -->"
+        marker = b"[@x:1]"
+        self.write("draft.md", "---\nbibliography: refs.bib\n---\n\n"
+                   "Citation [@x:1]. <!-- A draft comment. -->\n\n[Hidden]{.hide}\n")
+        self.write("extra.md", "Extra [@x:1]. <!-- A draft comment. -->\n")
+        writer = PdfWriter()
+        writer.add_blank_page(width=100, height=100)
+        writer.add_attachment("excerpts.json", record)
+        writer.write(self.root / "earlier.pdf")
+        writer = PdfWriter()
+        writer.add_blank_page(width=100, height=100)
+        writer.add_attachment("files/earlier.pdf", (self.root / "earlier.pdf").read_bytes())
+        writer.write(self.root / "nested.pdf")
+        writer = PdfWriter()
+        writer.add_blank_page(width=100, height=100)
+        writer.write(self.root / "ordinary.pdf")
+        flags = ("-e", "inkmd", "--engine-fallback", "off")
+        cases = (
+            ("default", ("--attach-source",), False, False, False),
+            ("bundle", ("--bundle", "all"), True, True, True),
+            ("strip", ("--bundle", "all", "--strip-comments"), False, False, True),
+            ("keep-kind", ("--attach-source", "--keep-comments-in", "Excerpts"), False, True, False),
+            ("override", ("--attach-source", "private", "--strip-comments-in", "excerpts"), False, False, False),
+        )
+        for name, args, comments, excerpts, sweep in cases:
+            with self.subTest(name=name):
+                result = self.run_build("draft.md", *flags, *args, "-o", "out.pdf")
+                pdf = self.root / "out.pdf"
+                reader = PdfReader(pdf)
+                attachments = {key: values[0] for key, values in reader.attachments.items()}
+                source = attachments[pdfmd.ATTACH_SOURCE]
+                self.assertEqual(comment in source, comments)
+                self.assertEqual(marker in source, excerpts)
+                self.assertIn(b"[Hidden]{.hide}", source)
+                self.assertEqual(attachments.get("excerpts.json"), record if excerpts else None)
+                self.assertEqual("files/earlier.pdf" in attachments, sweep and excerpts)
+                self.assertEqual("files/nested.pdf" in attachments, sweep and excerpts)
+                self.assertEqual("files/ordinary.pdf" in attachments, sweep)
+                self.assertEqual("NOTE  " in result.stdout and "travel inside the PDF" in result.stdout, sweep or excerpts)
+                if sweep:
+                    self.run_build("--restore", "out.pdf", "-o", f"{name}.restored")
+                    extra = (self.root / f"{name}.restored" / "extra.md").read_bytes()
+                    self.assertEqual(comment in extra, comments)
+                    self.assertEqual(marker in extra, excerpts)
+                if not excerpts:
+                    self.scan(name, pdf.read_bytes())
+
+    def test_excerpt_comment_policy_uses_all_settings_layers(self):
+        document = self.write("project/draft.md", "Text.\n")
+        metadata = self.write("project/metadata.yaml", "{}\n")
+        folder = self.write("project/.pdfmd/config.yaml", "{}\n")
+        for layer in ("document", "metadata", "folder", "config"):
+            for policy in ("false", "{Excerpts: false}", "true", "[Excerpts]", "{Excerpts: true}"):
+                with self.subTest(layer=layer, policy=policy):
+                    options = f"strip-comments: {policy}"
+                    document.write_text(f"---\npdfmd-options: {{{options}}}\n---\n"
+                                        if layer == "document" else "Text.\n", encoding="utf-8")
+                    metadata.write_text(f"pdfmd-options: {{{options}}}\n" if layer == "metadata" else "{}\n",
+                                        encoding="utf-8")
+                    folder.write_text(f"options: {{{options}}}\n" if layer == "folder" else "{}\n", encoding="utf-8")
+                    config = {"strip-comments": pdfmd.yaml.safe_load(policy)} if layer == "config" else {}
+                    pdfmd.folder_walk.cache_clear()
+                    with mock.patch.object(pdfmd, "config_options", return_value=config):
+                        for shortcut in (frozenset(), frozenset({"excerpts"})):
+                            strips = "excerpts" in pdfmd.resolve_strip_comments(document, [metadata], default=True,
+                                                                               default_keep=shortcut)
+                            self.assertEqual(strips, "false" not in policy)
+
     @unittest.skipUnless(shutil.which("pdflatex"), "needs pdfLaTeX")
     def test_latex_pdf_attachments_and_kept_intermediates(self):
         try:
@@ -1108,7 +1184,7 @@ sys.meta_path.insert(0, OmitLua())
         except ImportError:
             self.skipTest("needs pypdf")
         self.run_build("draft.md", "-e", "pdflatex", "--engine-fallback", "off", "--attach-source",
-                       "--bundle", "all", "--cache", "--keep-aux", "-o", "latex.pdf")
+                       "--cache", "--keep-aux", "-o", "latex.pdf")
         self.run_build("--restore", "latex.pdf")
         reader = PdfReader(self.root / "latex.pdf")
         self.assertIn("41", reader.pages[0].extract_text())

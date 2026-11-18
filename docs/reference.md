@@ -777,19 +777,21 @@ sentence takes one of the spaces around it. The command line wins over the
 document, then its metadata files.
 (v3.22.4) The option names the kinds of source: `true`, `false`, a list
 (`[preamble, bibliography]`: just those), or a mapping per kind
-(`{markdown: false}`: the rest follow the default, which is all of them for
-an attached source and none for --assemble-only). Kinds: markdown, preamble
+(`{markdown: false}`: the rest follow the default. A plain PDF attachment
+strips every kind except `hidden`, and an explicit PDF bundle or --assemble-only
+keeps comments by default). The kinds include markdown, preamble
 (LaTeX `%`: a `%` closing a line stays bare, since it swallows the break;
 `\verb`, `\url`, verbatim environments and `% !TEX` lines are text),
 bibliography (the text between a .bib's entries), csl (XML comments),
 metadata (YAML `#` comments and the file's own quoting and layout: the merged
 text cannot hold them, so the attachment stores each metadata file and the
 document's front matter as written and --restore writes them back byte for
-byte; v3.25.13). --strip-comments-in KINDS / --keep-comments-in KINDS do the
-same per run. The additional kind `hidden` (alias `hide`) removes plain hide divs and spans from the assembled or attached
+byte, v3.25.13), and excerpts (the markers and record file in PDF source).
+--strip-comments-in KINDS / --keep-comments-in KINDS do the same per run.
+The additional kind `hidden` (alias `hide`) removes plain hide divs and spans from the assembled or attached
 copy, keeping calc-hide statement blocks. It is off by default, including with `strip-comments: true` and
 `--strip-comments`: name it explicitly (`[markdown, hidden]`, `{hidden: true}`, `--strip-comments-in hidden`);
-`--keep-comments-in hidden` keeps it. The existing setup row offers hidden alone or Markdown plus hidden.
+`--keep-comments-in hidden` keeps it. The setup row offers `hidden` and `excerpts` alone or with `markdown`.
 If stripped definitions supply calculator names used outside the hidden content, one NOTE names the names the restored
 source will not define. Lua filters are never touched. The data files of `.csv`
 blocks are stored with every attached source (small, and the text needs them).
@@ -865,8 +867,11 @@ from Markdown images, `<img>`, `file="..."` CSV tables, \includegraphics,
 naming a file that exists (so data reached by a project's own macros is found
 too); `--bundle all` every file in the document's folder except the output,
 hidden files and folders, .aux/.log and the like, and backups. It implies
---attach-source; the Markdown files stored this way lose their comments like
-the source does. A file outside the document's folder is named in a note and
+--attach-source. An explicit PDF bundle keeps comments, hidden content and
+excerpt records by default. It prints a NOTE naming what travels. A
+`strip-comments` setting or flag can still strip any of those kinds.
+`--bundle all` includes earlier PDFs carrying excerpt records when excerpts are kept.
+A file outside the document's folder is named in a note and
 not stored. `pdfmd-options.bundle-max-mb` (default 100) caps the total: over
 it only the source is attached, with a warning. --restore writes the files
 back, never over an existing one, checking each hash. With it a restored
@@ -1056,15 +1061,20 @@ metadata. Code, raw blocks, maths and comments keep their text.
 `pdfmd --excerpts detach --all FILE.md ...` writes plain citations atomically
 and reports the changed files and marker counts. Assembled Markdown, shared
 source attachments, embedded metadata and the native renderer also use plain
-citations. Shared bundles skip the excerpts file by path and name.
+citations. A default source attachment omits the excerpt record.
 
-For a personal copy, use `--attach-source private` or
-`pdfmd-options: {attach-source: private}` (also available in `--setup`).
-The setting works with `--bundle` and keeps the original markers in the PDF's
-stored Markdown. The active `excerpts.json` travels as a separate attachment,
-including passages and notes, and the build warns about this. Opening the PDF
-with pdfmd restores the record beside the source. The PDF's rendered pages and
-other output formats use the usual citation-only view.
+An explicit PDF bundle keeps excerpt markers as written and stores the active
+record, including passages and notes, as a separate `excerpts.json` attachment.
+To keep excerpts in a plain PDF attachment, use `--keep-comments-in excerpts`,
+`--keep-comments` or `pdfmd-options: {strip-comments: {excerpts: false}}`.
+`--attach-source private` and `attach-source: private` are shortcuts that also
+turn on attachment. An explicit strip setting for excerpts overrides the shortcut.
+`--bundle --strip-comments` strips comments and detaches the markers to plain
+citations. `--strip-comments-in excerpts` selects just excerpts in a bundle.
+With excerpts stripped, the bundle skips record files and PDFs that hold them.
+When excerpt records travel, the build notes this and pdfmd restores the record
+where it can find it again. The PDF's rendered pages and other output formats
+use the usual citation-only view.
 
 `sources` lists file hints and hash states (`ok`, `changed`, `missing`, `unknown`).
 `sources add KEY FILE` records the relative file hint, SHA-256 and size; `--pages`

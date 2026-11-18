@@ -785,7 +785,9 @@ folded in, a manifest of the original layout, the data files of `.csv` blocks, a
 of the PDF itself (a JPEG byte for byte, others as the same pixels, an SVG or PDF figure as a vector PDF), so a plain
 attach needs no bundle for them. `--bundle` is for what the PDF does not draw (CSV data, `\input` files, listings).
 
-- **Comments.** By default notes to yourself do not travel. `strip-comments: false`, or per kind
+- **Comments.** A plain attachment strips comments by default. An explicit PDF bundle keeps comments and excerpt
+  records. Use `--strip-comments` when you want to bundle files without those comments or records.
+  `strip-comments: false`, or a per-kind setting
   (`[preamble, bibliography]`, `{markdown: false}`, `--keep-comments-in metadata`) keeps them; with the `metadata`
   kind kept the restored YAML files and front matter are the original text.
 - **Safety.** `--restore` never overwrites and never writes a path outside its folder. A folder you linked elsewhere is

@@ -716,6 +716,22 @@ def read_pdf_attachments(pdf_path: Path) -> dict[str, bytes]:
         pypdf_logger.setLevel(previous_level)
 
 
+def pdf_carries_excerpts(source: Path | io.BytesIO) -> bool:
+    """Check attachment names, following PDFs carried inside previous bundles."""
+    if core.pypdf is None:
+        return False
+    from .options import ATTACH_EXCERPTS
+
+    try:
+        attachments = core.pypdf.PdfReader(source).attachments
+        if any(PurePosixPath(name).name.casefold() == ATTACH_EXCERPTS for name in attachments):
+            return True
+        return any(pdf_carries_excerpts(io.BytesIO(data)) for name in attachments if name.lower().endswith(".pdf")
+                   for data in attachments[name])
+    except Exception:  # noqa: BLE001 -- unrecognised or unreadable PDFs may still be ordinary bundle files
+        return False
+
+
 FONT_KEYS = ("mainfont", "sansfont", "monofont", "mathfont", "CJKmainfont", "CJKsansfont", "CJKmonofont")
 
 
@@ -757,7 +773,7 @@ def attachment_requirements(merged: str, deps: list[dict], stored: set[str], pdf
                      "sha256": dep["sha256"], "stored": dep["name"] in stored} for dep in deps]}
 
 
-def csv_block_files(merged: str, base: Path, private=None) -> dict[str, bytes]:
+def csv_block_files(merged: str, base: Path, exclude) -> dict[str, bytes]:
     """The files the `.csv` blocks of the attached text read (`file="tables/x.csv"`), as {path relative to the
     document's folder: bytes}: the ones that exist inside the folder and are small."""
     try:
@@ -774,9 +790,45 @@ def csv_block_files(merged: str, base: Path, private=None) -> dict[str, bytes]:
             path.relative_to(Path(os.path.abspath(base)))
         except ValueError:
             continue
-        if path.is_file() and path.stat().st_size <= 5 * 1024 * 1024:
+        if path.is_file() and path.stat().st_size <= 5 * 1024 * 1024 and not exclude(path):
             found[core.relative_posix(base, path)] = path.read_bytes()
     return found
+
+
+def strip_bundled_file(name: str, data: bytes, strip: frozenset[str], detach_markers) -> bytes:
+    """Apply the bundle's policy to additional files of known comment kinds."""
+    suffix = Path(name).suffix.lower()
+    if suffix in (".md", ".markdown", ".qmd"):
+        kinds = strip & {"markdown", "hidden", "excerpts"}
+    elif suffix in TEX_SOURCE_SUFFIXES:
+        kinds = strip & {"preamble"}
+    elif suffix in (".bib", ".bibtex"):
+        kinds = strip & {"bibliography"}
+    elif suffix == ".csl":
+        kinds = strip & {"csl"}
+    else:
+        return data
+    if not kinds:
+        return data
+    try:
+        original = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return data
+    if "preamble" in kinds:
+        text = core.strip_tex_comments(original)
+    elif "bibliography" in kinds:
+        text = core.filter_bibliography(original, None, True)[0]
+    elif "csl" in kinds:
+        text = core.strip_xml_comments(original)
+    else:
+        text = original
+        if "hidden" in kinds:
+            text = core.deferred("pdfmd_filters.hidden", "strip_hidden")(text)
+        if "markdown" in kinds:
+            text = core.strip_markdown_comments(text)
+        if "excerpts" in kinds:
+            text = detach_markers(text)
+    return text.encode("utf-8") if text != original else data
 
 
 def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_files: list[Path],
@@ -789,16 +841,27 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     base = Path(os.path.abspath(base or md_path.parent))
     is_pdf = output.suffix.lower() == ".pdf"
     from .options import private_attach
-    keep_markers = is_pdf and private_attach(md_path, metadata_files)
+    bundled = is_pdf and core.resolve_bundle(md_path, metadata_files) is not None
+    shortcut = frozenset({"excerpts"}) if is_pdf and private_attach(md_path, metadata_files) else frozenset()
+    strip = core.resolve_strip_comments(md_path, metadata_files, default=not bundled, default_keep=shortcut)
+    keep_markers = is_pdf and "excerpts" not in strip
+    # The record has its own manifest entry. Keep the comment list of existing plain attachments unchanged.
+    comment_kinds = strip - {"excerpts"}
     with contextlib.redirect_stdout(io.StringIO()):       # the embed notes are for --assemble-only
         merged, manifest = attached_source(md_path, parts, metadata_files, preamble_files, no_auto,
-                                           core.resolve_strip_comments(md_path, metadata_files, default=True),
+                                           comment_kinds,
                                            resolve_bibliography_pruning(md_path, metadata_files),
                                            report=report, base=base, with_csl=resolve_csl_attach(md_path, metadata_files),
                                            named_reader=named_reader, pandoc_options=pandoc_options,
                                            keep_excerpt_markers=keep_markers)
     from pdfmd_excerpts.discovery import private_paths
     private = private_paths([md_path, *parts], metadata_files)
+    strip_bundle_excerpts = bundled and not keep_markers
+
+    def exclude(path: Path) -> bool:
+        return private.contains(path) or (strip_bundle_excerpts and path.suffix.lower() == ".pdf"
+                                          and pdf_carries_excerpts(path))
+
     extras: dict[str, bytes] = {}
     origins: dict[str, str] = {}
     # A chosen kit's parts (its package, the library it inputs, its logos: the `carry:` list) are stored whether or not the
@@ -811,7 +874,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
         for line in kit_notes:
             print(line, file=sys.stderr)
         for name, path in carried.items():
-            if name not in extras and not private.contains(path):
+            if name not in extras and not exclude(path):
                 extras[name] = path.read_bytes()
                 origins[name] = "kit"
     mode = attached_bundle_mode(md_path, metadata_files, is_pdf)
@@ -827,6 +890,8 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
                                       manifest["data_files"], base, pictures, bundle_reach(base), metadata_files)
         core.add_calc_constants(md_path, metadata_files, base, represented, found, outside)
         core.drop_calc_export(md_path, [md_path, *parts], metadata_files, found, outside)
+        if strip_bundle_excerpts:
+            found = [path for path in found if not exclude(path)]
         up = next((count for count in (1, 2) if all(item.is_relative_to(base.parents[count - 1])
                                                     for item in found if not item.is_relative_to(base))), 0) \
             if any(not item.is_relative_to(base) for item in found) else 0
@@ -852,12 +917,13 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
                   f"{limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); only the source was attached",
                   file=sys.stderr)
         else:
-            stripping = "markdown" in manifest["comments_stripped"]
+            stripping = "markdown" in comment_kinds
             for item in found:
                 if private.contains(item):
                     continue
                 data = item.read_bytes()
-                if (stripping or "hidden" in manifest["comments_stripped"]) and item.suffix.lower() in (".md", ".markdown"):
+                if (not bundled and (stripping or "hidden" in comment_kinds)
+                        and item.suffix.lower() in (".md", ".markdown")):
                     try:
                         text = data.decode("utf-8-sig")
                         if "hidden" in manifest["comments_stripped"]:
@@ -875,7 +941,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
             manifest["outside"] = sorted({Path(name).name for name in outside})
     # The data a `.csv` block names is part of the source (the merged text cannot build without it), and
     # small: it is stored even when the rest of the folder is not bundled.
-    for name, data in csv_block_files(merged, base, private).items():
+    for name, data in csv_block_files(merged, base, exclude).items():
         if name not in extras:
             extras[name] = data
     # A source that was edited as one file (--edit) already holds its files as blocks, and its embedded data again: a file
@@ -885,7 +951,18 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
             for place in block_places(block):
                 if place not in extras and place in inline_candidates({place: block["bytes"]}):
                     extras[place] = block["bytes"]
-    if "hidden" in manifest["comments_stripped"]:
+    if bundled and strip:
+        def detach_markers(text):
+            from pdfmd_excerpts.detach import rewrite
+            from pdfmd_excerpts.resolution import prepare
+
+            state = prepare([md_path, *parts], metadata_files, pandoc_options, no_auto,
+                            text=text, named_reader=named_reader)
+            return rewrite(text, md_path, metadata_files, state)[0] if state is not None else text
+
+        for name, data in extras.items():
+            extras[name] = strip_bundled_file(name, data, strip, detach_markers)
+    elif "hidden" in manifest["comments_stripped"]:
         # Include source files already embedded in an edited/assembled input.
         for name, data in extras.items():
             if Path(name).suffix.lower() in (".md", ".markdown", ".qmd"):
@@ -915,7 +992,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     if layers:
         manifest["layers"] = {"options": layers}
         manifest["format"] = core.ATTACH_FORMAT
-    record = excerpt_attachment(md_path, metadata_files, no_auto, named_reader, manifest) if keep_markers else {}
+    record = excerpt_attachment(md_path, metadata_files, manifest) if keep_markers else {}
     attachments = {
         core.ATTACH_SOURCE: merged.encode("utf-8"),
         core.ATTACH_MANIFEST: json.dumps(manifest, ensure_ascii=False, indent=1).encode("utf-8"),
@@ -924,15 +1001,12 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     return attachments, merged, manifest
 
 
-def excerpt_attachment(document, metadata, no_auto, named_reader, manifest):
+def excerpt_attachment(document, metadata, manifest):
     from pdfmd_config import is_setup_layer
     from pdfmd_excerpts.discovery import discover
     from pdfmd_excerpts.record import RecordError
-    from pdfmd_excerpts.resolution import enabled
     from .options import ATTACH_EXCERPTS
 
-    if not enabled(document, metadata, no_auto, named_reader):
-        return {}
     try:
         data = discover(document, metadata).read_bytes()
     except (FileNotFoundError, RecordError):
@@ -966,14 +1040,19 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
         print(f"WARN  attach-source: could not attach the source to {core.display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
         return
-    from .options import private_attach
-    if private_attach(md_path, metadata_files):
-        suffix = "" if "private_excerpts" in manifest else " when present"
-        print("WARN  attach-source private: excerpt records (passages and notes) travel inside the PDF" + suffix,
-              file=sys.stderr)
     core.deferred("pdfmd_filters.hidden", "attachment_warning")([md_path, *parts], metadata_files,
                                                                 manifest["comments_stripped"])
     note = held_comments_note(manifest, merged)
+    bundled = core.resolve_bundle(md_path, metadata_files) is not None
+    if bundled or "private_excerpts" in manifest:
+        if "private_excerpts" in manifest:
+            records = "excerpt records (passages and notes) travel inside the PDF"
+        elif any(pdf_carries_excerpts(io.BytesIO(data)) for name, data in attachments.items()
+                 if name.lower().endswith(".pdf")):
+            records = "excerpt records travel inside bundled PDFs"
+        else:
+            records = "no excerpt records travel inside the PDF"
+        print(f"NOTE  {'source bundle' if bundled else 'attached source'}: {note}. {records}")
     kept = manifest.get("extras") or []
     print(f"ATTACHED  {core.display_path(pdf_path)}: source of {core.display_path(md_path)}"
           + (f" and {len(parts)} more" if report and parts else "")

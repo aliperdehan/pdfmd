@@ -348,7 +348,7 @@ class AttachAndRestore(unittest.TestCase):
                         if name.startswith(pdfmd.EXTRA_PREFIX))
         self.assertEqual(stored, ["d.pdf.bak", "notes/a.txt", "notes/n.md", "photos/p.jpg"])
         out = self.restore(pdf)
-        self.assertEqual((out / "notes" / "n.md").read_text(encoding="utf-8"), "Note.\n")   # stripped like the source
+        self.assertEqual((out / "notes" / "n.md").read_text(encoding="utf-8"), "Note <!-- private -->.\n")
 
     def test_bundle_off_and_the_size_limit(self):
         (self.root / "f.png").write_bytes(b"x" * 2048)
@@ -637,11 +637,12 @@ class CommentKinds(unittest.TestCase):
 
     def test_policy(self):
         policy = pdfmd.parse_comment_policy
-        self.assertEqual(policy(None, True).kinds(), frozenset({"markdown", "preamble", "bibliography", "csl", "metadata"}))
+        self.assertEqual(policy(None, True).kinds(), {"markdown", "preamble", "bibliography", "csl", "metadata", "excerpts"})
         self.assertFalse(policy(True, True).strips("hidden"))
         self.assertTrue(policy({"hidden": True}, True).strips("hidden"))
         self.assertEqual(policy("tex, bib", True).kinds(), {"preamble", "bibliography"})
-        self.assertEqual(policy({"bibliography": False, "markdown": False}, True).kinds(), {"csl", "metadata", "preamble"})
+        self.assertEqual(policy({"bibliography": False, "markdown": False}, True).kinds(),
+                         {"csl", "metadata", "preamble", "excerpts"})
         self.assertEqual(policy({"preamble": True}, False).kinds(), {"preamble"})
         self.assertEqual(policy(False, True).kinds(), frozenset())
 

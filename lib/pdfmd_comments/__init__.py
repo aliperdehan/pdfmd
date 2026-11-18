@@ -173,10 +173,11 @@ def strip_markdown_comments(text: str) -> str:
 # -- Comments in the other kinds of source (v3.22.4) ---------------------------
 # `strip-comments` names which kinds of source lose their comments, not only the
 # Markdown's: `true` (all), `false`, a list (just those), or a mapping with true
-# and false per kind (the rest follow the default: all where a PDF is being
-# attached, none for --assemble-only). Kinds: markdown (<!-- -->), preamble
+# and false per kind (the rest follow the default: strip in a plain PDF source
+# attachment, keep in an explicit PDF bundle or --assemble-only). Kinds: markdown (<!-- -->), preamble
 # (LaTeX `%`), bibliography (what a .bib holds outside its entries), csl (XML
-# comments), metadata (a YAML file's `#` comments, v3.25.13). Plain hidden content
+# comments), metadata (a YAML file's `#` comments, v3.25.13), and excerpts
+# (markers and their record in PDF source). Plain hidden content
 # is an additional opt-in kind: a blanket true never strips it. The YAML metadata is
 # merged and written again whenever it is embedded, so the merged text never has
 # them; with the metadata kind kept, an attached source also stores each metadata
@@ -191,6 +192,7 @@ COMMENT_KIND_NAMES = {
     "bibliography": "bibliography", "bib": "bibliography", "bibtex": "bibliography",
     "references": "bibliography", "csl": "csl", "style": "csl",
     "hidden": "hidden", "hide": "hidden",
+    "excerpts": "excerpts",
     "metadata": "metadata", "yaml": "metadata", "yml": "metadata", "lua": "lua",
 }
 TEX_VERBATIM_BEGIN_RE = re.compile(r"\\begin\{(verbatim\*?|Verbatim\*?|lstlisting|minted|alltt|filecontents\*?|comment)\}")
@@ -224,22 +226,22 @@ def comment_kind_set(value) -> frozenset[str]:
     return frozenset(COMMENT_KIND_NAMES[name.casefold()] for name in names if name.casefold() in COMMENT_KIND_NAMES)
 
 
-def parse_comment_policy(value, default: bool) -> CommentPolicy:
+def parse_comment_policy(value, default: bool, *, default_keep: frozenset[str] = frozenset()) -> CommentPolicy:
     """``pdfmd-options.strip-comments`` as a policy (see the comment above)."""
     if isinstance(value, dict):
         wanted = {comment_kind_set(name): core.option_flag(flag) for name, flag in value.items()}
-        return CommentPolicy(default,
-                             frozenset().union(*(kinds for kinds, flag in wanted.items() if flag is not False)),
-                             frozenset().union(*(kinds for kinds, flag in wanted.items() if flag is False)))
+        strip = frozenset().union(*(kinds for kinds, flag in wanted.items() if flag is not False))
+        keep = frozenset().union(*(kinds for kinds, flag in wanted.items() if flag is False))
+        return CommentPolicy(default, strip, keep | (default_keep - strip))
     text = str(value).strip().casefold()
     if value is None:
-        return CommentPolicy(default)
+        return CommentPolicy(default, keep=default_keep)
     if value is True or text in {"true", "yes", "on", "all"}:
         return CommentPolicy(True)
     if value is False or text in {"false", "no", "off", "none"}:
         return CommentPolicy(False)
     named = comment_kind_set(value)
-    return CommentPolicy(False, named) if named else CommentPolicy(default)
+    return CommentPolicy(False, named) if named else CommentPolicy(default, keep=default_keep)
 
 
 def tex_comment_start(line: str) -> int | None:
@@ -333,4 +335,4 @@ def fence_after(fence: str, line: str) -> str:
 FENCE_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<rest>.*)$")
 
 
-COMMENT_KINDS = ("markdown", "preamble", "bibliography", "csl", "metadata", "hidden")
+COMMENT_KINDS = ("markdown", "preamble", "bibliography", "csl", "metadata", "hidden", "excerpts")
