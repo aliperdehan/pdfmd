@@ -79,10 +79,16 @@ def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action],
 
 def run_main() -> None:
     parser, hidden = command_line_parser()
-    args, pandoc_options = parser.parse_known_args(core.load_package("pdfmd_args").normalise_metadata_options(sys.argv[1:]))
+    argv, excerpts = sys.argv[1:], None
+    if "--excerpts" in argv:
+        # `--excerpts` takes the rest of the line as its own command line. argparse's REMAINDER does not hold on to
+        # it on Python 3.9 and 3.10 (`--page` was read as an ambiguous pdfmd option): split it off before parsing.
+        at = argv.index("--excerpts")
+        argv, excerpts = argv[:at + 1], argv[at + 1:]
+    args, pandoc_options = parser.parse_known_args(core.load_package("pdfmd_args").normalise_metadata_options(argv))
     refuse_disabled(args, hidden, parser)
     if args.excerpts is not None:
-        raise SystemExit(core.load_package("pdfmd_excerpts.cli").command(list(args.excerpts)))
+        raise SystemExit(core.load_package("pdfmd_excerpts.cli").command(list(args.excerpts if excerpts is None else excerpts)))
     if args.bopen is not None:
         try:
             core.parse_bopen(args.bopen)
