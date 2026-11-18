@@ -113,6 +113,76 @@ class CommandLine(unittest.TestCase):
         self.assertIn("<sub>", (self.directory / "b.html").read_text(encoding="utf-8"))
 
 
+    def test_deep_reads_adjacent_blocks_after_front_matter(self):
+        body = ("Intro followed by a list.\n- entry\n\n"
+                "Intro followed by a heading.\n## Section\n\n"
+                "Intro followed by a quote.\n> quoted\n\n"
+                "Intro followed by a table.\nName | Value\n--- | ---\nA | B\n")
+        self.write("a.md", "---\ntitle: Sample\npdfmd-options: {dialect-detect: deep}\n---\n\n" + body)
+        done = self.run_pdfmd("a.md", "-t", "html", "-v")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        html = (self.directory / "a.html").read_text(encoding="utf-8")
+        for tag in ("<ul>", "<h2", "<blockquote>", "<table>"):
+            self.assertIn(tag, html)
+        self.assertIn("lines 7, 10, 13, 16", done.stdout)
+
+    def test_basic_keeps_its_body_and_hints_at_deep(self):
+        self.write("a.md", "---\ntitle: Sample\n---\n\nProse.\n- entry\n")
+        done = self.run_pdfmd("a.md", "-t", "html", "-v")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        html = (self.directory / "a.html").read_text(encoding="utf-8")
+        self.assertNotIn("<ul>", html)
+        self.assertIn("dialect-detect: deep", done.stdout)
+        self.write("a.md", "---\ntitle: Sample\npdfmd-options: {dialect-detect: basic}\n---\n\nProse.\n- entry\n")
+        done = self.run_pdfmd("a.md", "-t", "html")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual((self.directory / "a.html").read_text(encoding="utf-8"), html)
+
+    def test_toml_front_matter_has_a_default_warning_and_deep_reads_it(self):
+        source = '+++\ntitle = "Synthetic note"\n+++\n\nProse.\n- entry\n'
+        self.write("a.md", source)
+        done = self.run_pdfmd("a.md", "-t", "html")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr.count("TOML front matter"), 1)
+        self.assertIn("dialect-detect: deep", done.stderr)
+        self.assertIn("+++", (self.directory / "a.html").read_text(encoding="utf-8"))
+        self.write("dialect.yaml", "pdfmd-options: {dialect-detect: deep}\n")
+        done = self.run_pdfmd("a.md", "-t", "html", "-y", "dialect.yaml", "--standalone")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        html = (self.directory / "a.html").read_text(encoding="utf-8")
+        self.assertNotIn("+++", html)
+        self.assertIn("<ul>", html)
+        if sys.version_info >= (3, 11):
+            self.assertIn("<title>Synthetic note</title>", html)
+        else:
+            self.assertIn("NOTE", done.stderr)
+        self.assertEqual((self.directory / "a.md").read_text(encoding="utf-8"), source)
+
+
+    def test_deep_probe_corpus(self):
+        self.write("dialect.yaml", "pdfmd-options: {dialect-detect: DeEp}\n")
+        probes = {
+            "gfm": ("- plain list\n", "<ul>"),
+            "pandoc": ("% Synthetic title\n\nA note^[footnote].\n", "footnote"),
+            "commonmark": ("---\ntitle: Synthetic\n---\n\nParagraph.\n\n> quote\n", "<blockquote>"),
+            "obsidian": ("---\ntitle: Synthetic\n---\n\nTry this.\n%%\n# Hidden\n%%\n\n==marked==\n", "marked"),
+            "r-markdown": ("```{r}\nx <- 2\n```\n", "x &lt;- 2"),
+            "multimarkdown": ("Title: Synthetic\nAuthor: Example\n\nBody.\n", "Author: Example"),
+            "jekyll": ("---\nlayout: post\n---\n\nText.\n## Heading\n", "<h2"),
+            "mixed": ("---\ntitle: Synthetic\n---\n\n<!-- Prose\n# Example\n-->\n\n"
+                      "```\nExample\n- Item\n```\n\n$$\ntext\n- x\n$$\n", "<pre>"),
+            "not-toml": ("+++\nOrdinary fenced-looking prose.\n+++\n", "+++"),
+        }
+        for name, (source, expected) in probes.items():
+            with self.subTest(name=name):
+                self.write("a.md", source)
+                done = self.run_pdfmd("a.md", "-t", "html", "-y", "dialect.yaml", "-v")
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertNotIn("TOML front matter", done.stderr)
+                self.assertIn(expected, (self.directory / "a.html").read_text(encoding="utf-8"))
+                self.assertEqual("GFM-style blocks after front matter" in done.stdout, name == "jekyll")
+
+
 class FrontMatterCheck(unittest.TestCase):
     """`has_yaml_frontmatter` says what Pandoc's own Markdown reader says (v3.32.4). The table was measured with Pandoc 3.13
     (`pandoc -f markdown -t json`): a block opens with `---` and a non-blank line, closes with `---` or `...`."""

@@ -380,7 +380,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     flat = core.flat_settings(md_path, metadata_files, target_format) if flat_target else None
     from pdfmd_filters import document_filter_scope
     with document_filter_scope(), core.prepared_title_source(md_path, metadata_files, disabled=core.auto_disabled(no_auto, "title") or flat_target or target_format == "ansi",
-                               override=source_override) \
+                               override=source_override, reader=effective_from) \
             as (title_source, title_shifted), \
             core.embedded_lua_filters(md_path, not core.auto_disabled(cli_no_auto, "lua"), trust_embedded) \
             as embedded_filters, \

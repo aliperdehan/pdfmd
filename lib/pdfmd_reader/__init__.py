@@ -316,6 +316,8 @@ def flavour_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str 
         return reader, note
     if reader is None:                                   # Pandoc's Markdown, with what the flavour adds to it (v3.32.23)
         return ("markdown" + preset.markdown_plus if preset.markdown_plus else None), note
+    if reader.startswith("markdown+"):
+        return reader + preset.markdown_plus, note
     return (reader + "".join(f"+{extension}" for extension in preset.gfm_plus.split("+") if extension and extension not in reader)
             if reader.startswith("gfm") else reader), note
 
@@ -323,7 +325,12 @@ def flavour_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str 
 def pdfmd_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str | None, str | None]:
     """pdfmd's own pick of reader for a Markdown file, from what the file says and uses (resolve_from_format has the reasons): gfm with
     the extensions it needs, or None for Pandoc's own Markdown."""
-    text = core.obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, show=False)   # hidden text decides nothing
+    from . import dialect
+    original = md_path.read_text(encoding="utf-8-sig")
+    text = core.obsidian_source(original, md_path, metadata_files, show=False)   # hidden text decides nothing
+    toml = dialect.toml_front_matter(original)
+    if (toml and dialect.deep(md_path, metadata_files)) or core.has_yaml_frontmatter(original):
+        return dialect.reader(original, md_path, metadata_files, toml)
     if core.has_yaml_frontmatter(text) or has_percent_title_block(text):
         return None, None
     if core.EMBED_BLOCK_RE.search(text) and core.is_assembled_text(text):
@@ -491,7 +498,8 @@ def promote_bare_title(text: str, has_external_metadata: bool = False) -> tuple[
 @contextmanager
 def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
                           disabled: bool = False,
-                          override: tuple[str, bool] | None = None) -> Iterator[tuple[Path, bool]]:
+                          override: tuple[str, bool] | None = None,
+                          reader: str | None = None) -> Iterator[tuple[Path, bool]]:
     """Yield a temporary copy of ``md_path`` with promote_bare_title() applied,
     and whether that happened (the caller needs to know to also shift
     heading levels). Yields ``md_path`` itself, unchanged, when nothing to
@@ -504,9 +512,12 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
     comes from the whole file, so a section is built with the document's own
     settings.
     """
+    from . import dialect
+    relax = dialect.EXTENSIONS in (reader or "")
     if override is not None:
         text, shifted = override
         if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
+            text = dialect.prepare(text, md_path, metadata_files, relax)
             text = core.obsidian_source(text, md_path, metadata_files)
             text = core.repair_ascii_text(text, core.table_ascii_mode(md_path, list(metadata_files)), core.display_path(md_path))
             text = core.cell_tags_text(text, md_path, metadata_files, core.display_path(md_path))
@@ -524,7 +535,8 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
         yield md_path, False
         return
     original = md_path.read_text(encoding="utf-8-sig")
-    text = core.obsidian_source(original, md_path, metadata_files)      # an Obsidian note's %%comments%% go first: a hidden heading is no title
+    text = dialect.prepare(original, md_path, metadata_files, relax)
+    text = core.obsidian_source(text, md_path, metadata_files)      # an Obsidian note's %%comments%% go first: a hidden heading is no title
     corrected, shifted = text, False
     if not disabled:
         corrected, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))

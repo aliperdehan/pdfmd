@@ -3130,6 +3130,11 @@ file (it is `--from` for one document) and the flavour stays `auto`. `--from` on
 presets are a table in the `pdfmd_flavours` package; later releases make every part of a preset adjustable, so that a flavour of
 your own is a few lines.
 
+For a document with front matter, `pdfmd-options: {dialect-detect: deep}` (also in `--setup`) reads GFM-style
+blocks that follow prose without a blank line. It also reads a leading `+++` TOML block as metadata on Python 3.11
+or later. On older Python it drops the block with a note. The default `basic` retains the usual reader and warns
+if a leading TOML block will be printed as text.
+
 What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, arrives piece by piece):
 
 - **`%%comments%%`** (v3.32.20, in `obsidian` and `pdfmd`). Obsidian hides them in its reading view, and so does pdfmd, in every

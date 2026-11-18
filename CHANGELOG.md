@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.34.24 — 2026-11-18
+
+Pre-edit state: commit `51b7a0d`. Front matter selected Pandoc's Markdown even when
+the body relied on GFM's relaxed blank-line rules, and Hugo's TOML metadata
+printed as body text. Set `dialect-detect: deep` to recognise neighbouring
+GFM blocks and read TOML front matter. Basic mode retains the existing output
+and warns about TOML. The setting follows the usual layers and has a setup row.
+
+- Synthetic reader tests cover reachable blocks, protected examples, both modes
+  and a corpus of documents from different Markdown dialects.
+
 ## v3.34.23 — 2026-11-18
 
 Pre-edit state: commit `e69d966`. Typst skipped figure measurement when fitting was off,

@@ -166,6 +166,9 @@ use citation fields alone.
 
 ## When a build fails
 
+Use `pdfmd-options: {dialect-detect: deep}` for GFM-style blocks that follow prose in documents with front matter,
+or for a leading Hugo-style TOML metadata block. The default `basic` warns about TOML and keeps it in the body.
+
 With `.hst` history enabled, a change of the automatic Pandoc reader prints one WARN naming the old and new readers
 and the reason when known. Successful full builds record the reader; first builds and legacy entries are silent.
 An explicit `--from` or `pdfmd-options: {reader: ...}` suppresses this warning.

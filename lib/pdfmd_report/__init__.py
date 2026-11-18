@@ -259,7 +259,7 @@ def run(core, *,
                     as (report_fonts_header, report_fonts_filter), \
                     office_reference(files[0], metadata_files, variables, target_format, output,
                                      pandoc_options, report_no_auto, report_note) as report_office_arguments:
-                prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters)
+                prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters, metadata_files, report_from)
                 prepared_metadata = prepared[len(files):]
                 cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "-t", target_format]
                 if is_tex_target and report_standalone_auto:
@@ -428,7 +428,7 @@ def run(core, *,
                         document_header_file(files[0], (bool(preambles) or has_embedded_preamble(files[0])
                                                         or bool(report_pdf_meta_snippet_text))
                                              and engine in LATEX_ENGINES, metadata_files, report_no_auto) as report_header_file:
-                    prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters)
+                    prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters, metadata_files, report_from)
                     prepared_metadata = prepared[len(files):]
                     cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "--pdf-engine=" + engine]
                     if engine == "prince":                # it names only the page's first author (v3.33.66)

@@ -233,6 +233,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "raw": "options.raw",
     "pagebreak": "options.pagebreak", "markup": "options.markup", "show-comments": "options.show-comments", "show-hidden": "options.show-hidden", "calc.enabled": "options.calc.enabled", "calc.digits": "options.calc.digits", "calc.round": "options.calc.round", "calc.subs": "options.calc.subs", "calc.typeset": "options.calc.typeset", "calc.typeset-upright": "options.calc.typeset-upright", "calc.typeset-italic": "options.calc.typeset-italic", "calc.noindent": "options.calc.noindent", "calc.space": "options.calc.space", "calc.align": "options.calc.align", "calc.constants": "options.calc.constants", "calc.export": "options.calc.export",
     "calc": "options.calc.enabled",
+    "dialect-detect": "options.dialect-detect",
     "reader": "options.flavour",
     **dict.fromkeys(spelling.spellings("flavour"), "options.flavour"),
     "unclosed-comment": "options.unclosed-comment",

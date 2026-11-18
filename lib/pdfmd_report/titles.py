@@ -238,13 +238,19 @@ class Hidden:
         for path in self.paths:
             path.unlink(missing_ok=True)
 
-    def copies(self, core, inputs: list[Path], files: list[Path], chapters: dict[Path, Chapter]) -> list[Path]:
+    def copies(self, core, inputs: list[Path], files: list[Path], chapters: dict[Path, Chapter],
+               metadata_files=(), reader: str | None = None) -> list[Path]:
+        from pdfmd_reader import dialect
+
         out = []
         for path, original in zip(inputs, files):
-            if original not in chapters:
+            raw = path.read_text(encoding="utf-8-sig")
+            text = dialect.prepare(raw, original, metadata_files, dialect.EXTENSIONS in (reader or ""))
+            if original in chapters:
+                text = apply(core, text, chapters[original])
+            if text == raw:
                 out.append(path)
                 continue
-            text = apply(core, Path(path).read_text(encoding="utf-8-sig"), chapters[original])
             with NamedTemporaryFile("w", encoding="utf-8", suffix=".md", prefix=f".{original.stem}.pdfmd-title-",
                                     dir=Path(path).parent, delete=False) as handle:
                 handle.write(text)

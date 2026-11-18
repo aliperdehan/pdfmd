@@ -1280,6 +1280,13 @@ explicitly via --from. Report mode decides this once, from the first
 file, same as its documentclass/pdf-engine front matter; batch and
 single-file modes decide it per file.
 
+Set `pdfmd-options: {dialect-detect: deep}` or choose **Markdown dialect detection** in `--setup` to read
+lists, ATX headings, blockquotes and pipe tables immediately after prose in a Markdown document with front matter.
+`--verbose` names the lines that caused the reader to change. `basic` (the default) keeps the usual reader selection.
+A leading Hugo-style `+++` block with TOML assignments stays in the text in basic mode and produces one warning.
+Deep mode reads it as document metadata on Python 3.11 or later. On older Python versions it drops the block with a note.
+An explicit reader still controls reader selection.
+
 With file history enabled (`--stamp --stamp-store file`, or `both`), each successful full build records its effective
 Pandoc reader as the optional `reader=` field in NAME.hst. If it differs from the latest compiled entry's reader,
 one WARN names both readers and the reason when known (for example, YAML front matter selects Pandoc's Markdown).
