@@ -54,3 +54,24 @@ public static class Theme
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 }
+
+public sealed class ThemeWatcher : IDisposable
+{
+    public event Action<bool>? Changed;
+
+    public ThemeWatcher()
+    {
+        SystemEvents.UserPreferenceChanged += OnPreferenceChanged;
+    }
+
+    private void OnPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        var dark = Theme.IsDark();
+        Application.Current?.Dispatcher.BeginInvoke(() => Changed?.Invoke(dark));
+    }
+
+    public void Dispose()
+    {
+        SystemEvents.UserPreferenceChanged -= OnPreferenceChanged;
+    }
+}

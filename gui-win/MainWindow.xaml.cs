@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private readonly CommandLineTarget _target;
     private readonly AppSettings _settings = AppSettings.Load();
     private readonly ChildJob _job = new();
+    private readonly ThemeWatcher _theme = new();
 
     private CoreWebView2Environment? _environment;
     private ServeSession? _serve;
@@ -23,6 +24,7 @@ public partial class MainWindow : Window
     private bool _pdfReady;
     private bool _pdfFailed;
     private bool _building;
+    private bool _closingApproved;
     private bool _dirty;
     private string? _folder;
     private string? _currentFile;
@@ -35,7 +37,12 @@ public partial class MainWindow : Window
     {
         _target = target;
         InitializeComponent();
+
+        var placement = WindowPlacement.Load();
+        if (placement is not null) placement.ApplyTo(this);
+
         Theme.Apply(Theme.IsDark());
+        _theme.Changed += OnThemeChanged;
     }
 
     internal bool IsSmoke { get; set; }
@@ -113,6 +120,18 @@ public partial class MainWindow : Window
         try { if (_pdfReady && PdfWeb.CoreWebView2 is { } core) core.Profile.PreferredColorScheme = mode; } catch { }
     }
 
+    private void OnThemeChanged(bool dark)
+    {
+        Theme.Apply(dark);
+        Theme.ApplyTitleBar(this, dark);
+        ApplyWebTheme();
+    }
+
+    private void Window_SourceInitialized(object? sender, EventArgs e)
+    {
+        Theme.ApplyTitleBar(this, Theme.IsDark());
+    }
+
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (Keyboard.Modifiers != ModifierKeys.Control) return;
@@ -151,6 +170,8 @@ public partial class MainWindow : Window
             ShowError("That folder does not exist", full);
             return;
         }
+
+        if (!await MayLeaveAsync("opening another folder")) return;
 
         StopServe();
         HideBuildPane();
@@ -411,6 +432,42 @@ public partial class MainWindow : Window
         return false;
     }
 
+    private async Task<bool> MayLeaveAsync(string what)
+    {
+        if (!_webReady) return true;
+        var dirty = await EvalBoolAsync("window.appDirty ? window.appDirty() : null");
+        dirty ??= _dirty;
+        if (dirty != true) return true;
+
+        var answer = MessageBox.Show(this,
+            "This project has changes that are not saved.\n\nSave them before " + what + "?",
+            "Colophon", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+        if (answer == MessageBoxResult.Cancel) return false;
+        if (answer == MessageBoxResult.No) return true;
+        return await SavePageAsync();
+    }
+
+    private async Task<bool> ConfirmCloseAsync()
+    {
+        if (!_webReady) return true;
+        bool? dirty;
+        try { dirty = await EvalBoolAsync("window.appDirty ? window.appDirty() : null"); }
+        catch { dirty = _dirty; }
+        dirty ??= _dirty;
+        if (dirty != true) return true;
+
+        var answer = MessageBox.Show(this,
+            "This project has changes that are not saved.\n\nSave every tab with changes before closing?",
+            "Colophon", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+        if (answer == MessageBoxResult.Cancel) return false;
+        if (answer == MessageBoxResult.No) return true;
+        if (await SavePageAsync()) return true;
+        MessageBox.Show(this,
+            "Some changes could not be saved (a file may have changed on disk). The window stays open.",
+            "Colophon", MessageBoxButton.OK, MessageBoxImage.Error);
+        return false;
+    }
+
     internal async Task<bool?> EvalBoolAsync(string script)
     {
         var raw = await EvalAsync(script);
@@ -483,6 +540,8 @@ public partial class MainWindow : Window
 
     internal void CloseForSmoke()
     {
+        _closingApproved = true;
+        try { WindowPlacement.Save(this); } catch { }
         Close();
     }
 
@@ -492,8 +551,25 @@ public partial class MainWindow : Window
         LogText.ScrollToEnd();
     }
 
+    private async void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_closingApproved)
+        {
+            WindowPlacement.Save(this);
+            return;
+        }
+        e.Cancel = true;
+        if (await ConfirmCloseAsync())
+        {
+            _closingApproved = true;
+            WindowPlacement.Save(this);
+            Close();
+        }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
+        _theme.Dispose();
         StopServe();
         _job.Dispose();
         try { Web.Dispose(); } catch { }

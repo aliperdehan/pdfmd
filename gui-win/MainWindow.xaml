@@ -3,8 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Colophon" Width="1320" Height="840" MinWidth="720" MinHeight="480"
-        WindowStartupLocation="CenterScreen" Background="{DynamicResource WindowBrush}"
-        Foreground="{DynamicResource ForegroundBrush}" PreviewKeyDown="Window_PreviewKeyDown">
+        WindowStartupLocation="Manual" Background="{DynamicResource WindowBrush}"
+        Foreground="{DynamicResource ForegroundBrush}" Closing="Window_Closing"
+        SourceInitialized="Window_SourceInitialized" PreviewKeyDown="Window_PreviewKeyDown">
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />

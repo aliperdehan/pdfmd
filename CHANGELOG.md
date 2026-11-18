@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.33.333g — 2026-11-18
+
+Pre-edit state: commit `17b51e8`. Light and dark follow Windows and update live, the window's size and position are
+remembered, the page's own shortcuts keep working inside WebView2, and closing with unsaved changes asks first, using
+the page's own answer when it can answer and otherwise the last state it reported. `--smoke` now also checks the window
+rectangle is remembered. `dotnet build`, `--selftest` (16 passed) and `--smoke` (14 passed) pass. Not verified by
+hand: the light/dark switch, the close prompt and the visual result on screen.
+
 ## v3.33.333f — 2026-11-18
 
 Pre-edit state: commit `8fddfe8`. Ctrl+B saves the page (through `appSave`) and runs `pdfmd FILE.md` in the file's

@@ -158,6 +158,9 @@ internal static class Smoke
             await Task.Delay(1500);
             if (server is not null)
                 checks.Check("the serve process stops with the window", !Alive(server.Value), "still running: pid " + server);
+            checks.Note("data dir: " + AppPaths.DataDir);
+            checks.Check("the window rectangle is remembered",
+                File.Exists(AppPaths.WindowFile), "window.json is missing at " + AppPaths.WindowFile);
             try { Directory.Delete(root, true); } catch { }
         }
 

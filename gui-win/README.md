@@ -28,6 +28,10 @@ status bar and in the log. The PDF is the one named in pdfmd's `OK source > outp
 project therefore shows its parent's PDF. Ctrl+B is the shell's: the page's own Ctrl+B (bold) does not reach the
 editor while the shell is in front.
 
+Light and dark follow Windows and update live; the window's size and position are remembered between runs; the page's
+own shortcuts keep working inside WebView2. Closing with unsaved changes asks first, using the page's own answer when it
+can answer, otherwise the last state it reported.
+
 Settings are read from `%LOCALAPPDATA%\Colophon\settings.json` (all seconds; defaults in brackets):
 `BuildTimeoutSeconds` [600], `ServerStartTimeoutSeconds` [20], `SaveTimeoutSeconds` [15], `BuildPaneHeight` [260].
 
