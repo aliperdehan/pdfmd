@@ -91,7 +91,8 @@ set it under `pdfmd-options` or in `--setup` (as for `pagecite`). It needs the
 and links stay literal; the native tier leaves markers with one NOTE.
 
 `pdfmd --excerpts ACTION` manages local source records: `list`, `show ID`,
-`add`, `edit ID`, `remove ID`, `sources`, `where ID`, `export`, `detach`. It consumes the
+`add`, `edit ID`, `remove ID`, `sources`, `where ID`, `export`, `detach`, `check`,
+`reanchor KEY`, `renumber` and `rekey OLD NEW`. It consumes the
 rest of the command line; each action accepts `--json` and `--in PATH` (document
 or folder). Exit codes: 0 success, 1 problems/file failure, 2 usage. JSON failures
 answer `{error}`. `list` prints a compact table of record fields with long values
@@ -99,10 +100,19 @@ shortened to fit the terminal (80 columns in a pipe). Use `list --json` for the
 complete records. `add --key glass --page 41 --text "Invented evidence."` prints
 an id and canonical forms `[@x:ID]` and `[@KEY#ID]`; `add --remark "Check this inference."` needs no source.
 `remove --detach` rewrites citations before deletion. `remove --force` leaves
-markers in place. `--problems` awaits excerpt checks. `sources add KEY FILE --pages '[[2,"41"]]'` records a source;
+markers in place. `list --problems` filters to records with warnings or errors.
+`sources add KEY FILE --pages '[[2,"41"]]'` records a source;
 `sources match [DIR]` proposes matches (`--apply` only for unambiguous exact
 evidence). PDF reading needs optional pypdf. `export [-o FILE]` is a private
 Markdown review sheet containing passages and notes.
+
+`--check` verifies excerpt markers, source keys, locators and quotations
+without opening source PDFs. `--excerpts check --json` also checks PDF hashes
+and bounds and reports unused records. Quotation and overlap checks default to
+3 and 6 words respectively. Set `excerpt-quote-min-words` and
+`excerpt-overlap-words` under `pdfmd-options` or in `--setup`. An overlap
+threshold of 0 turns overlap checking off. `reanchor` uses Poppler
+`pdftotext`. Ambiguous anchors and duplicate identifiers need review.
 
 `pdfmd-options.excerpts` names the record file relative to the file setting it;
 `off` disables discovery. Otherwise it is the nearest `excerpts.json` beside the

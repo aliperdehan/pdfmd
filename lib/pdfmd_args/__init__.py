@@ -165,7 +165,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="print the newest record of FILE's build (see --build-log)")
     parser.add_argument("--failed", action="store_true", help="with --last-build: the newest record of a build that failed")
     parser.add_argument("--excerpts", nargs=argparse.REMAINDER, metavar="ACTION ...",
-                        help="manage the project's local excerpt records: list, show, add, edit, remove, sources, where, export, detach; "
+                        help="manage the project's local excerpt records: list, show, add, edit, remove, sources, where, export, detach, "
+                             "check, reanchor, renumber, rekey; "
                              "takes the rest of the command line. --json on every action; --in PATH selects a document or folder. "
                              "pdfmd-options.excerpts names the record file relative to its naming file; off disables discovery. "
                              "Default: nearest excerpts.json beside the document, in metadata/, then parent/folder layers. "
@@ -174,6 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "Builds resolve citations using the local record. pdfmd-options.excerpt-page-terms sets the singular and "
                              "plural page terms (p., pp. by default; --setup). "
                              "pdfmd-options.excerpt-repeat: page uses the pagecite page form for repeated sources; default full. "
+                             "Checks use excerpt-quote-min-words (3) and excerpt-overlap-words (6; 0 switches overlap off). "
                              "Markup kind: excerpts. "
                              "`pdfmd --excerpts --help` lists command options")
     parser.add_argument("--serve", nargs="?", const="", metavar="FOLDER",
@@ -542,7 +544,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "without keeping a build: a missing image or csv file, a link or #anchor to nowhere, a duplicate "
                              "{#id}, a @fig:x or \\ref{x} nothing defines, a citation the bibliography lacks, a "
                              "footnote with no text, a skipped heading level, a code fence or <!-- never closed, front "
-                             "matter that does not parse. A temporary LaTeX or Typst build can report figures that are too "
+                             "matter that does not parse, or excerpt markers, locators and quotation problems. "
+                             "A temporary LaTeX or Typst build can report figures that are too "
                              "tall (figure-too-tall). Exit 1 on an error (also on a warning with --strict)")
     parser.add_argument("--check-ignore", action="append", metavar="CODE[,CODE]",
                         help="with --check: leave out these checks (also `pdfmd-options: {check-ignore: [heading-jump]}`; "

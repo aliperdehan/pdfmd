@@ -247,11 +247,12 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
                         continue
                 elif setting.check == "list":
                     value = [item.strip() for item in value.split(",") if item.strip()]
-                elif setting.check == "nonnegative":
-                    if value.isdecimal():
+                elif setting.check in ("nonnegative", "positive"):
+                    if value.isdecimal() and (setting.check == "nonnegative" or int(value) > 0):
                         value = int(value)
                     else:
-                        state["message"] = "A non-negative whole number, please."
+                        kind = "non-negative" if setting.check == "nonnegative" else "positive"
+                        state["message"] = f"A {kind} whole number, please."
                         continue
                 elif setting.check == "parents":
                     from pdfmd_metadata import parse_depth

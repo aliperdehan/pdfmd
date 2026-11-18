@@ -48,6 +48,64 @@ class CommandFixture:
 
 
 class Commands(CommandFixture, unittest.TestCase):
+    def test_renumber_rewrites_unambiguous_markers_after_a_merge(self):
+        record = self.write("excerpts.json", json.dumps({
+            "pdfmd-excerpts": 1, "next-id": 3, "sources": {}, "excerpts": [
+                {"id": 1, "key": "glass", "page": "41", "kind": "text", "parts": []},
+                {"id": 1, "key": "clay", "page": "52", "kind": "text", "parts": []},
+                {"id": 2, "key": "glass", "page": "42", "kind": "text", "parts": []},
+            ]}))
+        path = self.write("draft.md", "Ambiguous [@x:1].\n")
+        before = record.read_bytes()
+        report = self.command("check", code=1)
+        self.assertEqual([item["code"] for item in report], ["excerpt-file"])
+        self.assertIn("duplicate excerpt id 1", report[0]["message"])
+        self.assertIn("ambiguous", self.command("renumber", code=1)["error"])
+        self.assertEqual(record.read_bytes(), before)
+        self.assertEqual(path.read_text(encoding="utf-8"), "Ambiguous [@x:1].\n")
+        path.write_bytes(b"One [@glass:1] and [@clay#1] with `@clay#1`.\r\n")
+        answer = self.command("renumber")
+        self.assertEqual({(item["key"], item["new"]) for item in answer["renumbered"]}, {("glass", 3), ("clay", 4)})
+        self.assertEqual(path.read_bytes(), b"One [@glass#3] and [@clay#4] with `@clay#1`.\r\n")
+        self.assertEqual(json.loads(record.read_bytes())["next-id"], 5)
+
+    def test_rekey_updates_source_and_long_markers(self):
+        record = self.write("excerpts.json", json.dumps({
+            "pdfmd-excerpts": 1, "next-id": 2, "sources": {"glass": {"future": 1}}, "excerpts": [
+                {"id": 1, "key": "glass", "page": "41", "kind": "text", "parts": []}]}))
+        path = self.write("draft.md", "[@glass:1] [@x#1] and `@glass#1`.\n")
+        meta = self.write("metadata.yaml", "nocite: '[@glass#1]'\nreferences:\n  - id: 'glass'\n    title: '@glass#1'\n")
+        other = self.write("other/draft.md", "[@glass#1].\n")
+        self.write("other/excerpts.json", record.read_text(encoding="utf-8"))
+        self.command("rekey", "glass", "glasswork")
+        self.assertEqual(path.read_text(encoding="utf-8"), "[@glasswork#1] [@x#1] and `@glass#1`.\n")
+        self.assertEqual(meta.read_text(encoding="utf-8"),
+                         "nocite: '[@glasswork#1]'\nreferences:\n  - id: 'glass'\n    title: '@glass#1'\n")
+        self.assertEqual(other.read_text(encoding="utf-8"), "[@glass#1].\n")
+        data = json.loads(record.read_bytes())
+        self.assertEqual(data["sources"], {"glasswork": {"future": 1}})
+        self.assertEqual(data["excerpts"][0]["key"], "glasswork")
+
+    def test_repairs_roll_back_markdown_if_record_write_fails(self):
+        from pdfmd_excerpts.repairs import rekey
+
+        path = self.write("draft.md", "[@glass#1].\n")
+        self.command("add", "--key", "glass", "--page", "41")
+        record = self.root / "excerpts.json"
+        before = record.read_bytes()
+        write = pdfmd.atomic_write_bytes
+
+        def fail_record(destination, data):
+            if destination == record.resolve():
+                raise OSError("synthetic record write failure")
+            write(destination, data)
+
+        with mock.patch.object(pdfmd, "atomic_write_bytes", side_effect=fail_record):
+            with self.assertRaisesRegex(OSError, "synthetic record write failure"):
+                rekey(self.root, record.resolve(), "glass", "glasswork")
+        self.assertEqual(path.read_text(encoding="utf-8"), "[@glass#1].\n")
+        self.assertEqual(record.read_bytes(), before)
+
     def test_list_defaults_to_aligned_record_fields_and_keeps_full_json(self):
         records = [
             {"id": 2, "kind": "remark", "note": "Remark canary"},
@@ -249,7 +307,8 @@ pdfmd-options: {excerpt-prefix: Ex_1-local}
             self.command(*args, code=2)
         self.command("add", "--remark", "An invented note")
         before = (self.root / "excerpts.json").read_bytes()
-        for args, code in ((("show", "99"), 1), (("list", "--problems"), 2), (("detach", "--all"), 2),
+        self.assertEqual(self.command("list", "--problems"), [])
+        for args, code in ((("show", "99"), 1), (("detach", "--all"), 2),
                            (("add", "--key", "glass", "--box", "1,2,3,4"), 2),
                            (("add", "--key", "glass", "--pdf-page", "0"), 2),
                            (("add", "--key", "glass", "--pdf-page", "1", "--box", "4,3,2,1"), 1)):
@@ -429,6 +488,56 @@ class SourcePDFs(CommandFixture, unittest.TestCase):
         labelled.unlink()
         self.assertEqual(self.command("sources")[0]["state"], "missing")
 
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs Poppler pdftotext")
+    def test_check_and_reanchor_after_a_cover_page_is_added(self):
+        source = self.pdf("glass.pdf", count=1)
+        self.pdf("missing.pdf", count=1)
+        self.command("sources", "add", "glass", "glass.pdf")
+        self.command("sources", "add", "missing", "missing.pdf")
+        (self.root / "missing.pdf").unlink()
+        self.write("draft.md", "[@x:1].\n")
+        self.write("refs.bib", "@book{glass, title={Invented glass}}")
+        self.command("add", "--key", "glass", "--pdf-page", "1", "--text", "Inventedglass study",
+                     "--box", "10,170,103,190", "--page", "41")
+        self.command("add", "--key", "glass", "--kind", "area", "--pdf-page", "1", "--box", "20,40,80,90")
+        self.command("add", "--key", "glass", "--pdf-page", "1", "--text", "printed 41", "--box", "199,5,210,15")
+        self.assertEqual({item["code"] for item in self.command("check", code=1)},
+                         {"excerpt-source-missing", "excerpt-box", "excerpt-unused"})
+        writer = pdfmd.pypdf.PdfWriter()
+        writer.add_blank_page(width=200, height=200)
+        writer.append(source)
+        with source.open("wb") as handle:
+            writer.write(handle)
+        before = source.read_bytes()
+        self.assertIn("excerpt-source-changed", {item["code"] for item in self.command("check", code=1)})
+        [updated] = self.command("reanchor", "glass")
+        self.assertEqual(updated["state"], "updated")
+        original = self.command("show", "1")
+        self.assertEqual(original["page"], "41")
+        self.assertEqual(original["parts"][0]["pdf-page"], 2)
+        self.assertNotEqual(original["parts"][0]["boxes"], [[10, 170, 103, 190]])
+        self.assertEqual(self.command("show", "2")["parts"][0]["boxes"], [[20, 40, 80, 90]])
+        self.assertEqual(self.command("show", "2")["parts"][0]["pdf-page"], 2)
+        self.assertEqual(source.read_bytes(), before)
+        final = self.command("check")
+        self.assertEqual({item["code"] for item in final}, {"excerpt-source-missing", "excerpt-unused"})
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs Poppler pdftotext")
+    def test_reanchor_lists_unresolved_parts_without_committing_a_source(self):
+        source = self.pdf("glass.pdf", count=1)
+        self.command("sources", "add", "glass", "glass.pdf")
+        self.command("add", "--key", "glass", "--pdf-page", "1", "--text", "Invented glass")
+        self.command("add", "--key", "glass", "--pdf-page", "1", "--text", "Unavailable passage")
+        record = self.root / "excerpts.json"
+        before = record.read_bytes()
+        source.write_bytes(source.read_bytes() + b"\n% changed\n")
+        [review] = self.command("reanchor", "glass", code=1)
+        self.assertEqual(review["state"], "review")
+        self.assertEqual([item["id"] for item in review["located"]], [1])
+        self.assertEqual([item["id"] for item in review["unresolved"]], [2])
+        self.assertEqual(record.read_bytes(), before)
+
+
     def test_sources_match_file_doi_title_name_cover_and_likeness(self):
         self.pdf("known.pdf", "Synthetic file identity", count=3)
         self.pdf("renamed.pdf", "Synthetic DOI 10.1234/invented", count=2)
@@ -525,6 +634,70 @@ class ResolverFixture(CommandFixture):
 
 
 class TextResolver(ResolverFixture, unittest.TestCase):
+    def test_lint_checks_excerpt_markers_quotes_and_overlap(self):
+        record = self.root / "excerpts.json"
+        data = json.loads(record.read_bytes())
+        data["excerpts"][0]["parts"] = [{"text": "The glue-\nprintedinvented phrase and ﬁnal words. One two three four five six.",
+                                        "text-from": "pdf"}]
+        data["excerpts"][1]["parts"] = [{"text": "A wholly alternate excerpt", "text-from": "typed"}]
+        data["excerpts"][2]["parts"] = [{"text": "Optical reading", "text-from": "ocr"}]
+        data["excerpts"].append({"id": 13, "key": "gone", "page": "7", "kind": "text", "parts": []})
+        data["next-id"] = 14
+        record.write_text(json.dumps(data), encoding="utf-8")
+        self.write("draft.md", """---
+bibliography: refs.bib
+---
+
+"The glueprinted [editorial] invented [...] final words" [@x:1, p. 41, Table 4].
+
+“A wholly alternate excerpt” [@x:1].
+
+"That is invented differently" [@x:3].
+
+"This is unrelated prose" [@x:1].
+
+One two three four five six [@x:1, 98].
+
+[@x:99]. [@clay#1]. [@x:13]. And @x:4.
+""")
+        answer = self.build("--check", "draft.md", code=1).stdout
+        for code in ("excerpt-unknown", "excerpt-key-mismatch", "excerpt-bib", "excerpt-locator-differs",
+                     "excerpt-remark-narrative", "excerpt-overlap"):
+            self.assertEqual(answer.count(f"[{code}]"), 1, answer)
+        self.assertEqual(answer.count("[excerpt-quote]"), 3, answer)
+        self.assertIn("note: quotation matches uncited excerpt 2", answer)
+        self.assertIn("note: quotation is absent", answer)
+        self.assertIn("warning: quotation is absent", answer)
+        self.assertIn("6 words as in excerpt 1", answer)
+        self.assertNotIn("[cite-missing]", answer)
+        record.write_text(json.dumps({key: value for key, value in data.items() if key != "next-id"}), encoding="utf-8")
+        self.assertIn("missing or invalid next-id  [excerpt-file]", self.build("--check", "draft.md", code=1).stdout)
+
+    def test_lint_excerpt_thresholds_and_ignore(self):
+        self.command("edit", "1", "--text", "One two three four five six")
+        self.write("draft.md", """---
+bibliography: refs.bib
+pdfmd-options: {excerpt-quote-min-words: 4, excerpt-overlap-words: 0}
+---
+
+"Three invented words" and one two three four five six [@x:1].
+
+<!-- pdfmd-check: ignore excerpt-unknown -->
+[@x:99].
+""")
+        self.assertIn("no problems", self.build("--check", "draft.md", "--strict").stdout)
+
+    def test_external_metadata_markers_are_checked_and_count_as_used(self):
+        self.write("draft.md", "An invented claim.\n")
+        self.write("metadata.yaml", "nocite: '[@x:1; @x:99; @clay#2]'\n")
+        output = self.build("--check", "draft.md", code=1).stdout
+        self.assertIn("metadata.yaml:1: error", output)
+        self.assertIn("[excerpt-unknown]", output)
+        self.assertIn("[excerpt-key-mismatch]", output)
+        issues = self.command("check", code=1)
+        self.assertFalse(any(item["message"] == "excerpt 1 is unused" for item in issues))
+        self.assertEqual([item["id"] for item in self.command("list", "--problems")], [2])
+
     def test_repeat_page_detaches_to_literal_locator(self):
         path = self.write("draft.md", """---
 pdfmd-options: {excerpt-repeat: page, pagecite: auto}

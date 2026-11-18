@@ -166,20 +166,26 @@ def check_command(args, pandoc_options: list[str]) -> int:
             status = 1
             continue
         bibliography, missing = check_bibliography(document, metadata_files, args.variable or [])
-        sources = []
+        inputs = []
         for path in files:
             try:
-                sources.append(check.Source(core.display_path(path), path.parent, path.read_text(encoding="utf-8-sig")))
+                inputs.append((path, check.Source(core.display_path(path), path.parent, path.read_text(encoding="utf-8-sig"))))
             except (OSError, UnicodeDecodeError) as error:
                 print(f"{core.display_path(path)}: cannot read it ({error})", file=sys.stderr)
                 status = 1
         folders = [folder for folder in core.accessory_directories(document.parent, document.stem)[1:]]
         limit = core.resolve_budget(document, metadata_files)[0]
-        excerpts = core.deferred("pdfmd_excerpts.resolution", "prepare")(
-            files, metadata_files, pandoc_options, core.effective_no_auto(document, args.no_auto),
-            named_reader=args.from_format)
+        try:
+            excerpts, citation_key = core.deferred("pdfmd_excerpts.checks", "lint_excerpts")(
+                inputs, document, metadata_files, pandoc_options, core.effective_no_auto(document, args.no_auto),
+                args.from_format)
+        except ValueError as error:
+            print(f"{core.display_path(document)}: {error}", file=sys.stderr)
+            status = 1
+            continue
+        sources = [source for _, source in inputs]
         problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None,
-                              citation_key=excerpts.key if excerpts and excerpts.records is not None else None,
+                              citation_key=citation_key, extra_problems=excerpts,
                               calc=calc_check_records(files, metadata_files))
         if "figure-too-tall" not in ignore:
             from pdfmd_check.figures import figure_problems

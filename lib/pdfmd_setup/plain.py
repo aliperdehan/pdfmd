@@ -102,11 +102,12 @@ def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: C
             answer = int(value) if value == int(value) else value
         elif setting.check == "list":
             answer = [item.strip() for item in answer.split(",") if item.strip()]
-        elif setting.check == "nonnegative":
-            if answer.isdecimal():
+        elif setting.check in ("nonnegative", "positive"):
+            if answer.isdecimal() and (setting.check == "nonnegative" or int(answer) > 0):
                 answer = int(answer)
             else:
-                say("A non-negative whole number, please.")
+                kind = "non-negative" if setting.check == "nonnegative" else "positive"
+                say(f"A {kind} whole number, please.")
                 return False
         elif setting.check == "parents":
             from pdfmd_metadata import parse_depth

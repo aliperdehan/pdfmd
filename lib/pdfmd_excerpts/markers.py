@@ -10,6 +10,7 @@ from .record import RecordError
 MARKER = re.compile(r"(.+)[:#]([0-9]+)\Z")
 CITATION = re.compile(r"(?<![\w@\\])@(?:\{([^}\n]+)\}|([-\w](?:[\w:.#$%&+?<>~/-]*\w)?))")
 REFERENCE_PREFIXES = ("fig", "tbl", "eq", "sec", "lst")
+NON_CITATION_METADATA = frozenset({"references", "references+", "pdfmd-options", "bibliography", "bibliography+", "csl"})
 
 
 def prefix_setting(document, metadata):
@@ -44,15 +45,28 @@ def canonical(ident, key, prefix):
     return f"@{key}#{ident}" if key is not None else f"@{prefix}:{ident}"
 
 
-def citation_mask(text, document, metadata, include_metadata=False):
+def citation_mask(text, document, metadata, include_metadata=False, *, metadata_only=False):
     """Blank protected text without changing offsets or line numbers."""
     from pdfmd_check.lint import Analysis, Source, blank_matches, blank, mask_code
     analysis = Analysis(Source(document.name, document, text))
     scanned = analysis.cited
-    if include_metadata and analysis.front_end:
-        front = text[:analysis.front_end]
+    front_end = len(text) if metadata_only else analysis.front_end if include_metadata else 0
+    if front_end:
+        front = text[:front_end]
         # Indented YAML block scalars are content, so mask just their inline code and comments.
-        scanned = mask_code(re.sub(r"(?m)^[ \t]+", lambda match: "!" * len(match[0]), front))[0] + scanned[analysis.front_end:]
+        front = mask_code(re.sub(r"(?m)^[ \t]+", lambda match: "!" * len(match[0]), front))[0]
+        if metadata_only and core.yaml is not None:
+            try:
+                node = core.yaml.compose(text)
+            except core.yaml.YAMLError:
+                node = None
+            if isinstance(node, core.yaml.MappingNode):
+                for key, value in node.value:
+                    if isinstance(key, core.yaml.ScalarNode) and key.value in NON_CITATION_METADATA:
+                        start, end = key.start_mark.index, value.end_mark.index
+                        if start < end:  # a YAML alias can point back to an earlier key
+                            front = front[:start] + blank(front[start:end]) + front[end:]
+        scanned = front + scanned[front_end:]
     for raw in re.finditer(r"(?is)<(pre|script|style|code)\b[^>]*>.*?</\1>", text):
         scanned = scanned[:raw.start()] + blank(scanned[raw.start():raw.end()]) + scanned[raw.end():]
     scanned = blank_matches(re.compile(r"(?s)\\\[.*?\\\]|\\\(.*?\\\)"), scanned)
@@ -67,31 +81,44 @@ def citation_mask(text, document, metadata, include_metadata=False):
     return scanned
 
 
-def locations(place, record_path, bibliography, data=None):
-    from .resolution import Resolution, project
-    records = project(data) if data is not None else None
-    warnings = set()
-    place = Path(place)
+def project_root(place, record_path):
+    place = Path(place).expanduser().resolve()
     root = place if place.is_dir() else place.parent
     project = record_path.parent.parent if record_path.parent.name in ("metadata", ".pdfmd") else record_path.parent
-    if project == root or project in root.parents:
-        root = project
-    documents = sorted(root.rglob("*"))
-    result = []
-    for path in documents:
+    return project if project == root or project in root.parents else root
+
+
+def project_contexts(place, record_path):
+    from .discovery import context, discover
+
+    root = project_root(place, record_path)
+    for path in sorted(root.rglob("*")):
         if (path.suffix.lower() not in (".md", ".markdown", ".qmd") or not path.is_file()
                 or any(part.startswith(".") for part in path.relative_to(root).parts)):
             continue
         # A nearer/explicit different record file makes this a different id namespace.
-        from .discovery import context, discover
         document, metadata = context(path)
         try:
-            if discover(document, metadata).resolve() != record_path.resolve():
-                continue
+            namespace = discover(document, metadata).resolve()
         except ValueError:
-            continue
+            namespace = None
+        yield document, metadata, namespace
+
+
+def project_documents(place, record_path):
+    namespace = record_path.resolve()
+    return ((document, metadata) for document, metadata, found in project_contexts(place, record_path)
+            if found == namespace)
+
+
+def locations(place, record_path, bibliography, data=None):
+    from .resolution import Resolution, project
+    records = project(data) if data is not None else None
+    warnings = set()
+    result = []
+    for document, metadata in project_documents(place, record_path):
         prefix = prefix_setting(document, metadata)
-        text = path.read_text(encoding="utf-8")
+        text = document.read_text(encoding="utf-8")
         scanned = citation_mask(text, document, metadata, include_metadata=True)
         from .discovery import bibliography as document_bibliography
         real_keys = {**bibliography, **document_bibliography(document, metadata)}
@@ -103,6 +130,6 @@ def locations(place, record_path, bibliography, data=None):
                 state.resolve(key, diagnostics=True)
             elif parsed is not None and (records is None or state.resolve(key) is not None):
                 ident, named = parsed
-                result.append({"id": ident, "key": named, "file": core.display_path(path),
+                result.append({"id": ident, "key": named, "file": core.display_path(document),
                                "line": text.count("\n", 0, found.start()) + 1, "marker": canonical(ident, named, prefix)})
     return result

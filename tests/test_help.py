@@ -73,7 +73,7 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("off (default)", text)
 
     def test_excerpts_command_and_path_have_a_help_topic(self):
-        text = re.sub(r"pdfmd-\s+options", "pdfmd-options", run("--help", "excerpts").stdout)
+        text = re.sub(r"-\n\s+", "-", run("--help", "excerpts").stdout)
         text = " ".join(text.split())
         self.assertIn("--excerpts", text)
         self.assertIn("pdfmd-options.excerpts", text)
@@ -82,6 +82,10 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("@x:ID and @KEY#ID", text)
         self.assertIn("--json", text)
         self.assertIn("--in PATH", text)
+        self.assertIn("excerpt-quote-min-words", text)
+        self.assertIn("excerpt-overlap-words", text)
+        for action in ("reanchor", "renumber", "rekey"):
+            self.assertIn(action, text)
 
     def test_private_attach_mode_has_source_help(self):
         text = " ".join(run("--help", "source").stdout.split())

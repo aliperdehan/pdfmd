@@ -976,6 +976,10 @@ pdfmd --excerpts remove 1 --force
 pdfmd --excerpts sources add glass sources/glass.pdf --pages '[[2,"41"]]'
 pdfmd --excerpts sources match sources/
 pdfmd --excerpts export -o review.md
+pdfmd --excerpts check --json
+pdfmd --excerpts reanchor glass
+pdfmd --excerpts renumber
+pdfmd --excerpts rekey glass glasswork
 ```
 
 `--excerpts` takes the rest of the command line. Every action accepts `--json`,
@@ -1027,7 +1031,7 @@ The default is `x`. Use one word of letters, digits, hyphens or underscores.
 The cross-reference prefixes `fig`, `tbl`, `eq`, `sec` and `lst` are reserved.
 
 A cited record can be removed with `--detach` to rewrite its citations, or with
-`--force` to leave its markers. `list --problems` awaits the excerpt checks. `export` groups records by source, with notes and citing places.
+`--force` to leave its markers. `list --problems` shows records with warnings or errors. `export` groups records by source, with notes and citing places.
 It deliberately contains passages: keep this local review sheet private.
 
 **Excerpt citations.** In the pdfmd and Obsidian flavours, a build with an
@@ -1075,6 +1079,35 @@ plus a map when the bibliography’s page range and page count agree (one extra
 PDF page is a cover). `--apply` writes unique matches by file, DOI, title or exact
 name; ambiguous or merely similar names need a choice with `sources add`.
 Existing different source files are never silently replaced.
+
+`pdfmd FILE.md --check` checks excerpt references and prose. It reports
+`excerpt-unknown`, `excerpt-key-mismatch` and `excerpt-file` as errors, and
+`excerpt-bib`, `excerpt-locator-differs`, `excerpt-quote`, `excerpt-overlap`
+and `excerpt-remark-narrative` as warnings. Quotations may contain ellipses
+and bracketed insertions. A quotation found only in an uncited record, or
+one that cannot be verified against OCR text, gets a note. Messages can name
+the marker or record but never repeat a passage or note.
+
+Set `excerpt-quote-min-words` (default 3) and `excerpt-overlap-words`
+(default 6) in `pdfmd-options` or `--setup`. Overlap is for unquoted words.
+Set its threshold to 0 to switch it off. Both checks normalise Unicode,
+quotes and dashes. They ignore case, whitespace, and soft and line-end hyphens.
+
+`--excerpts check` checks the project and also reports `excerpt-unused`,
+`excerpt-source-missing`, `excerpt-source-changed` and `excerpt-box`.
+The command exits 1 for warnings or errors. With `--json` it returns the
+finding's code, severity, file, line and message.
+`--excerpts reanchor KEY` uses pypdf and Poppler's `pdftotext` to find text
+and boxes in a changed PDF, trying the old page first. It moves areas when
+all anchored text parts for that file move by the same number of pages.
+If any part needs review, it reports the proposed moves and leaves that
+file's anchors and hash as they were. Printed locators and page maps stay
+as written.
+`--excerpts renumber` assigns fresh IDs to colliding records and updates long
+markers that identify a unique source. Ambiguous references need clarification
+before anything is written. `--excerpts rekey OLD NEW` follows a bibliography
+key rename in the record and in long markers. Short markers keep their IDs.
+Repairs stop if a marker to change is in shared or outside metadata.
 
 The record format is version 1: top-level `pdfmd-excerpts: 1`, `next-id`, `sources`
 and `excerpts`. Records have `id`, `key`, `page`, `kind`, `parts` and optional

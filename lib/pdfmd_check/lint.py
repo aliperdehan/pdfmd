@@ -44,6 +44,18 @@ CODES: dict[str, tuple[str, str]] = {
     "asset-large": ("warning", "an image or data file bigger than the size budget (--max-asset-mb)"),
     "calc-undefined": ("error", "a calculator span, `::: calc` line or {ans} that uses a name nothing defines"),
     "calc-redefined": ("note", "a calculator name defined more than once (a use sees the nearest definition above it, else the first below)"),
+    "excerpt-unknown": ("error", "a marker names an excerpt id that does not exist"),
+    "excerpt-key-mismatch": ("error", "a long marker has a different key from the excerpt"),
+    "excerpt-file": ("error", "the excerpt record file cannot be read or is invalid"),
+    "excerpt-bib": ("warning", "the excerpt's source key is absent from the bibliography"),
+    "excerpt-locator-differs": ("warning", "a typed locator differs from the one in the excerpt"),
+    "excerpt-quote": ("warning", "a quotation does not match a cited excerpt"),
+    "excerpt-overlap": ("warning", "unquoted words in a row match a cited excerpt"),
+    "excerpt-remark-narrative": ("warning", "a remark is used as a narrative citation"),
+    "excerpt-unused": ("note", "an excerpt has no marker in the project"),
+    "excerpt-source-missing": ("note", "an excerpt's source PDF is missing"),
+    "excerpt-source-changed": ("warning", "the source PDF's hash changed"),
+    "excerpt-box": ("error", "an excerpt page or box falls outside the source PDF"),
 }
 
 
@@ -53,10 +65,11 @@ class Problem:
     line: int                                       # 1-based; 0 = the file as a whole
     code: str
     message: str
+    severity_override: str | None = None
 
     @property
     def severity(self) -> str:
-        return CODES[self.code][0]
+        return self.severity_override or CODES[self.code][0]
 
 
 @dataclass
@@ -332,11 +345,11 @@ class Analysis:
 class Findings:
     problems: list[Problem] = field(default_factory=list)
 
-    def add(self, analysis: Analysis, line: int, code: str, message: str) -> None:
+    def add(self, analysis: Analysis, line: int, code: str, message: str, *, severity=None) -> None:
         silenced = analysis.ignored.get(line, frozenset())
         if silenced is None or code in silenced:
             return
-        self.problems.append(Problem(analysis.source.label, line, code, message))
+        self.problems.append(Problem(analysis.source.label, line, code, message, severity))
 
 
 def suggestion(word: str, known) -> str:
@@ -346,7 +359,8 @@ def suggestion(word: str, known) -> str:
 
 def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore: frozenset = frozenset(),
          folders: list[Path] | None = None, asset_limit: int | None = None,
-         calc: "tuple[list, list] | None" = None, citation_key: Callable | None = None) -> list[Problem]:
+         calc: "tuple[list, list] | None" = None, citation_key: Callable | None = None,
+         extra_problems=()) -> list[Problem]:
     """The problems of ``sources`` taken as one document (a scaffold and its parts, or a single file), in order.
     ``folders`` are searched for files after the source's own folder; ``asset_limit`` (bytes) is the size budget of an
     image or data file; ``calc`` is what the calculator's filter found (see calc_names): the uses of undefined names and
@@ -373,7 +387,7 @@ def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore
     citations(analyses, findings, bibliography, citation_key)
     if calc:
         calc_names(analyses, findings, *calc)
-    problems = [problem for problem in findings.problems if problem.code not in ignore]
+    problems = [problem for problem in [*findings.problems, *extra_problems] if problem.code not in ignore]
     order = {analysis.source.label: number for number, analysis in enumerate(analyses)}
     return sorted(problems, key=lambda item: (order.get(item.file, 0), item.line))
 

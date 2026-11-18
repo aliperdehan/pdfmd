@@ -30,16 +30,22 @@ def parser():
     common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="answer as JSON (also on failure)")
     common.add_argument("--in", dest="place", default=argparse.SUPPRESS, metavar="PATH", help="document or project folder")
     common.add_argument("--verbose", action="store_true", default=argparse.SUPPRESS, help="show further record files ignored")
-    result = Parser(prog="pdfmd --excerpts", parents=[common], description="Local excerpt records and Markdown citation detachment.",
+    result = Parser(prog="pdfmd --excerpts", parents=[common], description="Local excerpt records, checks and Markdown citation detachment.",
                     formatter_class=argparse.RawDescriptionHelpFormatter)
     actions = result.add_subparsers(dest="action", required=True, parser_class=Parser)
-    for action in ("list", "show", "where", "add", "edit", "remove", "sources", "export", "detach"):
+    for action in ("list", "show", "where", "add", "edit", "remove", "sources", "export", "detach", "check",
+                   "reanchor", "renumber", "rekey"):
         sub = actions.add_parser(action, parents=[common])
         if action == "list":
             sub.description = "List excerpt records as a table. Use --json for complete records."
             sub.add_argument("--key")
             sub.add_argument("--unused", action="store_true")
-            sub.add_argument("--problems", action="store_true", help="requires the P1d checks (not available yet)")
+            sub.add_argument("--problems", action="store_true", help="only records with excerpt check problems")
+        if action == "reanchor":
+            sub.add_argument("key")
+        if action == "rekey":
+            sub.add_argument("old")
+            sub.add_argument("new")
         if action in ("show", "where", "edit", "remove"):
             sub.add_argument("id", type=int)
         if action in ("add", "edit"):
@@ -196,8 +202,27 @@ def execute(args, arguments):
         return files(names, ids or None, selected_path=selected)
 
     document, metadata = context(args.place)
-    prefix = prefix_setting(document, metadata)
+    if args.action == "check":
+        from .checks import file_problem, project_checks
+        try:
+            path = discover(document, metadata, args.verbose)
+            data = read(path)
+        except RecordError as error:
+            problems = [file_problem(document, str(error))]
+        except OSError:
+            problems = [file_problem(document, "cannot read the record file")]
+        else:
+            problems = project_checks(args.place, path, data)[0]
+        return [{"file": item.file, "line": item.line, "severity": item.severity, "code": item.code,
+                 "message": item.message} for item in problems]
     path = discover(document, metadata, args.verbose)
+    if args.action == "reanchor":
+        from .anchors import reanchor
+        return reanchor(path, args.key)
+    if args.action in ("renumber", "rekey"):
+        from .repairs import renumber, rekey
+        return renumber(args.place, path) if args.action == "renumber" else rekey(args.place, path, args.old, args.new)
+    prefix = prefix_setting(document, metadata)
     entries = bibliography(document, metadata)
     if args.action == "add":
         def add(data):
@@ -258,7 +283,11 @@ def execute(args, arguments):
             return update(path, apply)
         return proposals
     if args.action == "list" and args.problems:
-        raise UsageError("--problems needs P1d excerpt checks; not available in P1b")
+        from .checks import project_checks
+        _, used, affected = project_checks(args.place, path, data)
+        return [item for item in sorted(data["excerpts"], key=lambda item: item["id"])
+                if item["id"] in affected and (args.key is None or args.key == item.get("key"))
+                and (not args.unused or item["id"] not in used)]
     if args.action == "remove":
         def remove(current):
             from .detach import files
@@ -373,6 +402,16 @@ def command(arguments):
             print("Excerpt review written.")
     elif args.action == "add":
         print(str(answer["id"]) + " " + " ".join(answer["markers"]))
+    elif args.action == "check":
+        for item in answer:
+            place = f"{item['file']}:{item['line']}" if item["line"] else item["file"]
+            print(f"{place}: {item['severity']}: {item['message']}  [{item['code']}]")
+        if not answer:
+            print("CHECK  excerpts: no problems")
     else:
         print(json.dumps(answer, ensure_ascii=False, indent=2))
+    if args.action == "check":
+        return int(any(item["severity"] != "note" for item in answer))
+    if args.action == "reanchor":
+        return int(any(item["state"] in ("missing", "review") for item in answer))
     return 0

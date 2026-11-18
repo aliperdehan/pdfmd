@@ -807,6 +807,8 @@ pdfmd report --check --check-ignore heading-jump,link-missing
 | `anchor-missing` | `[x](#methods)` with no heading or `{#id}` of that name (the ids Pandoc and GitHub make from a heading count) |
 | `id-duplicate`, `crossref-missing`, `ref-missing` | the same `{#id}` twice; a `@fig:x`, `@tbl:x`, `@eq:x`, `@sec:x`, `@lst:x` or `\ref{x}` nothing defines |
 | `cite-missing`, `cite-no-bibliography`, `bibliography-missing` | a `@key` the `.bib`, CSL JSON or `references:` lacks (with a "did you mean"), citations with no bibliography set, a bibliography file that is missing |
+| `excerpt-unknown`, `excerpt-key-mismatch`, `excerpt-file` | an unknown excerpt ID, a long marker that names a different source, or an unreadable or invalid record file |
+| `excerpt-bib`, `excerpt-locator-differs`, `excerpt-quote`, `excerpt-overlap`, `excerpt-remark-narrative` | problems with an excerpt's bibliography key, locator, use in prose or narrative remark marker |
 | `math-digit` | `$\geq$3`, `$\pm$10`: Pandoc reads `$...$` as math only when the closing `$` is not followed by a digit, so this is text with the dollars printed (a build says the same as a WARN, and a `\geq` left in text mode rebuilds the document in another font); write `$\geq 3$` |
 | `footnote-missing`, `footnote-unused` | `[^1]` with no text, a `[^1]:` nobody uses |
 | `heading-jump`, `heading-space`, `heading-empty` | `#` then `###`; `#Heading` (a paragraph); a heading with no text |
@@ -2869,6 +2871,10 @@ pdfmd --excerpts remove 1 --force
 pdfmd --excerpts sources add glass sources/glass.pdf --pages '[[2,"41"]]'
 pdfmd --excerpts sources match sources/
 pdfmd --excerpts export -o review.md
+pdfmd --excerpts check --json
+pdfmd --excerpts reanchor glass
+pdfmd --excerpts renumber
+pdfmd --excerpts rekey glass glasswork
 ```
 
 `--excerpts` takes the rest of the command line. Every action accepts `--json`,
@@ -2907,15 +2913,13 @@ spaces. `edit` keeps unspecified fields; supplying parts replaces the parts list
 in the source’s `more` mapping; a second file is named there by hand in this phase.
 
 `where` scans project Markdown and QMD files recursively, preserving source line
-numbers, excluding hidden folders, code, comments, math, raw blocks and other
-record-file namespaces. It recognises `@x:ID`, `@x#ID`, `@KEY#ID` in bracketed,
-narrative, author-suppressed and mixed citations. `@KEY:ID` is an ordinary key;
-reference prefixes `fig`, `tbl`, `eq`, `sec`, `lst` remain cross-references. An
-actual bibliography key wins over a marker of the same spelling. The prefix `x`
-is fixed. This is a location scanner, not the forthcoming citation resolver.
-A cited record cannot be removed without `--force`; its markers then remain.
-`remove --detach` awaits P1c; `list --problems` awaits the P1d checks (both exit 2
-in this phase). `export` groups records by source, with notes and citing places.
+numbers and excluding hidden folders, code, comments, math, raw blocks and other
+record-file namespaces. It accepts both marker separators in bracketed, narrative,
+author-suppressed and mixed citations. Real bibliography keys take precedence
+over markers of the same spelling. The short marker prefix defaults to `x`;
+set `excerpt-prefix` to change it. A cited record can be removed with
+`remove --detach`, which replaces its markers, or `remove --force`, which leaves them.
+`list --problems` shows records with warnings or errors. `export` groups records by source, with notes and citing places.
 It deliberately contains passages: keep this local review sheet private.
 
 `sources` lists file hints and hash states (`ok`, `changed`, `missing`, `unknown`).
@@ -2931,6 +2935,35 @@ plus a map when the bibliography’s page range and page count agree (one extra
 PDF page is a cover). `--apply` writes unique matches by file, DOI, title or exact
 name; ambiguous or merely similar names need a choice with `sources add`.
 Existing different source files are never silently replaced.
+
+`pdfmd FILE.md --check` checks excerpt references and prose. It reports
+`excerpt-unknown`, `excerpt-key-mismatch` and `excerpt-file` as errors, and
+`excerpt-bib`, `excerpt-locator-differs`, `excerpt-quote`, `excerpt-overlap`
+and `excerpt-remark-narrative` as warnings. Quotations may contain ellipses
+and bracketed insertions. A quotation found only in an uncited record, or
+one that cannot be verified against OCR text, gets a note. Messages can name
+the marker or record but never repeat a passage or note.
+
+Set `excerpt-quote-min-words` (default 3) and `excerpt-overlap-words`
+(default 6) in `pdfmd-options` or `--setup`. Overlap is for unquoted words.
+Set its threshold to 0 to switch it off. Both checks normalise Unicode,
+quotes and dashes. They ignore case, whitespace, and soft and line-end hyphens.
+
+`--excerpts check` checks the project and also reports `excerpt-unused`,
+`excerpt-source-missing`, `excerpt-source-changed` and `excerpt-box`.
+The command exits 1 for warnings or errors. With `--json` it returns the
+finding's code, severity, file, line and message.
+`--excerpts reanchor KEY` uses pypdf and Poppler's `pdftotext` to find text
+and boxes in a changed PDF, trying the old page first. It moves areas when
+all anchored text parts for that file move by the same number of pages.
+If any part needs review, it reports the proposed moves and leaves that
+file's anchors and hash as they were. Printed locators and page maps stay
+as written.
+`--excerpts renumber` assigns fresh IDs to colliding records and updates long
+markers that identify a unique source. Ambiguous references need clarification
+before anything is written. `--excerpts rekey OLD NEW` follows a bibliography
+key rename in the record and in long markers. Short markers keep their IDs.
+Repairs stop if a marker to change is in shared or outside metadata.
 
 The record format is version 1: top-level `pdfmd-excerpts: 1`, `next-id`, `sources`
 and `excerpts`. Records have `id`, `key`, `page`, `kind`, `parts` and optional

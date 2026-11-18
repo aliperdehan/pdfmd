@@ -40,7 +40,7 @@ def page_map(value):
         previous = anchor[0]
 
 
-def validate(data):
+def validate(data, *, allow_duplicate_ids=False):
     if not isinstance(data, dict) or not positive(data.get("pdfmd-excerpts")):
         raise RecordError("missing or invalid pdfmd-excerpts version")
     if not positive(data.get("next-id")):
@@ -75,7 +75,7 @@ def validate(data):
         if not isinstance(record, dict) or not positive(record.get("id")):
             raise RecordError("excerpt id must be a positive integer")
         ident = record["id"]
-        if ident in seen:
+        if ident in seen and not allow_duplicate_ids:
             raise RecordError(f"duplicate excerpt id {ident}")
         seen.add(ident)
         if ident >= data["next-id"]:
@@ -112,7 +112,7 @@ def validate(data):
     return data
 
 
-def read(path: Path, create=False):
+def read(path: Path, create=False, *, allow_duplicate_ids=False):
     if create and not path.exists():
         return {"pdfmd-excerpts": 1, "next-id": 1, "sources": {}, "excerpts": []}
     try:
@@ -121,7 +121,7 @@ def read(path: Path, create=False):
         data = json.loads(path.read_text(encoding="utf-8"), parse_constant=invalid_constant)
     except (ValueError, UnicodeError):
         raise RecordError("invalid JSON") from None
-    validate(data)
+    validate(data, allow_duplicate_ids=allow_duplicate_ids)
     if data["pdfmd-excerpts"] > 1:
         print("WARN  excerpts.json: newer record version; reading only", file=sys.stderr)
     return data
