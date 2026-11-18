@@ -19,6 +19,51 @@ same commit as the change.
 
 ---
 
+## v3.33.333h — 2026-11-18
+
+Pre-edit state: commit `8e51bbc`. `gui-win/publish.ps1` runs `dotnet publish` for win-x64, self-contained, into
+`gui-win/publish/` (about 146 MB); that folder runs on a clean Windows 11 carrying only the WebView2 runtime, with
+no installer, and `colophon-win.exe` is its entry point. `--selftest` passes in the published folder. Not verified by
+hand: the published folder on a clean machine.
+
+## v3.33.333g — 2026-11-18
+
+Pre-edit state: commit `17b51e8`. Light and dark follow Windows and update live, the window's size and position are
+remembered, the page's own shortcuts keep working inside WebView2, and closing with unsaved changes asks first, using
+the page's own answer when it can answer and otherwise the last state it reported. `--smoke` now also checks the window
+rectangle is remembered. `dotnet build`, `--selftest` (16 passed) and `--smoke` (14 passed) pass. Not verified by
+hand: the light/dark switch, the close prompt and the visual result on screen.
+
+## v3.33.333f — 2026-11-18
+
+Pre-edit state: commit `8fddfe8`. Ctrl+B saves the page (through `appSave`) and runs `pdfmd FILE.md` in the file's
+folder as a child process; stdout and stderr go to a log pane below the page, and the PDF pdfmd names is shown in a
+WebView2 pane that renders it. A nonzero exit, a timeout or a missing PDF is reported in the status bar and the log,
+not swallowed. The PDF is found from pdfmd's `OK source > output in ... (engine)` line, resolving relative paths
+against the file's folder and the project root, so a part shows its parent's PDF. `--smoke` adds a real end-to-end run
+in a scratch project: open, edit, save, build, the PDF pane and a failed build's log. `--selftest` grows to 16 checks.
+`dotnet build`, `--selftest` (16 passed) and `--smoke` (13 passed; the PDF pane drew a PNG) pass. Not verified by
+hand: the build pane and the rendered PDF on screen.
+
+## v3.33.333e — 2026-11-18
+
+Pre-edit state: commit `2d7f0d9`. The shell opens a folder (`Ctrl+O`, and the page's Ctrl+O too) with the native folder
+dialogue, starts `pdfmd --serve` on the port the server itself picks and shows its page; `colophon-win.exe FILE.md`
+opens the file's folder on that file. The server runs in a job object limited to kill-on-close, so it dies with the
+shell even when the shell is killed; a stopped server is reported in the status bar. The page's native bridge is
+installed, so the page marks itself native and posts its state (title, unsaved dot). `--selftest` grows to 11 checks:
+the command line, pdfmd's location and its UTF-8 child environment join the earlier ones. `dotnet build` passes and
+`--selftest` reports 11 passed, 0 failed. Not verified by hand: the folder dialogue and the page on screen.
+
+## v3.33.333d — 2026-11-18
+
+Pre-edit state: commit `892c408`. `gui-win/` starts Colophon's Windows trial: a thin .NET 8 shell around the web
+UI and `pdfmd --serve`, not a port of the Swift app. WPF with WebView2 was chosen over WinUI 3 because it needs no
+Windows App SDK and no extra runtime beyond the WebView2 that Windows 11 carries. This commit adds the project, the
+window with its WebView2 page and the light/dark resources, a window-placement helper and `--selftest` (4 checks:
+placement, settings, theme). `gui-win/` ships nothing in the PyPI package and `PDFMD_VERSION` stays 3.33.333.
+`dotnet build` passes and `--selftest` reports 4 passed, 0 failed. Not verified by hand: the window on screen.
+
 ## v3.33.333c — 2026-11-18
 
 Pre-edit state: commit `3ef873d`. The release run of 3.33.333 built no container image: the `full` and `office` builds for
