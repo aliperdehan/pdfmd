@@ -345,7 +345,7 @@ def run_main() -> None:
     if args.check_ignore and not args.check:
         raise SystemExit("--check-ignore goes with --check: pdfmd --check --check-ignore heading-jump")
     if args.check:
-        raise SystemExit(core.check_command(args))
+        raise SystemExit(core.check_command(args, pandoc_options))
     if args.check_dependencies:
         raise SystemExit(0 if core.dependency_report() else 1)
     if args.extract_tables or args.expand_tables or args.extract_inline_csv:

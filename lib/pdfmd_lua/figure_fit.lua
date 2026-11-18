@@ -35,6 +35,7 @@ end
 function Pandoc(doc)
   if FORMAT ~= "latex" and FORMAT ~= "typst" then return end
   local enabled = flag(doc.meta["pdfmd-figure-fit"]) ~= false
+  local checking = flag(doc.meta["pdfmd-figure-check"]) == true
   local raw = function(text) return pandoc.RawBlock(FORMAT, text) end
   local count, used = 0, false
 
@@ -58,20 +59,26 @@ function Pandoc(doc)
     return override
   end
 
+  local function typst_arguments(on, number, pieces)
+    return tostring(on) .. ', ("' .. number .. '", "' .. table.concat(pieces, '", "') .. '",)'
+  end
+
   local filter = {traverse = "topdown"}
   function filter.Figure(figure)
     local images, override = pictures(pandoc.Div(figure.content))
-    if images == 0 or #figure.caption.long == 0 or not opted_in(override) then return figure, false end
+    local on = opted_in(override)
+    if images == 0 or #figure.caption.long == 0 or not (on or checking) then return figure, false end
     local number, pieces = identify(figure, figure.caption.long)
     if FORMAT == "latex" then
       local messages = {}
       for index, piece in ipairs(pieces) do
         table.insert(messages, "\\pdfmdFitMessage{\\pdfmdFitStatus-" .. number .. "-" .. index .. "-" .. piece .. "}")
       end
-      return {raw("\\pdfmdFitBegin{" .. table.concat(messages) .. "}"), figure, raw("\\pdfmdFitEnd")}, false
+      local start = "\\pdfmdFitBegin{" .. table.concat(messages) .. "}{" .. (on and "1" or "0") .. "}"
+      return {raw(start), figure, raw("\\pdfmdFitEnd")}, false
     end
-    local name = '("' .. number .. '", "' .. table.concat(pieces, '", "') .. '",)'
-    return {raw("#["), raw("#show figure: pdfmd-fit.with(" .. name .. ")"), figure, raw("]")}, false
+    local arguments = typst_arguments(on, number, pieces)
+    return {raw("#["), raw("#show figure: pdfmd-fit.with(" .. arguments .. ")"), figure, raw("]")}, false
   end
 
   if FORMAT == "typst" then
@@ -86,10 +93,11 @@ function Pandoc(doc)
       end
       if images < 2 then return end
       local _, override = pictures(body)
-      if not opted_in(override) then return div, false end
+      local on = opted_in(override)
+      if not (on or checking) then return div, false end
       local number, pieces = identify(div, div.content[2])
-      local name = '("' .. number .. '", "' .. table.concat(pieces, '", "') .. '",)'
-      local blocks = pandoc.Blocks({raw("#pdfmd-fit-group(" .. name .. ", ["), body, raw("], [")})
+      local arguments = typst_arguments(on, number, pieces)
+      local blocks = pandoc.Blocks({raw("#pdfmd-fit-group(" .. arguments .. ", ["), body, raw("], [")})
       for index = 2, #div.content do blocks:insert(div.content[index]) end
       blocks:insert(raw("])"))
       div.content = blocks

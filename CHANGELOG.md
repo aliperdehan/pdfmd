@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.34.5 — 2026-11-18
+
+Pre-edit state: commit `2de3b7c`. The source linter could not tell whether a typeset figure would overrun the
+page body. `--check` now measures figures in a temporary LaTeX or Typst build and reports `figure-too-tall`
+with the source location where available and the outcome of the figure's fit setting. Fitted Typst figures
+also support explicit floating placement. Tests cover shrinking, opt-out, a fitting control, ignore and strict mode.
+
 ## v3.34.4 — 2026-11-18
 
 Pre-edit state: commit `39dfced`. LaTeX bounded the image without reserving space for its caption, and

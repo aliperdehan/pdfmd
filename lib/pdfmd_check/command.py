@@ -146,8 +146,8 @@ def check_documents(target: Path, args) -> tuple[list[Path], Path]:
     return files, document
 
 
-def check_command(args) -> int:
-    """`pdfmd --check [FILE...]`: what would go wrong or print wrongly in the build, found by reading the source."""
+def check_command(args, pandoc_options: list[str]) -> int:
+    """Read and check the source, then measure figure heights if the document has pictures."""
     import pdfmd_check as check
     status = 0
     for target in (args.path or [Path.cwd()]):
@@ -177,6 +177,9 @@ def check_command(args) -> int:
         limit = core.resolve_budget(document, metadata_files)[0]
         problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None,
                               calc=calc_check_records(files, metadata_files))
+        if "figure-too-tall" not in ignore:
+            from pdfmd_check.figures import figure_problems
+            problems.extend(figure_problems(sources, document, metadata_files, args, pandoc_options))
         for name in missing:
             if "bibliography-missing" in ignore:
                 continue

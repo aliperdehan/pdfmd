@@ -14,15 +14,20 @@
   }
 }
 
-#let pdfmd-fit(name, it) = layout(size => {
+#let pdfmd-fit-status(enabled, height, room) = {
+  if height <= room { none }
+  else if not enabled { "o" }
+  else if room <= 0pt { "c" }
+  else { "s" }
+}
+
+#let pdfmd-fit(enabled, name, it) = layout(size => {
   let body = measure(width: size.width, it.body)
   let cap = measure(width: size.width, it.caption)
   let room = size.height - cap.height - it.gap.to-absolute()
-  if room <= 0pt {
-    pdfmd-fit-message(name, "c")
-    it
-  } else if body.height > room {
-    pdfmd-fit-message(name, "s")
+  let status = pdfmd-fit-status(enabled, body.height, room)
+  if status != none { pdfmd-fit-message(name, status) }
+  if status == "s" {
     let picture = pdfmd-fit-picture(size, it.body, body.height, room)
     let caption = it.caption
     let gap = v(it.gap)
@@ -30,22 +35,24 @@
     let content = if position == top { caption + gap + picture } else { picture + gap + caption }
     let fitted = block(breakable: false, align(center, content))
     if it.placement == none { fitted }
-    else { place(it.placement, float: true, scope: it.scope, clearance: it.clearance, fitted) }
+    else {
+      let options = (float: true)
+      if it.has("scope") { options.scope = it.scope }
+      place(it.placement, fitted, ..options)
+    }
   } else {
     it
   }
 })
 
-#let pdfmd-fit-group(name, body, caption) = layout(size => {
+#let pdfmd-fit-group(enabled, name, body, caption) = layout(size => {
   let height = measure(width: size.width, body).height
   let original = body + parbreak() + caption
   let space = measure(width: size.width, original).height - height
   let room = size.height - space
-  if room <= 0pt {
-    pdfmd-fit-message(name, "c")
-    original
-  } else if height > room {
-    pdfmd-fit-message(name, "s")
+  let status = pdfmd-fit-status(enabled, height, room)
+  if status != none { pdfmd-fit-message(name, status) }
+  if status == "s" {
     block(breakable: false, pdfmd-fit-picture(size, body, height, room) + parbreak() + caption)
   } else {
     original

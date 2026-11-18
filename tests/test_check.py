@@ -247,6 +247,30 @@ class CommandLine(unittest.TestCase):
         self.assertRegex(done.stdout, r"parts[\\/]10-intro\.md:3: error: image not found: gone\.png")
         self.assertNotIn("anchor-missing", done.stdout)                                  # #methods is in another part
 
+    @needs_pandoc(3, 1, 3)
+    @unittest.skipUnless(shutil.which("typst"), "needs Typst")
+    def test_figure_height_check_reports_fit_and_opt_out_at_the_source(self):
+        (self.directory / "narrow.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="400">'
+            '<rect width="100" height="400" fill="black"/></svg>', encoding="utf-8")
+        source = self.directory / "doc.md"
+        source.write_text("Before.\n\n```{=typst}\n#set figure(placement: auto)\n```\n\n"
+                          "![First caption.](narrow.svg){#fig-fit height=30cm}\n\n"
+                          "![Second caption.](narrow.svg){height=30cm fit=off}\n", encoding="utf-8")
+        done = self.run_pdfmd("doc.md", "--check", "-e", "typst")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("doc.md:7: warning: figure 'fig-fit': build shrinks it", done.stdout)
+        self.assertIn("doc.md:9: warning: figure 'Second caption.': build lets it run past the page body", done.stdout)
+        self.assertEqual(done.stdout.count("[figure-too-tall]"), 2, done.stdout)
+        self.assertFalse((self.directory / "doc.pdf").exists())
+        self.assertEqual(self.run_pdfmd("doc.md", "--check", "-e", "typst", "--strict").returncode, 1)
+        ignored = self.run_pdfmd("doc.md", "--check", "-e", "typst", "--check-ignore", "figure-too-tall")
+        self.assertIn("no problems", ignored.stdout)
+        source.write_text("![Short caption.](narrow.svg){height=20mm}\n", encoding="utf-8")
+        clean = self.run_pdfmd("doc.md", "--check", "-e", "typst")
+        self.assertEqual(clean.returncode, 0, clean.stdout + clean.stderr)
+        self.assertIn("no problems", clean.stdout)
+
     def test_not_markdown_and_not_found(self):
         self.write("a.tex", "x")
         done = self.run_pdfmd("a.tex", "--check")

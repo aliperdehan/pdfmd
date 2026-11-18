@@ -38,6 +38,7 @@ Pandoc’s own Typst spacing without pdfmd’s line rules.
 
 LaTeX and Typst fit tall figures to the page body and warn when they shrink the images. Captions keep their size.
 Use `pdfmd-options: {figure-fit: off}` for the document or `{fit=off}` on a figure image to keep its original size.
+`--check` can use a temporary PDF to report `figure-too-tall` and say how the build handles each oversized figure.
 
 With `--no-citeproc`, native Typst omits an uncited bibliography and its heading unless `nocite` or
 `full-bibliography: true` requests uncited entries. Cited lists keep Typst's automatic title; `reference-section-title`

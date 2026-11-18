@@ -516,10 +516,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "config folder's templates/, or any path)")
     parser.add_argument("--check", action="store_true",
                         help="read FILE (a scaffold and its parts too) and report what would go wrong or print wrongly, "
-                             "without building: a missing image or csv file, a link or #anchor to nowhere, a duplicate "
+                             "without keeping a build: a missing image or csv file, a link or #anchor to nowhere, a duplicate "
                              "{#id}, a @fig:x or \\ref{x} nothing defines, a citation the bibliography lacks, a "
                              "footnote with no text, a skipped heading level, a code fence or <!-- never closed, front "
-                             "matter that does not parse. Exit 1 on an error (also on a warning with --strict)")
+                             "matter that does not parse. A temporary LaTeX or Typst build can report figures that are too "
+                             "tall (figure-too-tall). Exit 1 on an error (also on a warning with --strict)")
     parser.add_argument("--check-ignore", action="append", metavar="CODE[,CODE]",
                         help="with --check: leave out these checks (also `pdfmd-options: {check-ignore: [heading-jump]}`; "
                              "one line: `<!-- pdfmd-check: ignore CODE -->` on it or the line above)")

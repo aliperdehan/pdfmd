@@ -1380,12 +1380,16 @@ A Lua filter pdfmd finds by itself is noted (v3.26.11): a NOTE the first time th
 time after it changed; it runs either way, and nothing prompts. `--trust-lua FOLDER|FILE` marks what is yours;
 only `--strict` skips a new or edited filter outside a trusted folder.
 
-`pdfmd FILE --check` (v3.26.15) reads a Markdown document (a scaffold and its parts as one) and reports, without
-building, a missing image or csv file, a link or #anchor to nowhere, a duplicate {#id}, an undefined @fig:x or
+`pdfmd FILE --check` (v3.26.15) reads a Markdown document (a scaffold and its parts as one) and reports
+a missing image or csv file, a link or #anchor to nowhere, a duplicate {#id}, an undefined @fig:x or
 \ref, a citation the bibliography lacks, a footnote without text, a skipped heading level, a fence or comment
 never closed, front matter that does not parse. The reading is in the pdfmd_check package; the exit code is 1 on an
 error (a warning too with `--strict`); `--check-ignore`, `pdfmd-options.check-ignore` and
 `<!-- pdfmd-check: ignore CODE -->` turn checks off.
+
+`figure-too-tall` compares a figure and its caption to the body of the page at their original sizes. It names the
+figure, gives the source line when available, and says whether the build shrinks it or keeps its original size.
+The check uses a temporary PDF with the selected LaTeX or Typst engine. It measures opted-out figures too.
 
 A bare `pdfmd --install` prints every install kind with its approximate size, what it fetches and from where,
 its target folder and removal command. It fetches nothing. Bare `--install diagram` lists the tools;

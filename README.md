@@ -789,21 +789,20 @@ folder, otherwise the default is used with a warning. A watch (`-w`) always rewr
 ### Check a document before you build it
 
 ```sh
-pdfmd report --check                  # read report.md (a scaffold and its parts too) and list what is wrong; builds nothing
+pdfmd report --check                  # check report.md and its parts without saving a PDF
 pdfmd a.md b.md --check               # several files, one report each
 pdfmd report --check --strict         # warnings fail too (exit 1), for CI
 pdfmd report --check --check-ignore heading-jump,link-missing
 ```
 
-`--check` reads the source, with no Pandoc and no LaTeX (the one exception: a document that uses the calculator is read once by
-Pandoc with the calculator's filter, which evaluates nothing, to see its names; without Pandoc a NOTE says they were not checked),
-and prints compiler-style lines
+`--check` reads the source and prints compiler-style lines
 (`report.md:12: error: image not found: figs/a.png  [image-missing]`) that an editor can jump to, then
 `CHECK  report.md: 1 error(s), 2 warning(s)`. It exits 1 on an error, and on a warning too with `--strict` (a `note` never fails it). It finds:
 
 | check | |
 |---|---|
 | `image-missing`, `file-missing`, `link-missing` | an image (`![](..)`, `<img>`, `\includegraphics`), a `file=` of a `.csv` div or a link to a local file that is not there |
+| `figure-too-tall` | a figure and its caption exceed the page body. The warning names the figure and says whether the build shrinks it or keeps the original size |
 | `anchor-missing` | `[x](#methods)` with no heading or `{#id}` of that name (the ids Pandoc and GitHub make from a heading count) |
 | `id-duplicate`, `crossref-missing`, `ref-missing` | the same `{#id}` twice; a `@fig:x`, `@tbl:x`, `@eq:x`, `@sec:x`, `@lst:x` or `\ref{x}` nothing defines |
 | `cite-missing`, `cite-no-bibliography`, `bibliography-missing` | a `@key` the `.bib`, CSL JSON or `references:` lacks (with a "did you mean"), citations with no bibliography set, a bibliography file that is missing |
@@ -813,6 +812,10 @@ and prints compiler-style lines
 | `fence-open`, `comment-open`, `div-open`, `div-stray`, `math-open` | a code fence, `<!--`, `:::` div or `$$` that is never closed, or a stray `:::` |
 | `front-matter`, `front-matter-duplicate` | YAML that does not parse (with its line) or never closes; a key set twice |
 | `calc-undefined`, `calc-redefined` | a calculator span, `::: calc` line or `{ans}` that uses a name no span, line or constants file defines (one line per statement, with its line and part, in document order); a name defined more than once: a note listing where, and which definition a use below them sees (a normal build says nothing: redefining a name on purpose is how a report reuses `V`) |
+
+Figure heights come from a temporary PDF built with the selected LaTeX or Typst engine. Calculator names are read by
+Pandoc's calculator filter without evaluating them. If the required tools are unavailable, a note identifies the check
+that could not run.
 
 Code, comments, math and URLs are not read, so `@decorator` in a code block or `me@x.org` is not a citation. A
 document in parts is checked as one: a link to `#methods` in the scaffold is found in a part. A file with no front
@@ -909,7 +912,7 @@ command it runs is written to the *pdfmd* output panel. Install it with `npx @vs
 
 ```sh
 pdfmd report --max-asset-mb 5 --max-output-mb 20     # warn about an image over 5 MB and an output over 20 MB
-pdfmd report --check --max-asset-mb 5                # list the images over 5 MB (asset-large), nothing is built
+pdfmd report --check --max-asset-mb 5                # include images over 5 MB (asset-large) in the check
 ```
 
 ```yaml

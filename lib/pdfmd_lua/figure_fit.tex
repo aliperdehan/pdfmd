@@ -43,32 +43,40 @@
 \def\pdfmd@fitbox{%
   \setbox\pdfmd@fitfloat\lastbox
   \ifdim\pdfmd@fitheight\pdfmd@fitfloat>\textheight
-    \begingroup
-    \splittopskip\z@skip\splitmaxdepth\maxdimen\vbadness\@M\vfuzz\maxdimen
-    \setbox\pdfmd@fitafter\copy\pdfmd@fitfloat
-    \setbox\pdfmd@fitbefore\vsplit\pdfmd@fitafter to \maxdimen
-    \setbox\pdfmd@fitcaption\vsplit\pdfmd@fitafter to \maxdimen
-    \pdfmd@fitnatural\pdfmd@fitbefore
-    \pdfmd@fitnatural\pdfmd@fitcaption
-    \pdfmd@fitnatural\pdfmd@fitafter
-    \pdfmd@fitroom\dimexpr\textheight-\pdfmd@fitheight\pdfmd@fitcaption\relax
-    \pdfmd@fitimages\dimexpr\pdfmd@fitheight\pdfmd@fitbefore+\pdfmd@fitheight\pdfmd@fitafter\relax
-    \ifdim\pdfmd@fitroom>\z@
-      \def\pdfmdFitStatus{s}\pdfmd@fitreport
-      \pdfmdFitFactor
-      \nointerlineskip\vbox{%
-        \pdfmd@fitscaled\pdfmd@fitbefore
-        \unvbox\pdfmd@fitcaption
-        \pdfmd@fitscaled\pdfmd@fitafter
-      }%
-    \else
-      \def\pdfmdFitStatus{c}\pdfmd@fitreport
+    \ifnum\pdfmd@fitenabled=0
+      \def\pdfmdFitStatus{o}\pdfmd@fitreport
       \nointerlineskip\box\pdfmd@fitfloat
+    \else
+      \pdfmd@fitresize
     \fi
-    \endgroup
   \else
     \nointerlineskip\box\pdfmd@fitfloat
   \fi
+}
+\def\pdfmd@fitresize{%
+  \begingroup
+  \splittopskip\z@skip\splitmaxdepth\maxdimen\vbadness\@M\vfuzz\maxdimen
+  \setbox\pdfmd@fitafter\copy\pdfmd@fitfloat
+  \setbox\pdfmd@fitbefore\vsplit\pdfmd@fitafter to \maxdimen
+  \setbox\pdfmd@fitcaption\vsplit\pdfmd@fitafter to \maxdimen
+  \pdfmd@fitnatural\pdfmd@fitbefore
+  \pdfmd@fitnatural\pdfmd@fitcaption
+  \pdfmd@fitnatural\pdfmd@fitafter
+  \pdfmd@fitroom\dimexpr\textheight-\pdfmd@fitheight\pdfmd@fitcaption\relax
+  \pdfmd@fitimages\dimexpr\pdfmd@fitheight\pdfmd@fitbefore+\pdfmd@fitheight\pdfmd@fitafter\relax
+  \ifdim\pdfmd@fitroom>\z@
+    \def\pdfmdFitStatus{s}\pdfmd@fitreport
+    \pdfmdFitFactor
+    \nointerlineskip\vbox{%
+      \pdfmd@fitscaled\pdfmd@fitbefore
+      \unvbox\pdfmd@fitcaption
+      \pdfmd@fitscaled\pdfmd@fitafter
+    }%
+  \else
+    \def\pdfmdFitStatus{c}\pdfmd@fitreport
+    \nointerlineskip\box\pdfmd@fitfloat
+  \fi
+  \endgroup
 }
 % Round down in TeX's fixed-point units, so graphicx's scaling cannot push the float over the body.
 \ExplSyntaxOn
@@ -82,10 +90,11 @@
 % Pandoc forwards missing-character diagnostics from successful TeX runs. pdfmd decodes this
 % marker before checking for missing glyphs, and prints the figure diagnostic in its own format.
 \newcommand*\pdfmdFitMessage[1]{\typeout{Missing character: There is no pdfmd-fit-#1}}
-\newcommand*\pdfmdFitBegin[1]{%
+\newcommand*\pdfmdFitBegin[2]{%
   \begingroup
   \global\pdfmd@fitmarkedfalse
   \def\pdfmd@fitreport{#1}%
+  \def\pdfmd@fitenabled{#2}%
   \let\pdfmd@fitoriginalcaption\caption
   \let\caption\pdfmd@fitcaptioncmd
   \let\pdfmd@fitoriginalend\@endfloatbox
