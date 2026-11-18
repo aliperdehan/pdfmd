@@ -1202,7 +1202,8 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
         output_file = core.load_package("pdfmd_routing.output").protected(md_path, planned, target_format, metadata_list)
     from pdfmd_crop.build import prepare as prepare_crop
     try:
-        with prepare_crop(md_path, output_file, metadata_list, target_format, verbose) as crop:
+        with prepare_crop(md_path, output_file, metadata_list, target_format, verbose,
+                          variables=variables, report=bool(core.REPORT_BUILD.get("files"))) as crop:
             result = _convert_one(md_path, out_dir, presentation, font, engines, variables, slide_level,
                                   pandoc_options, metadata_file, output_file, preamble_files,
                                   target_format=target_format, from_format=from_format, no_auto=no_auto,

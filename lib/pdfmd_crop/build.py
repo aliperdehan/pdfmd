@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import shutil
 import sys
+from collections.abc import Sequence
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -17,7 +18,8 @@ CROP_OPTIONS_REQUIRED = "--crop-pad, --crop-ignore-bottom and --crop-page go wit
 
 
 @contextmanager
-def prepare(document: Path, output: Path, metadata: list[Path], target: str, verbose: bool):
+def prepare(document: Path, output: Path, metadata: list[Path], target: str, verbose: bool, *,
+            variables: Sequence[str] = (), report: bool = False):
     """Yield the crop to run after the engine succeeds. Restore the previous PDF if cropping fails."""
     enabled, pad, bottom, page = core.POLISH_CLI.get("crop", (None, None, None, None))
     if enabled is None and target == "pdf":
@@ -36,8 +38,9 @@ def prepare(document: Path, output: Path, metadata: list[Path], target: str, ver
     if page is not None and page < 1:
         raise SystemExit("--crop-page counts pages from 1")
 
+    from pdfmd_build import page_numbers
     saved = TemporaryDirectory(prefix=".pdfmd-uncropped-", dir=output.parent) if output.is_file() else nullcontext()
-    with saved as folder:
+    with saved as folder, page_numbers.cropped(document, variables, report=report):
         previous = None
         if folder is not None:
             previous = Path(folder) / output.name

@@ -343,12 +343,25 @@ class Pictures(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("pandoc") and shutil.which("typst"), "needs Pandoc and Typst")
     def test_markdown_crop_ignores_the_engine_number_unless_requested(self):
-        (self.dir / "note.md").write_text("---\npage-numbering: '1'\n---\n\nOne synthetic line.\n", encoding="utf-8")
-        for flags in ((), ("--page-numbers",), ("-V", "page-numbering=1")):
-            done = self.run_pdfmd("note.md", "-e", "typst", "--crop", *flags)
-            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            _, bottom, _, top = media(self.dir / "note.pdf")
-            self.assertEqual(top - bottom > 100, bool(flags))
+        document = self.dir / "note.md"
+        output = self.dir / "out"
+        output.mkdir()
+        for flags, options, numbered in (
+            (("--crop",), "{}", False),
+            (("--crop", "--page-numbers"), "{}", True),
+            (("--crop", "-V", "page-numbering=1"), "{}", True),
+            ((), "{crop: true}", False),
+            ((), "{crop: true, page-numbers: on}", True),
+            (("--crop", "-t", "png,pdf"), "{}", False),
+            (("--crop", "-t", "png,pdf"), "{page-numbers: on}", True),
+        ):
+            with self.subTest(flags=flags, options=options):
+                document.write_text(f"---\npage-numbering: '1'\npdfmd-options: {options}\n---\n\nOne synthetic line.\n",
+                                    encoding="utf-8")
+                done = self.run_pdfmd("note.md", "-e", "typst", "-o", "out", "--no-stamp", *flags)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                _, bottom, _, top = media(output / "note.pdf")
+                self.assertEqual(top - bottom > 100, numbered, (bottom, top))
 
     def test_a_markdown_source_is_built_then_cropped(self):
         # no Pandoc on the path: the built-in renderer makes the PDF, so the test needs no engine
@@ -413,6 +426,12 @@ class Pictures(unittest.TestCase):
         self.assertIn("not a page 3", done.stdout + done.stderr)
         self.assertEqual(self.source.read_bytes(), previous)
         self.assertEqual(document.read_bytes(), before)
+
+        picture = self.run_pdfmd("note.md", "-e", "inkmd", "--crop", "--crop-page", "3", "--to", "png",
+                                 path=self.native_path())
+        self.assertNotEqual(picture.returncode, 0, picture.stdout + picture.stderr)
+        self.assertIn("not a page 3", picture.stderr)
+        self.assertFalse((self.dir / "note.png").exists())
 
 
 if __name__ == "__main__":

@@ -192,7 +192,8 @@ def run(core, *,
     any_citations = any_citations or bool(before_citeproc)
     from pdfmd_crop.build import prepare as prepare_crop
     with (document_filter_scope(), table_width_filter() as width_filter, csv_table_filter() as csv_filter,
-          titles.Hidden() as hidden, prepare_crop(files[0], output, metadata_files, target_format, args.verbose) as crop,
+          titles.Hidden() as hidden,
+          prepare_crop(files[0], output, metadata_files, target_format, args.verbose, variables=variables, report=True) as crop,
           contextlib.ExitStack() as link_scope):
         if target_format != "pdf":
             # See convert_one's matching comment: a TEX_STANDALONE_FORMATS

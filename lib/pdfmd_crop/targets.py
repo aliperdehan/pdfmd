@@ -36,9 +36,8 @@ def crop_flags(args) -> list[str]:
 
 
 def picture_build(args, source: Path, scratch: Path) -> tuple[Path | None, str]:
-    """The PDF pdfmd makes of the Markdown `source` (a run of pdfmd itself with every option of this command line but
-    the ones in PICTURE_OPTIONS, and without a build stamp, a backup or a renamed older result), in `scratch`, and what
-    the build printed on stderr; None for the PDF when the build failed."""
+    """Build the intermediate PDF, with any requested crop, in `scratch` without a stamp or backup.
+    Return the PDF (None on failure) and the build's diagnostics."""
     typed = {str(path) for path in args.path}
     kept, skip = [], 0
     for word in sys.argv[1:]:
@@ -54,17 +53,12 @@ def picture_build(args, source: Path, scratch: Path) -> tuple[Path | None, str]:
     command = [sys.executable, str(Path(core.__file__).resolve()), *kept, str(source), "--to", "pdf", "-o", str(built),
                "--no-stamp", "--no-backup", "--rewrite"]
     if args.crop is not None:
-        # Explicit cropping belongs to the picture command and must happen just once.
-        command.append("--no-crop")
-    else:
-        command += crop_flags(args)
-    markdown = args.report or source.suffix.lower() in core.MARKDOWN_LIKE_SUFFIXES
-    numbering_variables = ("pagestyle", "page-numbering")
-    explicit_style = any(value.split(":", 1)[0].split("=", 1)[0] in numbering_variables for value in args.variable)
-    if args.crop and markdown and args.page_numbers is None and not explicit_style:
-        command.append("--no-page-numbers")
+        command.append("--crop" if args.crop else "--no-crop")
+    command += crop_flags(args)
     done = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
-    return (built if done.returncode == 0 and built.is_file() else None), done.stderr
+    if done.returncode == 0 and built.is_file():
+        return built, done.stderr
+    return None, done.stdout + done.stderr
 
 
 def picture_sources(args) -> list[Path] | str:
@@ -131,7 +125,7 @@ def picture_one(args, source: Path, destination_for, pad: float, dpi: float, qua
             if pdf is None:
                 return 1, out_lines, err_lines
         try:
-            if args.crop:
+            if from_pdf and args.crop:
                 cropped = folder / "cropped.pdf"
                 done = crop_pdf(pdf, cropped, pad=pad, ignore_bottom=args.crop_ignore_bottom or 0.0, page=args.crop_page)
                 first = 1 if args.crop_page is None else args.crop_page
