@@ -158,7 +158,7 @@ class Build(unittest.TestCase):
         source = "---\ntitle: Index\npdfmd-options: {parts: auto, flavour: obsidian}\n---\n\n[[other#Café|Read it]].\n"
         (self.directory / "n.md").write_text(source, encoding="utf-8")
         for target, xml, anchor in (("docx", "word/document.xml", 'w:anchor="_?café"'),
-                                     ("odt", "content.xml", 'xlink:href="#caf')):
+                                     ("odt", "content.xml", 'xlink:href="#_?café"')):
             with self.subTest(target=target):
                 done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "n.md", "-t", target],
                                       cwd=self.directory, env=self.env, capture_output=True, encoding="utf-8")
