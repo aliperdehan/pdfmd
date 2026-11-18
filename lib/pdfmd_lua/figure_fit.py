@@ -53,7 +53,7 @@ def diagnostics(output: str, source: Path) -> None:
     if report:
         Path(report).write_text(json.dumps(records), encoding="utf-8")
         return
+    messages = {"s": "shrunk to fit the page body", "c": "caption alone is too tall for the page body",
+                "o": "image and caption are too tall for the page body"}
     for _, status, name in records:
-        message = ("shrunk to fit the page body" if status == "s" else
-                   "caption alone is too tall for the page body")
-        print(f"WARN  {core.display_path(source)}: figure {name!r}: {message}", file=sys.stderr)
+        print(f"WARN  {core.display_path(source)}: figure {name!r}: {messages[status]}", file=sys.stderr)

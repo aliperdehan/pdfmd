@@ -252,7 +252,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "A Markdown --crop build suppresses it unless you give --page-numbers.", "Every document (global metadata)"),
         choice("options.figure-fit", "Figures that are too tall for the page", (("on", "shrink to fit"), ("off", "keep size")), "on",
                "LaTeX and Typst shrink the images proportionally and keep the full-size caption on the same page. "
-               "An image's fit=on or fit=off overrides the document for its figure.", "Every document (global metadata)"),
+               "Typst still warns when fitting is off and a figure is too tall. An image's fit=on or fit=off overrides "
+               "the document for its figure.", "Every document (global metadata)"),
         text("options.pandoc-memory", "Pandoc memory cap",
              "Optional heap size, e.g. 512m or 2g (whole k, m or g units). Empty: off. Passed to every Pandoc as "
              "+RTS -M<size> -RTS. A heap overflow names pdfmd-options.pandoc-memory.", "Every document (global metadata)"),

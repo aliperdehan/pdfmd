@@ -147,7 +147,8 @@ def uncovered(parser: argparse.ArgumentParser) -> list[str]:
 
 
 FIGURE_FIT_HELP = ("pdfmd-options.figure-fit: on (default) or off. LaTeX and Typst fit images and their captions "
-                   "to the page body. A figure image can override it with fit=on or fit=off.\n")
+                   "to the page body. A figure image can override it with fit=on or fit=off. "
+                   "Typst still warns about figures that are too tall when fitting is off.\n")
 
 PRE_CITEPROC_HELP = ("pdfmd-options.lua-filter-before-citeproc: named Lua filters run before citation processing. "
                     "Use a path or list, or append with lua-filter-before-citeproc+. Default: none.\n")

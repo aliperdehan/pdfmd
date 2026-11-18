@@ -1038,7 +1038,23 @@ class FigureFit(unittest.TestCase):
                                      for line in (done.stdout + done.stderr).splitlines()), 1, done.stderr)
                 done = self.build(source.replace("width=100%", "width=100% fit=off"), "-e", engine)
                 self.assertEqual(done.returncode, 0, done.stderr)
-                self.assertNotIn("fig-tall", done.stderr)
+                warning = "figure 'fig-tall': image and caption are too tall for the page body"
+                self.assertEqual(done.stderr.count(warning), int(engine == "typst"), done.stderr)
+                self.assertNotIn("figure 'fig-tall': shrunk", done.stderr)
+
+    @unittest.skipUnless(TYPST, "needs Typst")
+    def test_typst_strict_counts_a_figure_with_fitting_switched_off(self):
+        caption = "A caption that wraps across the page. " * 65
+        source = ("---\npdfmd-options: {figure-fit: off}\n---\n\n"
+                  "![Short caption.](tall.png){#fig-short height=10pt}\n\n"
+                  f"![{caption}](tall.png){{#fig-tall height=550pt}}\n")
+        done = self.build(source, "-e", "typst", "--strict")
+        log = done.stdout + done.stderr
+        warning = "figure 'fig-tall': image and caption are too tall for the page body"
+        self.assertEqual(done.stderr.count(warning), 1, log)
+        self.assertNotIn("figure 'fig-short':", log)
+        self.assertNotEqual(done.returncode, 0, log)
+        self.assertIn("--strict: the build printed", log)
 
     def test_figure_fit_off_leaves_exports_byte_identical(self):
         for writer, suffix in (("latex", "tex"), ("typst", "typ")):

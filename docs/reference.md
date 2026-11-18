@@ -321,7 +321,8 @@ images and to figures with several images. If the caption alone cannot fit, pdfm
 size and warns. In Typst, plain images are also capped at the body height.
 
 Choose `figure-fit: off` in `pdfmd-options` or `--setup` to keep the writer's sizing. An attribute on a figure image,
-`{fit=off}` or `{fit=on}`, overrides the document setting for that figure.
+`{fit=off}` or `{fit=on}`, overrides the document setting for that figure. Typst still warns once if the figure and
+caption are too tall with fitting off. `--strict` counts that warning.
 
 ## Images LaTeX cannot read (v3.25.7; the package pdfmd_images)
 

@@ -67,7 +67,8 @@ function Pandoc(doc)
   function filter.Figure(figure)
     local images, override = pictures(pandoc.Div(figure.content))
     local on = opted_in(override)
-    if images == 0 or #figure.caption.long == 0 or not (on or checking) then return figure, false end
+    -- Typst also measures figures whose size the document asks to keep.
+    if images == 0 or #figure.caption.long == 0 or not (on or checking or FORMAT == "typst") then return figure, false end
     local number, pieces = identify(figure, figure.caption.long)
     if FORMAT == "latex" then
       local messages = {}
@@ -94,7 +95,6 @@ function Pandoc(doc)
       if images < 2 then return end
       local _, override = pictures(body)
       local on = opted_in(override)
-      if not (on or checking) then return div, false end
       local number, pieces = identify(div, div.content[2])
       local arguments = typst_arguments(on, number, pieces)
       local blocks = pandoc.Blocks({raw("#pdfmd-fit-group(" .. arguments .. ", ["), body, raw("], [")})

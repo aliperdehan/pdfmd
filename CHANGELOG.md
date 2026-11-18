@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.34.23 — 2026-11-18
+
+Pre-edit state: commit `e69d966`. Typst skipped figure measurement when fitting was off,
+so an oversized image and caption could run into the footer without a warning. The fitter
+now measures those figures too, preserves their sizing and warns once by figure name.
+`--strict` counts the warning. Regression coverage includes document and per-image opt-outs,
+a figure that fits, and strict builds on Pandoc 3.13 and 3.1.3.
+
 ## v3.34.22 — 2026-11-18
 
 Pre-edit state: commit `f894974`. A Markdown crop kept the writer's page numbers as ink.
