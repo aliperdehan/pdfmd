@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.33.333f — 2026-11-18
+
+Pre-edit state: commit `8fddfe8`. Ctrl+B saves the page (through `appSave`) and runs `pdfmd FILE.md` in the file's
+folder as a child process; stdout and stderr go to a log pane below the page, and the PDF pdfmd names is shown in a
+WebView2 pane that renders it. A nonzero exit, a timeout or a missing PDF is reported in the status bar and the log,
+not swallowed. The PDF is found from pdfmd's `OK source > output in ... (engine)` line, resolving relative paths
+against the file's folder and the project root, so a part shows its parent's PDF. `--smoke` adds a real end-to-end run
+in a scratch project: open, edit, save, build, the PDF pane and a failed build's log. `--selftest` grows to 16 checks.
+`dotnet build`, `--selftest` (16 passed) and `--smoke` (13 passed; the PDF pane drew a PNG) pass. Not verified by
+hand: the build pane and the rendered PDF on screen.
+
 ## v3.33.333e — 2026-11-18
 
 Pre-edit state: commit `2d7f0d9`. The shell opens a folder (`Ctrl+O`, and the page's Ctrl+O too) with the native folder

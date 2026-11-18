@@ -89,6 +89,76 @@ internal static class SelfTest
             Equal(2, info.ArgumentList.Count, "arguments");
         });
 
+        Check("build: the PDF after the time and the engine is found", () =>
+        {
+            var dir = Scratch();
+            try
+            {
+                var pdf = Path.Combine(dir, "report.pdf");
+                File.WriteAllText(pdf, "pdf");
+                var found = BuildRunner.FindMadePdf(
+                    "DEFAULTS  margin\nOK    report.md > report.pdf  in 3:07  (lualatex)\n", "report.md", dir);
+                Equal(Path.GetFullPath(pdf), found, "pdf");
+            }
+            finally { Directory.Delete(dir, true); }
+        });
+
+        Check("build: a PDF with no time is found", () =>
+        {
+            var dir = Scratch();
+            try
+            {
+                var pdf = Path.Combine(dir, "out.pdf");
+                File.WriteAllText(pdf, "pdf");
+                var found = BuildRunner.FindMadePdf("OK    report.md > out.pdf  (typst)", "report.md", dir);
+                Equal(Path.GetFullPath(pdf), found, "pdf");
+            }
+            finally { Directory.Delete(dir, true); }
+        });
+
+        Check("build: a relative PDF in the project root is found", () =>
+        {
+            var dir = Scratch();
+            try
+            {
+                var parts = Path.Combine(dir, "parts");
+                Directory.CreateDirectory(parts);
+                var pdf = Path.Combine(dir, "report.pdf");
+                File.WriteAllText(pdf, "pdf");
+                var found = BuildRunner.FindMadePdf("OK    ../report.md > report.pdf  in 1.2 s", "intro.md", parts, dir);
+                Equal(Path.GetFullPath(pdf), found, "pdf");
+            }
+            finally { Directory.Delete(dir, true); }
+        });
+
+        Check("build: no OK line falls back to the source's own name", () =>
+        {
+            var dir = Scratch();
+            try
+            {
+                var pdf = Path.Combine(dir, "intro.pdf");
+                File.WriteAllText(pdf, "pdf");
+                var found = BuildRunner.FindMadePdf("no build line", "intro.md", dir);
+                Equal(Path.GetFullPath(pdf), found, "pdf");
+            }
+            finally { Directory.Delete(dir, true); }
+        });
+
+        Check("build: a PDF that is not there is not invented", () =>
+        {
+            var dir = Scratch();
+            try { Equal(null, BuildRunner.FindMadePdf("no build line", "intro.md", dir), "pdf"); }
+            finally { Directory.Delete(dir, true); }
+        });
+
+        Check("build: the studio does not build its PDF and picture tabs", () =>
+        {
+            True(!MainWindow.IsText("report.pdf"), "pdf");
+            True(!MainWindow.IsText("drawing.PNG"), "png");
+            True(MainWindow.IsText("report.md"), "markdown");
+            True(MainWindow.IsText("data.txt"), "text");
+        });
+
         Check("placement: a window off every screen is centred", () =>
         {
             var window = new Window();
@@ -122,12 +192,6 @@ internal static class SelfTest
             True(settings.ServerStartTimeoutSeconds >= 3, "server timeout");
             True(settings.SaveTimeoutSeconds >= 3, "save timeout");
             True(settings.BuildPaneHeight >= 120, "pane height");
-        });
-
-        Check("theme: light or dark is a real answer", () =>
-        {
-            var dark = Theme.IsDark();
-            True(dark || !dark, "theme");
         });
 
         Check("job: a child job is created and closed", () =>

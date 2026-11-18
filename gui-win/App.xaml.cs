@@ -16,6 +16,28 @@ public partial class App : Application
             return;
         }
 
+        if (e.Args.Contains("--smoke"))
+        {
+            ConsoleSupport.Attach();
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            var code = 1;
+            try { code = await Smoke.RunAsync(e.Args); }
+            catch (Exception ex) { Console.Error.WriteLine("FAIL  smoke threw: " + ex); }
+            Shutdown(code);
+            return;
+        }
+
+        if (e.Args.Contains("--smoke-crash"))
+        {
+            ConsoleSupport.Attach();
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            var code = 2;
+            try { code = await Smoke.RunCrashAsync(); }
+            catch (Exception ex) { Console.Error.WriteLine("FAIL  crash smoke threw: " + ex); }
+            Shutdown(code);
+            return;
+        }
+
         var target = CommandLineTarget.Parse(e.Args);
         if (target.Error is not null)
         {

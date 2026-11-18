@@ -1,9 +1,12 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
 
 namespace ColophonWin;
 
@@ -15,12 +18,17 @@ public partial class MainWindow : Window
 
     private CoreWebView2Environment? _environment;
     private ServeSession? _serve;
+    private CancellationTokenSource? _build;
     private bool _webReady;
+    private bool _pdfReady;
+    private bool _pdfFailed;
+    private bool _building;
     private bool _dirty;
     private string? _folder;
     private string? _currentFile;
     private string? _project;
     private string? _main;
+    private string? _lastPdf;
     private int _tabs;
 
     public MainWindow(CommandLineTarget target)
@@ -29,6 +37,18 @@ public partial class MainWindow : Window
         InitializeComponent();
         Theme.Apply(Theme.IsDark());
     }
+
+    internal bool IsSmoke { get; set; }
+    internal bool WebReady => _webReady;
+    internal string? CurrentFile => _currentFile;
+    internal string? ProjectName => _project;
+    internal string? PdfShown => _lastPdf;
+    internal bool Dirtied => _dirty;
+    internal string BuildLog => LogText.Text;
+    internal int? ServePid => _serve?.Process.Id;
+    internal string? Folder => _folder;
+    internal Microsoft.Web.WebView2.Core.CoreWebView2? Browser => _webReady ? Web.CoreWebView2 : null;
+    internal Microsoft.Web.WebView2.Wpf.WebView2 PdfBrowser => PdfWeb;
 
     public async Task StartAsync()
     {
@@ -65,10 +85,32 @@ public partial class MainWindow : Window
         _webReady = true;
     }
 
+    private async Task EnsurePdfAsync()
+    {
+        if (_pdfReady || _pdfFailed) return;
+        if (_environment is null) { _pdfFailed = true; return; }
+        try
+        {
+            await PdfWeb.EnsureCoreWebView2Async(_environment);
+            var core = PdfWeb.CoreWebView2;
+            core.Settings.AreDevToolsEnabled = false;
+            core.Settings.IsStatusBarEnabled = false;
+            core.Settings.AreDefaultContextMenusEnabled = true;
+            ApplyWebTheme();
+            _pdfReady = true;
+        }
+        catch (Exception ex)
+        {
+            _pdfFailed = true;
+            AppendLog("The PDF pane could not start: " + ex.Message);
+        }
+    }
+
     private void ApplyWebTheme()
     {
         var mode = Theme.IsDark() ? CoreWebView2PreferredColorScheme.Dark : CoreWebView2PreferredColorScheme.Light;
         try { if (_webReady && Web.CoreWebView2 is { } core) core.Profile.PreferredColorScheme = mode; } catch { }
+        try { if (_pdfReady && PdfWeb.CoreWebView2 is { } core) core.Profile.PreferredColorScheme = mode; } catch { }
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -79,9 +121,15 @@ public partial class MainWindow : Window
             e.Handled = true;
             _ = ChooseFolderAsync();
         }
+        else if (e.Key == Key.B)
+        {
+            e.Handled = true;
+            _ = BuildAsync();
+        }
     }
 
     private async void OpenFolder_Click(object sender, RoutedEventArgs e) => await ChooseFolderAsync();
+    private async void Build_Click(object sender, RoutedEventArgs e) => await BuildAsync();
 
     private async Task ChooseFolderAsync()
     {
@@ -105,7 +153,9 @@ public partial class MainWindow : Window
         }
 
         StopServe();
+        HideBuildPane();
         _folder = full;
+        _lastPdf = null;
         _currentFile = null;
         _project = new DirectoryInfo(full).Name;
         _main = null;
@@ -145,6 +195,7 @@ public partial class MainWindow : Window
 
     private void StopServe()
     {
+        _build?.Cancel();
         if (_serve is null) return;
         _serve.Stopped -= OnServeStopped;
         _serve.Dispose();
@@ -157,7 +208,7 @@ public partial class MainWindow : Window
         Web.CoreWebView2.NavigateToString(Page(
             "Colophon",
             "<p>Open a folder to work on its Markdown with the web studio.</p>" +
-            "<p><b>Ctrl+O</b> opens a folder.</p>" +
+            "<p><b>Ctrl+O</b> opens a folder. <b>Ctrl+B</b> builds the file the studio is on.</p>" +
             "<p class='dim'>The page is served by <code>pdfmd --serve</code> on 127.0.0.1. Its server stops with this window.</p>"));
         StatusText.Text = "No folder open.";
     }
@@ -192,6 +243,7 @@ public partial class MainWindow : Window
             {
                 var command = root.TryGetProperty("command", out var c) ? c.GetString() : null;
                 if (command == "openFolder") await ChooseFolderAsync();
+                else if (command == "build") await BuildAsync();
                 return;
             }
             if (type != "state") return;
@@ -228,11 +280,224 @@ public partial class MainWindow : Window
         }
     }
 
+    internal async Task BuildAsync()
+    {
+        if (_building) return;
+        if (!_webReady || _serve is null)
+        {
+            StatusText.Text = "Open a folder before building.";
+            return;
+        }
+        if (!await SavePageAsync())
+        {
+            StatusText.Text = "Build cancelled: the page could not save the file.";
+            ShowBuildPane();
+            SelectPane(pdf: false);
+            AppendLog("Build cancelled: the page has changes that could not be saved. A file may have changed on disk.");
+            return;
+        }
+
+        var relative = _currentFile ?? _main;
+        if (string.IsNullOrEmpty(relative))
+        {
+            StatusText.Text = "Build cancelled: the studio is on no file.";
+            return;
+        }
+        if (!IsText(relative))
+        {
+            StatusText.Text = "Build cancelled: " + relative + " is not a text file.";
+            return;
+        }
+
+        var root = _folder;
+        if (root is null) return;
+        string file;
+        try { file = Path.GetFullPath(Path.Combine(root, relative.Replace('/', '\\'))); }
+        catch (Exception ex)
+        {
+            StatusText.Text = "Build cancelled: " + ex.Message;
+            return;
+        }
+        if (!file.StartsWith(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                             StringComparison.OrdinalIgnoreCase) || !File.Exists(file))
+        {
+            StatusText.Text = "Build cancelled: " + relative + " is not in this folder.";
+            return;
+        }
+
+        var working = Path.GetDirectoryName(file)!;
+        var argument = Path.GetFileName(file);
+        _building = true;
+        BuildButton.IsEnabled = false;
+        _build = new CancellationTokenSource();
+        ShowBuildPane();
+        SelectPane(pdf: false);
+        LogText.Clear();
+        PaneTitle.Text = "Build log: " + argument;
+
+        try
+        {
+            var command = PdfmdLocator.Find();
+            var shown = PdfmdLocator.Display(command, working, new[] { argument });
+            AppendLog("$ " + shown);
+            StatusText.Text = "Building " + argument + " …";
+            var outcome = await BuildRunner.RunAsync(command, working, argument, root, _job,
+                Math.Max(30, _settings.BuildTimeoutSeconds),
+                line => Dispatcher.BeginInvoke(() => AppendLog(line)),
+                _build.Token);
+
+            if (outcome.Ok)
+            {
+                if (outcome.PdfPath is not null)
+                {
+                    await ShowPdfAsync(outcome.PdfPath);
+                    StatusText.Text = $"Built {Path.GetFileName(outcome.PdfPath)} in {outcome.Seconds:0.0} s.";
+                }
+                else
+                {
+                    SelectPane(pdf: false);
+                    StatusText.Text = "pdfmd finished but named no PDF. See the log.";
+                    AppendLog("pdfmd exited 0 but no PDF was found.");
+                }
+            }
+            else
+            {
+                SelectPane(pdf: false);
+                var why = outcome.CouldNotStart ? outcome.Error
+                    : outcome.TimedOut ? outcome.Error
+                    : "exit status " + outcome.ExitCode;
+                StatusText.Text = "Build failed (" + why + "). See the log.";
+                AppendLog("");
+                AppendLog("BUILD FAILED: " + why);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            SelectPane(pdf: false);
+            StatusText.Text = "Build failed. See the log.";
+            AppendLog("BUILD FAILED: " + ex.Message);
+        }
+        finally
+        {
+            _building = false;
+            BuildButton.IsEnabled = true;
+            _build?.Dispose();
+            _build = null;
+        }
+    }
+
+    internal static bool IsText(string path)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        return extension is not (".pdf" or ".png" or ".jpg" or ".jpeg" or ".gif" or ".svg" or ".webp");
+    }
+
+    private async Task<bool> SavePageAsync()
+    {
+        if (!_webReady) return true;
+        var dirty = await EvalBoolAsync("window.appDirty ? window.appDirty() : null");
+        if (dirty != true) return true;
+        await EvalAsync("window.appSave && window.appSave().catch(function(){})");
+        var deadline = DateTime.UtcNow.AddSeconds(Math.Max(3, _settings.SaveTimeoutSeconds));
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(150);
+            var still = await EvalBoolAsync("window.appDirty ? window.appDirty() : null");
+            if (still == false) return true;
+        }
+        return false;
+    }
+
+    internal async Task<bool?> EvalBoolAsync(string script)
+    {
+        var raw = await EvalAsync(script);
+        return raw switch
+        {
+            "true" => true,
+            "false" => false,
+            _ => null
+        };
+    }
+
+    internal async Task<string?> EvalAsync(string script)
+    {
+        if (!_webReady) return null;
+        try { return await Web.CoreWebView2.ExecuteScriptAsync(script); }
+        catch { return null; }
+    }
+
+    private void ShowBuildPane()
+    {
+        if (BuildPane.Visibility == Visibility.Visible) return;
+        SplitterRow.Height = new GridLength(5);
+        PaneRow.Height = new GridLength(Math.Max(120, _settings.BuildPaneHeight));
+        BuildSplitter.Visibility = Visibility.Visible;
+        BuildPane.Visibility = Visibility.Visible;
+    }
+
+    private void HideBuildPane()
+    {
+        BuildPane.Visibility = Visibility.Collapsed;
+        BuildSplitter.Visibility = Visibility.Collapsed;
+        PaneRow.Height = new GridLength(0);
+        SplitterRow.Height = new GridLength(0);
+    }
+
+    private void ClosePane_Click(object sender, RoutedEventArgs e) => HideBuildPane();
+    private void PdfTab_Click(object sender, RoutedEventArgs e) => SelectPane(pdf: true);
+    private void LogTab_Click(object sender, RoutedEventArgs e) => SelectPane(pdf: false);
+
+    private void SelectPane(bool pdf)
+    {
+        PdfWeb.Visibility = pdf ? Visibility.Visible : Visibility.Collapsed;
+        LogText.Visibility = pdf ? Visibility.Collapsed : Visibility.Visible;
+        PdfTab.Foreground = (Brush)FindResource(pdf ? "AccentBrush" : "MutedBrush");
+        LogTab.Foreground = (Brush)FindResource(pdf ? "MutedBrush" : "AccentBrush");
+    }
+
+    private async Task ShowPdfAsync(string path)
+    {
+        await EnsurePdfAsync();
+        ShowBuildPane();
+        if (!_pdfReady)
+        {
+            SelectPane(pdf: false);
+            AppendLog("The PDF pane is not available; the build still wrote " + path);
+            return;
+        }
+        SelectPane(pdf: true);
+        PaneTitle.Text = $"PDF: {Path.GetFileName(path)}";
+        if (string.Equals(_lastPdf, path, StringComparison.OrdinalIgnoreCase))
+        {
+            PdfWeb.CoreWebView2.Reload();
+        }
+        else
+        {
+            _lastPdf = path;
+            PdfWeb.CoreWebView2.Navigate(new Uri(path).AbsoluteUri);
+        }
+    }
+
+    internal void CloseForSmoke()
+    {
+        Close();
+    }
+
+    private void AppendLog(string line)
+    {
+        LogText.AppendText(line + Environment.NewLine);
+        LogText.ScrollToEnd();
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         StopServe();
         _job.Dispose();
         try { Web.Dispose(); } catch { }
+        try { PdfWeb.Dispose(); } catch { }
         base.OnClosed(e);
     }
 
@@ -248,10 +513,11 @@ public partial class MainWindow : Window
   }
   window.addEventListener('keydown', function (e) {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-    if ((e.key || '').toLowerCase() === 'o') {
+    var k = (e.key || '').toLowerCase();
+    if (k === 'o' || k === 'b') {
       e.preventDefault();
       e.stopPropagation();
-      window.chrome.webview.postMessage({ type: 'command', command: 'openFolder' });
+      window.chrome.webview.postMessage({ type: 'command', command: k === 'o' ? 'openFolder' : 'build' });
     }
   }, true);
 })();

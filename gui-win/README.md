@@ -22,6 +22,12 @@ that folder on that file. The child runs in a job object that kills it when the 
 shell is killed or crashes; the status bar says when a server has stopped. Ctrl+O is also taken from the page and
 sent back to the native folder dialogue.
 
+`Build` (Ctrl+B) saves the file the studio is on, runs `pdfmd FILE.md` in its folder and shows the PDF in a pane below
+the page, beside a log of what pdfmd printed. A failed build, a timeout or a PDF pdfmd did not name is reported in the
+status bar and in the log. The PDF is the one named in pdfmd's `OK source > output in ... (engine)` line; a part of a
+project therefore shows its parent's PDF. Ctrl+B is the shell's: the page's own Ctrl+B (bold) does not reach the
+editor while the shell is in front.
+
 Settings are read from `%LOCALAPPDATA%\Colophon\settings.json` (all seconds; defaults in brackets):
 `BuildTimeoutSeconds` [600], `ServerStartTimeoutSeconds` [20], `SaveTimeoutSeconds` [15], `BuildPaneHeight` [260].
 
@@ -29,9 +35,15 @@ Settings are read from `%LOCALAPPDATA%\Colophon\settings.json` (all seconds; def
 
     colophon-win.exe --selftest
 
-runs the checks that need no window: the command line, pdfmd's location and child environment, window placement,
-settings, theme and the child job.
+runs the checks that need no window: the command line, pdfmd's location and child environment, the build-line parser,
+window placement, settings and the child job.
+
+`--smoke` runs a real page through `pdfmd --serve`, saves an edit, builds a PDF through pdfmd and checks the PDF pane;
+it uses a scratch project and never a real document. `--smoke-crash` simulates a crash for the job-object check
+(`COLOPHON_CRASH_PIDFILE` names the file that receives the server's process id). The close prompt and the visual
+result on screen are not verified by hand.
 
 ## What this commit has
 
-The shell and its `pdfmd --serve` page. Building a PDF from the page follows in the next commit of the trial.
+The shell, its `pdfmd --serve` page and the build pane. The native window behaviour follows in the next commit of the
+trial.
