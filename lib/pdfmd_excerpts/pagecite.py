@@ -175,7 +175,11 @@ def filter_args(sources: Path | list[Path], metadata: list[Path], options: list[
     texts = [core.read_text_best_effort(file) for file in files]
     if not any(has_markers(text, terms) or ESCAPED_OPEN in text for text in texts):
         return []
-    import pdfmd_lua
+    try:
+        import pdfmd_lua
+    except ImportError:
+        core.pdfmd_lua_missing()
+        return []
     shipped = pdfmd_lua.path("pagecite")
     if shipped is None:
         core.pdfmd_lua_missing()

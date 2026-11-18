@@ -460,7 +460,8 @@ def announce_preambles(preambles: list[Path]) -> None:
 @contextmanager
 def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
                           typst_engine: bool = False, doc_count: int = 1,
-                          drop_embedded_preamble: bool = False) -> Iterator[list[Path]]:
+                          drop_embedded_preamble: bool = False,
+                          named_reader: str | None = None) -> Iterator[list[Path]]:
     """Yield temporary, corrected inputs for LaTeX-family renders when
     needed -- or, with `typst_engine` instead, to make a margin setting
     written for the OTHER engine family reach Typst's own template (see
@@ -491,6 +492,9 @@ def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
                 text = core.strip_embedded_preamble(text)
             if index < doc_count and "\\[" in text:
                 text = core.deferred("pdfmd_excerpts.pagecite", "protect_escapes")(text, paths[0], paths[doc_count:])
+            if "@-" in text:
+                text = core.deferred("pdfmd_excerpts.resolution", "protect_hyphen_prefix")(
+                    text, paths[0], paths[doc_count:], core.effective_no_auto(paths[0], core.NO_AUTO_CLI), named_reader)
             if latex_engine:
                 corrected = core.wrap_latex_header_includes(text)
             elif typst_engine:

@@ -138,7 +138,8 @@ def filter_bibliography(text: str, used: set[str] | None, strip_comments: bool) 
 
 def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
                            plan: "EmbedPlan | None" = None, partial: bool = False,
-                           strip_comments: "bool | frozenset[str]" = False) -> str:
+                           strip_comments: "bool | frozenset[str]" = False,
+                           excerpt_state=None, excerpt_metadata=(), excerpt_diagnostics=False) -> str:
     """The Markdown Pandoc is given for ``sources``, as ONE text: the first
     file as it is, every later one after it. In parts mode a part's own
     leading front matter is dropped first, exactly as scaffold_inputs() does
@@ -162,10 +163,15 @@ def assemble_markdown_text(sources: list[Path], drop_later_front_matter: bool,
             text = core.deferred("pdfmd_filters.hidden", "strip_hidden")(text)
         if "markdown" in kinds:
             text = core.strip_markdown_comments(text)
+        if excerpt_state is not None:
+            from pdfmd_excerpts.detach import rewrite
+            text = rewrite(text, sources[0], excerpt_metadata, excerpt_state, diagnostics=excerpt_diagnostics, finish=False)[0]
         chunks.append(text.rstrip("\n") + "\n")
+    if excerpt_state is not None and excerpt_diagnostics:
+        excerpt_state.finish()
     joined = "\n".join(chunks)
     if plan is not None:
-        return embed_into_text(joined, sources[0], plan, partial)
+        return embed_into_text(joined, sources[0], plan, partial, excerpt_state)
     return mark_assembled(joined, partial=partial)
 
 
@@ -174,7 +180,8 @@ def write_assembled_markdown(sources: list[Path], output: Path,
                              drop_later_front_matter: bool,
                              plan: "EmbedPlan | None" = None,
                              partial: bool = False,
-                             strip_comments: "bool | frozenset[str]" = False) -> tuple[bool, str]:
+                             strip_comments: "bool | frozenset[str]" = False,
+                             metadata_files=(), no_auto=None, named_reader=None) -> tuple[bool, str]:
     """Write the --stop-at markdown stage. Never over one of its own sources:
     `-o report.md` would otherwise replace the very file it was built from.
     """
@@ -189,7 +196,10 @@ def write_assembled_markdown(sources: list[Path], output: Path,
         # the same setting (--attach-bibliography, pdfmd-options.attach-bibliography; v3.33.57: it was always whole here)
         from pdfmd_attach import resolve_bibliography_pruning
         plan.bib_prune = resolve_bibliography_pruning(sources[0], plan.metadata_files)
-    text = assemble_markdown_text(sources, drop_later_front_matter, plan, partial, strip_comments)
+    from pdfmd_excerpts.resolution import prepare
+    excerpt_state = prepare(sources, metadata_files, no_auto=no_auto, named_reader=named_reader, diagnostics=True)
+    text = assemble_markdown_text(sources, drop_later_front_matter, plan, partial, strip_comments,
+                                  excerpt_state, metadata_files, excerpt_diagnostics=True)
     core.write_text_lf(output, text)
     print(f"ASSEMBLED  {core.display_path(output)}  ({len(sources)} file{'s' if len(sources) != 1 else ''}, "
           f"{len(text.splitlines())} lines)")
@@ -783,7 +793,7 @@ def apply_lua_filters(front_text: str, body: str, filters: list[Path], first: Pa
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = False) -> str:
+def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = False, excerpt_state=None) -> str:
     """Fold what ``plan`` names into the joined assembled ``text`` (see the
     comment above EMBED_KINDS); ``first`` is the document whose own front
     matter is merged (the scaffold, or a report's first chapter)."""
@@ -907,6 +917,9 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     for key, value in core.merge_metadata_layers([*file_layers, (document, True)], append_names, core.display_path(first)).items():
         merged[key] = value
         owner[key] = "document"
+    if excerpt_state is not None:
+        from pdfmd_excerpts.detach import metadata_values
+        merged = metadata_values(merged, first, plan.metadata_files, excerpt_state)
     option_owner: dict[str, str] = {}
     for label, source in [("document", document_options if isinstance(document_options, dict) else {}),
                           *zip(option_labels, file_options)]:
@@ -999,7 +1012,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         represented = {Path(os.path.abspath(item)) for item in [*plan.sources, *plan.metadata_files,
                                                                    *plan.preamble_files, *plan.lua_filters, *data_found]}
         found, outside_files = core.bundle_files(first, plan.sources[1:], plan.preamble_files, "referenced", represented,
-                                            plan.output or (base / "_assembled.md"), [], base)
+                                            plan.output or (base / "_assembled.md"), [], base, metadata_files=plan.metadata_files)
         core.add_calc_constants(first, plan.metadata_files, base, represented, found, outside_files)
         core.drop_calc_export(first, list(plan.sources), plan.metadata_files, found, outside_files)
         limit = float(core.option_flag_number(core.first_pdfmd_option(first, plan.metadata_files, "bundle-max-mb"))
@@ -1008,7 +1021,11 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             print(f"WARN  embed files: {len(found)} files, {sum(item.stat().st_size for item in found) / 1048576:.0f} MB, is "
                   f"over the {limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); none was embedded", file=sys.stderr)
             found = []
+        from pdfmd_excerpts.discovery import private_paths
+        private = private_paths(plan.sources, plan.metadata_files)
         for item in found:
+            if private.contains(item):
+                continue
             blocks_text = render_embedded_file(item.name, core.relative_posix(base, item), item.read_bytes())
             file_blocks += "\n" + blocks_text
             file_names.append(core.relative_posix(base, item))

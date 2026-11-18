@@ -17,16 +17,22 @@ def roman(number):
     return result
 
 
+def roman_number(printed):
+    if not re.fullmatch("[ivxlcdmIVXLCDM]+", printed):
+        return None
+    number, rest = 0, printed.upper()
+    for value, word in ROMAN:
+        while rest.startswith(word):
+            number += value
+            rest = rest[len(word):]
+    return number if roman(number).casefold() == printed.casefold() else None
+
+
 def advance(printed, delta):
-    if re.fullmatch("[ivxlcdmIVXLCDM]+", printed):
-        number, rest = 0, printed.upper()
-        for value, word in ROMAN:
-            while rest.startswith(word):
-                number += value
-                rest = rest[len(word):]
-        if roman(number).casefold() == printed.casefold():
-            result = roman(number + delta)
-            return result.lower() if printed.islower() else result
+    number = roman_number(printed)
+    if number is not None:
+        result = roman(number + delta)
+        return result.lower() if printed.islower() else result
     found = re.fullmatch(r"(.*?)([0-9]+)", printed)
     if found:
         return found[1] + str(int(found[2]) + delta)

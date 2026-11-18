@@ -161,7 +161,9 @@ def run(core, *,
             if "lua" in kinds:
                 print("NOTE  a report/book build applies no discovered Lua filter, so none is embedded")
         ok, reason = write_assembled_markdown(files, output, False, report_plan,
-                                              strip_comments=resolve_strip_comments(files[0], metadata_files))
+                                              strip_comments=resolve_strip_comments(files[0], metadata_files),
+                                              metadata_files=metadata_files, no_auto=report_no_auto,
+                                              named_reader=args.from_format)
         if not ok:
             raise SystemExit(reason)
         for file in files:
@@ -178,7 +180,12 @@ def run(core, *,
     report_resource_path = resource_path_option(files[0].parent, pandoc_cwd, metadata_files)
 
     measurement_state = {}
-    with table_width_filter() as width_filter, csv_table_filter() as csv_filter, titles.Hidden() as hidden:
+    from pdfmd_filters import document_filter_scope
+    any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
+        files, metadata_files, pandoc_options, report_no_auto, args.from_format)
+    if any_citations is None:
+        any_citations = any(contains_citations(file) for file in files)
+    with document_filter_scope(), table_width_filter() as width_filter, csv_table_filter() as csv_filter, titles.Hidden() as hidden:
         if target_format != "pdf":
             # See convert_one's matching comment: a TEX_STANDALONE_FORMATS
             # writer here still gets --standalone plus the same
@@ -235,7 +242,7 @@ def run(core, *,
                                                report_note))
             with prepared_latex_inputs([*files, *pandoc_metadata_order(metadata_files)], is_tex_target,
                                        typst_engine=(target_format == "typst"),
-                                       doc_count=len(files),
+                                       doc_count=len(files), named_reader=args.from_format,
                                        drop_embedded_preamble=not is_tex_target) as prepared, \
                     document_header_file(files[0], (bool(report_preambles) or has_embedded_preamble(files[0]) or bool(report_pdf_meta_snippet_text))
                                          and is_tex_target, metadata_files, report_no_auto) as report_header_file, \
@@ -299,8 +306,8 @@ def run(core, *,
                     cmd += html_pandoc_args(files[0], metadata_files, pandoc_options,
                                             args.self_contained, report_note)
                 cmd += document_filter_args(files, files, metadata_files, report_no_auto, csv_filter, pandoc_options,
-                                            label="REPORT")
-                if (any(contains_citations(file) for file in files)
+                                            label="REPORT", named_reader=args.from_format)
+                if (any_citations
                         and "--citeproc" not in pandoc_options
                         and not core.CITEPROC_DISABLED):
                     cmd.append("--citeproc")
@@ -399,7 +406,7 @@ def run(core, *,
                     continue
                 with prepared_latex_inputs([*files, *pandoc_metadata_order(metadata_files)], engine in LATEX_ENGINES,
                                            typst_engine=(engine == "typst"),
-                                           doc_count=len(files)) as prepared, \
+                                           doc_count=len(files), named_reader=args.from_format) as prepared, \
                         pdf_metadata_header_file(
                             report_pdf_meta_snippet_text if engine in LATEX_ENGINES else None
                         ) as report_pdf_meta_file, \
@@ -448,8 +455,8 @@ def run(core, *,
                     if report_header_file is not None:          # last, as in the branch above
                         cmd += ["--include-in-header", str(report_header_file)]
                     cmd += document_filter_args(files, files, metadata_files, report_no_auto, csv_filter, pandoc_options,
-                                                label="REPORT")
-                    if (any(contains_citations(file) for file in files)
+                                                label="REPORT", named_reader=args.from_format)
+                    if (any_citations
                             and "--citeproc" not in pandoc_options
                             and not core.CITEPROC_DISABLED):
                         cmd.append("--citeproc")
@@ -554,7 +561,7 @@ def run(core, *,
             attach_source_after_success(
                 files[0], output, list(files[1:]), metadata_files, list(stamp_preambles), report_no_auto,
                 args.verbose, report=True,
-                base=report_common_folder(files))
+                base=report_common_folder(files), named_reader=args.from_format, pandoc_options=pandoc_options)
     report_problems.extend(history_record.reader_warnings())
     report_strict_failed = bool(result.returncode == 0 and report_problems and resolve_strict(files[0], metadata_files))
     history_record.finish_history(result.returncode == 0 and not report_strict_failed)

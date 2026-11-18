@@ -441,7 +441,7 @@ def bundle_reach(base: Path) -> Path | None:
 def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | None, mode: str,
                  represented: set[Path], output: Path, data_names: list[str],
                  base: Path | None = None, pictures: list[Path] | None = None,
-                 reach: Path | None = None) -> tuple[list[Path], list[str]]:
+                 reach: Path | None = None, metadata_files=()) -> tuple[list[Path], list[str]]:
     """The files to store beside the source (the source carries the Markdown,
     metadata, preamble, filters, bibliography and CSL itself): the images and data
     the text and the preamble point at, and what the text files among them point at
@@ -452,10 +452,13 @@ def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | 
     base = Path(os.path.abspath(base or md_path.parent))
     found: list[Path] = []
     outside: list[str] = []
+    from pdfmd_excerpts.discovery import private_paths
+    private = private_paths([md_path, *parts], metadata_files)
 
     def add(path: Path) -> bool:
         path = Path(os.path.abspath(path))
-        if path in represented or path == Path(os.path.abspath(output)) or path in found:
+        if (path in represented or path == Path(os.path.abspath(output)) or path in found
+                or private.contains(path)):
             return False
         if mode == "sources" and path.suffix.lower() in BUNDLE_IMAGE_SUFFIXES:
             if pictures is not None and path not in pictures and path.is_relative_to(base):
@@ -535,7 +538,7 @@ def bundle_files(md_path: Path, parts: list[Path], preamble_files: list[Path] | 
 
 def attachment_manifest(md_path: Path, parts: list[Path], plan: "core.EmbedPlan | None",
                         merged: str, stripped: frozenset[str], chunks: list[dict],
-                        base: Path | None = None, report: bool = False) -> dict:
+                        base: Path | None = None, report: bool = False, excerpt_state=None) -> dict:
     base = base or md_path.parent
     layout: list[dict] = []
     if plan is not None:
@@ -566,7 +569,12 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "core.EmbedPlan 
             if core.is_global_metadata(item):
                 continue
             try:
-                metadata_texts[layout_path(base, item)] = item.read_text(encoding="utf-8-sig")
+                text = item.read_text(encoding="utf-8-sig")
+                if excerpt_state is not None:
+                    from pdfmd_excerpts.detach import rewrite
+                    wrapped = "---\n" + text.rstrip("\n") + "\n---\n"
+                    text = rewrite(wrapped, md_path, plan.metadata_files, excerpt_state)[0][4:-4]
+                metadata_texts[layout_path(base, item)] = text
             except (OSError, UnicodeDecodeError):
                 pass
     front_text = None
@@ -575,6 +583,9 @@ def attachment_manifest(md_path: Path, parts: list[Path], plan: "core.EmbedPlan 
             found_front = re.match(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)",
                                    md_path.read_text(encoding="utf-8-sig"), re.DOTALL)
             front_text = found_front.group(0) if found_front else None
+            if front_text and excerpt_state is not None:
+                from pdfmd_excerpts.detach import rewrite
+                front_text = rewrite(front_text, md_path, list(plan.metadata_files) if plan else [], excerpt_state)[0]
         except (OSError, UnicodeDecodeError):
             pass
     return {"format": ATTACH_FORMAT_PLAIN, "pdfmd": core.PDFMD_VERSION, "kind": "source",
@@ -610,7 +621,8 @@ def held_comments_note(manifest: dict, merged: str) -> str:
 def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path],
                     preamble_files: list[Path] | None, no_auto: list[str] | None,
                     strip: frozenset[str], prune_bibliography: bool = True,
-                    report: bool = False, base: Path | None = None, with_csl: bool = False) -> tuple[str, dict]:
+                    report: bool = False, base: Path | None = None, with_csl: bool = False,
+                    named_reader=None, pandoc_options=()) -> tuple[str, dict]:
     """The text to attach (the assembled file with everything embedded) and its manifest.
     ``report``: the files are the chapters of a -r/--report build, each keeping its own front matter."""
     plan = core.make_embed_plan(md_path, metadata_files, preamble_files, no_auto,
@@ -618,6 +630,9 @@ def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path]
     plan.bib_prune = prune_bibliography
     base = base or md_path.parent
     chunks: list[dict] = []
+    from pdfmd_excerpts.detach import rewrite
+    from pdfmd_excerpts.resolution import prepare
+    excerpt_state = prepare([md_path, *parts], metadata_files, pandoc_options, no_auto, named_reader=named_reader)
     for index, source in enumerate([md_path, *parts]):
         raw = core.strip_location_markers(source.read_text(encoding="utf-8-sig"))
         text = core.strip_part_front_matter(raw) if index and not report else raw
@@ -626,6 +641,9 @@ def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path]
             text = core.deferred("pdfmd_filters.hidden", "strip_hidden")(text)
         if "markdown" in strip:
             text = core.strip_markdown_comments(text)
+        if excerpt_state is not None:
+            text = rewrite(text, md_path, metadata_files, excerpt_state)[0]
+            head = rewrite(head, md_path, metadata_files, excerpt_state)[0]
         chunk = text.rstrip("\n") + "\n"
         front = re.match(r"^---[ \t]*\n.*?\n(?:---|\.\.\.)[ \t]*(?:\n|$)", chunk, re.DOTALL) if not index else None
         body = chunk[front.end():] if front else chunk
@@ -635,8 +653,9 @@ def attached_source(md_path: Path, parts: list[Path], metadata_files: list[Path]
         chunks.append({"path": core.relative_posix(base, source), "head": head,
                        "lead": len(body) - len(content), "lines": len(content.splitlines()),
                        "sha256": core.sha256_text(content), "front_matter": bool(front)})
-    merged = core.assemble_markdown_text([md_path, *parts], bool(parts) and not report, plan, False, strip)
-    return merged, attachment_manifest(md_path, parts, plan, merged, strip, chunks, base, report)
+    merged = core.assemble_markdown_text([md_path, *parts], bool(parts) and not report, plan, False, strip,
+                                        excerpt_state, metadata_files)
+    return merged, attachment_manifest(md_path, parts, plan, merged, strip, chunks, base, report, excerpt_state)
 
 
 def resolve_bibliography_pruning(md_path: Path, metadata_files: list[Path]) -> bool:
@@ -737,7 +756,7 @@ def attachment_requirements(merged: str, deps: list[dict], stored: set[str], pdf
                      "sha256": dep["sha256"], "stored": dep["name"] in stored} for dep in deps]}
 
 
-def csv_block_files(merged: str, base: Path) -> dict[str, bytes]:
+def csv_block_files(merged: str, base: Path, private=None) -> dict[str, bytes]:
     """The files the `.csv` blocks of the attached text read (`file="tables/x.csv"`), as {path relative to the
     document's folder: bytes}: the ones that exist inside the folder and are small."""
     try:
@@ -761,7 +780,8 @@ def csv_block_files(merged: str, base: Path) -> dict[str, bytes]:
 
 def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_files: list[Path],
                        preamble_files: list[Path] | None, no_auto: list[str] | None,
-                       report: bool = False, base: Path | None = None) -> tuple[dict[str, bytes], str, dict]:
+                       report: bool = False, base: Path | None = None, named_reader=None,
+                       pandoc_options=()) -> tuple[dict[str, bytes], str, dict]:
     """The files a build's source is kept as -- the assembled Markdown, a manifest of the layout, the data and
     bundled files -- as {name: bytes}, with the merged text and the manifest. They go into a PDF (--attach-source)
     or after a Markdown output (--keep-source); ``output`` is the file they will belong to."""
@@ -771,7 +791,10 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
         merged, manifest = attached_source(md_path, parts, metadata_files, preamble_files, no_auto,
                                            core.resolve_strip_comments(md_path, metadata_files, default=True),
                                            resolve_bibliography_pruning(md_path, metadata_files),
-                                           report=report, base=base, with_csl=resolve_csl_attach(md_path, metadata_files))
+                                           report=report, base=base, with_csl=resolve_csl_attach(md_path, metadata_files),
+                                           named_reader=named_reader, pandoc_options=pandoc_options)
+    from pdfmd_excerpts.discovery import private_paths
+    private = private_paths([md_path, *parts], metadata_files)
     extras: dict[str, bytes] = {}
     origins: dict[str, str] = {}
     # A chosen kit's parts (its package, the library it inputs, its logos: the `carry:` list) are stored whether or not the
@@ -784,7 +807,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
         for line in kit_notes:
             print(line, file=sys.stderr)
         for name, path in carried.items():
-            if name not in extras:
+            if name not in extras and not private.contains(path):
                 extras[name] = path.read_bytes()
                 origins[name] = "kit"
     mode = attached_bundle_mode(md_path, metadata_files, is_pdf)
@@ -797,7 +820,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
                        for item in [*manifest["chunks"], *manifest["layout"]]}
         pictures: list[Path] = []
         found, outside = bundle_files(md_path, parts, preamble_files, mode, represented, output,
-                                      manifest["data_files"], base, pictures, bundle_reach(base))
+                                      manifest["data_files"], base, pictures, bundle_reach(base), metadata_files)
         core.add_calc_constants(md_path, metadata_files, base, represented, found, outside)
         core.drop_calc_export(md_path, [md_path, *parts], metadata_files, found, outside)
         up = next((count for count in (1, 2) if all(item.is_relative_to(base.parents[count - 1])
@@ -813,10 +836,10 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
             if entry["path"] not in {image["path"] for image in manifest["images"]}:
                 manifest["images"].append(entry)
         from_tree = [dep for dep in deps if (dep["kind"] == "input" or packages)
-                     and (dep.get("local") or not (base / dep["name"]).exists())]
+                     and (dep.get("local") or not (base / dep["name"]).exists()) and not private.contains(dep["path"])]
         if packages:
             from_tree += [dep for dep in package_companions(from_tree, base)
-                          if dep.get("local") or not (base / dep["name"]).exists()]
+                          if (dep.get("local") or not (base / dep["name"]).exists()) and not private.contains(dep["path"])]
         limit = float(core.option_flag_number(core.first_pdfmd_option(md_path, metadata_files, "bundle-max-mb"))
                       or core.BUNDLE_MAX_MB) * 1024 * 1024
         total = sum(item.stat().st_size for item in found) + sum(dep["path"].stat().st_size for dep in from_tree)
@@ -827,6 +850,8 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
         else:
             stripping = "markdown" in manifest["comments_stripped"]
             for item in found:
+                if private.contains(item):
+                    continue
                 data = item.read_bytes()
                 if (stripping or "hidden" in manifest["comments_stripped"]) and item.suffix.lower() in (".md", ".markdown"):
                     try:
@@ -846,7 +871,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
             manifest["outside"] = sorted({Path(name).name for name in outside})
     # The data a `.csv` block names is part of the source (the merged text cannot build without it), and
     # small: it is stored even when the rest of the folder is not bundled.
-    for name, data in csv_block_files(merged, base).items():
+    for name, data in csv_block_files(merged, base, private).items():
         if name not in extras:
             extras[name] = data
     # A source that was edited as one file (--edit) already holds its files as blocks, and its embedded data again: a file
@@ -897,7 +922,8 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
 def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path],
                                 metadata_files: list[Path], preamble_files: list[Path] | None,
                                 no_auto: list[str] | None, verbose: bool,
-                                report: bool = False, base: Path | None = None) -> None:
+                                report: bool = False, base: Path | None = None,
+                                named_reader=None, pandoc_options=()) -> None:
     """--attach-source: put the document's source into the PDF just built. ``report``: the
     files are the chapters of a -r/--report build; ``base`` the folder their layout is relative to."""
     if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
@@ -909,7 +935,7 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
     base = Path(os.path.abspath(base or md_path.parent))
     try:
         attachments, merged, manifest = source_attachments(md_path, pdf_path, parts, metadata_files, preamble_files, no_auto,
-                                                           report, base)
+                                                           report, base, named_reader, pandoc_options)
         write_pdf_attachments(pdf_path, attachments)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
         print(f"WARN  attach-source: could not attach the source to {core.display_path(pdf_path)} ({error}); "
@@ -941,7 +967,8 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
 
 def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], metadata_files: list[Path],
                               preamble_files: list[Path] | None, no_auto: list[str] | None, mode: str,
-                              verbose: bool, ascii_only: bool = False, pandoc_options: list[str] | None = None) -> None:
+                              verbose: bool, ascii_only: bool = False, pandoc_options: list[str] | None = None,
+                              named_reader=None) -> None:
     """--keep-source: end the Markdown just written with its source. For an ASCII build the trailer is ASCII too: the
     packed form, with the source's name spelt in ASCII (the readable form would carry the Unicode source as it is).
 
@@ -960,7 +987,8 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
     if not output.is_file():
         return
     try:
-        entries, merged, manifest = source_attachments(md_path, output, parts, metadata_files, preamble_files, no_auto)
+        entries, merged, manifest = source_attachments(md_path, output, parts, metadata_files, preamble_files, no_auto,
+                                                       named_reader=named_reader, pandoc_options=pandoc_options or ())
         written = output.read_bytes().decode("utf-8")
         body, old = keep.split(written)        # a file written by this run never has one; a stale one would be replaced
         label = md_path.name

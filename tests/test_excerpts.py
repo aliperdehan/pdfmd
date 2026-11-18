@@ -249,7 +249,7 @@ pdfmd-options: {excerpt-prefix: Ex_1-local}
             self.command(*args, code=2)
         self.command("add", "--remark", "An invented note")
         before = (self.root / "excerpts.json").read_bytes()
-        for args, code in ((("show", "99"), 1), (("list", "--problems"), 2), (("remove", "1", "--detach"), 2),
+        for args, code in ((("show", "99"), 1), (("list", "--problems"), 2), (("detach", "--all"), 2),
                            (("add", "--key", "glass", "--box", "1,2,3,4"), 2),
                            (("add", "--key", "glass", "--pdf-page", "0"), 2),
                            (("add", "--key", "glass", "--pdf-page", "1", "--box", "4,3,2,1"), 1)):
@@ -482,10 +482,199 @@ class SourcePDFs(CommandFixture, unittest.TestCase):
         self.assertFalse((self.root / "excerpts.json").exists())
 
 
+CASES = json.loads((ROOT / "tests" / "fixtures" / "excerpts-cases.json").read_text(encoding="utf-8"))
+
+
+class ResolverFixture(CommandFixture):
+    def setUp(self):
+        super().setUp()
+        records = [
+            {"id": 1, "key": "glass", "page": "41"},
+            {"id": 2, "key": "glass", "page": "42"},
+            {"id": 3, "key": "glass", "page": "45"},
+            {"id": 4, "kind": "remark"},
+            {"id": 5, "key": "glass", "page": "43", "locator": "ch. 3"},
+            {"id": 6, "key": "glass", "page": ""},
+            {"id": 7, "key": "clay", "page": "9-10"},
+            {"id": 8, "key": "glass", "page": "xi"},
+            {"id": 9, "key": "glass", "page": "ix"},
+            {"id": 10, "key": "glass", "page": "x"},
+            {"id": 11, "key": "clay", "page": "S10"},
+            {"id": 12, "key": "clay", "page": "S9"},
+        ]
+        for item in records:
+            item.setdefault("kind", "text")
+            item.update(note="CANARY_EXCERPT_NOTE", quoting="CANARY_EXCERPT_QUOTING", parts=[
+                {"pdf-page": 1, "boxes": [[223.1, 224.2, 225.3, 226.4]], "text": "CANARY_EXCERPT_TEXT",
+                 "text-from": "typed"}])
+        self.write("excerpts.json", json.dumps({"pdfmd-excerpts": 1, "next-id": 13, "excerpts": records, "sources": {}}))
+        self.write("refs.bib", """@book{glass, author={Tester, Pat}, title={Invented Glass}, year={2001}}
+@book{clay, author={Tester, Jo}, title={Invented Clay}, year={2002}}
+@book{unused, author={Tester, Lee}, title={Invented Unused}, year={2003}}
+""")
+
+    def build(self, *words, env=None, code=0):
+        command = [sys.executable, str(ROOT / "scripts" / "pdfmd"), *words]
+        result = subprocess.run(command, cwd=self.root, env={**os.environ, "PDFMD_CONFIG": self.config,
+                                                            "PDFMD_NO_PROMPT": "1", **(env or {})},
+                                capture_output=True, encoding="utf-8", timeout=120)
+        if code is not None:
+            self.assertEqual(result.returncode, code, result.stdout + result.stderr)
+        self.assertNotIn("CANARY_EXCERPT", result.stdout + result.stderr)
+        return result
+
+
+class TextResolver(ResolverFixture, unittest.TestCase):
+    def test_shared_detach_cases(self):
+        from pdfmd_excerpts.detach import text_for
+        for source, expected in CASES:
+            with self.subTest(source=source):
+                path = self.write("draft.md", source)
+                self.assertEqual(text_for(path, [], source, diagnostics=False), expected)
+
+    def test_detach_selection_remove_and_preserve_crlf(self):
+        path = self.write("draft.md", "ignored")
+        path.write_bytes(b"One [@x:1]. Two [@glass:2].\r\n")
+        answer = self.command("detach", "2", "draft.md")
+        self.assertEqual(answer[0]["markers"], 1)
+        self.assertEqual(path.read_bytes(), b"One [@x:1]. Two [@glass, p. 42].\r\n")
+        self.command("remove", "1", "--detach")
+        self.assertEqual(path.read_bytes(), b"One [@glass, p. 41]. Two [@glass, p. 42].\r\n")
+        self.assertEqual(self.command("detach", "--all", "draft.md"), [])
+
+    def test_check_uses_resolved_keys(self):
+        self.write("draft.md", "---\nbibliography: refs.bib\n---\n\n[@x:1] [@x:7] [@x:4].\n")
+        answer = self.build("--check", "draft.md")
+        self.assertNotIn("cite-missing", answer.stdout + answer.stderr)
+        self.write("refs.bib", "@book{glass, title={Invented Glass}}")
+        answer = self.build("--check", "draft.md", code=None)
+        self.assertIn("@clay is not in the bibliography", answer.stdout + answer.stderr)
+        self.assertNotIn("@x:7 is not in the bibliography", answer.stdout + answer.stderr)
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class PandocResolver(ResolverFixture, unittest.TestCase):
+    def test_shared_pandoc_cases(self):
+        import re
+        for source, expected in CASES:
+            with self.subTest(source=source):
+                results = []
+                for text in (source, expected):
+                    self.write("draft.md", text + "\n")
+                    self.build("draft.md", "--to", "html", "--standalone", "-o", "out.html",
+                               "--no-stamp", "--no-backup", "--no-cache")
+                    output = (self.root / "out.html").read_text(encoding="utf-8")
+                    results.append(re.sub(r"\s+", " ", output))
+                self.assertEqual(*results)
+
+    def test_real_key_wins_only_warns_on_an_actual_clash_and_strict_fails(self):
+        self.write("refs.bib", """@book{x:1, author={Real, Ada}, title={The Real Source}, year={2019}}
+@book{glass, author={Tester, Pat}, title={Invented Glass}, year={2001}}
+@book{smith:2019, author={Smith, Ada}, title={Ordinary}, year={2019}}
+""")
+        self.write("draft.md", "[@x:1; @x#1; @smith:2019]. Then [@other#1; @x:99; @x:7].\n")
+        result = self.build("draft.md", "--to", "html", "-o", "out.html", "--strict", "--no-backup", "--no-stamp", code=1)
+        output = (self.root / "out.html").read_text(encoding="utf-8")
+        self.assertIn('data-cites="x:1 glass smith:2019"', output)
+        said = result.stdout + result.stderr
+        self.assertIn("write @glass#1 for the excerpt", said)
+        self.assertNotIn("bibliography has a key 'smith:2019'", said)
+        self.assertIn("@other#1: excerpt 1 belongs to glass", said)
+        self.assertIn("excerpt 99 is not in excerpts.json", said)
+        self.assertIn("excerpt 7: its key clay is not in the bibliography", said)
+
+    def test_locators_biblatex_and_markup_switches(self):
+        self.write("draft.md", """---
+pdfmd-options:
+  excerpt-prefix: src
+  excerpt-page-terms: [S., Ss.]
+  pagecite-terms: [Bl., Bll.]
+bibliography: refs.bib
+---
+
+[@src#1; @glass:2]. [@src:1, Bl. 8].
+""")
+        self.build("draft.md", "--to", "latex", "--biblatex", "-o", "out.tex", "--no-stamp", "--no-backup")
+        output = (self.root / "out.tex").read_text(encoding="utf-8")
+        self.assertIn(r"{glass}", output)
+        self.assertRegex(output, r"Ss\. 41")
+        self.assertIn("Bl. 8", output)
+        for option in (("--no-auto", "excerpts"), ("--no-markup",), ("--from", "markdown"), ("--flavour", "pandoc")):
+            self.build("draft.md", "--to", "html", "-o", "out.html", "--no-stamp", "--no-backup", *option)
+            self.assertIn("src:1", (self.root / "out.html").read_text(encoding="utf-8"))
+
+    def test_missing_and_invalid_record_are_visible_and_deduplicated(self):
+        self.write("draft.md", "[@x:1; @x:2] and @x:1.\n")
+        record = self.root / "excerpts.json"
+        record.unlink()
+        args = ("draft.md", "--to", "html", "-o", "out.html", "--no-stamp", "--no-backup")
+        result = self.build(*args)
+        self.assertEqual((result.stdout + result.stderr).count("3 excerpt markers but no excerpts.json"), 1)
+        record.write_text("{CANARY_EXCERPT", encoding="utf-8")
+        result = self.build(*args)
+        self.assertIn("excerpts.json: invalid JSON", result.stdout + result.stderr)
+
+    def test_live_preview_for_unsaved_text(self):
+        text = "A [@x:1;\n@x:2].\n\n## Next section\n"
+        result = self.build("--api", "POST", "/api/render", json.dumps({"path": "draft.md", "text": text}))
+        preview = json.loads(result.stdout)["html"]
+        self.assertIn("@glass, pp. 41–42", preview)
+        self.assertNotIn("@x:1", preview)
+        self.assertIn('data-pos="draft.md@4:1-5:1"', preview)
+
+    def test_merged_locator_and_pagecite_use_the_resolved_source(self):
+        self.write("author-date.csl", """<style xmlns="http://purl.org/net/xbiblio/csl" version="1.0" class="in-text">
+<info><title>Synthetic Author Date</title><id>urn:uuid:00000000-0000-4000-8000-000000000002</id>
+<category citation-format="author-date"/></info>
+<citation><layout prefix="(" suffix=")" delimiter="; ">
+<group delimiter=", "><names variable="author"><name form="short"/></names>
+<date variable="issued"><date-part name="year"/></date>
+<group delimiter=" "><label variable="locator" form="short"/><text variable="locator"/></group></group>
+</layout></citation></style>
+""")
+        self.write("draft.md", """---
+bibliography: refs.bib
+csl: author-date.csl
+pdfmd-options: {pagecite: style}
+---
+
+[@x:3; @x:1; @x:2; @x#1]. Next [p. 60].
+""")
+        self.build("draft.md", "--to", "html", "-o", "out.html", "--no-stamp", "--no-backup")
+        output = " ".join((self.root / "out.html").read_text(encoding="utf-8").split())
+        self.assertIn("(Tester, 2001, pp. 41–42, 45)", output)
+        self.assertIn("(Tester, 2001, p. 60)", output)
+
+    def test_hyphen_initial_prefix_is_read_in_both_forms(self):
+        self.write("draft.md", """---
+pdfmd-options: {excerpt-prefix: -src}
+bibliography: refs.bib
+---
+
+[@-src:1]. [@-src#2].
+""")
+        self.build("draft.md", "--to", "html", "-o", "out.html", "--no-stamp", "--no-backup")
+        output = " ".join((self.root / "out.html").read_text(encoding="utf-8").split())
+        self.assertIn("(Tester 2001, 41)", output)
+        self.assertIn("(Tester 2001, 42)", output)
+
+
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class BuildIsolation(CommandFixture, unittest.TestCase):
-    def test_record_presence_has_no_build_effect_or_passage_leak(self):
-        self.write("draft.md", "---\ntitle: Synthetic trial\nidentifier: urn:uuid:00000000-0000-4000-8000-000000000001\n---\n\nAn invented claim [@x:1].\n")
+    def test_build_resolves_the_record_instead_of_the_marker(self):
+        self.command("add", "--key", "glass", "--page", "41")
+        self.write("refs.bib", "@book{glass, title={Invented glass}, author={Test, Pat}, year={2001}}\n")
+        self.write("draft.md", "An invented claim [@x:1].\n")
+        result = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "draft.md",
+                                 "--to", "html", "-o", "out.html", "--no-stamp", "--no-backup"],
+                                cwd=self.root, capture_output=True, encoding="utf-8", timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        output = (self.root / "out.html").read_text(encoding="utf-8")
+        self.assertIn('data-cites="glass"', output)
+        self.assertRegex(output, r"Test\s+2001[,\s]+41")
+
+    def test_record_presence_has_no_build_effect_without_markers(self):
+        self.write("draft.md", "---\ntitle: Synthetic trial\nidentifier: urn:uuid:00000000-0000-4000-8000-000000000001\n---\n\nAn invented claim.\n")
         for writer in ("html", "latex", "typst", "docx", "epub", "gfm"):
             command = [sys.executable, str(ROOT / "scripts" / "pdfmd"), "draft.md", "--to", writer, "-o", "out." + writer,
                        "--no-backup", "--no-stamp", "--no-cache", "--no-auto", "bib", "crossref"]
@@ -499,6 +688,212 @@ class BuildIsolation(CommandFixture, unittest.TestCase):
             self.assertEqual((self.root / ("out." + writer)).read_bytes(), before, writer)
             self.assertNotIn("CANARY_INVENTED", second.stdout + second.stderr)
             (self.root / "excerpts.json").unlink()
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class CanaryBuilds(ResolverFixture, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.record = self.root / "excerpts.json"
+        self.cache = self.root / "cache"
+        self.env = {"XDG_CACHE_HOME": str(self.cache), "LOCALAPPDATA": str(self.cache),
+                    "SOURCE_DATE_EPOCH": "1700000000"}
+        self.write("draft.md", """---
+title: Invented Canary Trial
+identifier: urn:uuid:00000000-0000-4000-8000-000000000001
+bibliography: refs.bib
+---
+
+Citation [@x:1]. Next [@glass:2].
+""")
+        self.flags = ("--no-stamp", "--no-backup", "--build-log", "on", "--verbose")
+
+    def run_build(self, *args):
+        return self.build(*args, *self.flags, env=self.env)
+
+    def scan(self, name, data):
+        import zipfile
+
+        self.assertNotIn(b"CANARY_EXCERPT", data, name)
+        self.assertNotIn(b"223.1, 224.2, 225.3, 226.4", data, name)
+        if zipfile.is_zipfile(io.BytesIO(data)):
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                for member in archive.namelist():
+                    self.scan(f"{name}/{member}", archive.read(member))
+            return
+        if not data.startswith(b"%PDF-"):
+            return
+        try:
+            from pypdf import PdfReader
+            from pypdf.generic import DictionaryObject, IndirectObject, StreamObject
+        except ImportError:
+            self.skipTest("needs pypdf to inspect PDF streams and attachments")
+        reader = PdfReader(io.BytesIO(data))
+        for page in reader.pages:
+            self.scan(f"{name}/text", page.extract_text().encode("utf-8"))
+        for member, copies in reader.attachments.items():
+            for payload in copies:
+                self.scan(f"{name}/{member}", payload)
+        visited = set()
+
+        def inspect(value):
+            if isinstance(value, IndirectObject):
+                identity = (value.idnum, value.generation)
+                if identity in visited:
+                    return
+                visited.add(identity)
+                inspect(value.get_object())
+                return
+            if isinstance(value, StreamObject):
+                try:
+                    payload = value.get_data()
+                except NotImplementedError:   # some image encodings are unsupported by pypdf
+                    payload = value._data
+                self.assertNotIn(b"CANARY_EXCERPT", payload, name)
+            if isinstance(value, DictionaryObject):
+                for item in value.values():
+                    inspect(item)
+            elif isinstance(value, list):
+                for item in value:
+                    inspect(item)
+            elif isinstance(value, (str, bytes)):
+                self.assertNotIn(b"CANARY_EXCERPT", value.encode("utf-8") if isinstance(value, str) else value, name)
+
+        inspect(reader.trailer)
+
+    def scan_tree(self, *private):
+        excluded = {self.record.resolve(), *(path.resolve() for path in private)}
+        for path in self.root.rglob("*"):
+            if path.is_file() and path.resolve() not in excluded:
+                self.scan(path.relative_to(self.root).as_posix(), path.read_bytes())
+
+    def test_pandoc_writers_without_private_fields(self):
+        # Some writers (e.g. chunkedhtml) were added after the oldest supported Pandoc.
+        executable = shutil.which("pandoc")
+        available = subprocess.run([executable, "--list-output-formats"], check=True, capture_output=True,
+                                   encoding="utf-8").stdout.splitlines()
+        from pdfmd_output import FORMAT_EXTENSION
+        output_count = 0
+        for writer, extension in FORMAT_EXTENSION.items():
+            if writer not in available or writer == "pdf":
+                continue
+            with self.subTest(writer=writer):
+                output = f"out-{writer}{extension if writer != 'chunkedhtml' else '.zip'}"
+                result = self.run_build("draft.md", "--to", writer, "-o", output, "--no-cache")
+                self.assertRegex(result.stdout + result.stderr, r"excerpts\.lua[^\n]*--citeproc")
+                self.assertTrue((self.root / output).is_file())
+                output_count += 1
+        self.assertGreater(output_count, 10)
+        self.scan_tree()
+
+    def test_markdown_exports_prune_by_resolved_key_and_exclude_record_path_and_name(self):
+        record = self.root / "private" / "notes.json"
+        record.parent.mkdir()
+        self.record.rename(record)
+        self.record = record
+        copy = self.write("also/notes.json", record.read_text(encoding="utf-8"))
+        alias = self.root / "alias.json"
+        try:
+            alias.symlink_to(record)
+        except (OSError, NotImplementedError):
+            alias = record
+        self.write("draft.md", """---
+bibliography: refs.bib
+pdfmd-options: {excerpts: private/notes.json}
+---
+
+[@x:1]. [Direct](private/notes.json). [Alias](alias.json).
+""")
+        self.run_build("draft.md", "--merge", "-o", "merged.md")
+        self.run_build("draft.md", "--stop-at", "markdown", "-o", "assembled.md")
+        self.run_build("draft.md", "--to", "gfm", "--keep-source", "readable", "--bundle", "all", "-o", "flat.md")
+        for name in ("merged.md", "assembled.md", "flat.md"):
+            self.assertIn("[@glass, p. 41]", (self.root / name).read_text(encoding="utf-8"), name)
+        merged = (self.root / "merged.md").read_text(encoding="utf-8")
+        self.assertIn("@book{glass", merged)
+        self.assertNotIn("@book{unused", merged)
+        self.assertNotIn("@book{clay", merged)
+        self.run_build("--restore", "flat.md")
+        self.scan_tree(copy, alias)
+
+    def test_report_parallel_batch_and_parts(self):
+        self.write("chapter.md", "Second chapter [@glass:2].\n")
+        result = self.run_build("-r", "draft.md", "chapter.md", "--to", "html", "-o", "report.html")
+        self.assertIn("excerpts.lua", result.stdout + result.stderr)
+        for name in ("a", "b"):
+            self.write(f"batch/{name}.md", f"The {name} claim [@x:1].\n")
+        self.run_build("-b", "-j", "2", "batch/a.md", "batch/b.md", "--to", "html")
+        self.write("parts/01.md", "\nPart [@x#1].\n")
+        self.write("scaffold.md", "---\npdfmd-options: {parts: parts}\nbibliography: refs.bib\n---\n\nScaffold.\n")
+        self.run_build("scaffold.md", "--to", "html", "-o", "parts.html")
+        for name in ("report.html", "parts.html", "batch/a.html", "batch/b.html"):
+            path = self.root / name
+            self.assertIn('data-cites="glass"', path.read_text(encoding="utf-8"), name)
+        self.scan_tree()
+
+    def test_without_lua_package_warns_once_and_builds(self):
+        self.write("sitecustomize.py", """import sys
+from importlib.abc import MetaPathFinder
+class OmitLua(MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "pdfmd_lua" or fullname.startswith("pdfmd_lua."):
+            raise ModuleNotFoundError(fullname)
+sys.meta_path.insert(0, OmitLua())
+""")
+        env = {**self.env, "PYTHONPATH": str(self.root)}
+        result = self.build("draft.md", "--to", "html", "-o", "out.html", *self.flags, env=env)
+        self.assertEqual((result.stdout + result.stderr).count("pdfmd_lua package is not installed"), 1)
+        self.scan_tree()
+
+    @unittest.skipUnless(shutil.which("pdflatex"), "needs pdfLaTeX")
+    def test_latex_pdf_attachments_and_kept_intermediates(self):
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            self.skipTest("needs pypdf")
+        self.run_build("draft.md", "-e", "pdflatex", "--engine-fallback", "off", "--attach-source",
+                       "--bundle", "all", "--cache", "--keep-aux", "-o", "latex.pdf")
+        self.run_build("--restore", "latex.pdf")
+        reader = PdfReader(self.root / "latex.pdf")
+        self.assertIn("41", reader.pages[0].extract_text())
+        self.assertTrue(reader.attachments)
+        self.assertTrue(list(self.root.rglob("*.tex")), "no intermediate was kept")
+        self.assertTrue(list(self.cache.rglob("*.log")) or list(self.cache.rglob("*.txt")), "no build record was found")
+        self.scan_tree()
+
+    @unittest.skipUnless(shutil.which("typst"), "needs Typst")
+    def test_typst_pdf_and_writer(self):
+        self.run_build("draft.md", "-e", "typst", "--engine-fallback", "off", "-o", "typst.pdf")
+        self.run_build("draft.md", "--to", "typst", "-o", "out.typ")
+        self.assertIn("41", (self.root / "out.typ").read_text(encoding="utf-8"))
+        self.scan_tree()
+
+    @unittest.skipUnless(pdfmd.resolve_soffice(), "needs LibreOffice")
+    @unittest.skipIf(os.environ.get("CODEX_SANDBOX"), "LibreOffice cannot run in the sandbox")
+    def test_bridge_and_hybrid(self):
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            self.skipTest("needs pypdf")
+        self.run_build("draft.md", "-e", "soffice", "--engine-fallback", "off", "-o", "bridge.pdf")
+        latex = shutil.which("pdflatex") or shutil.which("lualatex")
+        if latex:
+            self.run_build("draft.md", "--hybrid", "-e", Path(latex).stem, "-o", "hybrid.pdf")
+            self.assertIn("Original.odt", PdfReader(self.root / "hybrid.pdf").attachments)
+        self.scan_tree()
+
+
+class NativeCanary(ResolverFixture, unittest.TestCase):
+    def test_inkmd_uses_detached_citations(self):
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            self.skipTest("needs pypdf")
+        self.write("draft.md", "A claim [@x:1].\n")
+        self.build("draft.md", "-e", "inkmd", "-o", "native.pdf", "--no-backup", "--no-stamp", env={"PATH": ""})
+        text = PdfReader(self.root / "native.pdf").pages[0].extract_text()
+        self.assertIn("@glass, p. 41", text)
+        self.assertNotIn("CANARY_EXCERPT", text)
 
 
 if __name__ == "__main__":

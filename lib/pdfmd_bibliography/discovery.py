@@ -76,6 +76,8 @@ def discover(sources, metadata_files, layers, read, no_auto):
                 parsed = read(path)
                 if parsed is not None:
                     known.update(citation for citation, _ in parsed[0])
+    wanted = core.deferred("pdfmd_excerpts.resolution", "candidate_keys")(
+        sources, metadata_files, wanted, known, no_auto, layers)
     missing = wanted - known
     added = []
     if missing:

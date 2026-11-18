@@ -297,7 +297,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                                     geometry_needed: bool, monofont_needed: bool,
                                     tablewidth_auto: bool, width_filter: Path, csv_filter: Path,
                                     no_auto: list[str] | None, engines: list[str], keep_aux: bool,
-                                    verbose: bool, debug: bool) -> tuple[bool, str]:
+                                    verbose: bool, debug: bool, named_reader=None) -> tuple[bool, str]:
     """Route a PDF compile's bibliography through Pandoc's own --natbib/
     --biblatex instead of --citeproc, for pdfmd-options.citation-engine.
 
@@ -354,7 +354,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     os.close(fd)
     tex_path = Path(tex_path_str)
     try:
-        with core.prepared_latex_inputs([title_source, *core.pandoc_metadata_order(metadata_files)], True) as prepared, \
+        with core.prepared_latex_inputs([title_source, *core.pandoc_metadata_order(metadata_files)], True, named_reader=named_reader) as prepared, \
                 core.document_header_file(md_path, bool(preamble_files) or core.has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text),
                                          metadata_files, no_auto) as header_file, \
                 core.pdf_metadata_header_file(pdf_meta_snippet_text) as pdf_meta_file, \
@@ -404,7 +404,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if header_file is not None:
                 cmd += ["--include-in-header", str(header_file)]
             cmd += core.document_filter_args(md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
-                                             citation_engine=citation_engine)
+                                             citation_engine=citation_engine, named_reader=named_reader)
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
                 cmd.append(f"--{citation_engine}")
                 cmd += core.fullcite_pre_args(md_path, metadata_files, pandoc_options, citation_engine)    # `\\fullcite{}`, not citeproc

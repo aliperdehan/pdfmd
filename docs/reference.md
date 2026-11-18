@@ -957,10 +957,9 @@ layers and cached copies holding clash winners. Citeproc and LaTeX's natbib/bibl
 export keeps absolute resource names; compile it with `typst compile --root=/ file.typ file.pdf`. Direct `.typ` inputs
 keep Typst's own project root.
 
-**Local excerpt records** (`--excerpts`, P1b). Keep source passages, page pointers,
+**Local excerpt records** (`--excerpts`). Keep source passages, page pointers,
 area selections and private notes in one `excerpts.json` per project. These commands
-work without Pandoc or Colophon. This phase only manages records: builds do not
-read the file or resolve its markers yet. Source PDFs are never written.
+work without Pandoc or Colophon. Source PDFs are never written or read by a build.
 
 ```sh
 pdfmd --excerpts add --key glass --page 41 --text "An invented passage."
@@ -972,6 +971,7 @@ pdfmd --excerpts show 1
 pdfmd --excerpts edit 1 --note "Compare the second table."
 pdfmd --excerpts where 1
 pdfmd --excerpts list --unused
+pdfmd --excerpts detach --all draft.md
 pdfmd --excerpts remove 1 --force
 pdfmd --excerpts sources add glass sources/glass.pdf --pages '[[2,"41"]]'
 pdfmd --excerpts sources match sources/
@@ -982,7 +982,7 @@ pdfmd --excerpts export -o review.md
 `--in PATH` (document or folder; default the working folder) and `--verbose`.
 Use `pdfmd --excerpts ACTION --help` for its options. Success exits 0, a problem
 or file failure 1, invalid usage 2. JSON answers are arrays for `list`, `where`,
-`sources` and matching proposals, a record for `show`/`edit`, `{id, markers}` for
+`sources`, `detach` and matching proposals, a record for `show`/`edit`, `{id, markers}` for
 `add`, `{removed}` for `remove`, `{markdown}` for `export`, and `{error}` on failure.
 Plain `list` prints a table with one row per record, showing id, key, page and
 kind, plus locator, label, supplement and creation date when present. It
@@ -1026,10 +1026,34 @@ document, metadata, folder settings or global config, or use the `--setup` row.
 The default is `x`. Use one word of letters, digits, hyphens or underscores.
 The cross-reference prefixes `fig`, `tbl`, `eq`, `sec` and `lst` are reserved.
 
-A cited record cannot be removed without `--force`; its markers then remain.
-`remove --detach` awaits P1c; `list --problems` awaits the P1d checks (both exit 2
-in this phase). `export` groups records by source, with notes and citing places.
+A cited record can be removed with `--detach` to rewrite its citations, or with
+`--force` to leave its markers. `list --problems` awaits the excerpt checks. `export` groups records by source, with notes and citing places.
 It deliberately contains passages: keep this local review sheet private.
+
+**Excerpt citations.** In the pdfmd and Obsidian flavours, a build with an
+`excerpts.json` resolves a marker to its source key and locator before
+cross-references and bibliography processing. A bibliography key that matches
+the whole marker wins. pdfmd warns when the same spelling also names an excerpt,
+when a marker cannot be resolved, or when its resolved source is missing from
+the bibliography. `--strict` counts these warnings. `--no-auto excerpts`,
+`--no-markup`, a markup list without `excerpts`, or an explicitly named Pandoc
+reader disables resolution.
+
+A typed locator wins. Otherwise the record's locator or page is inserted before
+any typed suffix. `pdfmd-options: {excerpt-page-terms: [p., pp.]}` sets the
+singular and plural terms at any layer, or through `--setup`. Adjacent markers
+in the same bracket for the same source and citation mode, with no extra text
+or whole locator, produce one citation when their page numbers can be ordered
+together.
+Remark markers disappear. This also applies to `nocite` and other citation-bearing
+metadata. Code, raw blocks, maths and comments keep their text.
+
+`pdfmd --excerpts detach ID ... FILE.md ...` or
+`pdfmd --excerpts detach --all FILE.md ...` writes plain citations atomically
+and reports the changed files and marker counts. Assembled Markdown, source
+attachments, embedded metadata and the native renderer also use plain
+citations. Records' passages, notes, secondary quotations and coordinates stay
+local. Bundling skips the excerpts file by path and name.
 
 `sources` lists file hints and hash states (`ok`, `changed`, `missing`, `unknown`).
 `sources add KEY FILE` records the relative file hint, SHA-256 and size; `--pages`
@@ -1572,7 +1596,7 @@ section for why), typstdirect and htmldirect (the same for a .typ and an
 .html file: off, they go through Pandoc), svg and remoteimages (see "Images LaTeX cannot read" above), pdfimages (PDF images in HTML builds become SVG), diagrams (fenced mermaid/d2/dot blocks drawn by mmdc/d2/dot), smiles (smiles blocks drawn as chemical structures), crossref (the auto-detected `--filter pandoc-
 crossref` for `@fig:`/`@eq:`/`@tbl:`/`@sec:`/`@lst:` syntax or a
 `{#fig:...}`-style attribute -- see crossref_filter_args()),
-pagecite (bare page markers after citations), citationengine (a document's own `pdfmd-options.citation-engine`
+pagecite (bare page markers after citations), excerpts (local excerpt citations), citationengine (a document's own `pdfmd-options.citation-engine`
 setting -- see "Output formats" below; disabling this KIND always
 means plain `--citeproc`, regardless of what the document's own front
 matter or metadata file requests), csvtable (the `.csv`-div table

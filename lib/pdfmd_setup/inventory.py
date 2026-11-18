@@ -149,7 +149,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "csl.spacing": Omitted("document", "a per-document alias for bibliography-line-spacing"),
     "indent": "options.indent",
     "excerpts": Omitted("document", "the project's record file path, relative to its naming layer; off disables discovery"),
-    "excerpt-prefix": "options.excerpt-prefix",
+    "excerpt-prefix": "options.excerpt-prefix", "excerpt-page-terms": "options.excerpt-page-terms",
     "pagecite": "options.pagecite", "pagecite-terms": "options.pagecite-terms",
     "paragraph-spacing": "options.paragraph-spacing", "fullcite-list": "options.fullcite-list", "bibliography-indent": "options.bibliography-indent",
     "cover": Omitted("document", "per document: a title page, or a picture for the first page / an EPUB's cover"),

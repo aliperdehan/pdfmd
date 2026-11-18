@@ -30,10 +30,10 @@ def parser():
     common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="answer as JSON (also on failure)")
     common.add_argument("--in", dest="place", default=argparse.SUPPRESS, metavar="PATH", help="document or project folder")
     common.add_argument("--verbose", action="store_true", default=argparse.SUPPRESS, help="show further record files ignored")
-    result = Parser(prog="pdfmd --excerpts", parents=[common], description="Local excerpt records; no build changes in P1b.",
+    result = Parser(prog="pdfmd --excerpts", parents=[common], description="Local excerpt records and Markdown citation detachment.",
                     formatter_class=argparse.RawDescriptionHelpFormatter)
     actions = result.add_subparsers(dest="action", required=True, parser_class=Parser)
-    for action in ("list", "show", "where", "add", "edit", "remove", "sources", "export"):
+    for action in ("list", "show", "where", "add", "edit", "remove", "sources", "export", "detach"):
         sub = actions.add_parser(action, parents=[common])
         if action == "list":
             sub.description = "List excerpt records as a table. Use --json for complete records."
@@ -53,7 +53,10 @@ def parser():
         if action == "remove":
             choices = sub.add_mutually_exclusive_group()
             choices.add_argument("--force", action="store_true")
-            choices.add_argument("--detach", action="store_true", help="requires the P1c resolver (not available yet)")
+            choices.add_argument("--detach", action="store_true", help="detach citations before removing the record")
+        if action == "detach":
+            sub.add_argument("--all", action="store_true", help="detach every excerpt marker in the files")
+            sub.add_argument("items", nargs="+", metavar="ID ... FILE")
         if action == "sources":
             verbs = sub.add_subparsers(dest="verb", parser_class=Parser)
             add = verbs.add_parser("add", parents=[common])
@@ -182,6 +185,16 @@ def sheet(data, places):
 
 
 def execute(args, arguments):
+    if args.action == "detach":
+        from .detach import files
+        ids, names = set(), list(args.items)
+        while names and names[0].isdecimal():
+            ids.add(int(names.pop(0)))
+        if not names or args.all == bool(ids) or 0 in ids:
+            raise UsageError("detach needs IDs or --all, followed by Markdown files")
+        selected = discover(*context(args.place)) if args.place != "." else None
+        return files(names, ids or None, selected_path=selected)
+
     document, metadata = context(args.place)
     prefix = prefix_setting(document, metadata)
     path = discover(document, metadata, args.verbose)
@@ -247,22 +260,26 @@ def execute(args, arguments):
     if args.action == "list" and args.problems:
         raise UsageError("--problems needs P1d excerpt checks; not available in P1b")
     if args.action == "remove":
-        if args.detach:
-            raise UsageError("--detach needs the P1c resolver; not available in P1b")
         def remove(current):
+            from .detach import files
             record = find(current, args.id)
             # Re-scan inside the record lock, so concurrent record writers cannot race this decision.
             if not args.force:
-                cited = locations(Path(args.place).expanduser().resolve(), path, entries)
-                if any(place["id"] == args.id for place in cited):
-                    raise RecordError(f"excerpt {args.id} is cited; use --force (detach follows in P1c)")
+                cited = locations(Path(args.place).expanduser().resolve(), path, entries, current)
+                documents = [Path(place["file"]).expanduser() for place in cited if place["id"] == args.id]
+                if documents and not args.detach:
+                    raise RecordError(f"excerpt {args.id} is cited; use --detach or --force")
+                if documents:
+                    if current["pdfmd-excerpts"] != 1:
+                        raise RecordError("newer record version cannot be written")
+                    files(documents, {args.id}, selected_path=path, data=current)
             current["excerpts"].remove(record)
             return {"removed": args.id}
         return update(path, remove)
     if args.action == "list" and not args.unused:
         return [item for item in sorted(data["excerpts"], key=lambda item: item["id"])
                 if args.key is None or args.key == item.get("key")]
-    places = locations(Path(args.place).expanduser().resolve(), path, entries)
+    places = locations(Path(args.place).expanduser().resolve(), path, entries, data)
     if args.action == "where":
         find(data, args.id)
         return [place for place in places if place["id"] == args.id]

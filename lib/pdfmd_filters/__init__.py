@@ -9,7 +9,10 @@ import os
 import re
 import sys
 import urllib.parse
+from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from pdfmd_base import core
 
@@ -681,10 +684,29 @@ def strip_build_comments_args(sources: Path | list[Path], metadata_files: list[P
     return ["--lua-filter", str(shipped)] if shipped is not None else []
 
 
+_FILTER_FILES = ContextVar("document_filter_files")
+
+
+@contextmanager
+def document_filter_scope():
+    """Own any temporary files carried beside a run's filters."""
+    with ExitStack() as stack:
+        token = _FILTER_FILES.set(stack)
+        try:
+            yield
+        finally:
+            _FILTER_FILES.reset(token)
+
+
+def temporary_filter_directory():
+    return _FILTER_FILES.get().enter_context(TemporaryDirectory(prefix="pdfmd-excerpts-"))
+
+
 def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], metadata_files: list[Path], no_auto: list[str] | None,
                          csv_filter: Path, pandoc_options: list[str], crossref_sources: Path | list[Path] | None = None,
                          flat_pictures: Path | None = None, preamble: list[Path] | None = None, flat_text: bool = False,
-                         cellalign_early: bool = False, label: str | None = None, citation_engine: str | None = None) -> list[str]:
+                         cellalign_early: bool = False, label: str | None = None, citation_engine: str | None = None,
+                         named_reader: str | None = None) -> list[str]:
     """The filters pdfmd puts on what a document SAYS (its own syntax: the metadata that appends, `\\md{}`, calc, the CSV tables, page
     breaks, indent, callouts and the other markup, table captions, line breaks, the title, the cover, raw pieces and diagrams, the
     cross-references), in the order they run. Every build writes this one list, whatever the writer is, and so does the live view of
@@ -693,7 +715,8 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     `inputs` are the files whose text is searched for the syntax (the document, or all the files of a joined build), `md_path` the
     document itself (a report's files, for report mode); `cellalign_early` puts the cell filter here (the office route), where the
     others put it after the writer's own. `label` names the document in a message (report mode: `REPORT`); `md_path` by default."""
-    args = core.metadata_append_args(inputs, metadata_files, pandoc_options, no_auto)
+    citation_auto = [*(no_auto or []), "excerpts"] if named_reader and no_auto != [] else no_auto
+    args = core.metadata_append_args(inputs, metadata_files, pandoc_options, citation_auto)
     args += md_macro_args(inputs, metadata_files)
     args += core.deferred("pdfmd_filters.hidden", "mark_args")(inputs, metadata_files)
     args += core.calc_filter_args(inputs, metadata_files)
@@ -709,6 +732,9 @@ def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], 
     args += title_filter_args(md_path, metadata_files, pandoc_options, no_auto)
     args += cover_filter_args(md_path, metadata_files)
     args += raw_filter_args(inputs, no_auto, metadata_files, flat_pictures=flat_pictures, preamble=preamble, flat_text=flat_text)
+    sources = inputs if isinstance(inputs, list) else [inputs]
+    args += core.deferred("pdfmd_excerpts.runtime", "filter_args")(
+        sources, metadata_files, pandoc_options, no_auto, named_reader, temporary_filter_directory)
     pagecite_options = [*pandoc_options, f"--{citation_engine}"] if citation_engine in ("natbib", "biblatex") else pandoc_options
     args += core.deferred("pdfmd_excerpts.pagecite", "filter_args")(inputs, metadata_files, pagecite_options, no_auto)
     args += core.crossref_filter_args(crossref_sources or inputs, pandoc_options, no_auto, label or str(md_path))

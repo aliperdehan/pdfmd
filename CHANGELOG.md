@@ -19,6 +19,22 @@ same commit as the change.
 
 ---
 
+## v3.34.7 — 2026-11-18
+
+Pre-edit state: commit `a579b0a`. Builds treated excerpt markers as bibliography keys because the P1b
+commands only tracked records. The shared Pandoc filter list now resolves excerpts before pagecite,
+cross-references and citation processing. The temporary filter data contains citation fields alone.
+Markdown exports and the native renderer detach markers, and `--excerpts detach` and `remove --detach`
+can update source files atomically. Citation detection, bibliography discovery and `--check` use resolved
+keys. Source bundles exclude the record file by path and name.
+
+Regression coverage compares shared Lua and text cases, exercises clashes, warnings, native citations,
+source exports and build routes, and scans outputs, extracted attachments, intermediates and build records
+for private fields. The excerpts module ran 46 tests with each of Pandoc 3.13 and 3.1.3, with one
+LibreOffice skip each. The no-record and no-marker controls matched the previous build for HTML, LaTeX,
+Typst, Word, EPUB and GFM. The core and adjacent suites ran with two workers at most. The HTTP cases
+could not bind sockets in the sandbox. Socket-free live rendering passed with both versions.
+
 ## v3.34.6 — 2026-11-18
 
 Pre-edit state: commit `9cc96fe`. Excerpt locations used the old separator rules and `add` always printed the

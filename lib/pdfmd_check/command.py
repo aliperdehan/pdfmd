@@ -175,7 +175,11 @@ def check_command(args, pandoc_options: list[str]) -> int:
                 status = 1
         folders = [folder for folder in core.accessory_directories(document.parent, document.stem)[1:]]
         limit = core.resolve_budget(document, metadata_files)[0]
+        excerpts = core.deferred("pdfmd_excerpts.resolution", "prepare")(
+            files, metadata_files, pandoc_options, core.effective_no_auto(document, args.no_auto),
+            named_reader=args.from_format)
         problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None,
+                              citation_key=excerpts.key if excerpts and excerpts.records is not None else None,
                               calc=calc_check_records(files, metadata_files))
         if "figure-too-tall" not in ignore:
             from pdfmd_check.figures import figure_problems

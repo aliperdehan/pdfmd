@@ -8,6 +8,7 @@ import re
 import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 try:
     from pdfmd_yaml_support import yaml
@@ -345,7 +346,7 @@ def suggestion(word: str, known) -> str:
 
 def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore: frozenset = frozenset(),
          folders: list[Path] | None = None, asset_limit: int | None = None,
-         calc: "tuple[list, list] | None" = None) -> list[Problem]:
+         calc: "tuple[list, list] | None" = None, citation_key: Callable | None = None) -> list[Problem]:
     """The problems of ``sources`` taken as one document (a scaffold and its parts, or a single file), in order.
     ``folders`` are searched for files after the source's own folder; ``asset_limit`` (bytes) is the size budget of an
     image or data file; ``calc`` is what the calculator's filter found (see calc_names): the uses of undefined names and
@@ -369,7 +370,7 @@ def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore
         digit_math(analysis, findings)
     cross_references(analyses, findings, ids)
     footnotes(analyses, findings)
-    citations(analyses, findings, bibliography)
+    citations(analyses, findings, bibliography, citation_key)
     if calc:
         calc_names(analyses, findings, *calc)
     problems = [problem for problem in findings.problems if problem.code not in ignore]
@@ -590,7 +591,8 @@ def footnotes(analyses: list[Analysis], findings: Findings) -> None:
                              f"[^{found.group(1)}]: is never referenced")
 
 
-def citations(analyses: list[Analysis], findings: Findings, bibliography: Bibliography | None) -> None:
+def citations(analyses: list[Analysis], findings: Findings, bibliography: Bibliography | None,
+              citation_key: Callable | None = None) -> None:
     if bibliography is None:
         return
     uses: dict[str, list[tuple[Analysis, int]]] = {}
@@ -599,7 +601,9 @@ def citations(analyses: list[Analysis], findings: Findings, bibliography: Biblio
             key = (found.group(1) or found.group(2)).strip()
             if key.split(":")[0] in CROSSREF_KINDS and ":" in key or key.startswith("*"):
                 continue                                                  # a cross-reference, or `@*`
-            uses.setdefault(key, []).append((analysis, analysis.line(found.start())))
+            key = citation_key(key) if citation_key else key
+            if key is not None:
+                uses.setdefault(key, []).append((analysis, analysis.line(found.start())))
         if bibliography.declared:
             for found in LATEX_CITE_RE.finditer(analysis.masked):
                 for key in (item.strip() for item in found.group(1).split(",")):

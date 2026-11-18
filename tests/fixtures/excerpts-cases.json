@@ -1,0 +1,15 @@
+[
+  ["All [@x#1; @glass:3; @glass#2; @x:1].", "All [@glass, pp. 41--42, 45]."],
+  ["[see @x:1, Table 4].", "[see @glass, p. 41, Table 4]."],
+  ["[-@x:1, p. 19].", "[-@glass, p. 19]."],
+  ["[@x:1, 19; @x:2, ch. 7].", "[@glass, 19; @glass, ch. 7]."],
+  ["@x:1 [p. 19].", "@glass [p. 19]."],
+  ["@glass#1 closes. @x:1 [as described].", "@glass [p. 41] closes. @glass [p. 41, as described]."],
+  ["A [@x:4] remark. Another @x#4 line.", "A remark. Another line."],
+  ["A [@x:4; @x:1; @x:4] stays.", "A [@glass, p. 41] stays."],
+  ["A [@x:1; -@x:2; @x:5; @x:6], then [@x:7].", "A [@glass, p. 41; -@glass, p. 42; @glass, ch. 3; @glass], then [@clay, pp. 9-10]."],
+  ["Roman [@x:8; @x:9; @x:10], supplement [@x:11; @x:12].", "Roman [@glass, pp. ix--xi], supplement [@clay, pp. S9--S10]."],
+  ["A footnote.^[See [@x:1].] Then [@x:4].", "A footnote.^[See [@glass, p. 41].] Then."],
+  ["`@x:1` $@x:1$ <!-- @x:1 --> \\@x:1.\n\n```{=html}\n@x:1\n```", "`@x:1` $@x:1$ <!-- @x:1 --> \\@x:1.\n\n```{=html}\n@x:1\n```"],
+  ["---\ntitle: 'Claim [@x:1]'\nnocite: '[@x:7]'\n---\n\nAnother claim.", "---\ntitle: 'Claim [@glass, p. 41]'\nnocite: '[@clay, pp. 9-10]'\n---\n\nAnother claim."]
+]

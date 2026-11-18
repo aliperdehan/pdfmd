@@ -47,6 +47,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [ASCII only: `--to ascii`](#ascii-only---to-ascii)
   - [Word and OpenDocument output](#word-and-opendocument-output)
   - [Stopping part-way](#stopping-part-way)
+  - [Cite a passage from local excerpt records](#cite-a-passage-from-local-excerpt-records)
   - [The PDF carries its own source](#the-pdf-carries-its-own-source)
   - [PDF to Markdown](#pdf-to-markdown)
   - [Bookmarks, header and footer, linked files](#bookmarks-header-and-footer-linked-files)
@@ -1649,6 +1650,14 @@ raw Word blocks such as a cover or form and the Word route's extras are lost; in
 `odt.engine: soffice` requires LibreOffice and errors on failure; `odt.engine: pandoc` uses Pandoc silently.
 `-e soffice` / `-e pandoc` on the command line wins over the key. In auto, an `.odt`/`.ott` reference document, named or
 discovered beside the source, selects Pandoc's styling with a NOTE. `--setup` offers the same OpenDocument writer choice.
+
+### Cite a passage from local excerpt records
+
+`pdfmd --excerpts add --key glass --page 41` creates a record and prints citation
+markers such as `[@x:1]` and `[@glass#1]`. With the project’s `excerpts.json`,
+pdfmd uses the record’s source and page in citations. The record's passages
+and notes stay local. Run `pdfmd --excerpts detach --all draft.md` to replace
+the markers with plain citations when sharing the Markdown.
 
 ### The PDF carries its own source
 

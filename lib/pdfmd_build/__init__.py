@@ -215,7 +215,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                           f"joined after it" + (" (partial build)" if partial else ""))
         plan = make_embed_plan(md_path, metadata_files, preamble_files, no_auto, embed)
         ok, reason = core.write_assembled_markdown([md_path, *parts_inputs], output, bool(parts_inputs), plan, partial,
-                                              core.resolve_strip_comments(md_path, metadata_files))
+                                              core.resolve_strip_comments(md_path, metadata_files), metadata_files, no_auto, from_format)
         flush_summary()
         return md_path, ok, reason
 
@@ -378,7 +378,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     flat_markdown = target_format == "gfm"             # flat Markdown: pictures beside the output, relative links, one line a paragraph
     flat_target = flat_markdown or target_format == "txt"        # and flat text, which shares the pipeline (not those extras)
     flat = core.flat_settings(md_path, metadata_files, target_format) if flat_target else None
-    with core.prepared_title_source(md_path, metadata_files, disabled=core.auto_disabled(no_auto, "title") or flat_target or target_format == "ansi",
+    from pdfmd_filters import document_filter_scope
+    with document_filter_scope(), core.prepared_title_source(md_path, metadata_files, disabled=core.auto_disabled(no_auto, "title") or flat_target or target_format == "ansi",
                                override=source_override) \
             as (title_source, title_shifted), \
             core.embedded_lua_filters(md_path, not core.auto_disabled(cli_no_auto, "lua"), trust_embedded) \
@@ -389,11 +390,14 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             {part: core.part_key(part, parts_root) for part in parts_inputs}
                             if part_markers and parts_root else None,
                             selection if isinstance(selection, (set, frozenset)) else None,
-                            core.ascii_table_transform(md_path, metadata_files, parts_inputs)) as scaffold_files:
+                            core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format)) as scaffold_files:
         part_files = scaffold_files[1:]
         lua_filters = [*lua_filters, *embedded_filters]
         all_inputs = [md_path, *parts_inputs] if parts_inputs else None
-        any_citations = any(core.contains_citations(item) for item in [md_path, *parts_inputs])
+        any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
+            all_inputs or [md_path], metadata_files, pandoc_options, no_auto, from_format)
+        if any_citations is None:
+            any_citations = any(core.contains_citations(item) for item in [md_path, *parts_inputs])
         any_code_spans = any(core.has_code_spans(item.read_text(encoding="utf-8-sig"))
                              for item in [md_path, *parts_inputs])
         if parts_inputs:
@@ -466,7 +470,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                               document_font, mainfont_auto, no_auto, note))
             with core.prepared_latex_inputs([title_source, *core.pandoc_metadata_order(metadata_files)], is_tex_target,
                                        typst_engine=(target_format == "typst"),
-                                       drop_embedded_preamble=not is_tex_target) as prepared, \
+                                       drop_embedded_preamble=not is_tex_target, named_reader=from_format) as prepared, \
                     core.document_header_file(md_path, (bool(preamble_files) or core.has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
                                          and is_tex_target, metadata_files, no_auto) as header_file, \
                     core.pdf_metadata_header_file(pdf_meta_snippet_text if is_tex_target else None) as pdf_meta_file, \
@@ -566,7 +570,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                             flat_pictures=output.parent / f"{output.stem}_files" if flat_markdown else None,
                                             preamble=list(preamble_files or []) if flat_markdown else None,
                                             flat_text=target_format == "txt",
-                                            citation_engine=citation_engine if is_tex_target else None)
+                                            citation_engine=citation_engine if is_tex_target else None,
+                                            named_reader=from_format)
                 cmd += core.select_filter_args(selection)
                 if any_citations and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
                     if (is_tex_target and citation_engine in ("natbib", "biblatex")
@@ -691,7 +696,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         if citation_engine is not None and citation_engine not in core.CITATION_ENGINES:
             raise SystemExit(f"{md_path}: unknown pdfmd-options.citation-engine value "
                              f"{citation_engine!r}. Valid: {', '.join(sorted(core.CITATION_ENGINES))}")
-        if citation_engine in ("natbib", "biblatex") and core.contains_citations(md_path):
+        if citation_engine in ("natbib", "biblatex") and any_citations:
             if not any(engine in core.LATEX_ENGINES for engine in engines):
                 print(f"WARN  {md_path}: pdfmd-options.citation-engine: {citation_engine} needs a "
                       "LaTeX-family engine, but none is available in this fallback chain; "
@@ -702,7 +707,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     lua_filters, preamble_files or [], title_source, pdf_meta_snippet_text,
                     citation_engine, presentation, slide_level, shift_heading, font, document_font,
                     mainfont_auto, geometry_needed, monofont_needed, tablewidth_auto, width_filter,
-                    csv_filter, no_auto, engines, keep_aux, verbose, debug)
+                    csv_filter, no_auto, engines, keep_aux, verbose, debug, named_reader=from_format)
                 # Pre-existing gap, closed here rather than left (2026-09-21):
                 # this branch never called stamp_after_success at all, so a
                 # citation-engine: natbib/biblatex document got neither the
@@ -734,7 +739,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                                         no_auto, verbose,
                                                         labels="auto" if engines == ["soffice"] else "off",
                                                         title_source=title_source, part_files=part_files,
-                                                        partial=partial, selection=selection)
+                                                        partial=partial, selection=selection, named_reader=from_format)
                 result = subprocess.CompletedProcess(args=["soffice"], returncode=0 if ok else 1,
                                                      stdout="", stderr="" if ok else reason)
                 if ok:
@@ -749,7 +754,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 core.report_engine_failure(str(md_path), engine, result, remaining, debug)
                 continue
             with core.prepared_latex_inputs([title_source, *core.pandoc_metadata_order(metadata_files)], engine in core.LATEX_ENGINES,
-                                       typst_engine=(engine == "typst")) as prepared, \
+                                       typst_engine=(engine == "typst"), named_reader=from_format) as prepared, \
                     core.document_header_file(md_path, (bool(preamble_files) or core.has_embedded_preamble(md_path) or bool(pdf_meta_snippet_text))
                                          and engine in core.LATEX_ENGINES, metadata_files, no_auto) as header_file, \
                     core.pdf_metadata_header_file(pdf_meta_snippet_text if engine in core.LATEX_ENGINES else None) as pdf_meta_file:
@@ -836,7 +841,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # see document_header_includes()'s own docstring.
                     if header_file is not None:
                         cmd += ["--include-in-header", str(header_file)]
-                    cmd += core.document_filter_args(all_inputs or md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options)
+                    cmd += core.document_filter_args(all_inputs or md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
+                                                     named_reader=from_format)
                     cmd += core.select_filter_args(selection)
                     # A CSL selected for Typst needs Pandoc's style resolver even without citations:
                     # otherwise its template gives Typst a bare filename outside Typst's search path.
@@ -1242,7 +1248,8 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
                                        else md_path.with_suffix(".pdf"))
             core.attach_source_after_success(md_path, produced, list(extra_inputs or []), metadata_files,
                                         preamble_files, core.effective_no_auto(md_path, no_auto), verbose,
-                                        report=bool(core.REPORT_BUILD), base=core.REPORT_BUILD.get("base"))
+                                        report=bool(core.REPORT_BUILD), base=core.REPORT_BUILD.get("base"),
+                                        named_reader=from_format, pandoc_options=pandoc_options)
         if (target_format in core.MARKDOWN_TARGETS and source_override is None and not partial
                 and md_path.suffix.lower() in (".md", ".markdown")):
             keep_mode = core.resolve_keep_source(md_path, metadata_files)
@@ -1253,7 +1260,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
                 core.keep_source_after_success(md_path, produced, list(extra_inputs or []), metadata_files,
                                           preamble_files, core.effective_no_auto(md_path, no_auto), keep_mode, verbose,
                                           ascii_only=core.ASCII_CLI["on"] and target_format in core.ASCII_FORMATS,
-                                          pandoc_options=pandoc_options)
+                                          pandoc_options=pandoc_options, named_reader=from_format)
     return result
 
 

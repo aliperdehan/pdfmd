@@ -15,7 +15,7 @@ try:
 except ImportError:      # a copy of pdfmd.py without its packages: strict Pandoc and nothing else
     FLAVOUR_PRESETS, FLAVOUR_WORDS = {}, ("auto",)
 
-MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "underline", "keep", "landscape", "appendix", "fullcite", "pagecite", "space")
+MARKUP_KINDS = ("callouts", "toc", "center", "highlight", "underline", "keep", "landscape", "appendix", "fullcite", "pagecite", "excerpts", "space")
 
 
 def markup_value(value) -> list[str]:
@@ -161,7 +161,7 @@ def markup_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -
     """``--lua-filter markup.lua`` with the kinds that take part (`-M pdfmd-markup=callouts`), when any."""
     files = sources if isinstance(sources, list) else [sources]
     fit = core.embed_filter_args(sources, metadata_files) + core.figure_filter_args(sources, metadata_files)   # before markup.lua, so a markup filter stays the last argument
-    kinds = markup_kinds(files[0], metadata_files) if files else []
+    kinds = [kind for kind in markup_kinds(files[0], metadata_files) if kind != "excerpts"] if files else []
     if not kinds:
         return fit
     try:
@@ -240,7 +240,7 @@ def markup_header_args(sources: Path | list[Path], metadata_files: list[Path], b
     Pandoc command so far: after a kit's or the user's own LaTeX the header keeps what that defined (v3.33.67,
     pdfmd_tex.markup)."""
     files = sources if isinstance(sources, list) else [sources]
-    kinds = markup_kinds(files[0], metadata_files) if files else []
+    kinds = [kind for kind in markup_kinds(files[0], metadata_files) if kind != "excerpts"] if files else []
     pieces = core.markup_header_pieces(files[0], metadata_files, kinds, before) if kinds else []     # the box is one piece
     if not pieces:
         return []

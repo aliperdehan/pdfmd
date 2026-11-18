@@ -65,9 +65,15 @@ def serve_live_filters(source: Path, metadata_files: list[Path]) -> Iterator[lis
     """The Pandoc arguments the live view of ``source`` gets: core.document_filter_args(), the list every build writes, so the document's own
     syntax (CSV tables, calc, callouts, page breaks, ...) is what it is in a build and a new one needs nothing here. Only one filter is
     the live view's own, and it runs first: pdfmd_lua/sourcepos.lua puts back what the position-marking reader changed in the document."""
-    import pdfmd_lua
-    first = pdfmd_lua.path("sourcepos")
-    with core.csv_table_filter() as csv_filter:
+    try:
+        import pdfmd_lua
+    except ImportError:
+        core.pdfmd_lua_missing()
+        first = None
+    else:
+        first = pdfmd_lua.path("sourcepos")
+    from pdfmd_filters import document_filter_scope
+    with document_filter_scope(), core.csv_table_filter() as csv_filter:
         yield (["--lua-filter", str(first)] if first is not None else []) + core.document_filter_args(
             source, source, metadata_files, core.effective_no_auto(source, None), csv_filter, []) + core.deferred(
                 "pdfmd_filters.hidden", "finish_args")() + (
@@ -84,9 +90,14 @@ def serve_core(folder: Path):
     def pick(root: Path):
         main, why = serve_main_document(root)
         return main, why
+    def render_text(document, metadata, text):
+        # CommonMark supplies source positions and has no Cite nodes. Show the same plain citations as a source export.
+        from pdfmd_excerpts.detach import preview_text
+        return preview_text(document, metadata, text, core.effective_no_auto(document, None))
+
     return Core(folder, pick_main=pick, discover=serve_discovered, write_bytes=core.atomic_write_bytes,
                 display=lambda path: str(path).replace(str(Path.home()), "~", 1), filters=serve_live_filters,
-                places=lambda: [core.cache_root()])
+                places=lambda: [core.cache_root()], render_text=render_text)
 
 
 def serve_command(args) -> int:

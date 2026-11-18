@@ -91,15 +91,15 @@ set it under `pdfmd-options` or in `--setup` (as for `pagecite`). It needs the
 and links stay literal; the native tier leaves markers with one NOTE.
 
 `pdfmd --excerpts ACTION` manages local source records: `list`, `show ID`,
-`add`, `edit ID`, `remove ID`, `sources`, `where ID`, `export`. It consumes the
+`add`, `edit ID`, `remove ID`, `sources`, `where ID`, `export`, `detach`. It consumes the
 rest of the command line; each action accepts `--json` and `--in PATH` (document
 or folder). Exit codes: 0 success, 1 problems/file failure, 2 usage. JSON failures
 answer `{error}`. `list` prints a compact table of record fields with long values
 shortened to fit the terminal (80 columns in a pipe). Use `list --json` for the
 complete records. `add --key glass --page 41 --text "Invented evidence."` prints
 an id and canonical forms `[@x:ID]` and `[@KEY#ID]`; `add --remark "Check this inference."` needs no source.
-`remove` refuses a cited record without `--force`; `--detach` and `--problems`
-await later phases. `sources add KEY FILE --pages '[[2,"41"]]'` records a source;
+`remove --detach` rewrites citations before deletion. `remove --force` leaves
+markers in place. `--problems` awaits excerpt checks. `sources add KEY FILE --pages '[[2,"41"]]'` records a source;
 `sources match [DIR]` proposes matches (`--apply` only for unambiguous exact
 evidence). PDF reading needs optional pypdf. `export [-o FILE]` is a private
 Markdown review sheet containing passages and notes.
@@ -107,12 +107,19 @@ Markdown review sheet containing passages and notes.
 `pdfmd-options.excerpts` names the record file relative to the file setting it;
 `off` disables discovery. Otherwise it is the nearest `excerpts.json` beside the
 document, in `metadata/`, then parent/folder layers. Records keep unknown fields,
-use monotonically increasing ids and are written atomically under a lock. This
-phase changes no build. `where` reads either `:` or `#` in both forms and reports
+use monotonically increasing ids and are written atomically under a lock.
+`where` reads either `:` or `#` in both forms and reports
 canonical markers. Set `pdfmd-options.excerpt-prefix` in any settings layer or
 through `--setup` (default `x`). Use letters, digits, hyphens or underscores.
 The cross-reference prefixes `fig`, `tbl`, `eq`, `sec` and `lst` are reserved.
-Source PDFs are never written. Keep passages and review exports local.
+Builds in the pdfmd and Obsidian flavours resolve markers against the record
+file before citation processing. Real bibliography keys take precedence.
+Set `pdfmd-options.excerpt-page-terms` (default `[p., pp.]`) to change generated
+locators. Use `--no-auto excerpts` to disable resolution. Run
+`pdfmd --excerpts detach --all draft.md` or specify IDs before the Markdown
+files to write plain citations. Source exports and attachments do this
+automatically. Builds never copy record passages, notes, quotation details or
+coordinates. Source PDFs and review exports stay local.
 
 ## When a build fails
 

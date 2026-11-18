@@ -1464,6 +1464,8 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
         raise SystemExit(f"{md_path}: the native renderers read Markdown only; this input needs Pandoc "
                          "(and a LaTeX/Typst/HTML engine, or soffice) -- see `pdfmd --check-dependencies`.")
     text = core.obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files)
+    text = core.deferred("pdfmd_excerpts.detach", "text_for")(
+        md_path, metadata_files, text, core.effective_no_auto(md_path, core.NO_AUTO_CLI), from_format)
     if "[" in text:
         core.deferred("pdfmd_excerpts.pagecite", "native_note")(md_path, metadata_files, text)
     attempts: list[str] = []

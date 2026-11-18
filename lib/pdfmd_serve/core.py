@@ -125,7 +125,8 @@ class Core:
 
     def __init__(self, root: Path, pick_main: Optional[Callable] = None, discover: Optional[Callable] = None,
                  write_bytes: Optional[Callable] = None, which: Callable = shutil.which, display: Optional[Callable] = None,
-                 filters: Optional[Callable] = None, places: Optional[Callable] = None):
+                 filters: Optional[Callable] = None, places: Optional[Callable] = None,
+                 render_text: Optional[Callable] = None):
         self.root = Path(root).resolve()
         self.pick_main = pick_main or (lambda root: (None, "not asked"))
         self.discover = discover or (lambda root, main: [])
@@ -134,6 +135,7 @@ class Core:
         self.display = display or str
         self.filters = filters or self._no_filters
         self.places = places or (lambda: [])
+        self.render_text = render_text
         self.lock = threading.Lock()
 
     # ---- dispatch ---------------------------------------------------------------------------------------------------------------
@@ -318,6 +320,7 @@ class Core:
                 said = io.StringIO()
                 with contextlib.redirect_stderr(said):
                     arguments = stack.enter_context(self.filters(document, metadata))
+                    rendered_text, remap = self.render_text(document, metadata, text) if self.render_text else (text, None)
                 warning_text = said.getvalue()
                 if not body.get("path") or document != path:
                     original = path.name if body.get("path") else "document.md"
@@ -326,7 +329,7 @@ class Core:
                 command += [str(item) for item in (arguments or [])]
                 # the filters open only what is inside the project (and pdfmd's own places): a name in the text is not a way out of it
                 extra, environment = stack.enter_context(contained(self.root, command, list(self.places())))
-                done = pandoc_run(command + extra, input=text.encode("utf-8"), capture_output=True, cwd=str(folder),
+                done = pandoc_run(command + extra, input=rendered_text.encode("utf-8"), capture_output=True, cwd=str(folder),
                                       timeout=RENDER_TIMEOUT, env=environment)
         except subprocess.TimeoutExpired:
             raise ApiError(504, "timeout", f"pandoc did not answer in {RENDER_TIMEOUT} s") from None
@@ -339,7 +342,7 @@ class Core:
                            log=errors, seconds=seconds)
         html = strip_wrappers(done.stdout.decode("utf-8", "replace"))
         html = self.preview_images(html, folder)
-        html = POSITION.sub(lambda m: f'data-pos="{source}@{m.group(1)}"', html)
+        html = POSITION.sub(lambda m: f'data-pos="{source}@{remap(m[1]) if remap else m[1]}"', html)
         # pandoc 3.13 prefers --math-method, older ones do not know it; pandoc 3.1.3 gives a list item two positions and warns about its own second one
         warnings = notes + [line for line in errors.splitlines() if not any(noise in line for noise in PANDOC_NOISE)]
         return 200, {"html": html, "seconds": seconds, "engine": "pandoc", "warnings": warnings}

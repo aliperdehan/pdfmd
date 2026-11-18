@@ -150,13 +150,15 @@ def build_parser() -> argparse.ArgumentParser:
                         help="print the newest record of FILE's build (see --build-log)")
     parser.add_argument("--failed", action="store_true", help="with --last-build: the newest record of a build that failed")
     parser.add_argument("--excerpts", nargs=argparse.REMAINDER, metavar="ACTION ...",
-                        help="manage the project's local excerpt records: list, show, add, edit, remove, sources, where, export; "
+                        help="manage the project's local excerpt records: list, show, add, edit, remove, sources, where, export, detach; "
                              "takes the rest of the command line. --json on every action; --in PATH selects a document or folder. "
                              "pdfmd-options.excerpts names the record file relative to its naming file; off disables discovery. "
                              "Default: nearest excerpts.json beside the document, in metadata/, then parent/folder layers. "
                              "pdfmd-options.excerpt-prefix (default x; --setup) sets the short marker prefix. "
                              "Both : and # are read in either form; canonical forms are @x:ID and @KEY#ID. "
-                             "No build changes yet. `pdfmd --excerpts --help` lists command options")
+                             "Builds resolve citations using the local record. pdfmd-options.excerpt-page-terms sets the singular and "
+                             "plural page terms (p., pp. by default; --setup). Markup kind: excerpts. "
+                             "`pdfmd --excerpts --help` lists command options")
     parser.add_argument("--serve", nargs="?", const="", metavar="FOLDER",
                         help="the web UI's local server for the project FOLDER (default: the working folder): 127.0.0.1, a random port, "
                              "a token. Prints one JSON line {api, url, port, token, root}; open the url. Stops with Ctrl-C")
@@ -591,7 +593,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "quote with a bold title (the rest); toc ([TOC], [[_TOC_]], <!-- toc -->) is the table "
                              "of contents where it stands; center (<center>, <div align=center>, ::: center) centres the "
                              "text; highlight (==text==) marks it; underline (<u>text</u>) underlines it; keep (::: keep) holds blocks on one page; landscape (::: landscape) puts them on landscape pages; appendix (\\appendix, <!-- appendix -->, "
-                             "{.appendix}) letters the sections after it; pagecite ([p. 5]) uses the previous citation (requires --pagecite MODE); space (\\vspace{1cm}, \\bigskip, <br>) is vertical space; bare: all kinds. On, except space, in the pdfmd and obsidian flavours (off with flavour: pandoc); also "
+                             "{.appendix}) letters the sections after it; pagecite ([p. 5]) uses the previous citation (requires --pagecite MODE); excerpts ([@x:1]) resolves local excerpt records; space (\\vspace{1cm}, \\bigskip, <br>) is vertical space; bare: all kinds. On, except space, in the pdfmd and obsidian flavours (off with flavour: pandoc); also "
                              "pdfmd-options.markup (true, false or a list) and pdfmd --setup")
     parser.add_argument("--show-hidden", action="store_true", default=None,
                         help="print plain hide blocks and spans (off by default); calc hide stays silent. "
@@ -903,7 +905,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "back through Pandoc), typstdirect / htmldirect (a .typ / .html file is built by Typst / WeasyPrint "
                              "or a browser directly; off, it goes through Pandoc), pdfimages (PDF images in HTML builds), diagrams (```mermaid / ```d2 / ```dot blocks drawn by their tool), smiles (```smiles / ::: smiles blocks drawn as chemical structures), mathjax (MathJax typesets the math of WeasyPrint PDFs; off, KaTeX or text does), texpackages (mhchem or siunitx loaded for a document that uses \\ce or \\SI and does not load them), draftpictures (the draft pass of seed-labels: draft does not draw TikZ, chemfig or images), remotecsl (a csl: style named by URL fetched once and kept, with Pandoc's own csl/ folder and its default style as fallbacks), svg / remoteimages (SVG "
                              "converted, and remote images fetched, for LaTeX builds), crossref (the auto-detected --filter pandoc-crossref "
-                             "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), citationengine (a document's own "
+                             "for @fig:/@eq:/@tbl:/@sec:/@lst: syntax), excerpts (local excerpt citations), citationengine (a document's own "
                              "pdfmd-options.citation-engine setting -- see 'Output formats' in --doc reference; disabling this KIND always means plain --citeproc), csvtable "
                              "(the .csv-div table inclusion -- see 'CSV/TSV table inclusion' in --doc reference), papersize (a document's own pagesize: front-matter key, "
                              "auto-translated to Pandoc's real papersize: variable since pagesize: alone "

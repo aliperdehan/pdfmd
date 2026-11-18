@@ -88,7 +88,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                                csv_filter: Path, no_auto: list[str] | None,
                                verbose: bool, labels: str = "off", title_source: Path | None = None,
                                part_files: list[Path] | tuple = (), partial: bool = False,
-                               selection=None) -> tuple[bool, str]:
+                               selection=None, named_reader=None) -> tuple[bool, str]:
     """The "soffice" PDF-engine fallback: Pandoc -> .docx -> headless
     LibreOffice -> PDF (the same Word file `-o x.docx` writes: template, native equations and tables, pictures
     for what LaTeX alone can draw; `labels` says where reference numbers come from, see office_label_data). Deliberately skips every LaTeX-only concern
@@ -108,7 +108,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
 
         def note(kind: str, detail: str) -> None:
             core.vprint(verbose, f"AUTO {kind}  {detail}")
-        with core.prepared_latex_inputs([title_source or md_path, *core.pandoc_metadata_order(metadata_files)], False, drop_embedded_preamble=True) as prepared:
+        with core.prepared_latex_inputs([title_source or md_path, *core.pandoc_metadata_order(metadata_files)], False, drop_embedded_preamble=True, named_reader=named_reader) as prepared:
             source, *prepared_metadata = prepared
             cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(odt), "-t", "docx"]
             if effective_from:
@@ -121,13 +121,18 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += core.resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
             for variable in variables:
                 cmd += ["-V", variable]
-            cmd += core.document_filter_args(md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
-                                        crossref_sources=[md_path, *part_files], cellalign_early=True)
+            sources = [md_path, *part_files]
+            cmd += core.document_filter_args(sources, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
+                                            cellalign_early=True, named_reader=named_reader)
             cmd += core.select_filter_args(selection)
-            if core.contains_citations(md_path) and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
+            any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
+                sources, metadata_files, pandoc_options, no_auto, named_reader)
+            if any_citations is None:
+                any_citations = core.contains_citations(md_path)
+            if any_citations and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
                 cmd.append("--citeproc")
             cmd += core.csl_args(
-                [md_path], metadata_files, pandoc_options, no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
+                sources, metadata_files, pandoc_options, no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
             cmd += core.fullcite_post_args(md_path, metadata_files, cmd, pandoc_options)      # after citeproc
             cmd += core.bibliography_indent_args(md_path, metadata_files, cmd, pandoc_options, "docx")
             # pandoc_options after --citeproc: any --lua-filter/--filter a caller

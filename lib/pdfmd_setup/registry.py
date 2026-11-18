@@ -42,6 +42,7 @@ UNSET = {
     "options.figure-fit": "on: fit images and their captions to one page",
     "options.pagecite-terms": "p., pp.",
     "options.excerpt-prefix": "x",
+    "options.excerpt-page-terms": "p., pp.",
     "options.bibliography-indent": "the writer's own (1.5em in Typst, which had none)",
     "options.bibliography-line-spacing": "off, writer defaults",
     "colorlinks": "off", "toc": "off",
@@ -149,6 +150,7 @@ AUTO_HELP = {
     "texdirect": "compile .tex directly with LaTeX", "officedirect": "convert office files with LibreOffice",
     "svg": "convert SVG images for LaTeX", "remoteimages": "fetch and keep remote images", "pdfimages": "show PDF images in HTML builds (as SVG)", "texpackages": "load mhchem/siunitx when \\ce or \\SI needs it", "draftpictures": "skip the pictures in the draft pass for part numbers", "remotecsl": "fetch a csl: style named by URL", "mathjax": "MathJax for the math of WeasyPrint PDFs (KaTeX or text instead)", "typstdirect": "build .typ files with Typst directly", "htmldirect": "build .html files with WeasyPrint or a browser directly",
     "pagecite": "bare page markers after citations",
+    "excerpts": "local excerpt citation markers",
     "crossref": "pandoc-crossref for @fig: references", "citationengine": "citeproc / biblatex choice",
     "csvtable": "tables from CSV files", "papersize": "fix `pagesize:` to `papersize:`", "parts": "report/book parts",
     "lookup": "find a document by a name that is not exact", "unicode": "fonts for other scripts",
@@ -171,6 +173,7 @@ MARKUP_CHOICES = (
     ("appendix", "\\appendix, <!-- appendix -->, {.appendix}: the sections after it lettered A, B (LaTeX, Typst; with --number-sections)"),
     ("fullcite", "[@key]{.fullcite}, [[fullcite:key]], ::: fullcite: the formatted reference of a source where it stands (citeproc)"),
     ("pagecite", "[p. 5] after a citation: that source’s page (off unless pagecite: auto or a mode is set)"),
+    ("excerpts", "[@x:1] uses the source and locator from excerpts.json"),
     ("space", "\\vspace{1cm}, \\bigskip, <br><br>, #v(1cm) alone on a line: vertical space in every format"),
 )
 
@@ -306,6 +309,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "Citations", check="list"),
         text("options.excerpt-prefix", "Short excerpt marker prefix",
              "One word of letters, digits, - or _. Reserved: fig, tbl, eq, sec, lst.", "Citations"),
+        text("options.excerpt-page-terms", "Excerpt page terms",
+             "The singular and plural locator terms, e.g. p., pp.", "Citations", check="list"),
         choice("options.fullcite-list", "The combined reference list when entries were placed with `[@key]{.fullcite}`",
                (("rest", "the placed entries leave it (the list goes when none is left)"), ("all", "it stays whole"),
                 ("none", "no combined list")), "rest",

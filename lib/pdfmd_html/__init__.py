@@ -197,13 +197,16 @@ def weasyprint_math_args(engine: str, pandoc_options: list[str], body_font: str 
     return out + ["--lua-filter", str(shipped)]
 
 
-def ascii_table_transform(md_path: Path, metadata_files: list[Path], parts: list[Path]) -> "Callable[[str, Path], str] | None":
+def ascii_table_transform(md_path: Path, metadata_files: list[Path], parts: list[Path], named_reader=None) -> "Callable[[str, Path], str] | None":
     """The ``transform`` of scaffold_inputs() that repairs the ASCII tables of a part (the document's own setting), or None."""
     if not parts:
         return None
     mode = core.table_ascii_mode(md_path, list(metadata_files))
 
     def transform(text: str, part: Path) -> str:
+        if "@-" in text:
+            text = core.deferred("pdfmd_excerpts.resolution", "protect_hyphen_prefix")(
+                text, md_path, metadata_files, core.effective_no_auto(md_path, core.NO_AUTO_CLI), named_reader)
         if "\\[" in text:
             text = core.deferred("pdfmd_excerpts.pagecite", "protect_escapes")(text, md_path, metadata_files)
         if mode != "off":

@@ -97,3 +97,26 @@ def bibliography(document, metadata):
             for key, item in parsed[0]:
                 result.setdefault(key, (item, path.parent))
     return result
+
+
+class PrivatePaths:
+    """The active record's identity and basename are both private to the project."""
+    def __init__(self):
+        self.paths = set()
+        self.names = {"excerpts.json"}
+
+    def contains(self, path):
+        return path.name in self.names or path.resolve() in self.paths
+
+
+def private_paths(sources, metadata):
+    private = PrivatePaths()
+    for document in sources:
+        try:
+            path = discover(document, list(metadata))
+        except RecordError:
+            continue
+        if path.is_file():
+            private.paths.add(path.resolve())
+            private.names.add(path.name)
+    return private

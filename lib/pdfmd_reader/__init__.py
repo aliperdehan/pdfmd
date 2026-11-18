@@ -42,8 +42,13 @@ def markdown_features(md_path: Path) -> tuple[bool, bool] | None:
             command = [pandoc, "-f", "markdown", "-t", "json"]
             if core.md_macro_in(text):
                 # the Markdown inside `\md{...}` is part of the document: a citation there needs --citeproc
-                import pdfmd_lua
-                shipped = pdfmd_lua.path("md_macro")
+                try:
+                    import pdfmd_lua
+                except ImportError:
+                    core.pdfmd_lua_missing()
+                    shipped = None
+                else:
+                    shipped = pdfmd_lua.path("md_macro")
                 if shipped is not None:
                     command += ["--lua-filter", str(shipped)]
             done = pandoc_run(command, input=text, capture_output=True,
@@ -328,7 +333,9 @@ def pdfmd_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str | 
         names = ", ".join(metadata_file.name for metadata_file in linked_files)
         return None, (f"{md_path}: no YAML front matter, but {names} is linked; "
                       "keeping the default markdown reader instead of gfm")
-    if contains_citations(md_path):
+    if contains_citations(md_path) or ("@-" in text and core.deferred(
+            "pdfmd_excerpts.resolution", "protect_hyphen_prefix")(
+                text, md_path, metadata_files, core.effective_no_auto(md_path, core.NO_AUTO_CLI)) != text):
         return None, (f"{md_path}: no YAML front matter, but it uses @citation syntax "
                       "gfm can't parse; keeping the default markdown reader")
     if core.ORG_CAPTION_RE.search(text) and core.table_ascii_mode(md_path, list(metadata_files)) == "repair":
