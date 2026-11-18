@@ -362,7 +362,7 @@ class CommandLine(unittest.TestCase):
             ("typst", "typ", ("<sample>", "#link(<sample>)", "Alpha/one")),
             ("markdown", "markdown", ("{#sample}", "](#sample)", "{.tag}")),
             ("docx", "docx", ("sample", "Alpha/one")),
-            ("odt", "odt", ('xlink:href="#sample"', "Alpha/one")),
+            ("odt", "odt", ("Alpha/one",)),
             ("plain", "txt", ("#Alpha/one", "#café", "Nested link")),
         ):
             with self.subTest(target=target):
@@ -377,6 +377,8 @@ class CommandLine(unittest.TestCase):
                     output = path.read_text(encoding="utf-8")
                 for token in expected:
                     self.assertIn(token, output)
+                if target == "odt":                 # LibreOffice's route puts "_" before a bookmark name, Pandoc's does not
+                    self.assertRegex(output, r'xlink:href="#_?sample"')
                 self.assertNotIn("^sample", output)
                 self.assertNotIn("^nested", output)
                 if target == "html":

@@ -39,7 +39,7 @@ Pre-edit state: commit `1a29f91`. Obsidian paragraph IDs printed as
 text and wikilinks to those IDs had no destination. Give paragraph IDs
 Pandoc anchors and resolve them in the same note, in joined parts and in a
 separate note's output. Keep tags visible as tagged spans and retain the
-existing YAML property metadata alongside pdfmd's settings.
+existing YAML property metadata alongside pdfmd's settings. Fix before release: the ODT test accepts the `_` LibreOffice puts before a bookmark name (`#_sample`) as well as Pandoc's own `#sample`; the link and its bookmark match either way.
 
 - Synthetic regressions cover ID collisions between parts, inline and nested
   tags, protected code and URL fragments, the flavour switch, and HTML,
