@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import copy
+import io
 import os
 from pathlib import Path
 import shutil
@@ -46,6 +47,68 @@ class CommandFixture:
 
 
 class Commands(CommandFixture, unittest.TestCase):
+    def test_list_defaults_to_aligned_record_fields_and_keeps_full_json(self):
+        records = [
+            {"id": 2, "kind": "remark", "note": "Remark canary"},
+            {"id": 1, "key": "glass", "page": "iv", "kind": "area", "label": "Table\n4", "locator": "ch. 3",
+             "file": "si", "created": "2026-11-18", "quoting": "Quotation canary", "note": "Note canary",
+             "parts": [{"text": "Passage canary"}], "future": "Extension canary"},
+        ]
+        self.write("excerpts.json", json.dumps({"pdfmd-excerpts": 1, "next-id": 3, "sources": {}, "excerpts": records}))
+        plain = self.raw("list")
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        header, first, second = plain.stdout.splitlines()
+        self.assertEqual(header.split(), ["id", "key", "page", "kind", "locator", "label", "file", "created"])
+        for column, value in (("id", "1"), ("key", "glass"), ("page", "iv"), ("kind", "area"),
+                              ("locator", "ch. 3"), ("label", "Table 4"), ("file", "si"), ("created", "2026-11-18")):
+            self.assertTrue(first[header.index(column):].startswith(value))
+        self.assertEqual(second.split(), ["2", "remark"])
+        self.assertEqual(second.index("remark"), header.index("kind"))
+        self.assertNotIn("canary", plain.stdout)
+        compact = self.raw("list", "--json")
+        self.assertEqual(compact.returncode, 0, compact.stderr)
+        self.assertEqual(compact.stdout, json.dumps(list(reversed(records)), ensure_ascii=False) + "\n")
+
+    def test_list_empty_and_text_filters(self):
+        self.write("excerpts.json", '{"pdfmd-excerpts":1,"next-id":1,"sources":{},"excerpts":[]}')
+        self.assertEqual(self.raw("list").stdout, "No excerpt records.\n")
+        self.command("add", "--key", "glass", "--page", "24")
+        self.command("add", "--key", "glass", "--page", "25")
+        self.command("add", "--key", "clay", "--page", "26")
+        self.write("draft.md", "See [@glass#1].")
+        for options, expected in ((("--key", "glass"), ["1", "2"]), (("--unused",), ["2", "3"]),
+                                  (("--key", "glass", "--unused"), ["2"])):
+            with self.subTest(options=options):
+                result = self.raw("list", *options)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual([row.split()[0] for row in result.stdout.splitlines()[1:]], expected)
+        self.assertEqual(self.raw("list", "--key", "missing").stdout, "No excerpt records.\n")
+
+    def test_list_fits_terminal_cells_and_keeps_one_line_per_record(self):
+        from pdfmd_ansi.text import text_width
+        from pdfmd_excerpts.cli import command
+
+        self.command("add", "--key", "glass", "--page", "iv", "--label", "漢字" * 30 + "\nsecond line")
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as output, \
+                mock.patch.object(output, "isatty", return_value=True), \
+                mock.patch("shutil.get_terminal_size", return_value=os.terminal_size((36, 24))):
+            self.assertEqual(command(["list", "--in", str(self.root)]), 0)
+            header, row = output.getvalue().splitlines()
+        self.assertEqual(header.split(), ["id", "key", "page", "kind", "label"])
+        self.assertIn("漢字", row)
+        self.assertTrue(row.endswith("…"))
+        self.assertLessEqual(text_width(row), 36)
+
+    def test_list_uses_utf8_and_eighty_columns_on_a_pipe(self):
+        self.command("add", "--key", "glass", "--label", "Выдуманный " * 15)
+        with mock.patch.dict(os.environ, {"PYTHONIOENCODING": "cp1252", "COLUMNS": "20"}):
+            result = self.raw("list")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        _, row = result.stdout.splitlines()
+        self.assertIn("Выдуманный", row)
+        self.assertTrue(row.endswith("…"))
+        self.assertEqual(len(row), 80)
+
     def test_add_show_and_delete_never_reuses_id(self):
         added = self.command("add", "--key", "glass", "--page", "24", "--text", "An invented passage.")
         self.assertEqual(added["id"], 1)
@@ -144,7 +207,7 @@ class Commands(CommandFixture, unittest.TestCase):
         self.assertEqual((self.root / "review.md").read_text(encoding="utf-8"), review)
         self.assertEqual(self.raw("export").stdout, review)
         self.command("export", "-o", "excerpts.json", code=1)
-        for args in (("list",), ("show", "1"), ("where", "1"), ("sources",), ("edit", "1", "--note", "Revised")):
+        for args in (("show", "1"), ("where", "1"), ("sources",), ("edit", "1", "--note", "Revised")):
             with self.subTest(args=args):
                 result = self.raw(*args)
                 self.assertEqual(result.returncode, 0, result.stderr)

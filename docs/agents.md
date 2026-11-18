@@ -90,7 +90,9 @@ and links stay literal; the native tier leaves markers with one NOTE.
 `add`, `edit ID`, `remove ID`, `sources`, `where ID`, `export`. It consumes the
 rest of the command line; each action accepts `--json` and `--in PATH` (document
 or folder). Exit codes: 0 success, 1 problems/file failure, 2 usage. JSON failures
-answer `{error}`. `add --key glass --page 41 --text "Invented evidence."` prints
+answer `{error}`. `list` prints a compact table of record fields with long values
+shortened to fit the terminal (80 columns in a pipe). Use `list --json` for the
+complete records. `add --key glass --page 41 --text "Invented evidence."` prints
 an id and marker forms; `add --remark "Check this inference."` needs no source.
 `remove` refuses a cited record without `--force`; `--detach` and `--problems`
 await later phases. `sources add KEY FILE --pages '[[2,"41"]]'` records a source;

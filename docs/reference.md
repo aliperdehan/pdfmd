@@ -949,6 +949,7 @@ read the file or resolve its markers yet. Source PDFs are never written.
 pdfmd --excerpts add --key glass --page 41 --text "An invented passage."
 pdfmd --excerpts add --key glass --page iv --label abstract
 pdfmd --excerpts add --remark "Check this inference."
+pdfmd --excerpts list
 pdfmd --excerpts list --key glass --json
 pdfmd --excerpts show 1
 pdfmd --excerpts edit 1 --note "Compare the second table."
@@ -966,8 +967,12 @@ Use `pdfmd --excerpts ACTION --help` for its options. Success exits 0, a problem
 or file failure 1, invalid usage 2. JSON answers are arrays for `list`, `where`,
 `sources` and matching proposals, a record for `show`/`edit`, `{id, markers}` for
 `add`, `{removed}` for `remove`, `{markdown}` for `export`, and `{error}` on failure.
+Plain `list` prints a table with one row per record, showing id, key, page and
+kind, plus locator, label, supplement and creation date when present. It
+shortens long values with `…` to fit the terminal (80 columns in a pipe).
+`--key` and `--unused` filter the table. Use `--json` for the complete records.
 Plain `add` prints the id and `[@x:ID]`, `[@KEY#ID]` (a remark has only the short
-form). Other plain answers are indented JSON; plain `export` prints Markdown.
+form). Plain `export` prints Markdown. The remaining actions print indented JSON.
 
 Discovery uses `pdfmd-options: {excerpts: PATH}` first, relative to the file
 that names it (document, metadata, folder config, global config in that order).

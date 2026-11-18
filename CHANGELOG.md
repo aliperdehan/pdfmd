@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.2 — 2026-11-18
+
+Pre-edit state: commit `d21d360`.
+
+`--excerpts list` defaulted to indented JSON, which made it hard to scan the records. Print a table of record fields,
+with aligned columns, an ellipsis when a value exceeds its terminal width, and one message for an empty result.
+Passages and notes stay in the complete records returned by `--json`, whose compact output is preserved. Regression
+tests cover field alignment, complete JSON, empty files, key and unused filters, wide characters and UTF-8 on pipes.
+`pdfmd.py` stays at 785 lines (version only).
+
 ## v3.34.1 — 2026-11-18
 
 Pre-edit state: commit `e07cf95`.

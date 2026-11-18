@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shutil
 import sys
 
 from pdfmd_base import core
@@ -35,6 +36,7 @@ def parser():
     for action in ("list", "show", "where", "add", "edit", "remove", "sources", "export"):
         sub = actions.add_parser(action, parents=[common])
         if action == "list":
+            sub.description = "List excerpt records as a table. Use --json for complete records."
             sub.add_argument("--key")
             sub.add_argument("--unused", action="store_true")
             sub.add_argument("--problems", action="store_true", help="requires the P1d checks (not available yet)")
@@ -279,6 +281,45 @@ def execute(args, arguments):
     return {"markdown": result}
 
 
+def print_records(records):
+    """Print a compact record index, using terminal cells for alignment and clipping."""
+    if not records:
+        print("No excerpt records.")
+        return
+
+    from pdfmd_ansi.text import char_width, clean, text_width
+
+    def shorten(value, width):
+        if text_width(value) <= width:
+            return value
+        remaining = width - 1  # reserve a cell for the ellipsis
+        for end, char in enumerate(value):
+            remaining -= char_width(char)
+            if remaining < 0:
+                return value[:end] + "…"
+
+    # Use only known summary fields. Passages, annotations and unknown extensions stay in the full record.
+    fields = ["id", "key", "page", "kind"]
+    fields += [key for key in ("locator", "label", "file", "created") if any(key in record for record in records)]
+    rows = [fields] + [[clean(" ".join(str(record.get(key, "")).split())) for key in fields] for record in records]
+    natural = [max(map(text_width, column)) for column in zip(*rows)]
+    width = shutil.get_terminal_size().columns if sys.stdout.isatty() else 80
+    widths = list(map(len, fields))
+    gaps = len(fields) - 1
+    gap = "  " if sum(widths) + 2 * gaps <= width else " "
+    available = max(len(fields), width - len(gap) * gaps)
+    if sum(widths) > available:
+        widths = [1] * len(fields)
+    for _ in range(min(available, sum(natural)) - sum(widths)):
+        column = min((i for i in range(len(fields)) if widths[i] < natural[i]), key=widths.__getitem__)
+        widths[column] += 1
+
+    for row in rows:
+        cells = [shorten(value, limit) for value, limit in zip(row, widths)]
+        line = gap.join(value + " " * (limit - text_width(value)) for value, limit in zip(cells, widths))
+        print(shorten(line.rstrip(), width))
+
+
 def command(arguments):
     # Records and answers are UTF-8 (passages in any script): a pipe on Windows is the ANSI code page otherwise, which
     # cannot write Cyrillic or Greek and makes `—` a byte no UTF-8 reader takes (as `pdfmd --doc` already does)
@@ -305,6 +346,8 @@ def command(arguments):
         return code
     if want_json:
         print(json.dumps(answer, ensure_ascii=False))
+    elif args.action == "list":
+        print_records(answer)
     elif args.action == "export":
         if not args.out:
             print(answer["markdown"], end="")
