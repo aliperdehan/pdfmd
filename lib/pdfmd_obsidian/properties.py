@@ -44,18 +44,24 @@ def _paragraph_end(text, end, prefix):
     return not body.strip() or bool(_NEXT_BLOCK.match(body) or _LIST_ITEM.match(body))
 
 
-def syntax_matches(text):
-    """Find source markers without entering protected Markdown constructs."""
+def source_matches(text, scanner):
+    """Scan for protected constructs and source markers in reading order."""
     spans = iter(_indented_code(text))
     span = next(spans, None)
     cursor = 0
-    while match := _SYNTAX.search(text, cursor):
+    while match := scanner.search(text, cursor):
         while span and span[1] <= match.start():
             span = next(spans, None)
         if span and span[0] <= match.start() < span[1]:
             cursor = max(match.end(), span[1]) if match.lastgroup in ("front", "fence", "container_fence") else span[1]
             continue
         cursor = match.end()
+        yield match
+
+
+def syntax_matches(text):
+    """Find source markers without entering protected Markdown constructs."""
+    for match in source_matches(text, _SYNTAX):
         if match.lastgroup not in ("block", "tag"):
             continue
         start = text.rfind("\n", 0, match.start()) + 1

@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.34.29 — 2026-11-19
+
+Pre-edit state: commit `4848eea`. The callout filter treated both fold
+markers as ordinary open callouts and Pandoc printed extra task markers
+as bracketed text. Obsidian callouts now use HTML details with their
+specified initial state and print open. Custom callouts keep the note
+style and their own title. Extra task statuses use a box containing the
+status character, or a plain checkbox followed by that character.
+
+- Synthetic builds cover folded and open states, custom types, nested
+  tasks, literal code, the flavour switch and the writer fallbacks.
+  Use the shared core import in the Obsidian link module as required by
+  the split check. The launchpad stays at 785 lines.
+
 ## v3.34.28 — 2026-11-18
 
 Pre-edit state: commit `1a29f91`. Obsidian paragraph IDs printed as

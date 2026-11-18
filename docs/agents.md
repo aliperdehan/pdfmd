@@ -175,6 +175,8 @@ In the Obsidian flavour, wikilinks can target local headings, other parts of the
 A missing note produces a warning and leaves the display text.
 Use `[[#^id]]` or `[[Note#^id]]` to link to a paragraph ending in `^id`. Inline tags stay visible and Obsidian's YAML
 properties remain available as metadata.
+Obsidian callouts with `-` or `+` after the type fold in HTML and print open. Extra task statuses keep the
+status character. `--no-markup` leaves the callout and task syntax as written.
 
 Use `pdfmd-options: {dialect-detect: deep}` for GFM-style blocks that follow prose in documents with front matter,
 or for a leading Hugo-style TOML metadata block. The default `basic` warns about TOML and keeps it in the body.

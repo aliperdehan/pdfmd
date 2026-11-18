@@ -70,8 +70,14 @@ local function callout_of_quote(quote)
   local first = quote.content[1]
   if not first or (first.t ~= "Para" and first.t ~= "Plain") then return nil end
   local head = first.content[1]
-  if not head or head.t ~= "Str" then return nil end
-  local word = head.text:match("^%[!([%w_%-]+)%]%s*[%-%+]?$")
+  if not head then return nil end
+  local word, fold
+  if head.t == "Str" then
+    word = head.text:match("^%[!([%w_%-]+)%]%s*[%-%+]?$")
+  elseif head.t == "Span" then
+    fold = head.classes[1] and head.classes[1]:match("^pdfmd%-callout%-(%a+)$")
+    if fold == "open" or fold == "closed" then word = head.attributes.type end
+  end
   if not word then return nil end
   local kind = CALLOUT[word:lower()] or "note"
   local title, index = pandoc.Inlines({}), 2
@@ -89,7 +95,7 @@ local function callout_of_quote(quote)
     body[#body + 1] = pandoc.Para(rest)
   end
   for position = 2, #quote.content do body[#body + 1] = quote.content[position] end
-  return kind, (#title > 0 and title or nil), body
+  return kind, (#title > 0 and title or nil), body, fold
 end
 
 -- (kind, title inlines or nil, body blocks) of a div that is a callout, else nil
@@ -113,7 +119,11 @@ local function callout_of_div(div)
   return kind, title, body
 end
 
-local function make_callout(kind, title, body)
+local function write_inlines(inlines, format)
+  return pandoc.write(pandoc.Pandoc({pandoc.Plain(inlines)}), format):gsub("%s+$", "")
+end
+
+local function make_callout(kind, title, body, fold)
   local format = FORMAT or ""
   local heading = pandoc.Para({pandoc.Strong(title or pandoc.Inlines({pandoc.Str(TITLE[kind])}))})
   local out = pandoc.Blocks({})
@@ -128,6 +138,13 @@ local function make_callout(kind, title, body)
     out[#out + 1] = heading
     out:extend(body)
     out[#out + 1] = pandoc.RawBlock("typst", "]")
+  elseif format:match("^html") and fold then
+    local open = fold == "open" and " open" or ""
+    out[#out + 1] = pandoc.RawBlock("html",
+      '<details class="callout callout-' .. kind .. '"' .. open .. '>\n<summary>'
+      .. write_inlines(heading.content, format) .. '</summary>')
+    out:extend(body)
+    out[#out + 1] = pandoc.RawBlock("html", "</details>")
   elseif format:match("^html") or format:match("^epub") then
     local inner = pandoc.Blocks({pandoc.Div({heading}, pandoc.Attr("", {"callout-title"}))})
     inner:extend(body)
@@ -138,6 +155,22 @@ local function make_callout(kind, title, body)
     out[#out + 1] = pandoc.BlockQuote(inner)
   end
   return out
+end
+
+local function task_status(span)
+  local code = tonumber(span.attributes.status)
+  if not code or code % 1 ~= 0 or code < 33 or code > 0x10FFFF then return nil end
+  local symbol = utf8.char(code)
+  local format = FORMAT or ""
+  local inlines = {pandoc.Str(symbol)}
+  if format:match("^html") or format:match("^epub") then
+    return pandoc.Span(inlines, pandoc.Attr("", {"task-status"}, {style = "border: 1px solid; padding-inline: .2em"}))
+  elseif format:match("^latex") or format == "beamer" then
+    return pandoc.RawInline("latex", "\\fbox{\\strut\\texttt{" .. write_inlines(inlines, "latex") .. "}}")
+  elseif format:match("^typst") then
+    return pandoc.RawInline("typst", '#box(stroke: black)[#raw(' .. string.format("%q", symbol) .. ')]')
+  end
+  return {pandoc.Str("☐"), pandoc.Space(), pandoc.Str(symbol)}
 end
 
 
@@ -752,10 +785,10 @@ function Pandoc(doc)
   local walked = doc:walk({
     BlockQuote = function(quote)
       if not on("callouts") then return nil end
-      local kind, title, body = callout_of_quote(quote)
+      local kind, title, body, fold = callout_of_quote(quote)
       if not kind then return nil end
       used.callouts = true
-      return make_callout(kind, title, body)
+      return make_callout(kind, title, body, fold)
     end,
     Inlines = function(inlines)
       local after
@@ -769,6 +802,7 @@ function Pandoc(doc)
       return after
     end,
     Span = function(span)
+      if span.classes[1] == "pdfmd-task" then return task_status(span) end
       -- Pandoc 3.12 with +mark (or a Span written by hand) keeps the class: <mark> in HTML-like writers, the writer's own elsewhere
       if on("highlight") and #span.classes == 1 and span.classes[1] == "mark" and #span.attributes == 0 and span.identifier == "" then
         return marked(span.content)

@@ -1310,6 +1310,12 @@ Inline `#tag` and `#parent/child` stay visible, with a `tag` span in writers tha
 and URL fragments keep their usual meaning. YAML properties such as `tags`, `aliases` and `cssclasses` remain document
 metadata alongside `title` and `pdfmd-options`. Note transclusions (`![[Note]]`) are still literal.
 
+In the Obsidian flavour, `> [!note]-` starts closed in HTML and `> [!note]+` starts open. Printed and other
+outputs show the full callout. Custom types use the note style with the supplied title or the type name.
+Task markers such as `- [/]`, `- [-]`, `- [>]`, `- [<]`, `- [?]` and `- [!]` draw the status in a box
+in HTML, LaTeX and Typst. Other writers keep the character beside a plain checkbox. Use `--no-markup`
+to keep the original callout and task syntax.
+
 The Obsidian and pdfmd flavours hide `%%comments%%` in single documents, report and book chapters, and split-document
 parts. `--show-comments` displays them as HTML comments or as the writer's comment boxes. Heading listings, section
 selection and citation detection ignore their contents. Percent delimiters in indented and fenced code stay literal.

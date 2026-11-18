@@ -230,22 +230,31 @@ def linked_inputs(inputs, sources, reader, metadata_files, target, output, title
         yield inputs, reader
         return
     texts = [path.read_text(encoding="utf-8-sig") for path in inputs]
+    kinds = core.markup_kinds(sources[0], metadata_files)
+    from pdfmd_obsidian.markup import callouts_and_tasks
+    try:
+        from pdfmd_lua import path as lua_path
+    except ImportError:
+        lua_path = None
+    fold = target in ("html", "html4", "html5") and "callouts" in kinds
+    styled = [callouts_and_tasks(text, fold) if enabled else text for enabled, text in zip(active, texts)] \
+        if kinds and lua_path and lua_path("markup") else texts
     matches = [list(syntax_matches(text)) if enabled and ("#" in text or "^" in text) else []
-               for enabled, text in zip(active, texts)]
-    if not any(matches) and not any(enabled and "[[" in text for enabled, text in zip(active, texts)):
+               for enabled, text in zip(active, styled)]
+    if styled == texts and not any(matches) and not any(enabled and "[[" in text for enabled, text in zip(active, texts)):
         yield inputs, reader
         return
     links = Links(sources, texts, reader, target, output, title_auto)
     if any(match.lastgroup == "block" for local in matches for match in local):
         links.headings = _read_headings(texts, reader)
-    marked, links.blocks = _block_syntax(texts, matches, links.headings or [])
+    marked, links.blocks = _block_syntax(styled, matches, links.headings or [])
     converted = []
     for enabled, path, text in zip(active, links.sources, marked):
         def destination(name, heading):
             return links.destination(path, name, heading)
 
         converted.append(wikilinks_as_text(text, destination).text if enabled else text)
-    if links.anchors or any(matches):
+    if links.anchors or any(matches) or styled != texts:
         reader = _span_reader(reader)
     with ExitStack() as stack:
         prepared = []

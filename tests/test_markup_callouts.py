@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -182,6 +183,71 @@ class Options(unittest.TestCase):
 
 @unittest.skipUnless(PANDOC, "needs Pandoc")
 class Build(unittest.TestCase):
+    def test_obsidian_folds_only_in_html_and_keeps_custom_titles(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = ("> [!sample]- Details\n> Closed body.\n\n"
+                      "> [!note]+\n> Open body.\n\n> [!custom]\n> Custom body.\n")
+            (root / "d.md").write_text(source, encoding="utf-8")
+            command = [sys.executable, str(ROOT / "scripts" / "pdfmd"), "d.md", "--no-stamp"]
+            for writer, expected in (
+                ("html", ('<details class="callout callout-note">', 'open>', '<summary><strong>Details</strong></summary>',
+                          "<strong>custom</strong>")),
+                ("latex", (r"\begin{pdfmdcallout}{pdfmd-note}", r"\textbf{Details}")),
+                ("typst", ("#block(width:", "#strong[Details]")),
+                ("markdown", ("> **Details**", "> **custom**")),
+                ("docx", ("Details", "Custom body.")),
+                ("odt", ("Details", "Custom body.")),
+                ("plain", ("Details", "Custom body.")),
+            ):
+                with self.subTest(writer=writer):
+                    filename = f"result.{writer}"
+                    done = subprocess.run([*command, "-t", writer, "-o", filename, "--flavour", "obsidian"],
+                                          cwd=root, capture_output=True, encoding="utf-8")
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    if writer in ("docx", "odt"):
+                        with zipfile.ZipFile(root / filename) as archive:
+                            output = archive.read("word/document.xml" if writer == "docx" else "content.xml").decode("utf-8")
+                    else:
+                        output = (root / filename).read_text(encoding="utf-8")
+                    for token in (*expected, "Closed body.", "Open body."):
+                        self.assertIn(token, output)
+                    self.assertEqual("<details" in output, writer == "html")
+            done = subprocess.run([*command, "-o", "off.html", "--flavour", "pdfmd"],
+                                  cwd=root, capture_output=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertNotIn("<details", (root / "off.html").read_text(encoding="utf-8"))
+
+    def test_obsidian_task_statuses_and_plain_fallback(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            statuses = "/-><?!"
+            source = "\n".join(f"- [{status}] Task {number}" for number, status in enumerate(statuses, 1))
+            source += "\n  - [/] Nested\n- [x] Done\n\n```md\n- [/] Literal\n```\n"
+            (root / "d.md").write_text(source, encoding="utf-8")
+            command = [sys.executable, str(ROOT / "scripts" / "pdfmd"), "d.md", "--no-stamp"]
+            for writer, token in (("html", 'class="task-status"'), ("latex", r"\fbox{\strut"),
+                                  ("typst", "#box(stroke: black)"), ("markdown", "[ ] /"),
+                                  ("plain", "☐ /")):
+                with self.subTest(writer=writer):
+                    filename = f"result.{writer}"
+                    done = subprocess.run([*command, "-t", writer, "-o", filename, "--flavour", "obsidian"],
+                                          cwd=root, capture_output=True, encoding="utf-8")
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    output = (root / filename).read_text(encoding="utf-8")
+                    self.assertIn(token, output)
+                    self.assertIn("Nested", output)
+                    if writer == "html":
+                        self.assertEqual(output.count(token), 7)
+                        self.assertRegex(output, r'class="task-status"\s+style=')
+                        self.assertIn("&lt;</span>", output)
+            done = subprocess.run([*command, "-o", "off.html", "--flavour", "pdfmd"],
+                                  cwd=root, capture_output=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            html = (root / "off.html").read_text(encoding="utf-8")
+            self.assertIn("[/] Task 1", html)
+            self.assertNotIn('class="task-status"', html)
+
     def test_a_build_with_code_still_has_the_box_environment(self):
         # pdfmd's own header files (the code header) replace metadata header-includes: the environment is in a header file of its own
         with tempfile.TemporaryDirectory() as folder:
