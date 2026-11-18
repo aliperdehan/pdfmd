@@ -26,7 +26,7 @@ markers as ordinary open callouts and Pandoc printed extra task markers
 as bracketed text. Obsidian callouts now use HTML details with their
 specified initial state and print open. Custom callouts keep the note
 style and their own title. Extra task statuses use a box containing the
-status character, or a plain checkbox followed by that character.
+status character, or a plain checkbox followed by that character. Fix before release: a folded callout after the first line of a quote crashed the build (the quote-prefix pattern was anchored to the start of the text, not to the line).
 
 - Synthetic builds cover folded and open states, custom types, nested
   tasks, literal code, the flavour switch and the writer fallbacks.

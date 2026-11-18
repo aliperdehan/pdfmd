@@ -10,7 +10,7 @@ from .properties import _CODE_IN_CONTAINER, source_matches
 
 _QUOTE = r"(?:[ \t]*>[ \t]?)*"
 _SPACE = r"(?=[ \t\r\n]|$)"
-_QUOTE_PREFIX = re.compile("^" + _QUOTE)
+_QUOTE_PREFIX = re.compile(_QUOTE)            # used with match(text, pos): anchored at pos, so no "^"
 _MARKERS = re.compile(
     _PROTECTED + "|" + _CODE_IN_CONTAINER
     + rf"|(?P<fold>^{_QUOTE}[ \t]*>[ \t]*(?P<callout>\[![A-Za-z0-9_-]+\])(?P<state>[-+]){_SPACE})"
