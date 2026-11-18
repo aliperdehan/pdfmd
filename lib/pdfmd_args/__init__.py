@@ -166,7 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--failed", action="store_true", help="with --last-build: the newest record of a build that failed")
     parser.add_argument("--excerpts", nargs=argparse.REMAINDER, metavar="ACTION ...",
                         help="manage the project's local excerpt records: list, show, add, edit, remove, sources, where, export, detach, "
-                             "check, reanchor, renumber, rekey; "
+                             "check, reanchor, renumber, rekey, import FILE.pdf --key KEY (add saved PDF annotations; --dry-run previews); "
                              "takes the rest of the command line. --json on every action; --in PATH selects a document or folder. "
                              "pdfmd-options.excerpts names the record file relative to its naming file; off disables discovery. "
                              "Default: nearest excerpts.json beside the document, in metadata/, then parent/folder layers. "

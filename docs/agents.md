@@ -92,7 +92,7 @@ and links stay literal; the native tier leaves markers with one NOTE.
 
 `pdfmd --excerpts ACTION` manages local source records: `list`, `show ID`,
 `add`, `edit ID`, `remove ID`, `sources`, `where ID`, `export`, `detach`, `check`,
-`reanchor KEY`, `renumber` and `rekey OLD NEW`. It consumes the
+`reanchor KEY`, `renumber`, `rekey OLD NEW` and `import FILE.pdf --key KEY`. It consumes the
 rest of the command line; each action accepts `--json` and `--in PATH` (document
 or folder). Exit codes: 0 success, 1 problems/file failure, 2 usage. JSON failures
 answer `{error}`. `list` prints a compact table of record fields with long values
@@ -105,6 +105,11 @@ markers in place. `list --problems` filters to records with warnings or errors.
 `sources match [DIR]` proposes matches (`--apply` only for unambiguous exact
 evidence). PDF reading needs optional pypdf. `export [-o FILE]` is a private
 Markdown review sheet containing passages and notes.
+
+Register the PDF before calling `--excerpts import FILE.pdf --key KEY`.
+Saved text markup and area annotations become excerpt records. On macOS,
+import also reads Skim's archived notes attribute. Use `--dry-run --json`
+to preview the records without writing them or reserving their IDs.
 
 `--check` verifies excerpt markers, source keys, locators and quotations
 without opening source PDFs. `--excerpts check --json` also checks PDF hashes

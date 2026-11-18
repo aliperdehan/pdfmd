@@ -19,6 +19,22 @@ same commit as the change.
 
 ---
 
+## v3.34.13 — 2026-11-18
+
+Pre-edit state: commit `eac1a4a`. Saved PDF annotations had to be copied
+into excerpt records by hand. `--excerpts import FILE.pdf --key KEY` now
+uses the registered file's page map, reads text markup and area annotations,
+and extracts marked text with the Poppler tool already used by reanchor.
+It also reads archived Skim notes on macOS, including bzip2-compressed
+attributes split across fragments. The existing record lock serialises
+imports, repeated positions are skipped, and `--dry-run` previews records
+without writing. The crop precision follows the record format's 0.1 points.
+Synthetic tests failed before import existed and now cover all six
+annotation types, partial words, a cover, rotated pages, a supplement,
+repeat imports, previews and a macOS Skim archive. Skim's separate
+plain-text attribute lacks boxes and is pending a decision on how to
+represent those records. `pdfmd.py` only changes its version.
+
 ## v3.34.12 — 2026-11-18
 
 Pre-edit state: commit `b78dbde`. Excerpt records and their source PDFs were

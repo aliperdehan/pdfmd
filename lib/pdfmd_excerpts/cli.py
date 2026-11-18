@@ -34,7 +34,7 @@ def parser():
                     formatter_class=argparse.RawDescriptionHelpFormatter)
     actions = result.add_subparsers(dest="action", required=True, parser_class=Parser)
     for action in ("list", "show", "where", "add", "edit", "remove", "sources", "export", "detach", "check",
-                   "reanchor", "renumber", "rekey"):
+                   "reanchor", "renumber", "rekey", "import"):
         sub = actions.add_parser(action, parents=[common])
         if action == "list":
             sub.description = "List excerpt records as a table. Use --json for complete records."
@@ -46,6 +46,10 @@ def parser():
         if action == "rekey":
             sub.add_argument("old")
             sub.add_argument("new")
+        if action == "import":
+            sub.add_argument("file", metavar="FILE.pdf")
+            sub.add_argument("--key", required=True, help="the key already registered for this source PDF")
+            sub.add_argument("--dry-run", action="store_true", help="preview the new records without writing")
         if action in ("show", "where", "edit", "remove"):
             sub.add_argument("id", type=int)
         if action in ("add", "edit"):
@@ -269,6 +273,9 @@ def execute(args, arguments):
             problems = project_checks(args.place, path, data)[0]
         return problem_answers(problems)
     path = discover(document, metadata, args.verbose)
+    if args.action == "import":
+        from .import_pdf import import_annotations
+        return import_annotations(path, args.file, args.key, dry_run=args.dry_run)
     if args.action == "reanchor":
         from .anchors import reanchor
         return reanchor(path, args.key)

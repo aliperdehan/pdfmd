@@ -446,23 +446,149 @@ class RecordFormat(unittest.TestCase):
 
 @unittest.skipUnless(pdfmd.pypdf, "needs optional pypdf")
 class SourcePDFs(CommandFixture, unittest.TestCase):
-    def pdf(self, name, words="Invented glass study", count=2, label=None):
+    def pdf(self, name, words="Invented glass study", count=2, label=None, *, annotations=(), lines=(), rotations=()):
         """Small PDFs made in the test, with synthetic text and real/trivial labels."""
         from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
         writer = pdfmd.pypdf.PdfWriter()
         for number in range(count):
             page = writer.add_blank_page(width=200, height=200)
+            if rotations:
+                page.rotate(rotations[number])
+                page.mediabox.lower_left = (-20, -30)
+                page.mediabox.upper_right = (200, 210)
             stream = DecodedStreamObject()
-            stream.set_data(f"BT /F1 10 Tf 10 180 Td ({words}; printed {41 + number}) Tj ET".encode("ascii"))
+            body = f"BT /F1 10 Tf 10 180 Td ({words}; printed {41 + number}) Tj"
+            body += "".join(f" 0 -25 Td ({line}) Tj" for line in lines)
+            stream.set_data((body + " ET").encode("ascii"))
             font = DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"), NameObject("/BaseFont"): NameObject("/Helvetica")})
             page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/F1"): font})})
             page[NameObject("/Contents")] = writer._add_object(stream)
         if label:
             writer.set_page_label(0, count - 1, style="/D", start=label)
+        for number, kind, box, quad, note in annotations:
+            from pypdf.generic import ArrayObject, FloatObject, TextStringObject
+            annotation = DictionaryObject({
+                NameObject("/Subtype"): NameObject("/" + kind),
+                NameObject("/Type"): NameObject("/Annot"),
+                NameObject("/Rect"): ArrayObject([FloatObject(value) for value in box]),
+                NameObject("/Contents"): TextStringObject(note),
+            })
+            if quad:
+                annotation[NameObject("/QuadPoints")] = ArrayObject([FloatObject(value) for value in quad])
+            writer.add_annotation(number, annotation)
+        for page in writer.pages:
+            if "/Annots" in page:
+                page[NameObject("/Annots")] = writer._add_object(page["/Annots"])
         path = self.root / name
         with path.open("wb") as handle:
             writer.write(handle)
         return path
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs Poppler pdftotext")
+    def test_import_pdf_annotations_previews_page_map_text_notes_and_repeats(self):
+        kinds = ("Highlight", "Underline", "StrikeOut", "Squiggly", "Square", "FreeText")
+        annotations = []
+        for index, kind in enumerate(kinds):
+            y = 180 - 25 * index
+            right = (55, 64, 60, 55, 55, 55)[index]
+            bounds = (8, y - 3, right, y + 9)
+            quad = (8, y + 9, right, y + 9, 8, y - 3, right, y - 3) if index < 4 else ()
+            # The text annotation's Rect is deliberately wider than its QuadPoints.
+            rect = (8, y - 3, 190, y + 9) if quad else bounds
+            annotations.append((int(index != 4), kind, rect, quad, f"Note {kind}"))
+        annotations.append((1, "Text", (5, 6, 7, 8), (), "Unrelated note"))
+        path = self.pdf("marked.pdf", words="Amber glass outside", annotations=annotations,
+                        lines=("Blue shards outside", "Copper slag outside", "Drift sand outside"))
+        operation = ("import", path.name, "--key", "glass")
+        missing = self.command(*operation, code=1)
+        self.assertIn("sources add", missing["error"])
+        self.command("sources", "add", "glass", path.name, "--pages", '[[2,"41"]]')
+        before, original_pdf = (self.root / "excerpts.json").read_bytes(), path.read_bytes()
+        preview = self.command(*operation, "--dry-run")
+        self.assertEqual((self.root / "excerpts.json").read_bytes(), before)
+        self.assertEqual(self.command(*operation), preview)
+        self.assertEqual(self.command(*operation), [])
+        items = {item["note"]: item for item in self.command("list")}
+        self.assertEqual(len(items), 6)
+        for index, (kind, words) in enumerate(zip(kinds, ("Amber gla", "Blue shards", "Copper slag", "Drift sand"))):
+            record = items[f"Note {kind}"]
+            y = 180 - 25 * index
+            self.assertEqual((record["kind"], record["page"]), ("text", "41"))
+            self.assertEqual(record["parts"], [{"pdf-page": 2, "boxes": [[8, y - 3, annotations[index][3][2], y + 9]],
+                                               "text": words, "text-from": "pdf"}])
+        self.assertEqual(items["Note Square"]["parts"], [{"pdf-page": 1, "boxes": [[8, 77, 55, 89]]}])
+        self.assertEqual(items["Note Square"]["page"], "")
+        self.assertEqual(items["Note FreeText"]["kind"], "area")
+        self.assertEqual(path.read_bytes(), original_pdf)
+
+    def test_import_area_on_a_registered_supplement_needs_no_poppler(self):
+        from pdfmd_excerpts.import_pdf import import_annotations
+
+        primary = self.pdf("primary.pdf")
+        extra = self.pdf("extra.pdf", annotations=[(1, "Square", (10, 20, 30, 40), (), "An area")])
+        self.command("sources", "add", "glass", primary.name)
+        missing = self.command("import", extra.name, "--key", "glass", code=1)
+        self.assertIn("sources add", missing["error"])
+        path = self.root / "excerpts.json"
+        records = json.loads(path.read_text(encoding="utf-8"))
+        records["sources"]["glass"]["more"] = {"si": {"file": extra.name, "pages": [[1, "S1"]]}}
+        path.write_text(json.dumps(records), encoding="utf-8")
+        with mock.patch.object(pdfmd, "which", return_value=None):
+            [area] = import_annotations(path, extra, "glass")
+        self.assertEqual((area["file"], area["page"], area["note"]), ("si", "S2", "An area"))
+        self.assertEqual(area["parts"], [{"pdf-page": 2, "boxes": [[10, 20, 30, 40]]}])
+
+    @unittest.skipUnless(shutil.which("pdftotext"), "needs Poppler pdftotext")
+    def test_import_combines_quads_in_default_space_on_rotated_pages(self):
+        first_line = (8, 189, 66, 189, 8, 177, 66, 177)
+        second_line = (8, 164, 64, 164, 8, 152, 64, 152)
+        path = self.pdf("rotated.pdf", count=4, words="Amber glass outside", label=20,
+                        annotations=[(page, "Highlight", (8, 152, 66, 189), first_line + second_line, "")
+                                     for page in range(4)],
+                        lines=("Blue shards outside",), rotations=(0, 90, 180, 270))
+        self.command("sources", "add", "glass", path.name, "--pages", "labels")
+        records = self.command("import", path.name, "--key", "glass")
+        self.assertEqual([item["page"] for item in records], ["20", "21", "22", "23"])
+        for number, item in enumerate(records, 1):
+            with self.subTest(number=number):
+                self.assertEqual(item["parts"], [{"pdf-page": number, "boxes": [[8, 177, 66, 189], [8, 152, 64, 164]],
+                                                  "text": "Amber glass Blue shards", "text-from": "pdf"}])
+
+    @unittest.skipUnless(sys.platform == "darwin" and shutil.which("pdftotext"), "needs macOS xattr and Poppler pdftotext")
+    def test_import_reads_a_compressed_fragmented_skim_archive(self):
+        import bz2
+        import plistlib
+
+        path = self.pdf("skim.pdf", words="Amber glass outside")
+        self.command("sources", "add", "glass", path.name, "--pages", '[[2,"41"]]')
+        fields = {"type": "Highlight", "pageIndex": 1, "bounds": "{{8, 177}, {58, 12}}",
+                  "quadrilateralPoints": ["{0, 12}", "{58, 12}", "{0, 0}", "{58, 0}"], "contents": "A Skim note"}
+        uid = plistlib.UID
+        keys = list(fields)
+        values = list(fields.values())
+        points = values[3]
+        values[3] = {"NS.objects": [uid(13 + i) for i in range(len(points))], "$class": uid(17)}
+        archive = {"$archiver": "NSKeyedArchiver", "$version": 100000, "$top": {"root": uid(1)}, "$objects": [
+            "$null", {"NS.objects": [uid(2)], "$class": uid(17)},
+            {"NS.keys": [uid(3 + i) for i in range(len(keys))],
+             "NS.objects": [uid(8 + i) for i in range(len(values))], "$class": uid(18)},
+            *keys, *values, *points, {"$classname": "NSMutableArray"}, {"$classname": "NSMutableDictionary"},
+        ]}
+        compressed = bz2.compress(plistlib.dumps(archive, fmt=plistlib.FMT_BINARY))
+        stem = "net_sourceforge_skim-app"
+        suffix = "#S"
+        fragment = stem + "_6EE08252-84CC-47AC-ADAB-2830CC72F95F"
+        wrapper = plistlib.dumps({stem + "_has_wrapper": True, stem + "_unique_key": fragment,
+                                  stem + "_number_of_fragments": 2}, fmt=plistlib.FMT_BINARY)
+        for name, data in ((stem + "_notes", wrapper), (fragment + "-0", compressed[:100]),
+                           (fragment + "-1", compressed[100:])):
+            subprocess.run(["/usr/bin/xattr", "-wx", name + suffix, data.hex(), str(path)],
+                           check=True, capture_output=True)
+        [record] = self.command("import", path.name, "--key", "glass")
+        self.assertEqual((record["kind"], record["page"], record["note"]), ("text", "41", "A Skim note"))
+        self.assertEqual(record["parts"], [{"pdf-page": 2, "boxes": [[8, 177, 66, 189]],
+                                           "text": "Amber glass", "text-from": "pdf"}])
+        self.assertEqual(self.command("import", path.name, "--key", "glass"), [])
 
     def test_source_identity_hash_state_labels_and_map_fill_only_on_add(self):
         path = self.pdf("glass.pdf")

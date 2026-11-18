@@ -980,6 +980,7 @@ pdfmd --excerpts detach --all draft.md
 pdfmd --excerpts remove 1 --force
 pdfmd --excerpts sources add glass sources/glass.pdf --pages '[[2,"41"]]'
 pdfmd --excerpts sources match sources/
+pdfmd --excerpts import sources/glass.pdf --key glass --dry-run
 pdfmd --excerpts export -o review.md
 pdfmd --excerpts check --json
 pdfmd --excerpts reanchor glass
@@ -991,7 +992,7 @@ pdfmd --excerpts rekey glass glasswork
 `--in PATH` (document or folder; default the working folder) and `--verbose`.
 Use `pdfmd --excerpts ACTION --help` for its options. Success exits 0, a problem
 or file failure 1, invalid usage 2. JSON answers are arrays for `list`, `where`,
-`sources`, `detach` and matching proposals, a record for `show`/`edit`, `{id, markers}` for
+`sources`, `detach`, `import` and matching proposals, a record for `show`/`edit`, `{id, markers}` for
 `add`, `{removed}` for `remove`, `{markdown}` for `export`, and `{error}` on failure.
 Plain `list` prints a table with one row per record, showing id, key, page and
 kind, plus locator, label, supplement and creation date when present. It
@@ -1089,6 +1090,18 @@ plus a map when the bibliography’s page range and page count agree (one extra
 PDF page is a cover). `--apply` writes unique matches by file, DOI, title or exact
 name; ambiguous or merely similar names need a choice with `sources add`.
 Existing different source files are never silently replaced.
+
+`import FILE.pdf --key KEY` adds saved highlights, underlines, strikeouts and
+squiggles as text excerpts, and square and free-text annotations as areas. It
+uses the registered source's page map and saves the PDF page and boxes. PDF
+annotation contents become the note. The file and key must already be
+registered together with `sources add` or as a supplement. The command uses
+pypdf to read the annotations and Poppler's `pdftotext` to extract text in the
+marked regions. On macOS it also reads Skim's archived notes attribute.
+
+An annotation whose PDF page and boxes are already recorded for that source
+is skipped. `--dry-run` prints the records that would be added with provisional
+IDs. Use `--json` to get the array of previewed or newly created records.
 
 **Local excerpts API.** `--serve FOLDER` serves the folder's active record to
 authenticated clients. `GET /api/excerpts` returns `record`, `locations` (citing

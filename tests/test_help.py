@@ -85,8 +85,13 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("--in PATH", text)
         self.assertIn("excerpt-quote-min-words", text)
         self.assertIn("excerpt-overlap-words", text)
-        for action in ("reanchor", "renumber", "rekey"):
+        for action in ("reanchor", "renumber", "rekey", "import FILE.pdf", "--dry-run"):
             self.assertIn(action, text)
+
+    def test_import_excerpts_help_names_the_source_key_and_preview(self):
+        text = run("--excerpts", "import", "--help").stdout
+        for option in ("FILE.pdf", "--key", "--dry-run", "--json"):
+            self.assertIn(option, text)
 
     def test_serve_help_names_the_excerpt_api(self):
         text = run("--help", "serve").stdout
