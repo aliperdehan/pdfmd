@@ -14,6 +14,7 @@ from urllib.parse import quote
 
 from pdfmd_base import core
 from pdfmd_base import pandoc_run
+from pdfmd_obsidian.properties import syntax_matches, write_syntax
 from pdfmd_obsidian.wikilinks import wikilinks_as_text
 
 
@@ -80,18 +81,52 @@ def _read_headings(texts, reader):
     return headings
 
 
+def _block_syntax(texts, matches, headings):
+    """Allocate one document-wide anchor per block and retain each note's local names."""
+    used = {identifier for names in headings for identifier in names.values()}
+    names = []
+    converted = []
+    for text, local_matches in zip(texts, matches):
+        local, offsets = {}, {}
+        for match in local_matches:
+            if match.lastgroup != "block":
+                continue
+            name = match.group("identifier")
+            identifier = name
+            suffix = 1
+            while identifier in used:
+                identifier = f"{name}-{suffix}"
+                suffix += 1
+            used.add(identifier)
+            local.setdefault(name, identifier)
+            offsets[match.start()] = identifier
+        names.append(local)
+        converted.append(write_syntax(text, local_matches, offsets))
+    return converted, names
+
+
+def _span_reader(reader):
+    reader = reader or "markdown"
+    base = re.split(r"[+-]", reader, maxsplit=1)[0]
+    if base in ("gfm", "commonmark", "commonmark_x"):
+        for extension in ("+attributes", "+bracketed_spans"):
+            if extension not in reader:
+                reader += extension
+    return reader
+
+
 class Links:
-    def __init__(self, sources, texts, reader, metadata_files, target, output, title_auto):
+    def __init__(self, sources, texts, reader, target, output, title_auto):
         self.sources = [path.resolve() for path in sources]
         self.texts = texts
         self.reader = reader
-        self.metadata = metadata_files
         self.target = target
         self.output = output
         self.title_auto = title_auto
         self.anchors = {}
         self.told = set()
         self.headings = None
+        self.blocks = None
         self.external = {}
         self.indexes = {}
 
@@ -124,10 +159,15 @@ class Links:
         return (matches.pop(), False) if len(matches) == 1 else (None, bool(matches))
 
     def identifier(self, note, heading):
+        is_block = heading.startswith("^")
+        key = heading[1:] if is_block else heading.casefold()
         if note in self.sources:
+            index = self.sources.index(note)
+            if is_block:
+                return self.blocks[index].get(key)
             if self.headings is None:
                 self.headings = _read_headings(self.texts, self.reader)
-            return self.headings[self.sources.index(note)].get(heading.casefold())
+            return self.headings[index].get(key)
         if note not in self.external:
             try:
                 raw = note.read_text(encoding="utf-8-sig")
@@ -139,8 +179,10 @@ class Links:
             if self.title_auto:
                 text, _ = core.promote_bare_title(text, bool(metadata))
             reader, _ = core.resolve_from_format(note, None, metadata)
-            self.external[note] = _read_headings([text], reader)[0]
-        return self.external[note].get(heading.casefold())
+            headings = _read_headings([text], reader)
+            _, blocks = _block_syntax([text], [list(syntax_matches(text))], headings)
+            self.external[note] = headings[0], blocks[0]
+        return self.external[note][int(is_block)].get(key)
 
     def destination(self, path, name, heading):
         if name:
@@ -188,21 +230,23 @@ def linked_inputs(inputs, sources, reader, metadata_files, target, output, title
         yield inputs, reader
         return
     texts = [path.read_text(encoding="utf-8-sig") for path in inputs]
-    if not any(enabled and "[[" in text for enabled, text in zip(active, texts)):
+    matches = [list(syntax_matches(text)) if enabled and ("#" in text or "^" in text) else []
+               for enabled, text in zip(active, texts)]
+    if not any(matches) and not any(enabled and "[[" in text for enabled, text in zip(active, texts)):
         yield inputs, reader
         return
-    links = Links(sources, texts, reader, metadata_files, target, output, title_auto)
+    links = Links(sources, texts, reader, target, output, title_auto)
+    if any(match.lastgroup == "block" for local in matches for match in local):
+        links.headings = _read_headings(texts, reader)
+    marked, links.blocks = _block_syntax(texts, matches, links.headings or [])
     converted = []
-    for enabled, path, text in zip(active, links.sources, texts):
+    for enabled, path, text in zip(active, links.sources, marked):
         def destination(name, heading):
             return links.destination(path, name, heading)
 
         converted.append(wikilinks_as_text(text, destination).text if enabled else text)
-    if links.anchors:
-        reader = reader or "markdown"
-        base = re.split(r"[+-]", reader, maxsplit=1)[0]
-        if base in ("gfm", "commonmark", "commonmark_x"):
-            reader += "+attributes+bracketed_spans"
+    if links.anchors or any(matches):
+        reader = _span_reader(reader)
     with ExitStack() as stack:
         prepared = []
         for index, (path, original, changed) in enumerate(zip(inputs, texts, converted)):

@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.34.28 — 2026-11-18
+
+Pre-edit state: commit `1a29f91`. Obsidian paragraph IDs printed as
+text and wikilinks to those IDs had no destination. Give paragraph IDs
+Pandoc anchors and resolve them in the same note, in joined parts and in a
+separate note's output. Keep tags visible as tagged spans and retain the
+existing YAML property metadata alongside pdfmd's settings.
+
+- Synthetic regressions cover ID collisions between parts, inline and nested
+  tags, protected code and URL fragments, the flavour switch, and HTML,
+  LaTeX, Typst, Markdown, Word, OpenDocument and plain text. The launchpad
+  stays at 785 lines.
+
 ## v3.34.27 — 2026-11-18
 
 Pre-edit state: commit `999e1ce`. Pasted control characters reached Pandoc

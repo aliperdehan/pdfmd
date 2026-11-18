@@ -3176,6 +3176,9 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   A target containing `:` (before any `|` alias or `#`/`^` anchor), such as `[[name:key]]`, is kept exactly as text in every
   flavour (`[[fullcite:key]]` is read by the built-in `fullcite`, below, in the flavours that have it); the same rule applies to `![[...]]` embeds. An alias may contain `:`, so `[[Note|Time: 10]]` still shows `Time: 10`.
   Left as they are: `![[note]]` (a note embed comes later), `[[_TOC_]]` (the contents marker) and `[[1]](url)` (a link whose text is `[1]`).
+- **Block links and tags** (Obsidian). Finish a paragraph with `^block-id`, then use `[[#^block-id]]` or
+  `[[Note#^block-id]]` to link to it. Inline `#tag` stays visible and carries a `tag` span in supporting writers.
+  YAML `tags`, `aliases` and `cssclasses` are document properties and coexist with pdfmd settings.
 - **Pictures by name: `![[picture.png|300]]`** (v3.32.25, in `obsidian` and `pdfmd`). Obsidian's wikilink names a file, not a path: the
   vault finds it wherever it lies, so a picture can move without breaking the note, and every pasted picture is `![[Pasted image
   2026....png]]`. pdfmd reads the same spelling outside a vault as its own image embed. `|300` is the width in pixels, `|300x200` a

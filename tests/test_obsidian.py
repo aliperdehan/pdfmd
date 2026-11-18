@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -332,9 +333,78 @@ class CommandLine(unittest.TestCase):
         self.assertNotIn("<figure", run("gfm"))                                  # figures not asked for: none made
 
     def test_a_note_with_properties_is_cleaned_too(self):
-        html, _ = self.build("vault", "---\ntags: [a]\n---\n\nOne %%hidden%% two\n")
+        source = ("---\ntitle: Sample note\ntags: [one, two]\naliases: [Other name]\n"
+                  "cssclasses: [sample]\npdfmd-options: {single-newline: soft}\n---\n\n"
+                  "One %%hidden%% two\nthree\n")
+        html, _ = self.build("vault", source, "--standalone")
         self.assertNotIn("hidden", html)
+        self.assertIn("<title>Sample note</title>", html)
         self.assertIn("One", html)
+        self.assertNotIn("<br />", html)
+        result = self.run_pdfmd("n.md", "-t", "markdown", "--standalone", "-o", "properties.markdown")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        markdown = (self.directory / "vault" / "properties.markdown").read_text(encoding="utf-8")
+        for key in ("tags:", "aliases:", "cssclasses:"):
+            self.assertIn(key, markdown)
+
+    def test_block_ids_and_tags_in_the_writers(self):
+        self.write_note("other.md", "Target text. ^external\n")
+        self.write_note("n.md", "Start #Alpha/one and #café. ^sample\n\n"
+                        "[[#^sample|Local]] and [[other#^external|Remote]].\n\n"
+                        "## Heading #unchanged\n\n"
+                        "`#code ^code` and [link](https://example.org/#fragment).\n\n"
+                        "    #indented ^indented\n\n"
+                        "- Nested #tag ^nested\n\n[[#^nested|Nested link]].\n")
+        for target, suffix, expected in (
+            ("html", "html", ('id="sample"', 'href="#sample"', 'class="tag">#Alpha/one',
+                              'class="tag">#café', 'href="other.html#external"', 'href="#nested"')),
+            ("latex", "tex", (r"\label{sample}", r"\hyperref[sample]", r"\#Alpha/one")),
+            ("typst", "typ", ("<sample>", "#link(<sample>)", "Alpha/one")),
+            ("markdown", "markdown", ("{#sample}", "](#sample)", "{.tag}")),
+            ("docx", "docx", ("sample", "Alpha/one")),
+            ("odt", "odt", ('xlink:href="#sample"', "Alpha/one")),
+            ("plain", "txt", ("#Alpha/one", "#café", "Nested link")),
+        ):
+            with self.subTest(target=target):
+                name = f"out.{suffix}"
+                done = self.run_pdfmd("n.md", "-t", target, "-o", name)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                path = self.directory / "vault" / name
+                if target in ("docx", "odt"):
+                    with zipfile.ZipFile(path) as archive:
+                        output = archive.read("word/document.xml" if target == "docx" else "content.xml").decode("utf-8")
+                else:
+                    output = path.read_text(encoding="utf-8")
+                for token in expected:
+                    self.assertIn(token, output)
+                self.assertNotIn("^sample", output)
+                self.assertNotIn("^nested", output)
+                if target == "html":
+                    self.assertIn("Heading #unchanged", output)
+                    self.assertIn("#code ^code", output)
+                    self.assertIn("#indented ^indented", output)
+                    self.assertIn('https://example.org/#fragment', output)
+                    self.assertNotIn('class="tag">#fragment', output)
+
+    def test_duplicate_block_ids_in_parts_resolve_in_their_own_notes(self):
+        self.write_note("doc.md", "---\ntitle: Parts\npdfmd-options: {parts: auto}\n---\n\n"
+                        "[[second#^point|From scaffold]].\n")
+        self.write_note("parts/first.md", "First. ^point\n\n[[#^point|First link]].\n")
+        self.write_note("parts/second.md", "Second. ^point\n\n[[#^point|Second link]].\n")
+        done = self.run_pdfmd("doc.md", "-o", "doc.html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        html = (self.directory / "vault" / "doc.html").read_text(encoding="utf-8")
+        self.assertRegex(html, r'First\.\s*<span id="point"')
+        self.assertRegex(html, r'Second\.\s*<span id="point-1"')
+        self.assertIn('href="#point">First link', html)
+        self.assertIn('href="#point-1">Second link', html)
+        self.assertIn('href="#point-1">From scaffold', html)
+
+    def test_block_ids_and_tags_stay_literal_with_the_flavour_off(self):
+        html, _ = self.build("vault", "Start #tag. ^sample\n\n[[#^sample|Local]].\n", "--flavour", "pandoc")
+        self.assertIn("Start #tag. ^sample", html)
+        self.assertNotIn('id="sample"', html)
+        self.assertNotIn('class="tag"', html)
 
     def test_a_percent_pair_with_no_mate_hides_the_rest_and_says_so_unless_told_to_keep_it(self):
         note = "# N\n\nOne\n\n%% oops\nrest\n"

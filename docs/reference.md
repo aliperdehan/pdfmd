@@ -1305,6 +1305,11 @@ In the Obsidian flavour, `[[#Heading]]` links to a heading in the note. `[[Note]
 A missing note leaves the display text and produces one warning, which fails a `--strict` build.
 The pdfmd flavour continues to render wikilinks as display text.
 
+End a paragraph with `^block-id` to give it an anchor. Link to it with `[[#^block-id]]` or `[[Note#^block-id]]`.
+Inline `#tag` and `#parent/child` stay visible, with a `tag` span in writers that support spans. Heading lines, code
+and URL fragments keep their usual meaning. YAML properties such as `tags`, `aliases` and `cssclasses` remain document
+metadata alongside `title` and `pdfmd-options`. Note transclusions (`![[Note]]`) are still literal.
+
 The Obsidian and pdfmd flavours hide `%%comments%%` in single documents, report and book chapters, and split-document
 parts. `--show-comments` displays them as HTML comments or as the writer's comment boxes. Heading listings, section
 selection and citation detection ignore their contents. Percent delimiters in indented and fenced code stay literal.

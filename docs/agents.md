@@ -173,6 +173,8 @@ use citation fields alone.
 
 In the Obsidian flavour, wikilinks can target local headings, other parts of the build or a note's same-format output.
 A missing note produces a warning and leaves the display text.
+Use `[[#^id]]` or `[[Note#^id]]` to link to a paragraph ending in `^id`. Inline tags stay visible and Obsidian's YAML
+properties remain available as metadata.
 
 Use `pdfmd-options: {dialect-detect: deep}` for GFM-style blocks that follow prose in documents with front matter,
 or for a leading Hugo-style TOML metadata block. The default `basic` warns about TOML and keeps it in the body.

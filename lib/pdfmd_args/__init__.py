@@ -700,8 +700,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-show-comments", dest="show_comments", action="store_false",
                         help="do not show comments in this run, whatever pdfmd-options.show-comments says")
     parser.add_argument(*spelling.flags("flavour"), dest="flavour", metavar="NAME", type=str.casefold,
-                        help="the flavour of Markdown the files are written in: obsidian (%%%%comments%%%% hidden and "
-                             "[[wikilinks]] resolved), pdfmd (%%%%comments%%%% hidden; the rest of pdfmd's own syntax follows), pandoc (strict "
+                        help="the flavour of Markdown the files are written in: obsidian (%%%%comments%%%% hidden, [[wikilinks]] "
+                             "and ^block ids resolved, #tags visible), pdfmd (%%%%comments%%%% hidden; the rest of pdfmd's own syntax follows), pandoc (strict "
                              "Pandoc: nothing added), gfm, commonmark, or auto (the default: obsidian inside a vault, a folder with "
                              ".obsidian/ above the document, pdfmd elsewhere). A Pandoc reader such as gfm+smart is taken as the reader "
                              "with the flavour on auto, like --from. Also pdfmd-options.flavour (or reader) and pdfmd --setup. With an automatic reader, pdfmd-options.dialect-detect: deep checks for GFM-style blocks after front matter and reads TOML metadata")
