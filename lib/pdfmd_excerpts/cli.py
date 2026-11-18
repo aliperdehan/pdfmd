@@ -9,7 +9,7 @@ import sys
 
 from pdfmd_base import core
 from .discovery import context, discover, bibliography
-from .markers import locations
+from .markers import canonical, locations, prefix_setting
 from .pages import printed_page
 from .record import RecordError, positive, read, update
 from . import sources
@@ -183,6 +183,7 @@ def sheet(data, places):
 
 def execute(args, arguments):
     document, metadata = context(args.place)
+    prefix = prefix_setting(document, metadata)
     path = discover(document, metadata, args.verbose)
     entries = bibliography(document, metadata)
     if args.action == "add":
@@ -191,9 +192,9 @@ def execute(args, arguments):
             data["excerpts"].append(record)
             data["next-id"] += 1
             ident = record["id"]
-            markers = [f"[@x:{ident}]"]
+            markers = [f"[{canonical(ident, None, prefix)}]"]
             if record.get("key"):
-                markers.append(f"[@{record['key']}#{ident}]")
+                markers.append(f"[{canonical(ident, record['key'], prefix)}]")
             return {"id": ident, "markers": markers}
         return update(path, add)
     if args.action == "edit":

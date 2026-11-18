@@ -154,6 +154,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "takes the rest of the command line. --json on every action; --in PATH selects a document or folder. "
                              "pdfmd-options.excerpts names the record file relative to its naming file; off disables discovery. "
                              "Default: nearest excerpts.json beside the document, in metadata/, then parent/folder layers. "
+                             "pdfmd-options.excerpt-prefix (default x; --setup) sets the short marker prefix. "
+                             "Both : and # are read in either form; canonical forms are @x:ID and @KEY#ID. "
                              "No build changes yet. `pdfmd --excerpts --help` lists command options")
     parser.add_argument("--serve", nargs="?", const="", metavar="FOLDER",
                         help="the web UI's local server for the project FOLDER (default: the working folder): 127.0.0.1, a random port, "

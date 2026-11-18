@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.34.6 — 2026-11-18
+
+Pre-edit state: commit `9cc96fe`. Excerpt locations used the old separator rules and `add` always printed the
+short prefix `x`. Both forms now accept either separator, splitting at the last one before digits.
+`excerpt-prefix` follows the settings cascade and is available in `--setup`. Invalid values stop excerpt
+commands before they write. `add` and `where` report canonical spellings. Document builds keep the P1b behaviour.
+
+Regression tests cover the four spellings, keys with an internal separator, the settings cascade, invalid
+prefixes, citation contexts and the excerpts help topic. The build isolation test compares six writers with
+and without the records file.
+
 ## v3.34.5 — 2026-11-18
 
 Pre-edit state: commit `2de3b7c`. The source linter could not tell whether a typeset figure would overrun the

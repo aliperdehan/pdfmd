@@ -97,7 +97,7 @@ or folder). Exit codes: 0 success, 1 problems/file failure, 2 usage. JSON failur
 answer `{error}`. `list` prints a compact table of record fields with long values
 shortened to fit the terminal (80 columns in a pipe). Use `list --json` for the
 complete records. `add --key glass --page 41 --text "Invented evidence."` prints
-an id and marker forms; `add --remark "Check this inference."` needs no source.
+an id and canonical forms `[@x:ID]` and `[@KEY#ID]`; `add --remark "Check this inference."` needs no source.
 `remove` refuses a cited record without `--force`; `--detach` and `--problems`
 await later phases. `sources add KEY FILE --pages '[[2,"41"]]'` records a source;
 `sources match [DIR]` proposes matches (`--apply` only for unambiguous exact
@@ -108,7 +108,10 @@ Markdown review sheet containing passages and notes.
 `off` disables discovery. Otherwise it is the nearest `excerpts.json` beside the
 document, in `metadata/`, then parent/folder layers. Records keep unknown fields,
 use monotonically increasing ids and are written atomically under a lock. This
-phase changes no build: markers are only located by `where`, not resolved.
+phase changes no build. `where` reads either `:` or `#` in both forms and reports
+canonical markers. Set `pdfmd-options.excerpt-prefix` in any settings layer or
+through `--setup` (default `x`). Use letters, digits, hyphens or underscores.
+The cross-reference prefixes `fig`, `tbl`, `eq`, `sec` and `lst` are reserved.
 Source PDFs are never written. Keep passages and review exports local.
 
 ## When a build fails

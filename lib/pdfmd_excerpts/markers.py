@@ -1,33 +1,51 @@
-"""Read-only citation locations. The marker grammar lives here (D81 / Q74).
+"""Read-only citation locations and the marker grammar (D107).
 
 P1c will supply resolution and detach. No build imports this scanner in P1b.
 """
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from .record import RecordError
 
-# Change the separators/prefix here if a future decision supersedes D81.
-SHORT = re.compile(r"x[:#]([0-9]+)\Z")
-LONG = re.compile(r"(.+)#([0-9]+)\Z")
+MARKER = re.compile(r"(.+)[:#]([0-9]+)\Z")
+CITATION = re.compile(r"(?<![\w@\\])@(?:\{([^}\n]+)\}|([-\w](?:[\w:.#$%&+?<>~/-]*\w)?))")
 REFERENCE_PREFIXES = ("fig", "tbl", "eq", "sec", "lst")
 
 
-def marker(key):
+def prefix_setting(document, metadata):
+    for _, options in core.option_sources(document, metadata):
+        if "excerpt-prefix" in options:
+            value = options["excerpt-prefix"]
+            break
+    else:
+        return "x"
+    if type(value) is int:
+        value = str(value)
+    if (not isinstance(value, str) or not value or value in REFERENCE_PREFIXES
+            or not all(char.isalpha() or char.isdecimal() or char in "-_" for char in value)):
+        raise RecordError("excerpt-prefix must be one word of letters, digits, - or _, without a cross-reference prefix")
+    return value
+
+
+def marker(key, prefix="x"):
     if ":" in key and key.split(":", 1)[0] in REFERENCE_PREFIXES:
         return None
-    short = SHORT.fullmatch(key)
-    if short:
-        return int(short[1]), None
-    long = LONG.fullmatch(key)
-    return (int(long[2]), long[1]) if long else None
+    found = MARKER.fullmatch(key)
+    if found:
+        head, ident = found.groups()
+        return int(ident), None if head == prefix else head
+    return None
+
+
+def canonical(ident, key, prefix):
+    return f"@{key}#{ident}" if key is not None else f"@{prefix}:{ident}"
 
 
 def locations(place, record_path, bibliography):
-    from pdfmd_check.lint import Analysis, Source, CITE_RE, blank_matches, blank
+    from pdfmd_check.lint import Analysis, Source, blank_matches, blank
     place = Path(place)
     root = place if place.is_dir() else place.parent
     project = record_path.parent.parent if record_path.parent.name in ("metadata", ".pdfmd") else record_path.parent
@@ -35,7 +53,6 @@ def locations(place, record_path, bibliography):
         root = project
     documents = sorted(root.rglob("*"))
     result = []
-    collisions = set()
     for path in documents:
         if (path.suffix.lower() not in (".md", ".markdown", ".qmd") or not path.is_file()
                 or any(part.startswith(".") for part in path.relative_to(root).parts)):
@@ -48,6 +65,7 @@ def locations(place, record_path, bibliography):
                 continue
         except ValueError:
             continue
+        prefix = prefix_setting(document, metadata)
         text = path.read_text(encoding="utf-8")
         analysis = Analysis(Source(path.name, path, text))
         # Raw HTML bodies and TeX math are text, as are Pandoc raw blocks (masked as fences).
@@ -65,13 +83,11 @@ def locations(place, record_path, bibliography):
                     scanned = scanned[:start] + blank(scanned[start:stop]) + scanned[stop:]
         from .discovery import bibliography as document_bibliography
         real_keys = {**bibliography, **document_bibliography(document, metadata)}
-        for found in CITE_RE.finditer(scanned):
+        for found in CITATION.finditer(scanned):
             key = found[1] or found[2]
-            parsed = marker(key)
-            if parsed is not None and key in real_keys and key not in collisions:
-                collisions.add(key)
-                print(f"WARN  the bibliography has a key '{key}': it is used as a source, not as excerpt {parsed[0]}", file=sys.stderr)
-            elif parsed is not None and key not in real_keys:
+            parsed = marker(key, prefix)
+            if parsed is not None and key not in real_keys:
                 ident, named = parsed
-                result.append({"id": ident, "key": named, "file": core.display_path(path), "line": analysis.line(found.start())})
+                result.append({"id": ident, "key": named, "file": core.display_path(path),
+                               "line": analysis.line(found.start()), "marker": canonical(ident, named, prefix)})
     return result

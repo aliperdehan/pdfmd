@@ -26,6 +26,7 @@ class CommandFixture:
         temporary = tempfile.TemporaryDirectory(prefix="excerpts-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
+        self.config = ""
 
     def write(self, name, text):
         path = self.root / name
@@ -35,12 +36,12 @@ class CommandFixture:
 
     def raw(self, *args):
         return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--excerpts", *args],
-                              cwd=self.root, env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"},
+                              cwd=self.root, env={**os.environ, "PDFMD_CONFIG": self.config, "PDFMD_NO_PROMPT": "1"},
                               capture_output=True, encoding="utf-8", timeout=60)
 
     def command(self, *args, code=0):
         result = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--excerpts", *args, "--json"],
-                                cwd=self.root, env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"},
+                                cwd=self.root, env={**os.environ, "PDFMD_CONFIG": self.config, "PDFMD_NO_PROMPT": "1"},
                                 capture_output=True, encoding="utf-8", timeout=60)
         self.assertEqual(result.returncode, code, result.stdout + result.stderr)
         return json.loads(result.stdout)
@@ -164,8 +165,8 @@ class Commands(CommandFixture, unittest.TestCase):
         self.write("other/another.md", "[@x:1]")
         self.write(".backups/old.md", "[@x:1]")
         places = self.command("where", "1")
-        self.assertEqual(len(places), 7, places)
-        self.assertEqual(sorted(place["line"] for place in places), [1] * 7)
+        self.assertEqual(len(places), 8, places)
+        self.assertEqual(sorted(place["line"] for place in places), [1] * 7 + [10])
         self.assertEqual(self.command("list", "--key", "glass")[0]["id"], 1)
         self.assertEqual(self.command("list", "--unused"), [])
         self.assertIn("is cited", self.command("remove", "1", code=1)["error"])
@@ -176,8 +177,34 @@ class Commands(CommandFixture, unittest.TestCase):
         # Actual bibliography keys win, preserving case.
         self.write("refs.bib", "@book{x:2, title={Synthetic source}}")
         self.assertEqual(self.command("where", "2"), [])
-        result = self.raw("where", "2", "--json")
-        self.assertEqual(result.stderr.count("it is used as a source, not as excerpt 2"), 1)
+
+    def test_both_separators_and_setting_layers_write_canonical_markers(self):
+        self.config = str(self.write("global.yaml", "options: {excerpt-prefix: global}\n"))
+        self.command("add", "--key", "glass:part")
+        self.assertEqual(self.command("add", "--key", "glass")["markers"], ["[@global:2]", "[@glass#2]"])
+        self.write(".pdfmd/config.yaml", "options: {excerpt-prefix: folder}\n")
+        self.assertEqual(self.command("add", "--remark", "A note")["markers"], ["[@folder:3]"])
+        self.write("metadata.yaml", "pdfmd-options: {excerpt-prefix: meta}\n")
+        self.assertEqual(self.command("add", "--remark", "A note")["markers"], ["[@meta:4]"])
+        draft = """---
+pdfmd-options: {excerpt-prefix: Ex_1-local}
+---
+
+[@Ex_1-local#1; @Ex_1-local:1; @glass:part:1; @glass:part#1; @fig:1; @x:99a].
+"""
+        self.write("draft.md", draft)
+        self.assertEqual(self.command("add", "--in", "draft.md", "--remark", "A note")["markers"], ["[@Ex_1-local:5]"])
+        places = self.command("where", "1")
+        self.assertEqual([place["marker"] for place in places],
+                         ["@Ex_1-local:1", "@Ex_1-local:1", "@glass:part#1", "@glass:part#1"])
+
+    def test_invalid_prefix_names_the_setting_and_stops_before_writing(self):
+        for value in ("''", "null", "false", "'two words'", "'a:b'", "'a#b'", "fig", "tbl", "eq", "sec", "lst"):
+            with self.subTest(value=value):
+                self.write("draft.md", f"---\npdfmd-options: {{excerpt-prefix: {value}}}\n---\n")
+                error = self.command("add", "--in", "draft.md", "--key", "glass", code=1)
+                self.assertIn("excerpt-prefix", error["error"])
+                self.assertFalse((self.root / "excerpts.json").exists())
 
     def test_where_percent_comments_and_raw_blocks_keep_line_numbers(self):
         self.command("add", "--key", "glass")

@@ -988,7 +988,7 @@ Plain `list` prints a table with one row per record, showing id, key, page and
 kind, plus locator, label, supplement and creation date when present. It
 shortens long values with `…` to fit the terminal (80 columns in a pipe).
 `--key` and `--unused` filter the table. Use `--json` for the complete records.
-Plain `add` prints the id and `[@x:ID]`, `[@KEY#ID]` (a remark has only the short
+Plain `add` prints the id and canonical forms `[@x:ID]`, `[@KEY#ID]` (a remark has only the short
 form). Plain `export` prints Markdown. The remaining actions print indented JSON.
 
 Discovery uses `pdfmd-options: {excerpts: PATH}` first, relative to the file
@@ -1015,11 +1015,17 @@ in the source’s `more` mapping; a second file is named there by hand in this p
 
 `where` scans project Markdown and QMD files recursively, preserving source line
 numbers, excluding hidden folders, code, comments, math, raw blocks and other
-record-file namespaces. It recognises `@x:ID`, `@x#ID`, `@KEY#ID` in bracketed,
-narrative, author-suppressed and mixed citations. `@KEY:ID` is an ordinary key;
-reference prefixes `fig`, `tbl`, `eq`, `sec`, `lst` remain cross-references. An
-actual bibliography key wins over a marker of the same spelling. The prefix `x`
-is fixed. This is a location scanner, not the forthcoming citation resolver.
+record-file namespaces. It recognises `@x:ID`, `@x#ID`, `@KEY#ID` and `@KEY:ID`
+in bracketed, narrative, author-suppressed and mixed citations. It splits at
+the final separator followed by digits and tries the short prefix first.
+An actual bibliography key wins over a marker of the same spelling. Each
+location includes a `marker` field in canonical form.
+
+`pdfmd-options: {excerpt-prefix: x}` sets the short prefix. Set it in the
+document, metadata, folder settings or global config, or use the `--setup` row.
+The default is `x`. Use one word of letters, digits, hyphens or underscores.
+The cross-reference prefixes `fig`, `tbl`, `eq`, `sec` and `lst` are reserved.
+
 A cited record cannot be removed without `--force`; its markers then remain.
 `remove --detach` awaits P1c; `list --problems` awaits the P1d checks (both exit 2
 in this phase). `export` groups records by source, with notes and citing places.

@@ -77,6 +77,8 @@ class TieredHelp(unittest.TestCase):
         text = " ".join(text.split())
         self.assertIn("--excerpts", text)
         self.assertIn("pdfmd-options.excerpts", text)
+        self.assertIn("pdfmd-options.excerpt-prefix", text)
+        self.assertIn("@x:ID and @KEY#ID", text)
         self.assertIn("--json", text)
         self.assertIn("--in PATH", text)
 
