@@ -16,6 +16,7 @@ from pdfmd_base import core
 from pdfmd_base import timed
 
 from pdfmd_base import pandoc_run
+from pdfmd_reader.controls import diagnostic_scope, repair_controls
 
 
 def timing_module():
@@ -107,7 +108,8 @@ def warning_capture() -> Iterator[list[str]]:
     out, err = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = _WarningTee(out, lines), _WarningTee(err, lines)
     try:
-        yield lines
+        with diagnostic_scope():
+            yield lines
     finally:
         sys.stdout, sys.stderr = out, err
 
@@ -229,7 +231,7 @@ def nonmath_dollars(md_path: Path, reader: str | None) -> list[tuple[int, str, s
             if not any(MATH_LOOKING_RE.search(candidate.group(1)) for candidate in NONMATH_DOLLAR_CANDIDATE_RE.finditer(core.strip_code_text(raw))):
                 _NONMATH_DOLLARS[key] = found                   # nothing that could be one: no Pandoc pass for it
                 return found
-            text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(raw, md_path, show=False))
+            text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(repair_controls(raw), md_path, show=False))
             done = pandoc_run([pandoc, "-f", reader or "markdown", "-t", "json"], input=text, capture_output=True,
                                   text=True, encoding="utf-8", timeout=120)
             if done.returncode == 0:

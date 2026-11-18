@@ -240,7 +240,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     handle.write(source_override[0])
                 first = Path(handle.name)
                 temporaries.append(first)
-            with core.scaffold_inputs([first, *parts_inputs], bool(parts_inputs), metadata_files=metadata_files) as scaffold_files, \
+            with core.scaffold_inputs([first, *parts_inputs], bool(parts_inputs),
+                                      metadata_files=metadata_files, pandoc_source=False) as scaffold_files, \
                     NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix, prefix=f".{md_path.stem}.pdfmd-native-",
                                        dir=md_path.parent, delete=False) as handle:
                 handle.write(core.assemble_markdown_text(scaffold_files, False, None, partial, False))

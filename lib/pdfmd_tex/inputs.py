@@ -14,6 +14,7 @@ from textwrap import dedent
 from typing import Iterator
 
 from pdfmd_base import core
+from pdfmd_reader.controls import repair_controls
 
 
 # Folders holding files an assembled document embeds (its bibliography and CSL
@@ -582,7 +583,8 @@ def prepared_latex_inputs(paths: list[Path], latex_engine: bool,
     prepared: list[Path] = []
     try:
         for index, path in enumerate(paths):
-            original = text = path.read_text(encoding="utf-8-sig")
+            original = path.read_text(encoding="utf-8-sig")
+            text = repair_controls(original, path) if index < doc_count else original
             if drop_embedded_preamble and index < doc_count:
                 # A target that is not LaTeX-family gets no embedded LaTeX preamble.
                 text = core.strip_embedded_preamble(text)

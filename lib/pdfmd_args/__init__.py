@@ -210,7 +210,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "target format, same as --to")
     parser.add_argument("--strict", action=argparse.BooleanOptionalAction, default=None,
                         help="a build that printed a warning (an engine that failed and was replaced, a missing glyph, "
-                             "a Pandoc [WARNING]...) counts as failed: the output is kept, the exit code is 1 "
+                             "repaired source control characters, a Pandoc [WARNING]...) counts as failed: "
+                             "the output is kept, the exit code is 1 "
                              "(also `pdfmd-options: {strict: true}`); --no-strict overrides the document")
     parser.add_argument("--build-time", action=argparse.BooleanOptionalAction, default=None,
                         help="print how long a build took on its closing line (`OK  a.md > a.pdf  in 3:07`; on by default; "

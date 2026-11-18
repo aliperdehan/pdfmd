@@ -132,8 +132,9 @@ class Links:
                 raw = note.read_text(encoding="utf-8-sig")
             except (OSError, UnicodeError):
                 return None
+            from pdfmd_reader.controls import repair_controls
             metadata = core.scaffold_metadata_files(note, None)
-            text = core.obsidian_source(raw, note, metadata, show=False)
+            text = core.obsidian_source(repair_controls(raw), note, metadata, show=False)
             if self.title_auto:
                 text, _ = core.promote_bare_title(text, bool(metadata))
             reader, _ = core.resolve_from_format(note, None, metadata)

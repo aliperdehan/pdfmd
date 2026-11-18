@@ -32,6 +32,7 @@ from pdfmd_lookup import LOOKUP_TIERS, LookupAmbiguous, rank_lookup
 
 from pdfmd_base import core
 from pdfmd_flavours.markup import comment_source
+from pdfmd_reader.controls import repair_controls
 
 from pdfmd_base import pandoc_run
 
@@ -219,7 +220,7 @@ def select_parts_and_sections(parts: list[Path], directory: Path,
         spans: list[tuple[int, Path, int]] = []      # (offset, part, lines): where each part sits in `headings`' numbering
         offset = 0
         for part in parts:
-            text = comment_source(part.read_text(encoding="utf-8-sig"), part, metadata_files)
+            text = comment_source(repair_controls(part.read_text(encoding="utf-8-sig")), part, metadata_files)
             lines = core.strip_part_front_matter(text).split("\n")
             headings += [heading._replace(line=heading.line + offset, end=heading.end + offset)
                          for heading in scan_items(lines)]
@@ -424,7 +425,7 @@ def scaffold_inputs(files: list[Path], active: bool,
                     markers: dict[Path, str] | None = None,
                     select: "set[Path] | None" = None,
                     transform: "Callable[[str, Path], str] | None" = None,
-                    metadata_files=()) -> Iterator[list[Path]]:
+                    metadata_files=(), *, pandoc_source: bool = True) -> Iterator[list[Path]]:
     """Yield the files to hand Pandoc: the scaffold as is, each part with its
     front matter removed (a hidden temp copy beside it, deleted afterwards;
     a part with nothing to remove is passed through untouched). ``markers``
@@ -441,7 +442,8 @@ def scaffold_inputs(files: list[Path], active: bool,
     try:
         for part in files[1:]:
             text = part.read_text(encoding="utf-8-sig")
-            cleaned = core.strip_part_front_matter(comment_source(text, part, metadata_files))
+            repaired = repair_controls(text, part) if pandoc_source else text
+            cleaned = core.strip_part_front_matter(comment_source(repaired, part, metadata_files))
             if transform is not None:
                 cleaned = transform(cleaned, part)     # a rewrite of the part's text (ASCII tables), before it is cut or wrapped
             if part in chapters:
@@ -773,7 +775,7 @@ def section_source(source: Path, cli_no_auto: list[str] | None,
     to Pandoc: the same bare-`# Title` promotion first, so headings are cut
     from the text that is actually built."""
     metadata_files = core.scaffold_metadata_files(source, requested_metadata)
-    raw = comment_source(source.read_text(encoding="utf-8-sig"), source, metadata_files)
+    raw = comment_source(repair_controls(source.read_text(encoding="utf-8-sig")), source, metadata_files)
     if core.auto_disabled(core.effective_no_auto(source, cli_no_auto), "title"):
         promoted, shifted = raw, False
     else:
@@ -981,7 +983,7 @@ def print_parts(plan: core.ScaffoldPlan) -> None:
     print(f"SCAFFOLD  {core.display_path(plan.scaffold)}")
     for part in plan.parts:
         text = part.read_text(encoding="utf-8-sig")
-        body = strip_part_front_matter(comment_source(text, part, plan.metadata_files, show=False))
+        body = strip_part_front_matter(comment_source(repair_controls(text), part, plan.metadata_files, show=False))
         items = core.scan_items(body.split("\n"))
         heading = next((f"{'#' * item.level} {item.text}" for item in items if item.level), "")
         mark = "*" if plan.selected is not None and part in plan.selected else " "

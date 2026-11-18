@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.34.27 — 2026-11-18
+
+Pre-edit state: commit `999e1ce`. Pasted control characters reached Pandoc
+and made LaTeX reject the document. Repair the text before Pandoc reads it.
+Keep tabs and line endings, turn vertical tabs and form feeds into newlines,
+and remove whole ANSI colour sequences and other C0 controls. One warning
+per source lists the original lines, code points and repairs. The warning
+counts towards `--strict`, and the repair leaves the source untouched.
+
+- Synthetic tests cover the C0 range, HTML, section cuts, parts, both report
+  routes, strict mode and a first-engine LuaLaTeX build. The launchpad stays
+  at 785 lines.
+
 ## v3.34.26 — 2026-11-18
 
 Pre-edit state: commit `6b3fdcb`. Report chapters and split-document parts

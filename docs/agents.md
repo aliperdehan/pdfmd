@@ -59,6 +59,8 @@ Use `--page-numbers` when a cropped result should keep them.
 - The exit code is `0` when every file was built and `1` when any failed (the others in a batch are still built). With
   `--strict` a build that printed a warning (an engine that failed and was replaced, a missing glyph, a Pandoc
   `[WARNING]`) counts as failed too: the output is kept, the exit code is `1`. `--check` exits `1` on an error.
+- Control character repairs for Pandoc produce one warning per source, with original line numbers and code points.
+  The repair leaves the source file untouched and counts towards `--strict`.
 - When an engine fails, the next one is tried only where `engine-fallback` lets it. The default, `auto`, stops a
   build whose PDF already exists at an error in the document (exit `1`, the existing PDF left as it was; the closing line says
   `engine-fallback auto stopped the build`) and goes on only past an engine that cannot run here; a new PDF gets the whole

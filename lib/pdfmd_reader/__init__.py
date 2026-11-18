@@ -16,6 +16,7 @@ from typing import Iterator
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from .controls import repair_controls
 
 
 # What a Markdown document really contains, asked of Pandoc's own reader: a `@key` in a code span, an e-mail
@@ -40,7 +41,7 @@ def markdown_features(md_path: Path, metadata_files=()) -> tuple[bool, bool] | N
     if pandoc:
         try:
             text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(
-                md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, show=False))
+                repair_controls(md_path.read_text(encoding="utf-8-sig")), md_path, metadata_files, show=False))
             command = [pandoc, "-f", "markdown", "-t", "json"]
             if core.md_macro_in(text):
                 # the Markdown inside `\md{...}` is part of the document: a citation there needs --citeproc
@@ -107,7 +108,7 @@ def contains_citations(md_path: Path, metadata_files=()) -> bool:
     if features is not None:
         return False
     text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(
-        md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, show=False))
+        repair_controls(md_path.read_text(encoding="utf-8-sig")), md_path, metadata_files, show=False))
     return bool(re.search(r"(?<![\w@])(?:-?@[-\w:.]+)", text))
 
 
@@ -141,7 +142,7 @@ def contains_crossref(md_path: Path, metadata_files=()) -> bool:
     if features is not None:
         return features[1]
     text = core.EMBED_BLOCK_RE.sub("", core.obsidian_source(
-        md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, show=False))
+        repair_controls(md_path.read_text(encoding="utf-8-sig")), md_path, metadata_files, show=False))
     return bool(CROSSREF_RE.search(text))
 
 
@@ -330,7 +331,7 @@ def pdfmd_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str | 
     """pdfmd's own pick of reader for a Markdown file, from what the file says and uses (resolve_from_format has the reasons): gfm with
     the extensions it needs, or None for Pandoc's own Markdown."""
     from . import dialect
-    original = md_path.read_text(encoding="utf-8-sig")
+    original = repair_controls(md_path.read_text(encoding="utf-8-sig"))
     text = core.obsidian_source(original, md_path, metadata_files, show=False)   # hidden text decides nothing
     toml = dialect.toml_front_matter(original)
     if (toml and dialect.deep(md_path, metadata_files)) or core.has_yaml_frontmatter(original):
@@ -504,10 +505,10 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
                           disabled: bool = False,
                           override: tuple[str, bool] | None = None,
                           reader: str | None = None, keep_wikilinks: bool = False) -> Iterator[tuple[Path, bool]]:
-    """Yield a temporary copy of ``md_path`` with promote_bare_title() applied,
-    and whether that happened (the caller needs to know to also shift
-    heading levels). Yields ``md_path`` itself, unchanged, when nothing to
-    promote was found, or when ``disabled`` (--no-auto title/bare) skips it.
+    """Yield the prepared text source and whether its title was promoted.
+
+    Keep the original path when the text needs no changes. ``disabled``
+    (--no-auto title/bare) skips title promotion.
 
     ``override`` is (text, shifted) of a document already cut down to some of
     its sections (SectionPlan, which promoted the title itself): that text is
@@ -518,46 +519,32 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
     """
     from . import dialect
     relax = dialect.EXTENSIONS in (reader or "")
+    original = md_path.read_text(encoding="utf-8-sig")
+    text = repair_controls(original, md_path)
+    shifted = False
     if override is not None:
         text, shifted = override
-        if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
-            text = dialect.prepare(text, md_path, metadata_files, relax)
-            text = core.obsidian_source(text, md_path, metadata_files, keep_wikilinks=keep_wikilinks)
-            text = core.repair_ascii_text(text, core.table_ascii_mode(md_path, list(metadata_files)), core.display_path(md_path))
-            text = core.cell_tags_text(text, md_path, metadata_files, core.display_path(md_path))
-        with NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix,
-                                prefix=f".{md_path.stem}.pdfmd-section-", dir=md_path.parent,
-                                delete=False) as temporary:
-            temporary.write(text)
-            temporary_path = Path(temporary.name)
-        try:
-            yield temporary_path, shifted
-        finally:
-            temporary_path.unlink(missing_ok=True)
-        return
-    if md_path.suffix.lower() not in MARKDOWN_LIKE_SUFFIXES:
-        yield md_path, False
-        return
-    original = md_path.read_text(encoding="utf-8-sig")
-    text = dialect.prepare(original, md_path, metadata_files, relax)
-    text = core.obsidian_source(text, md_path, metadata_files, keep_wikilinks=keep_wikilinks)      # an Obsidian note's %%comments%% go first: a hidden heading is no title
-    corrected, shifted = text, False
-    if not disabled:
-        corrected, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))
-    repaired = core.repair_ascii_text(corrected, core.table_ascii_mode(md_path, list(metadata_files)), core.display_path(md_path))
-    repaired = core.cell_tags_text(repaired, md_path, metadata_files, core.display_path(md_path))
-    chapter = (core.REPORT_BUILD.get("chapters") or {}).get(md_path)
+        text = repair_controls(text)
+    if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
+        text = dialect.prepare(text, md_path, metadata_files, relax)
+        text = core.obsidian_source(text, md_path, metadata_files, keep_wikilinks=keep_wikilinks)
+        if override is None and not disabled:
+            text, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))
+        text = core.repair_ascii_text(text, core.table_ascii_mode(md_path, list(metadata_files)), core.display_path(md_path))
+        text = core.cell_tags_text(text, md_path, metadata_files, core.display_path(md_path))
+    chapter = (core.REPORT_BUILD.get("chapters") or {}).get(md_path) if override is None else None
     if chapter is not None:
         # a report's first file: its title leaves the front matter and becomes a chapter heading (pdfmd_report.titles)
         import pdfmd_report.titles as report_titles
-        repaired = report_titles.apply(core, repaired, chapter)
-    if not shifted and repaired == original:
+        text = report_titles.apply(core, text, chapter)
+    if override is None and not shifted and text == original:
         yield md_path, False
         return
+    kind = "section" if override is not None else "title"
     with NamedTemporaryFile("w", encoding="utf-8", suffix=md_path.suffix,
-                            prefix=f".{md_path.stem}.pdfmd-title-", dir=md_path.parent,
+                            prefix=f".{md_path.stem}.pdfmd-{kind}-", dir=md_path.parent,
                             delete=False) as temporary:
-        temporary.write(repaired)
+        temporary.write(text)
         temporary_path = Path(temporary.name)
     try:
         yield temporary_path, shifted

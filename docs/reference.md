@@ -1309,6 +1309,11 @@ The Obsidian and pdfmd flavours hide `%%comments%%` in single documents, report 
 parts. `--show-comments` displays them as HTML comments or as the writer's comment boxes. Heading listings, section
 selection and citation detection ignore their contents. Percent delimiters in indented and fenced code stay literal.
 
+Before Pandoc reads a text source, pdfmd repairs characters U+0000–U+001F in its working text. It keeps tabs and
+line endings, turns vertical tabs and form feeds into newlines, removes ANSI colour sequences whole, and drops the
+other controls. One warning per affected source lists its original line numbers, code points and repairs.
+`--strict` reports the build as failed. The repair leaves the source file untouched.
+
 ## CSV/TSV table inclusion
 
 A fenced Div with class `csv` --
