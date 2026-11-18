@@ -576,8 +576,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd.append(f"--{citation_engine}")
                     else:
                         cmd.append("--citeproc")
-                if "--citeproc" in cmd or "--citeproc" in pandoc_options:
-                    cmd += core.csl_args([md_path], metadata_files, pandoc_options, no_auto)
+                cmd += core.csl_args(
+                    [md_path], metadata_files, pandoc_options, no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
                 cmd += core.fullcite_post_args(all_inputs or md_path, metadata_files, cmd, pandoc_options)   # after citeproc
                 cmd += core.bibliography_indent_args(all_inputs or md_path, metadata_files, cmd, pandoc_options, target_format)
                 # pandoc_options after the citation-engine flag above: a
@@ -588,6 +588,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += core.html_pandoc_args(md_path, metadata_files, pandoc_options, self_contained, note)
                 cmd += office_arguments
                 cmd += pandoc_options
+                cmd += core.bibliography_spacing_args(md_path, metadata_files, cmd)
                 if is_tex_target:
                     cmd += core.tex_package_args([md_path, *parts_inputs], no_auto, note)
                     cmd += core.paragraph_spacing_latex_args([md_path, *parts_inputs], metadata_files)
@@ -839,8 +840,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if (any_citations or (engine == "typst" and core.document_csl([md_path], metadata_files))) \
                             and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
                         cmd.append("--citeproc")
-                    if "--citeproc" in cmd or "--citeproc" in pandoc_options:
-                        cmd += core.csl_args([md_path], metadata_files, pandoc_options, no_auto)
+                    cmd += core.csl_args(
+                        [md_path], metadata_files, pandoc_options, no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
                     cmd += core.fullcite_post_args(all_inputs or md_path, metadata_files, cmd, pandoc_options)   # after citeproc
                     cmd += core.bibliography_indent_args(all_inputs or md_path, metadata_files, cmd, pandoc_options, engine)
                     # pandoc_options after --citeproc, same reason as below: a
@@ -852,6 +853,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # on the actual pandoc command line. Confirmed via
                     # --verbose CMD output before this fix.)
                     cmd += pandoc_options
+                    cmd += core.bibliography_spacing_args(md_path, metadata_files, cmd)
                     if engine in core.LATEX_ENGINES:
                         cmd += core.tex_package_args([md_path, *parts_inputs], no_auto, note)
                         cmd += core.paragraph_spacing_latex_args([md_path, *parts_inputs], metadata_files)

@@ -41,6 +41,7 @@ UNSET = {
     "options.typst-line-spacing": "latex: LaTeX's line pitch",
     "options.pagecite-terms": "p., pp.",
     "options.bibliography-indent": "the writer's own (1.5em in Typst, which had none)",
+    "options.bibliography-line-spacing": "off, writer defaults",
     "colorlinks": "off", "toc": "off",
     "options.unicode": "off (only for text the font lacks)", "translit": "Cyrillic only",
     "bibliography": "none", "csl": "Pandoc's Chicago author-date", "link-citations": "off",
@@ -99,6 +100,7 @@ FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
     "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.pandoc-memory", "options.css-scope", "options.indent", "options.paragraph-spacing", "options.bibliography-indent",
     "options.typst-line-spacing",
+    "options.bibliography-line-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid", "options.shrink", "options.shrink-timeout", "options.odt.engine",
@@ -248,6 +250,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "a length (0.5in, 1.5em; units pt, mm, cm, in, em), 0 for none, or auto. Only a style that asks for a hanging indent has "
              "one. Empty: each writer's own (LaTeX 1.5em, HTML 2em, Word 0.5in) and, for Typst, whose writer had none, 1.5em; a "
              "value is applied the same in every writer. Per run: --bibliography-indent.", "Every document (global metadata)"),
+        text("options.bibliography-line-spacing", "Line spacing of references",
+             "Off leaves the writer's own spacing. Style uses CSL line-spacing. A positive factor such as 1 or 1.5 "
+             "sets the spacing in LaTeX, Typst, Word and HTML.", "Every document (global metadata)"),
         choice("colorlinks", "Coloured links", on_off, "", "Metadata accepts colourlinks or Pandoc's colorlinks.", "Every document (global metadata)", "metadata"),
         choice("toc", "Table of contents", on_off, "", "", "Every document (global metadata)", "metadata"),
         choice("options.global-metadata", "Use the global metadata above", on_off, "",

@@ -3439,10 +3439,16 @@ The same key works in metadata files, folder settings, the config and `--setup`.
 A CSL bibliography's `entry-spacing` adds that many line pitches between entries, including 2.5 and 0.5; zero adds no
 extra line. Without the attribute, the entries keep the document's paragraph spacing.
 
-A CSL style's bibliography `line-spacing="2"` gives a double-spaced reference list in LaTeX, Typst,
-Word and HTML. The rule stays inside the bibliography; `entry-spacing` still controls the gap between entries.
-pdfmd fills gaps in writer support (Pandoc 3.13 already applies it in Word; 3.1.3 needs the fallback).
-Without `line-spacing` the output is unchanged.
+`pdfmd-options.bibliography-line-spacing` (also in `--setup`) defaults to `off`, the output before v3.33.327.
+Each writer keeps its own behaviour. Pandoc still writes `data-line-spacing` in HTML, and Word writers that already
+honour CSL line spacing keep it. Set `style` to apply the CSL style's `line-spacing` in LaTeX, Typst, Word and HTML.
+Set a positive factor such as `1.5` to override the style, or `1` for single spacing in all four writers.
+The setting affects the combined reference list from citeproc. CSL `entry-spacing` still controls the space between entries.
+
+`pdfmd-options.csl` accepts a path or a mapping such as `{file: apa.csl, spacing: style}`. Relative paths use the same
+lookup as root `csl:`. The file comes from `--csl`, then `pdfmd-options.csl`, then root `csl:`. When files differ,
+one WARN names the choices. If `bibliography-line-spacing` and `csl.spacing` differ, one WARN names both and
+`bibliography-line-spacing` wins.
 
 ### Your own defaults: the config file
 

@@ -361,13 +361,13 @@ local LINE_HEIGHT = "measure[X].height"
 local csl_here = (PANDOC_SCRIPT_FILE or ""):gsub("[^/\\]*$", "")
 local csl_spacing = dofile(csl_here .. "csl_spacing.lua")
 
--- The refs div: CSL line-spacing sets its pitch locally; entry-spacing adds N pitches between entries.
+-- The refs div: an enabled bibliography line-spacing rule sets its pitch locally; entry-spacing adds N pitches.
 -- Without either attribute, leave spacing to the document/template.
 local function entry_spacing(div, meta)
   if div.identifier ~= "refs" then return nil end
   local lines = tonumber(div.attributes["entry-spacing"] or "")
   if lines == nil and div.attributes["entry-spacing"] == nil then lines = csl_spacing.attribute(meta, "entry-spacing") end
-  local stretch = tonumber(div.attributes["line-spacing"] or "")
+  local stretch = tonumber(div.attributes["pdfmd-bibliography-line-spacing"] or "")
   if stretch and (stretch <= 0 or stretch ~= stretch or stretch == math.huge) then stretch = nil end
   local entry = lines ~= nil and lines >= 0 and lines == lines and lines ~= math.huge
   if not entry and not stretch then return nil end
@@ -377,6 +377,7 @@ local function entry_spacing(div, meta)
     div.content:insert(1, pandoc.RawBlock("typst", "#show: body => context { set par(spacing: " .. value .. "); body }"))
   end
   if stretch then
+    div.attributes["pdfmd-bibliography-line-spacing"] = nil
     local rule
     if meta["pdfmd-typst-line-spacing"] and pandoc.utils.stringify(meta["pdfmd-typst-line-spacing"]) == "pandoc" then
       rule = "#show: body => context { set par(leading: " .. tostring(stretch)

@@ -148,7 +148,11 @@ Use `--strip-comments` or `pdfmd-options: {strip-comments: true}` to remove HTML
 
 Document `indent:` (front matter or pdfmd-options) accepts lengths such as 0.5in, 3em and 1cm in LaTeX, Typst, Word and HTML. True keeps each writer's standard indent (LaTeX the class's own, Typst 1.5em, Word 0.25in, HTML none); false/unset keeps defaults. Invalid lengths stop the build; indent divs still override a stretch.
 
-CSL bibliography line-spacing (for example 2 for double spacing) applies locally in LaTeX, Typst, Word and HTML; native writer spacing is retained. A style without it keeps its output unchanged.
+`pdfmd-options.bibliography-line-spacing` (also in `--setup`) defaults to `off`, keeping each writer's spacing,
+including native Word spacing and HTML's `data-line-spacing`. Use `style` to apply CSL line spacing to the reference list,
+or a positive factor (`1` for single spacing) to override it in LaTeX, Typst, Word and HTML.
+`pdfmd-options.csl` takes a path or `{file: apa.csl, spacing: style}`. For the file, `--csl` wins over the alias,
+then root `csl:`. For spacing, `bibliography-line-spacing` wins over `csl.spacing`. Conflicting values produce a WARN.
 
 Table width estimation: `pdfmd-options: {column-estimate: measure}` opts in to measured cell and word widths
 for LaTeX and Typst PDF builds with their selected engine. The default `count` is unchanged. `--setup` offers the key;

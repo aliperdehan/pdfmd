@@ -77,7 +77,10 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("--in PATH", text)
 
     def test_csl_line_spacing_is_in_output_help(self):
-        self.assertIn("CSL line-spacing", run("--help", "output").stdout)
+        text = " ".join(re.sub(r"-\n\s+", "-", run("--help", "output").stdout).split())
+        self.assertIn("bibliography-line-spacing", text)
+        self.assertIn("style (CSL line-spacing)", text)
+        self.assertIn("pdfmd-options.csl", text)
 
     def test_tables_help_explains_column_estimate(self):
         text = run("--help", "tables").stdout

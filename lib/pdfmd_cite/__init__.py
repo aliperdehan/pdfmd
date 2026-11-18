@@ -94,6 +94,14 @@ def open_url(request, timeout: float):
 
 
 def document_csl(sources: list[Path], metadata_files: list[Path]) -> str | None:
+    """The document's CSL file, including the pdfmd-options alias."""
+    from pdfmd_bibliography import csl_option
+
+    alias, _ = csl_option(Path(sources[0]), metadata_files) if sources else (None, None)
+    return alias or root_csl(sources, metadata_files)
+
+
+def root_csl(sources: list[Path], metadata_files: list[Path]) -> str | None:
     """The `csl:` Pandoc takes from the files: the last source's front matter, else the winning metadata file's."""
     for source in reversed(sources):
         value = core.front_matter_dict(core.read_text_best_effort(Path(source))).get("csl")
@@ -179,22 +187,58 @@ def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | No
 
 
 def csl_args(sources: list[Path], metadata_files: list[Path], pandoc_options: list[str],
-             no_auto: list[str] | None) -> list[str]:
-    """`--csl FILE` for a `csl:` URL in the front matter or a metadata file (see remote_csl); nothing for a local style,
-    one the command line names (--csl, -M csl=...), or `--no-auto remotecsl`."""
-    if core.auto_disabled(no_auto, "remotecsl"):
+             no_auto: list[str] | None, *, citeproc: bool = True) -> list[str]:
+    """Select a plain path for the pdfmd-options alias or a remotely cached CSL style."""
+    from pdfmd_args import metadata_command_layers
+    from pdfmd_bibliography import csl_option
+
+    if not sources:
         return []
-    for index, option in enumerate(pandoc_options):
-        following = pandoc_options[index + 1] if index + 1 < len(pandoc_options) else ""
-        if (option == "--csl" or option.startswith("--csl=")
-                or (option in ("-M", "--metadata") and following.startswith(("csl=", "csl:")))
-                or option.startswith(("-Mcsl=", "-Mcsl:", "--metadata=csl=", "--metadata=csl:"))):
-            return []
-    value = document_csl([Path(source) for source in sources], metadata_files)
-    if not value or not value.lower().startswith(("http://", "https://")):
+    source = Path(sources[0])
+    alias, _ = csl_option(source, metadata_files)
+    options = pandoc_options[:pandoc_options.index("--")] if "--" in pandoc_options else pandoc_options
+    cli = None
+    tokens = iter(options)
+    for option in tokens:
+        if option == "--csl":
+            cli = next(tokens, "")
+        elif option.startswith("--csl="):
+            cli = option.partition("=")[2]
+        elif option in ("-M", "--metadata", "-V", "--variable"):
+            next(tokens, None)
+    metadata, _ = metadata_command_layers(options)[0]
+    cli_metadata = metadata.get("csl")
+    root = root_csl(sources, metadata_files)
+    choices = [(key, value) for key, value in (("--csl", cli), ("command-line csl metadata", cli_metadata),
+                                               ("pdfmd-options.csl", alias), ("root csl", root))
+               if isinstance(value, str) and value]
+    if len(choices) > 1:
+        from pdfmd_bibliography.sources import locate, resource_folders
+
+        folders = resource_folders([Path(item) for item in sources], metadata_files)
+
+        def identity(path: str) -> Path | str:
+            if re.match(r"^https?://", path, re.I):
+                return path
+            try:
+                return locate(path, folders).resolve()
+            except (OSError, RuntimeError, ValueError):
+                return path
+
+        key, value = choices[0]
+        winner = identity(value)
+        conflicts = [f"{other_key} {other!r}" for other_key, other in choices[1:]
+                     if identity(other) != winner]
+        if conflicts:
+            print(f"WARN  {core.display_path(source)}: {key} {value!r} overrides {', '.join(conflicts)}", file=sys.stderr)
+    if cli is not None or "csl" in metadata:
         return []
-    local = remote_csl(value, Path(sources[0]), metadata_files)
-    return ["--csl", str(local)] if local is not None else []
+    value = alias or root
+    if citeproc and value and re.match(r"^https?://", value, re.I) and not core.auto_disabled(no_auto, "remotecsl"):
+        local = remote_csl(value, source, metadata_files)
+        if local is not None:
+            return ["--csl", str(local)]
+    return ["--csl", alias] if alias is not None else []
 
 
 BIB_ENTRY_START_RE = re.compile(r"^[ \t]*@[ \t]*([A-Za-z]+)[ \t]*([{(])", re.MULTILINE)

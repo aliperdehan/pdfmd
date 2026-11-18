@@ -304,14 +304,15 @@ def run(core, *,
                         and "--citeproc" not in pandoc_options
                         and not core.CITEPROC_DISABLED):
                     cmd.append("--citeproc")
-                if "--citeproc" in cmd or "--citeproc" in pandoc_options:
-                    cmd += csl_args(list(files), metadata_files, pandoc_options, report_no_auto)
+                cmd += csl_args(
+                    list(files), metadata_files, pandoc_options, report_no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
                 cmd += core.fullcite_post_args(list(files), metadata_files, cmd, pandoc_options)      # after citeproc
                 cmd += core.bibliography_indent_args(list(files), metadata_files, cmd, pandoc_options, target_format)
                 # pandoc_options after --citeproc: see convert_one's
                 # matching comment.
                 cmd += report_office_arguments
                 cmd += pandoc_options
+                cmd += core.bibliography_spacing_args(files[0], metadata_files, cmd)
                 if report_fonts_filter is not None:
                     cmd += ["--lua-filter", str(report_fonts_filter)]
                 if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
@@ -449,13 +450,14 @@ def run(core, *,
                             and "--citeproc" not in pandoc_options
                             and not core.CITEPROC_DISABLED):
                         cmd.append("--citeproc")
-                    if "--citeproc" in cmd or "--citeproc" in pandoc_options:
-                        cmd += csl_args(list(files), metadata_files, pandoc_options, report_no_auto)
+                    cmd += csl_args(
+                        list(files), metadata_files, pandoc_options, report_no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
                     cmd += core.fullcite_post_args(list(files), metadata_files, cmd, pandoc_options)      # after citeproc
                     cmd += core.bibliography_indent_args(list(files), metadata_files, cmd, pandoc_options, engine)
                     # pandoc_options after --citeproc: see convert_one's
                     # matching comment.
                     cmd += pandoc_options
+                    cmd += core.bibliography_spacing_args(files[0], metadata_files, cmd)
                     if engine in LATEX_ENGINES:
                         cmd += tex_package_args(files, report_no_auto, report_note)
                         cmd += core.paragraph_spacing_latex_args(list(files), metadata_files)

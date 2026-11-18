@@ -10,7 +10,8 @@ Only a style that asks for a hanging indent has one (citeproc's `hanging-indent`
 
 `pdfmd_lua/bibliography_indent.lua` does the list after `--citeproc`, per writer: `\\cslhangindent` for LaTeX, `#set par(hanging-indent:)`
 around the list for Typst, a style on each entry for HTML, and a paragraph style `pdfmd-hang-<length>` for Word and OpenDocument
-(`pdfmd_office` writes its indent afterwards). The indent filter goes in only when the setting is set, or for Typst (the default). A separate post-citeproc filter applies CSL line-spacing locally where writers need it; absent the attribute it changes nothing. The entries of
+(`pdfmd_office` writes its indent afterwards). The indent filter goes in only when the setting is set, or for Typst (the default).
+A separate post-citeproc filter applies opt-in bibliography line spacing locally. The entries of
 `fullcite` take the same value (`pdfmd_fullcite`).
 
 `core` is the `pdfmd` module (`from pdfmd_base import core`); the names used (`first_pdfmd_option`, `display_path`) are read as
@@ -21,6 +22,8 @@ from __future__ import annotations
 
 import os
 import re
+from decimal import Decimal
+from math import isfinite
 from pathlib import Path
 
 from pdfmd_base import core
@@ -31,6 +34,7 @@ DEFAULT = "1.5em"                         # Pandoc's own (\cslhangindent); the a
 ACCEPTED = "a length such as 0.5in or 1.5em (pt, mm, cm, in, em), 0 for none, or auto"
 LENGTH_RE = re.compile(r"(?:\d+(?:\.\d+)?|\.\d+)(?:pt|mm|cm|in|em)")
 ZERO_RE = re.compile(r"(?:0+(?:\.0*)?|\.0+)(?:pt|mm|cm|in|em)?")
+SPACING_KEY = "bibliography-line-spacing"
 
 
 def normalise(value) -> str | None:
@@ -76,23 +80,91 @@ def setting(md_path: Path, metadata_files: list[Path]) -> str | None:
 
 def bibliography_indent_args(sources: Path | list[Path], metadata_files: list[Path], cmd: list[str], pandoc_options: list[str],
                              writer: str) -> list[str]:
-    """Combined-list filters after citeproc: hanging indent when set (or Typst's default), then CSL line spacing."""
+    """The combined list's hanging indent after citeproc, when set or for Typst."""
     files = sources if isinstance(sources, list) else [sources]
     if not files or ("--citeproc" not in cmd and "--citeproc" not in pandoc_options):
         return []
     value = setting(files[0], metadata_files)
+    if value is None and writer not in ("typst", "typ"):
+        return []
     try:
         import pdfmd_lua
     except ImportError:
         core.pdfmd_lua_missing()
         return []
-    args = []
     shipped = pdfmd_lua.path("bibliography_indent")
-    if shipped is not None and (value is not None or writer in ("typst", "typ")):
-        args = ["-M", f"pdfmd-bibliography-indent={value}" if value else f"pdfmd-bibliography-indent-default={DEFAULT}",
-                "--lua-filter", str(shipped)]
-    spacing = pdfmd_lua.path("bibliography_spacing")
-    return args + (["--lua-filter", str(spacing)] if spacing is not None else [])
+    if shipped is None:
+        return []
+    return ["-M", f"pdfmd-bibliography-indent={value}" if value else f"pdfmd-bibliography-indent-default={DEFAULT}",
+            "--lua-filter", str(shipped)]
+
+
+def normalise_spacing(value) -> str:
+    """A spacing mode or a decimal usable by LaTeX, Typst, CSS and Word."""
+    if value is False:  # PyYAML reads an unquoted off as false.
+        return "off"
+    text = str(value).strip().casefold()
+    if text in ("off", "style"):
+        return text
+    if re.fullmatch(r"\+?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?", text):
+        number = float(text)
+        if isfinite(number) and number > 0:
+            decimal = format(Decimal(text), "f")
+            return decimal.rstrip("0").rstrip(".") if "." in decimal else decimal
+    raise ValueError(value)
+
+
+def checked_spacing(value, key: str, source: Path) -> str:
+    try:
+        return normalise_spacing(value)
+    except ValueError:
+        raise SystemExit(f"{core.display_path(source)}: pdfmd-options.{key} must be off, style, or a positive number, "
+                         f"not {value!r}") from None
+
+
+def csl_option(source: Path, metadata_files: list[Path]) -> tuple[str | None, str | None]:
+    """The pdfmd-options alias's file and spacing, each optional in the mapping."""
+    value = core.first_pdfmd_option(source, metadata_files, "csl")
+    if value is None:
+        return None, None
+    where = f"{core.display_path(source)}: pdfmd-options.csl"
+    if isinstance(value, dict):
+        for key in value:
+            if key not in ("file", "spacing"):
+                raise SystemExit(f"{where}: unknown key {key!r}; allowed keys are file and spacing")
+        path = value.get("file")
+        if "file" in value and (not isinstance(path, str) or not path.strip()):
+            raise SystemExit(f"{where}.file must be a CSL file path, not {path!r}")
+        spacing = checked_spacing(value["spacing"], "csl.spacing", source) if "spacing" in value else None
+        return path.strip() if path is not None else None, spacing
+    if isinstance(value, str) and value.strip():
+        return value.strip(), None
+    raise SystemExit(f"{where} must be a CSL file path or a mapping with file and spacing, not {value!r}")
+
+
+def bibliography_spacing_args(source: Path, metadata_files: list[Path], command: list[str]) -> list[str]:
+    """Validate the setting and apply it to the combined list after citeproc."""
+    import sys
+
+    _, alias = csl_option(source, metadata_files)
+    mode = None
+    for _, options in core.option_sources(source, metadata_files):
+        if SPACING_KEY in options:
+            mode = checked_spacing(options[SPACING_KEY], SPACING_KEY, source)
+            break
+    if mode is not None and alias is not None and mode != alias:
+        print(f"WARN  {core.display_path(source)}: pdfmd-options.{SPACING_KEY} ({mode}) overrides csl.spacing ({alias})",
+              file=sys.stderr)
+    mode = mode or alias
+    if mode in (None, "off") or "--citeproc" not in command:
+        return []
+    try:
+        import pdfmd_lua
+    except ImportError:
+        core.pdfmd_lua_missing()
+        return []
+    shipped = pdfmd_lua.path("bibliography_spacing")
+    return ["-M", f"pdfmd-bibliography-line-spacing={mode}", "--lua-filter", str(shipped)] if shipped is not None else []
 
 
 def native_path_args(command: list[str], writer: str | None = None) -> list[str]:

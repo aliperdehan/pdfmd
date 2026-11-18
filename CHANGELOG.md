@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.34.3 — 2026-11-18
+
+Pre-edit state: commit `33f95e1`. Since v3.33.327 pdfmd has applied CSL bibliography line spacing automatically.
+Default `bibliography-line-spacing` to `off` to restore each writer's earlier output, including native Word spacing and
+HTML's CSL data attribute. Opt in with `style` or use a positive factor to override the bibliography's line spacing in
+LaTeX, Typst, Word and HTML. Add the setting to setup and document the `pdfmd-options.csl` path and mapping forms.
+Warn once about conflicting CSL files and once about conflicting spacing values, using the command-line style and
+explicit spacing first. Regression tests cover writer output, native Word spacing, the Typst line pitch, alias
+resolution, conflicts and validation. The default and explicit off output match v3.33.326 byte for byte in all four
+writers on Pandoc 3.13 and 3.1.3. pdfmd.py stays at 785 lines.
+
 ## v3.34.2 — 2026-11-18
 
 Pre-edit state: commit `d21d360`.

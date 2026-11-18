@@ -215,24 +215,27 @@ def style_hangs(styles: str) -> tuple[str, int]:
 
 
 def bibliography_line_spacing(document: str) -> tuple[str, int]:
-    """Fill missing Word line spacing inside refs, preserving native writer properties (240 = one line, Word's format)."""
+    """Set Word line spacing inside refs, preserving native spacing in CSL style mode (240 = one line)."""
+    from decimal import Decimal
+
     changed = 0
 
     def bibliography(match):
         nonlocal changed
-        twips = round(float(match.group(1)) * 240)
+        twips = round(Decimal(match.group(1)) * 240)
+        override = match.group(2) is not None
         changed += 1  # remove the two private delimiters even when the writer supplied every property
 
         def paragraph(found):
             text = found.group(0)
             properties = re.search(r"<w:pPr\b[^>]*>.*?</w:pPr>", text, re.S)
             spacing = re.search(r"<w:spacing\b[^>]*/>", properties.group(0)) if properties else None
-            if spacing and re.search(r"\bw:line=", spacing.group(0)):
+            if spacing and not override and re.search(r"\bw:line=", spacing.group(0)):
                 return text
             attrs = f'w:line="{twips}" w:lineRule="auto"'
             if spacing:
                 old = spacing.group(0)
-                replacement = re.sub(r'\s+w:lineRule="[^"]*"', "", old)
+                replacement = re.sub(r'\s+w:(?:line|lineRule)="[^"]*"', "", old)
                 replacement = replacement[:-2] + " " + attrs + "/>"
                 inner = properties.group(0).replace(old, replacement, 1)
             elif properties:
@@ -241,9 +244,9 @@ def bibliography_line_spacing(document: str) -> tuple[str, int]:
                 return re.sub(r"(<w:p\b[^>]*>)", rf"\1<w:pPr><w:spacing {attrs}/></w:pPr>", text, count=1)
             return text[:properties.start()] + inner + text[properties.end():]
 
-        return re.sub(r"<w:p\b[^>]*>.*?</w:p>", paragraph, match.group(2), flags=re.S)
+        return re.sub(r"<w:p\b[^>]*>.*?</w:p>", paragraph, match.group(3), flags=re.S)
 
-    document = re.sub(r"<!--pdfmd-csl-line-spacing:([0-9.]+)-->\s*(.*?)<!--/pdfmd-csl-line-spacing-->\s*",
+    document = re.sub(r"<!--pdfmd-csl-line-spacing:([0-9.]+)(:override)?-->\s*(.*?)<!--/pdfmd-csl-line-spacing-->\s*",
                       bibliography, document, flags=re.S)
     return document, changed
 

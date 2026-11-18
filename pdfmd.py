@@ -47,7 +47,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.34.2"
+PDFMD_VERSION = "3.34.3"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
@@ -275,7 +275,7 @@ names("pdfmd_unicode.fonts_choice", "font_missing system_font_missing default_mo
 names("pdfmd_edit.command", "put_outside_blocks source_carried source_lost edit_command gather_stamp_texts "
                             "init_vscode_command part_digests stamp_scope_matches")
 names("pdfmd_run", "DISABLED_OK_ENV command_line_parser run_main")
-names("pdfmd_bibliography", "bibliography_indent_args bibliography_indent_command_line")
+names("pdfmd_bibliography", "bibliography_indent_args bibliography_indent_command_line bibliography_spacing_args")
 names("pdfmd_direct.route", "direct_route convert_direct convert_qmd")
 names("pdfmd_build", "PREFERRED_FONT DEFAULT_MONOFONT DEFAULT_VARS WEASYPRINT_CSS_NOISE run_engine_command "
                      "_convert_one_core finish_build set_soffice_limit convert_one make_embed_plan _convert_one")

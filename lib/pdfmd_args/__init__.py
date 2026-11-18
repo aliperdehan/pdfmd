@@ -307,7 +307,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="how far the lines of a reference after its first are set in, in the reference list and in the entries "
                              "`[@key]{.fullcite}` places: a length (0.5in, 1.5em; pt mm cm in em), 0 for none, or auto (the "
                              "default: each writer's own list, Pandoc's 1.5em for Typst). Also "
-                             "`pdfmd-options: {bibliography-indent: 0.5in}`, or --setup. CSL line-spacing sets the bibliography line pitch in LaTeX, Typst, Word and HTML")
+                             "`pdfmd-options: {bibliography-indent: 0.5in}`, or --setup. "
+                             "bibliography-line-spacing in pdfmd-options or --setup sets the pitch in LaTeX, Typst, Word and HTML: "
+                             "off (default, writer spacing), style (CSL line-spacing), or a positive number (1 for single spacing). "
+                             "pdfmd-options.csl takes a CSL file path or {file: FILE, spacing: VALUE}; --csl wins for the file")
     parser.add_argument("--bibliography", action=PassThrough, dest="pandoc_bibliography", metavar="FILE", default=argparse.SUPPRESS,
                         help="Pandoc's own option, passed to it as written (both `--bibliography FILE` and `--bibliography=FILE`); "
                              "pdfmd names it so that it is never read as a shortened --bibliography-indent")

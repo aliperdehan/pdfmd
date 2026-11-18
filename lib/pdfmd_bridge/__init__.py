@@ -126,8 +126,8 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
             cmd += core.select_filter_args(selection)
             if core.contains_citations(md_path) and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
                 cmd.append("--citeproc")
-            if "--citeproc" in cmd or "--citeproc" in pandoc_options:
-                cmd += core.csl_args([md_path], metadata_files, pandoc_options, no_auto)
+            cmd += core.csl_args(
+                [md_path], metadata_files, pandoc_options, no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
             cmd += core.fullcite_post_args(md_path, metadata_files, cmd, pandoc_options)      # after citeproc
             cmd += core.bibliography_indent_args(md_path, metadata_files, cmd, pandoc_options, "docx")
             # pandoc_options after --citeproc: any --lua-filter/--filter a caller
@@ -139,6 +139,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                                   labels=labels, force_filter=True) as office_arguments:
                 cmd += office_arguments
                 cmd += pandoc_options
+                cmd += core.bibliography_spacing_args(md_path, metadata_files, cmd)
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
