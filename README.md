@@ -1631,6 +1631,13 @@ files are errors, and the ordinary Lua trust check applies. `--setup` has rows
 for both lists; unset, neither adds a named file. Discovered files still precede
 the named files, and `--no-auto lua` / `--no-auto preamble` suppress them.
 
+Use `pdfmd-options.lua-filter-before-citeproc` for Lua filters that create or
+edit citations before Pandoc resolves them. It follows the same path, layer and
+trust rules as `lua-filter`. Use `lua-filter-before-citeproc+:` to append.
+The list is empty by default. A filter in this list enables automatic citation
+processing even when the source contains no citations. `--no-citeproc` still
+disables automatic citeproc.
+
 Plain HTML output is a fragment with MathML maths by default; an explicit
 `html.math`, Pandoc maths flag or passed defaults file chooses the method. For a finished page, or one file with
 everything (images, CSS) inlined, ask for it, on the command line or in the

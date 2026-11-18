@@ -149,11 +149,14 @@ def uncovered(parser: argparse.ArgumentParser) -> list[str]:
 FIGURE_FIT_HELP = ("pdfmd-options.figure-fit: on (default) or off. LaTeX and Typst fit images and their captions "
                    "to the page body. A figure image can override it with fit=on or fit=off.\n")
 
+PRE_CITEPROC_HELP = ("pdfmd-options.lua-filter-before-citeproc: named Lua filters run before citation processing. "
+                    "Use a path or list, or append with lua-filter-before-citeproc+. Default: none.\n")
+
 
 def _full(parser: argparse.ArgumentParser) -> str:
     return parser.format_help() + ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
                                  "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"
-                                 + FIGURE_FIT_HELP)
+                                 + FIGURE_FIT_HELP + PRE_CITEPROC_HELP)
 
 
 def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
@@ -179,7 +182,7 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
         if topic == "output":
             text += ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
                      "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"
-                     + FIGURE_FIT_HELP)
+                     + FIGURE_FIT_HELP + PRE_CITEPROC_HELP)
         return text
     finally:
         parser.description = previous

@@ -333,6 +333,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     lua_filters = core.check_lua_filters(md_path, lua_filters, core.resolve_strict(md_path, metadata_files))
     for lua_filter in lua_filters:
         note("LUA", str(lua_filter))
+    from pdfmd_filters.lua import pre_citeproc_args
+    before_citeproc = pre_citeproc_args(md_path, metadata_files, no_auto)
 
     # Resolved once, up front, since PDF metadata (unlike the .md BUILD
     # NOTES stamp, written after a successful compile) has to already be
@@ -398,6 +400,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             all_inputs or [md_path], metadata_files, pandoc_options, no_auto, from_format)
         if any_citations is None:
             any_citations = any(core.contains_citations(item) for item in [md_path, *parts_inputs])
+        any_citations = any_citations or bool(before_citeproc)
         any_code_spans = any(core.has_code_spans(item.read_text(encoding="utf-8-sig"))
                              for item in [md_path, *parts_inputs])
         if parts_inputs:
@@ -572,7 +575,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                             flat_text=target_format == "txt",
                                             citation_engine=citation_engine if is_tex_target else None,
                                             named_reader=from_format)
-                cmd += core.select_filter_args(selection)
+                cmd += before_citeproc + core.select_filter_args(selection)
                 if any_citations and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
                     if (is_tex_target and citation_engine in ("natbib", "biblatex")
                             and "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options):
@@ -707,7 +710,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     lua_filters, preamble_files or [], title_source, pdf_meta_snippet_text,
                     citation_engine, presentation, slide_level, shift_heading, font, document_font,
                     mainfont_auto, geometry_needed, monofont_needed, tablewidth_auto, width_filter,
-                    csv_filter, no_auto, engines, keep_aux, verbose, debug, named_reader=from_format)
+                    csv_filter, no_auto, engines, keep_aux, verbose, debug, named_reader=from_format,
+                    before_citeproc=before_citeproc)
                 # Pre-existing gap, closed here rather than left (2026-09-21):
                 # this branch never called stamp_after_success at all, so a
                 # citation-engine: natbib/biblatex document got neither the
@@ -739,7 +743,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                                         no_auto, verbose,
                                                         labels="auto" if engines == ["soffice"] else "off",
                                                         title_source=title_source, part_files=part_files,
-                                                        partial=partial, selection=selection, named_reader=from_format)
+                                                        partial=partial, selection=selection, named_reader=from_format,
+                                                        before_citeproc=before_citeproc)
                 result = subprocess.CompletedProcess(args=["soffice"], returncode=0 if ok else 1,
                                                      stdout="", stderr="" if ok else reason)
                 if ok:
@@ -843,7 +848,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["--include-in-header", str(header_file)]
                     cmd += core.document_filter_args(all_inputs or md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
                                                      named_reader=from_format)
-                    cmd += core.select_filter_args(selection)
+                    cmd += before_citeproc + core.select_filter_args(selection)
                     # A CSL selected for Typst needs Pandoc's style resolver even without citations:
                     # otherwise its template gives Typst a bare filename outside Typst's search path.
                     if (any_citations or (engine == "typst" and core.document_csl([md_path], metadata_files))) \

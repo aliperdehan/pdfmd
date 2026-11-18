@@ -143,6 +143,17 @@ def check_lua_filters(md_path: Path, filters: list[Path], strict: bool) -> list[
     return keep
 
 
+def pre_citeproc_args(document: Path, metadata_files: list[Path], no_auto: list[str] | None) -> list[str]:
+    """Resolve the named filters for the slot before citation processing."""
+    if core.auto_disabled(no_auto, "lua"):
+        return []
+    paths = core.deferred("pdfmd_assemble.named", "files")(document, metadata_files, "lua-filter-before-citeproc")
+    if not paths:
+        return []
+    return [arg for path in core.check_lua_filters(document, paths, core.resolve_strict(document, metadata_files))
+            for arg in ("--lua-filter", str(path))]
+
+
 def trust_lua(paths: list[Path]) -> bool:
     """--trust-lua PATH...: a folder is trusted for good, a file as it is now. True when every path was found."""
     complete = True

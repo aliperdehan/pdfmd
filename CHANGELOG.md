@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.18 — 2026-11-18
+
+Pre-edit state: commit `6761adc`. Project Lua filters ran after citeproc, so a
+filter could not add citations for Pandoc to resolve. Add the layered
+`lua-filter-before-citeproc` list ahead of citation processing. It shares the
+named filter path and trust rules and enables automatic citation processing for
+filters that create citations. The regressions cover ordering, filter-generated
+citations, replacement and append, strict trust and both off switches. Register
+the key in setup and document it in help and the guides.
+
 ## v3.34.17 — 2026-11-18
 
 Pre-edit state: commit `4af94d0`. Plain pdfmd used to pass unambiguous long

@@ -185,6 +185,9 @@ def run(core, *,
         files, metadata_files, pandoc_options, report_no_auto, args.from_format)
     if any_citations is None:
         any_citations = any(contains_citations(file) for file in files)
+    from pdfmd_filters.lua import pre_citeproc_args
+    before_citeproc = pre_citeproc_args(files[0], metadata_files, report_no_auto)
+    any_citations = any_citations or bool(before_citeproc)
     with document_filter_scope(), table_width_filter() as width_filter, csv_table_filter() as csv_filter, titles.Hidden() as hidden:
         if target_format != "pdf":
             # See convert_one's matching comment: a TEX_STANDALONE_FORMATS
@@ -307,6 +310,7 @@ def run(core, *,
                                             args.self_contained, report_note)
                 cmd += document_filter_args(files, files, metadata_files, report_no_auto, csv_filter, pandoc_options,
                                             label="REPORT", named_reader=args.from_format)
+                cmd += before_citeproc
                 if (any_citations
                         and "--citeproc" not in pandoc_options
                         and not core.CITEPROC_DISABLED):
@@ -456,6 +460,7 @@ def run(core, *,
                         cmd += ["--include-in-header", str(report_header_file)]
                     cmd += document_filter_args(files, files, metadata_files, report_no_auto, csv_filter, pandoc_options,
                                                 label="REPORT", named_reader=args.from_format)
+                    cmd += before_citeproc
                     if (any_citations
                             and "--citeproc" not in pandoc_options
                             and not core.CITEPROC_DISABLED):

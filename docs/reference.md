@@ -727,12 +727,22 @@ pdfmd-options:
     yaml: [base.yaml]
     preamble: my-preamble.tex
     lua-filter: my.lua
+
   embed:                          # what --assemble-only embeds, without the flag
     metadata: true                # true | false   (each kind is on unless said otherwise)
     preamble: true
     bibliography: true
     lua: embed                    # embed | ref | apply | off  (true = embed, false = off)
 ```
+
+For filters that create or edit citations, use
+`pdfmd-options.lua-filter-before-citeproc: [first.lua, second.lua]`. Paths
+are relative to the document, metadata or settings file that names them.
+The nearest list replaces inherited lists. The suffix `+` (or `+=`)
+appends. The default is an empty list. It has a `--setup` row and
+follows the ordinary Lua trust check and `--no-auto lua`. An active
+filter enables automatic citation processing even if the source has no
+citations. `--no-citeproc` disables automatic citeproc.
 
 `embed: true` means all four kinds; `embed: [metadata, lua]` names kinds;
 `embed: false` none. The document's own `embed` wins over its metadata

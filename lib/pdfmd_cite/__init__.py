@@ -297,7 +297,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                                     geometry_needed: bool, monofont_needed: bool,
                                     tablewidth_auto: bool, width_filter: Path, csv_filter: Path,
                                     no_auto: list[str] | None, engines: list[str], keep_aux: bool,
-                                    verbose: bool, debug: bool, named_reader=None) -> tuple[bool, str]:
+                                    verbose: bool, debug: bool, named_reader=None, before_citeproc=()) -> tuple[bool, str]:
     """Route a PDF compile's bibliography through Pandoc's own --natbib/
     --biblatex instead of --citeproc, for pdfmd-options.citation-engine.
 
@@ -385,6 +385,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["-V", variable]
             if shift_heading:
                 cmd += ["--shift-heading-level-by=-1"]
+            if "--citeproc" in pandoc_options:
+                cmd += before_citeproc
             cmd += pandoc_options
             cmd += core.paragraph_spacing_latex_args(md_path, metadata_files)
             if preamble_files:
@@ -405,6 +407,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--include-in-header", str(header_file)]
             cmd += core.document_filter_args(md_path, md_path, metadata_files, no_auto, csv_filter, pandoc_options,
                                              citation_engine=citation_engine, named_reader=named_reader)
+            if "--citeproc" not in pandoc_options:
+                cmd += before_citeproc
             if "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options:
                 cmd.append(f"--{citation_engine}")
                 cmd += core.fullcite_pre_args(md_path, metadata_files, pandoc_options, citation_engine)    # `\\fullcite{}`, not citeproc

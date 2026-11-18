@@ -93,6 +93,44 @@ class NamedFiles(unittest.TestCase):
         self.build('latex', '-y', 'meta/settings.yaml')
         self.assertIn('\\NamedChanged', self.text('latex'))
 
+    def test_filters_can_create_citations_before_citeproc(self):
+        self.write('meta/settings.yaml',
+                   'references:\n- {id: source, type: book, title: Synthetic source}\n'
+                   'pdfmd-options: {lua-filter-before-citeproc: assets/first.lua}\n')
+        self.write('meta/assets/first.lua',
+                   'function Str(s) if s.text == "Original" then return pandoc.Str("Marker") end end\n')
+        self.write('second.lua',
+                   'function Str(s) if s.text == "Marker" then '
+                   'return pandoc.read("[@source]").blocks[1].content end end\n')
+        self.write('after.lua',
+                   'function Div(d) if d.identifier == "refs" then '
+                   'd.content:insert(pandoc.Para("Resolved")) return d end end\n')
+        self.doc.write_text('---\npdfmd-options:\n  lua-filter-before-citeproc+: [second.lua]\n'
+                            '  lua-filter: after.lua\n---\n\nOriginal\n', encoding='utf-8')
+        done = self.build('html', '-y', 'meta/settings.yaml', '--verbose')
+        html = self.text('html')
+        self.assertIn('id="ref-source"', html)
+        self.assertIn('Resolved', html)
+        command = next(line for line in done.stderr.splitlines() if line.startswith('CMD'))
+        self.assertLess(command.index('first.lua'), command.index('second.lua'))
+        self.assertLess(command.index('second.lua'), command.index('--citeproc'))
+        self.assertLess(command.index('--citeproc'), command.index('after.lua'))
+        for options in (('--no-auto', 'lua'), ('--no-citeproc',)):
+            with self.subTest(options=options):
+                self.build('html', '-y', 'meta/settings.yaml', *options)
+                self.assertNotIn('Resolved', self.text('html'))
+
+    def test_the_pre_citeproc_list_replaces_and_checks_trust(self):
+        self.write('meta/settings.yaml', 'pdfmd-options: {lua-filter-before-citeproc: missing.lua}\n')
+        self.assets('own')
+        self.doc.write_text('---\npdfmd-options: {lua-filter-before-citeproc: own/change.lua}\n---\nOriginal\n',
+                            encoding='utf-8')
+        done = self.build('html', '-y', 'meta/settings.yaml', '--strict', ok=False)
+        self.assertIn('was not run (--strict)', done.stdout + done.stderr)
+        self.assertIn('Original', self.text('html'))
+        self.build('html', '-y', 'meta/settings.yaml')
+        self.assertIn('Changed', self.text('html'))
+
     def test_folder_layer_paths(self):
         self.assets('.pdfmd/assets')
         self.write('.pdfmd/config.yaml', 'inherit: false\noptions:\n  lua-filter: assets/change.lua\n  preamble: assets/extra.tex\n')
