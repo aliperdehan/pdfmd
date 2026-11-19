@@ -48,6 +48,7 @@ wait for an answer before any code.
 - [ ] `table-keep` by height: keep a short table whole when it is under `table-keep-height` of a page (default 25%), plus orphan control; mechanics unspiked [3dl]
 - [ ] Fetch templates (pandoc-templates.org index, `owner/repo`, URL) and CSL styles by name or link, cached; generalises the Eisvogel line [3dl]
 - [ ] Install source: pdfmd records how it was installed; `pdfmd --upgrade`; `--version` says when a newer release exists [3dk]
+- [ ] Term-paper gaps: --check codes attr-stray, emphasis-empty, repeated heading text, heading-only section/part, uncited keys (info), opt-in en-GB spelling; the "parts also sits beside" WARN for files without front matter ("not merged"); LaTeX errors name the part and line; engine-independent errors stop the fallback chain; a --restore help line [N123]
 
 ## Tables line, one feature line (3.31.0, full suite) [3dj]
 
@@ -87,6 +88,7 @@ wait for an answer before any code.
 ## Distribution inside this repository, carried inside 3.31 [3ed]
 
 - [ ] Obsidian plugin (plain JS, `manifest.json` at the root, bare-version release from publish.yml, `pdfmd --install obsidian`); VS Code extension published from publish.yml if a token exists [3ed]
+- [ ] Dual MIT / Apache-2.0 licence, as wordcraft does: licence files, pyproject licence expression, README, packaging metadata [D127]
 
 ## Making the main `pdfmd.py` main code more manageable [3fi]
 
@@ -176,6 +178,7 @@ is low priority. [3di]
 - [ ] reveal.js route, pptx slides, Quarto's slide formats [3bu, 3bv]
 - [ ] docx output and raw LaTeX multicols: nulabreport 1.29.1 writes tables between a raw `\begin{multicols}` and `\end{multicols}` as plain `tabular`; check what the docx (office) path does with those raw fences and the tables inside, since it parses raw LaTeX too
 - [ ] Features that may leave pdfmd for their own repositories (rebuilding a docx source from a PDF, `html2qmd`) [3dg, 3bn]
+- [ ] Investigate headless wordcraft/gridcraft/deckcraft beside or instead of LibreOffice; if wordcraft converts headlessly, an engine in the fallback chain [N123]
 
 ## In other repositories
 
