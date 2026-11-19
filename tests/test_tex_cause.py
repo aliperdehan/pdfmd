@@ -150,6 +150,24 @@ class DirectPasses(unittest.TestCase):
         self.assertEqual(self.passes(text, ["Rerun to get cross-references right.", ""]), (2, "2 pass(es)"))
 
 
+class DirectErrors(unittest.TestCase):
+    def test_a_miktex_update_notice_does_not_hide_the_undefined_macro(self):
+        notice = "pdflatex: major issue: So far, no MiKTeX administrator has checked for updates."
+        error = "fragment.tex:1: Undefined control sequence.\n l.1 \\fixturemacro"
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            source = folder / "fragment.tex"
+            source.write_text("\\fixturemacro\n", encoding="utf-8")
+            log = folder / "fragment.log"
+            for channel in ("log", "stdout"):
+                with self.subTest(channel=channel):
+                    log.write_text(error if channel == "log" else "", encoding="utf-8")
+                    result = subprocess.CompletedProcess([], 1, error if channel == "stdout" else "", notice)
+                    with mock.patch.object(subprocess, "run", return_value=result):
+                        self.assertEqual(pdfmd.run_tex_engine("pdflatex", source, folder, False),
+                                         (False, "Undefined control sequence."))
+
+
 class Refused(unittest.TestCase):
     """v3.33.44: a command line Pandoc refuses (exit 6) stops the engine chain at once; a refused --pdf-engine does not."""
 

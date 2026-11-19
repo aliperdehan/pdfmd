@@ -287,7 +287,7 @@ def tex_log_dewrap(text: str, width: int = TEX_LOG_WRAP_WIDTH) -> str:
     return "\n".join(joined)
 
 
-def tex_log_failure_reason(log_text: str) -> str | None:
+def tex_log_failure_reason(log_text: str, fallback: str = "") -> str | None:
     """Pull the single most useful line out of a failed direct-.tex compile.
 
     Dewraps first (see tex_log_dewrap), then prefers a classic ``! ...``
@@ -295,7 +295,8 @@ def tex_log_failure_reason(log_text: str) -> str | None:
     ``-file-line-error``-style ``path:line: message`` line (used here
     since it names the offending source line directly), skipping the
     generic ``... Fatal error occurred, no output PDF file produced!``
-    trailer every halted run ends with, which names no actual cause.
+    trailer every halted run ends with, which names no actual cause. An
+    engine's stderr is preferred to the log tail when neither form is found.
     """
     lines = [line.strip() for line in tex_log_dewrap(log_text).splitlines() if line.strip()]
     for line in lines:
@@ -305,7 +306,7 @@ def tex_log_failure_reason(log_text: str) -> str | None:
         match = re.match(r".+:\d+:\s+(.+)", line)
         if match and "Fatal error occurred" not in line:
             return match.group(1)
-    return lines[-1] if lines else None
+    return fallback or (lines[-1] if lines else None)
 
 
 def tex_bibliography_tool(text: str) -> str | None:
@@ -362,6 +363,10 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
     def log_text() -> str:
         return log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
 
+    def failure(result: subprocess.CompletedProcess) -> tuple[bool, str]:
+        # MiKTeX can warn on stderr while putting the actual TeX error in the log or stdout.
+        return False, tex_log_failure_reason(log_text() + "\n" + result.stdout, result.stderr.strip()) or ""
+
     def run(cmd: list[str], cwd: Path, env: dict | None = None) -> subprocess.CompletedProcess:
         core.log_cmd(cmd, cwd, verbose)
         return subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
@@ -376,7 +381,7 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         # Both already handle reruns and bibtex/biber internally.
         result = run(cmd, work_dir, env=engine_env)
         if result.returncode != 0 or not (output_dir / f"{tex_path.stem}.pdf").exists():
-            return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
+            return failure(result)
         from pdfmd_filters.lua import figure_fit_module
         diagnostics = figure_fit_module().diagnostics
         diagnostics(result.stdout + "\n" + result.stderr + "\n" + log_text(), tex_path)
@@ -391,7 +396,7 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
             result = again
             engine_env = repair.engine_env(engine, env)                        # the reruns below use the fresh cache too
     if result.returncode != 0:
-        return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
+        return failure(result)
 
     bib_tool = tex_bibliography_tool(tex_path.read_text(encoding="utf-8-sig"))
     if bib_tool:
@@ -422,14 +427,14 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
                   file=sys.stderr)
         result = run(cmd, work_dir, env=engine_env)
         if result.returncode != 0:
-            return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
+            return failure(result)
 
     passes = 1
     while tex_wants_rerun(log_text()) and passes < MAX_TEX_DIRECT_PASSES:
         result = run(cmd, work_dir, env=engine_env)
         passes += 1
         if result.returncode != 0:
-            return False, result.stderr.strip() or tex_log_failure_reason(log_text()) or ""
+            return failure(result)
     # every run of the engine: `passes` starts at the run after bibtex/biber, so the one before it is added (v3.33.47)
     core.vprint(verbose, f"AUTO TEXDIRECT  {tex_path}: {engine}, {passes + (1 if bib_tool else 0)} pass(es)"
           + (f" + {bib_tool}" if bib_tool else ""))

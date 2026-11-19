@@ -169,6 +169,10 @@ arguments as one raw block when line breaks would split them. The checkout
 regressions exercise the reader override with inspection off and on, the
 fragment with and without preamble discovery, and two multiline spellings
 through the LaTeX writer. Fix before release: the agent guide named `--include-in-header` as a pdfmd flag; it now names Pandoc's `-H FILE`, which pdfmd passes on.
+Fix before release: direct compilation reads the TeX error from the log or
+standard output before falling back to standard error, so a MiKTeX update
+notice cannot hide an undefined macro and send the fragment through Pandoc.
+A synthetic regression checks the error in each channel.
 
 ## v3.34.18 — 2026-11-18
 
