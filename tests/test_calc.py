@@ -1631,9 +1631,9 @@ class Export(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("lualatex") and pypdf_available(), "needs LuaLaTeX and pypdf")
     def test_it_does_not_travel_with_attach_source_but_a_constants_file_does(self):
-        def attached(extra: str) -> list[str]:
-            (self.directory / "a.md").write_text(self.TEXT.replace("title: X", "title: A\npdfmd-options:\n  calc: {export: results.csv%s}" % extra),
-                                                encoding="utf-8")
+        def attached(extra: str = "", body: str = "") -> str:
+            text = self.TEXT.replace("title: X", f"title: A\npdfmd-options:\n  calc: {{export: results.csv{extra}}}")
+            (self.directory / "a.md").write_text(text + body, encoding="utf-8")
             done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "a.md", "--attach-source", "--no-backup", "--no-stamp",
                                    "-e", "lualatex"], cwd=self.directory, capture_output=True, text=True, encoding="utf-8",
                                   env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
@@ -1642,20 +1642,17 @@ class Export(unittest.TestCase):
             files = {name: (data[0] if isinstance(data, list) else data) for name, data in pypdf.PdfReader(self.directory / "a.pdf").attachments.items()}
             return files["pdfmd-source.md"].decode("utf-8")        # the source carries the files it reads inside itself
 
-        source = attached("")
+        source = attached()
         self.assertTrue((self.directory / "results.csv").is_file())
         self.assertNotIn("results.csv", source.split("---\n", 2)[2])                                 # (only the option naming it, in the front matter)
         self.assertNotIn("name: results.csv", source)
         source = attached(", constants: results.csv")                                              # the same file, now read as input
         self.assertIn("name: results.csv", source)
-        (self.directory / "a.md").write_text(self.TEXT.replace("title: X", "title: A\npdfmd-options:\n  calc: {export: results.csv}")
-                                            + '\n::: {.csv file="results.csv"}\n:::\n', encoding="utf-8")   # the body reads last time's results
-        done = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "a.md", "--attach-source", "--no-backup", "--no-stamp", "-e", "lualatex"],
-                              cwd=self.directory, capture_output=True, text=True, encoding="utf-8", env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        import pypdf
-        data = pypdf.PdfReader(self.directory / "a.pdf").attachments["pdfmd-source.md"]
-        self.assertIn("name: results.csv", (data[0] if isinstance(data, list) else data).decode("utf-8"))
+        with self.subTest(input="CSV table"):
+            if not pdfmd.kpsewhich_path("booktabs.sty"):
+                self.skipTest("needs LaTeX's booktabs package for the CSV table")
+            source = attached(body='\n::: {.csv file="results.csv"}\n:::\n')  # reads last time's results
+            self.assertIn("name: results.csv", source)
 
 
 @unittest.skipUnless(PANDOC and shutil.which("lualatex") and shutil.which("pdftotext"), "needs Pandoc, LuaLaTeX and pdftotext")

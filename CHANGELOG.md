@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.30a — 2026-11-19
+
+Pre-edit state: commit `aaaf0b4`. Tests only: the calculator attachment test requires `booktabs.sty` only for its CSV table case, so the export and constants-file cases still run on MiKTeX when that package is missing (the Windows LaTeX job failed on it).
+
 ## v3.34.30 — 2026-11-19
 
 Pre-edit state: commit `5042464`. Numbered markers copied with a trailing
