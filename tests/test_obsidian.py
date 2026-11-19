@@ -358,7 +358,7 @@ class CommandLine(unittest.TestCase):
         for target, suffix, expected in (
             ("html", "html", ('id="sample"', 'href="#sample"', 'class="tag">#Alpha/one',
                               'class="tag">#café', 'href="other.html#external"', 'href="#nested"')),
-            ("latex", "tex", (r"\label{sample}", r"\hyperref[sample]", r"\#Alpha/one")),
+            ("latex", "tex", (r"\#Alpha/one",)),
             ("typst", "typ", ("<sample>", "#link(<sample>)", "Alpha/one")),
             ("markdown", "markdown", ("{#sample}", "](#sample)", "{.tag}")),
             ("docx", "docx", ("sample", "Alpha/one")),
@@ -377,6 +377,13 @@ class CommandLine(unittest.TestCase):
                     output = path.read_text(encoding="utf-8")
                 for token in expected:
                     self.assertIn(token, output)
+                if target == "latex":
+                    # Pandoc 3.1.3 uses hyperref's target/link commands for inline anchors.
+                    if r"\hypertarget{sample}" in output:
+                        self.assertIn(r"\hyperlink{sample}{Local}", output)
+                    else:
+                        self.assertIn(r"\label{sample}", output)
+                        self.assertIn(r"\hyperref[sample]{Local}", output)
                 if target == "odt":                 # LibreOffice's route puts "_" before a bookmark name, Pandoc's does not
                     self.assertRegex(output, r'xlink:href="#_?sample"')
                 self.assertNotIn("^sample", output)

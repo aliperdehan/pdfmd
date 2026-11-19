@@ -57,6 +57,9 @@ text and wikilinks to those IDs had no destination. Give paragraph IDs
 Pandoc anchors and resolve them in the same note, in joined parts and in a
 separate note's output. Keep tags visible as tagged spans and retain the
 existing YAML property metadata alongside pdfmd's settings. Fix before release: the ODT test accepts the `_` LibreOffice puts before a bookmark name (`#_sample`) as well as Pandoc's own `#sample`; the link and its bookmark match either way.
+Fix before release: the LaTeX test checks the matching anchor and link in
+Pandoc 3.1.3's `\hypertarget`/`\hyperlink` form as well as the
+`\label`/`\hyperref` form in Pandoc 3.13.
 
 - Synthetic regressions cover ID collisions between parts, inline and nested
   tags, protected code and URL fragments, the flavour switch, and HTML,
