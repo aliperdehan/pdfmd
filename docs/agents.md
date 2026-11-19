@@ -191,6 +191,13 @@ with Pandoc's own `-H FILE`, which pdfmd passes on.
 Use `--crop` or `pdfmd-options: {crop: true}` to crop the PDF of a build
 to its ink. The default is off. `--no-crop` overrides a saved setting.
 
+A trailing numbered list of web sources and matching markers such as
+`[1]` or `[1, 3]` become Pandoc citations in the pdfmd and Obsidian flavours.
+Use `--to md` to export citable source with `references:` front matter. Set
+`pdfmd-options: {numbered-references: off}` to preserve the input syntax.
+`--check` reports `numbered-references-off` when the full shape matches
+and the setting is off.
+
 Set `pdfmd-options.lua-filter-before-citeproc` to run a trusted Lua filter before citations are resolved. The list is empty by default and follows the same layers and relative paths as `lua-filter`.
 
 1. `pdfmd --doctor` says which engines exist. A missing one is not an error of the document.

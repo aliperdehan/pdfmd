@@ -183,7 +183,14 @@ def check_command(args, pandoc_options: list[str]) -> int:
             print(f"{core.display_path(document)}: {error}", file=sys.stderr)
             status = 1
             continue
+        from pdfmd_cite import numbered
+
         sources = [source for _, source in inputs]
+        _, reference_issue = numbered.inspect([path for path, _ in inputs], [source.text for source in sources],
+                                              metadata_files, pandoc_options, args.from_format)
+        if reference_issue == numbered.CHECK and numbered.CHECK not in ignore:
+            excerpts.append(check.Problem(sources[0].label, 0, numbered.CHECK,
+                                          "numbered source list matches but numbered-references is off"))
         problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None,
                               citation_key=citation_key, extra_problems=excerpts,
                               calc=calc_check_records(files, metadata_files))

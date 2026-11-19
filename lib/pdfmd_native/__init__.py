@@ -1466,7 +1466,10 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
             from_format is not None and from_format.casefold().split("+")[0] not in NATIVE_READERS):
         raise SystemExit(f"{md_path}: the native renderers read Markdown only; this input needs Pandoc "
                          "(and a LaTeX/Typst/HTML engine, or soffice) -- see `pdfmd --check-dependencies`.")
-    text = core.obsidian_source(md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files)
+    from pdfmd_cite import numbered
+
+    text = numbered.native_text_for(md_path.read_text(encoding="utf-8-sig"), md_path, metadata_files, from_format)
+    text = core.obsidian_source(text, md_path, metadata_files)
     if core.flavour_of(md_path, metadata_files) == "obsidian":
         from pdfmd_obsidian.markup import callouts_and_tasks
         from pdfmd_obsidian.properties import without_block_ids

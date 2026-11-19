@@ -88,7 +88,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                                csv_filter: Path, no_auto: list[str] | None,
                                verbose: bool, labels: str = "off", title_source: Path | None = None,
                                part_files: list[Path] | tuple = (), partial: bool = False,
-                               selection=None, named_reader=None, before_citeproc=()) -> tuple[bool, str]:
+                               selection=None, named_reader=None, before_citeproc=(), reference_args=()) -> tuple[bool, str]:
     """The "soffice" PDF-engine fallback: Pandoc -> .docx -> headless
     LibreOffice -> PDF (the same Word file `-o x.docx` writes: template, native equations and tables, pictures
     for what LaTeX alone can draw; `labels` says where reference numbers come from, see office_label_data). Deliberately skips every LaTeX-only concern
@@ -115,6 +115,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                 cmd += ["-f", effective_from]
             for metadata in prepared_metadata:
                 cmd += ["--metadata-file", str(metadata)]
+            cmd += reference_args
             if partial:
                 cmd += core.PARTIAL_METADATA
             cmd += core.table_keep_metadata(md_path, metadata_files)
@@ -130,7 +131,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                 sources, metadata_files, pandoc_options, no_auto, named_reader)
             if any_citations is None:
                 any_citations = any(core.contains_citations(path, metadata_files) for path in sources)
-            if (any_citations or before_citeproc) and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
+            if (any_citations or before_citeproc or reference_args) and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
                 cmd.append("--citeproc")
             cmd += core.csl_args(
                 sources, metadata_files, pandoc_options, no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)

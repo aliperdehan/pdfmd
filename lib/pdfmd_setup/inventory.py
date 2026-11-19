@@ -172,6 +172,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "cache-location": "options.cache.location",
     "check-ignore": "options.check-ignore", "kit": "options.kit", "kit-stack": "options.kit-stack",
     "citation-engine": "options.citation-engine",
+    "numbered-references": "options.numbered-references",
     "csl-fallback": "options.csl-fallback",
     "code-wrap": "options.code-wrap", "line-numbers": "options.line-numbers",
     "line-number-step": "options.line-number-step",

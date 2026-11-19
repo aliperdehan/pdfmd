@@ -14,6 +14,7 @@ The columns of a row:
 ``markup``    the kinds of universal markup that are on without a ``markup`` setting (``pdfmd-options.markup``, ``--markup``), as a
               space-separated list; ``pagebreak`` likewise for the page-break families (``all``). Only for a Markdown file; a
               ``markup`` / ``pagebreak`` setting of any kind, ``false`` included, replaces the row's.
+``numbered_references``  recognise trailing numbered source lists with matching citation markers.
 ``embeds``    Obsidian's ``![[picture.png|300]]`` is read as an image embed (found by name, sized in px).
 ``wikilinks`` Obsidian's ``[[Note|alias]]`` is written as the text it shows.
 ``newline``   what a single newline inside a paragraph does: ``hard`` (a line break, as Obsidian shows it unless its "Strict line
@@ -39,6 +40,7 @@ class Preset(NamedTuple):
     embeds: bool = False
     wikilinks: bool = False
     newline: str = "soft"
+    numbered_references: bool = False
 
 
 OWN_SYNTAX = "callouts toc centre highlight underline keep landscape appendix fullcite pagecite excerpts"      # `space` stays off: a lone <br> is often just a blank line
@@ -47,8 +49,8 @@ PRESETS: dict[str, Preset] = {
     "pandoc": Preset("default", False, "keep"),
     "gfm": Preset("gfm", False, "keep"),
     "commonmark": Preset("commonmark", False, "keep"),
-    "pdfmd": Preset("auto", True, "keep", "+smart+implicit_figures", "+autolink_bare_uris+emoji", OWN_SYNTAX, "all", True, True, "soft"),
-    "obsidian": Preset("auto", True, "hide", "+smart+implicit_figures", "+autolink_bare_uris+emoji", OWN_SYNTAX, "all", True, True, "hard"),
+    "pdfmd": Preset("auto", True, "keep", "+smart+implicit_figures", "+autolink_bare_uris+emoji", OWN_SYNTAX, "all", True, True, "soft", numbered_references=True),
+    "obsidian": Preset("auto", True, "hide", "+smart+implicit_figures", "+autolink_bare_uris+emoji", OWN_SYNTAX, "all", True, True, "hard", numbered_references=True),
 }
 WORDS = ("auto", *PRESETS)
 

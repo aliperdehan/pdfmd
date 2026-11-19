@@ -45,11 +45,11 @@ def canonical(ident, key, prefix):
     return f"@{key}#{ident}" if key is not None else f"@{prefix}:{ident}"
 
 
-def citation_mask(text, document, metadata, include_metadata=False, *, metadata_only=False):
+def citation_mask(text, document, metadata, include_metadata=False, *, metadata_only=False, prose=False):
     """Blank protected text without changing offsets or line numbers."""
     from pdfmd_check.lint import Analysis, Source, blank_matches, blank, mask_code
     analysis = Analysis(Source(document.name, document, text))
-    scanned = analysis.cited
+    scanned = analysis.plain if prose else analysis.cited
     front_end = len(text) if metadata_only else analysis.front_end if include_metadata else 0
     if front_end:
         front = text[:front_end]

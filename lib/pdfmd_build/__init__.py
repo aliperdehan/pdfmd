@@ -310,7 +310,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         return md_path, ok, reason[-3000:]
 
     if target_format == "ansi" and not core.which("pandoc") and not parts_inputs:
-        ok, reason = core.ansi_without_pandoc(md_path, output)        # the built-in parser stands in (v3.30.3)
+        ok, reason = core.ansi_without_pandoc(md_path, output, metadata_files)        # the built-in parser stands in (v3.30.3)
         flush_summary()
         return md_path, ok, reason[-3000:]
     if not core.which("pandoc"):
@@ -380,10 +380,18 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     flat_markdown = target_format == "gfm"             # flat Markdown: pictures beside the output, relative links, one line a paragraph
     flat_target = flat_markdown or target_format == "txt"        # and flat text, which shares the pipeline (not those extras)
     flat = core.flat_settings(md_path, metadata_files, target_format) if flat_target else None
+    from pdfmd_cite import numbered
     from pdfmd_filters import document_filter_scope
     from pdfmd_obsidian.links import linked_inputs
-    with document_filter_scope(), core.prepared_title_source(md_path, metadata_files, disabled=core.auto_disabled(no_auto, "title") or flat_target or target_format == "ansi",
-                               override=source_override, reader=effective_from, keep_wikilinks=True) \
+
+    references = numbered.prepare([md_path, *parts_inputs], metadata_files, pandoc_options, from_format)
+    numbered_source = references is not None and target_format == "markdown"
+    if references is not None:
+        effective_from = numbered.reader_for(effective_from)
+    transform_part = core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format)
+    with contextlib.ExitStack() as reference_files, document_filter_scope(), core.prepared_title_source(md_path, metadata_files, disabled=core.auto_disabled(no_auto, "title") or flat_target or target_format == "ansi",
+                               override=source_override, reader=effective_from, keep_wikilinks=True,
+                               transform=references.rewrite if references else None) \
             as (title_source, title_shifted), \
             core.embedded_lua_filters(md_path, not core.auto_disabled(cli_no_auto, "lua"), trust_embedded) \
             as embedded_filters, \
@@ -393,19 +401,20 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             {part: core.part_key(part, parts_root) for part in parts_inputs}
                             if part_markers and parts_root else None,
                             selection if isinstance(selection, (set, frozenset)) else None,
-                            core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format),
+                            numbered.part_transform(references, transform_part),
                             metadata_files=metadata_files) as scaffold_files, \
             linked_inputs([title_source, *scaffold_files[1:]], [md_path, *parts_inputs], effective_from, metadata_files,
                           "pdf" if link_output else target_format, link_output or output,
                           not core.auto_disabled(no_auto, "title")) as (linked, effective_from):
         title_source, *part_files = linked
+        reference_args = references.metadata_args(reference_files, include_uncited=not partial) if references else []
         lua_filters = [*lua_filters, *embedded_filters]
         all_inputs = [md_path, *parts_inputs] if parts_inputs else None
         any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
             all_inputs or [md_path], metadata_files, pandoc_options, no_auto, from_format)
         if any_citations is None:
             any_citations = any(core.contains_citations(item, metadata_files) for item in [md_path, *parts_inputs])
-        any_citations = any_citations or bool(before_citeproc)
+        any_citations = any_citations or bool(before_citeproc) or references is not None
         any_code_spans = any(core.has_code_spans(item.read_text(encoding="utf-8-sig"))
                              for item in [md_path, *parts_inputs])
         if parts_inputs:
@@ -495,7 +504,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 ansi_json = Path(ansi_scratch.name) / "document.json" if ansi_scratch is not None else None
                 if ansi_json is not None:
                     writer = "json"                              # pdfmd_ansi draws Pandoc's AST (v3.30.3)
+                if references:
+                    writer = numbered.writer_for(writer)
                 cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(ansi_json or output), "-t", writer]
+                if numbered_source and not core.has_standalone_option(pandoc_options):
+                    cmd.append("--standalone")
                 if flat_markdown and not any(option.startswith("--wrap") for option in pandoc_options):
                     cmd.append("--wrap=none")      # a paragraph is one line: a viewer wraps it, a diff shows what changed
                 if (flat_markdown and output.parent.resolve() != md_path.parent.resolve()
@@ -511,6 +524,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += ["-f", effective_from]
                 for metadata in prepared_metadata:
                     cmd += ["--metadata-file", str(metadata)]
+                cmd += reference_args
                 if partial:
                     cmd += core.PARTIAL_METADATA
                 cmd += core.table_keep_metadata(md_path, metadata_files)
@@ -582,7 +596,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                             citation_engine=citation_engine if is_tex_target else None,
                                             named_reader=from_format)
                 cmd += before_citeproc + core.select_filter_args(selection)
-                if any_citations and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
+                if any_citations and not numbered_source and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
                     if (is_tex_target and citation_engine in ("natbib", "biblatex")
                             and "--natbib" not in pandoc_options and "--biblatex" not in pandoc_options):
                         # No compile-and-rerun concern here the way the PDF path's
@@ -753,7 +767,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                                         labels="auto" if engines == ["soffice"] else "off",
                                                         title_source=title_source, part_files=part_files,
                                                         partial=partial, selection=selection, named_reader=from_format,
-                                                        before_citeproc=before_citeproc)
+                                                        before_citeproc=before_citeproc, reference_args=reference_args)
                 result = subprocess.CompletedProcess(args=["soffice"], returncode=0 if ok else 1,
                                                      stdout="", stderr="" if ok else reason)
                 if ok:
@@ -795,6 +809,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd += ["-f", effective_from]
                     for metadata in prepared_metadata:
                         cmd += ["--metadata-file", str(metadata)]
+                    cmd += reference_args
                     if partial:
                         cmd += core.PARTIAL_METADATA
                     cmd += core.table_keep_metadata(md_path, metadata_files)

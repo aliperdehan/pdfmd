@@ -13,7 +13,6 @@ wait for an answer before any code.
 - [ ] 5b. After wave 5: excerpts (source tracking: `[@key#N]` markers, `excerpts.json`, pagecite), pdfmd first, then Colophon's Source pane; spec approved [3fq 3fr 3fs D79 D80 Q74]
 - [ ] Deeper Markdown dialect detection, opt-in `dialect-detect: deep` (front matter over a GFM-style body; TOML front matter, with a default WARN), with the Obsidian flavour (5c) [3gf D106]
 - [ ] 5c. Then the Obsidian flavour and its community plugins (the sections below), before Colophon: plugin support may be wanted before committing fully to it [3ee 3er D85]
-- [ ] AI-style references: `[n]` markers + a trailing numbered source list (any shape, a bare `1. url` too) become Pandoc citations and `references:` entries, on when the strict shape matches; a small Sol batch after 5c [D112]
 - [ ] 6. Colophon by hand (`--smoke-web`, Cmd-Q with an unsaved tab, `gui.yml` on main), the review's list below in its order, then the GUI decisions and build [D59 D60 D81]
 - [ ] Colophon on Windows: finish the trial shell of PR #38 on a Windows machine with a stronger model; fix the trailers of its last two commits (Beam 1.0) before landing [D119]
 - [ ] 7. nulabreport last: the full smoke test; a biochem report as `.docx` beside its PDF [D59]

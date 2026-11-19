@@ -181,6 +181,7 @@ def run(core, *,
     report_resource_path = resource_path_option(files[0].parent, pandoc_cwd, metadata_files)
 
     measurement_state = {}
+    from pdfmd_cite import numbered
     from pdfmd_filters import document_filter_scope
     from pdfmd_obsidian.links import linked_inputs
     any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
@@ -189,12 +190,18 @@ def run(core, *,
         any_citations = any(contains_citations(file, metadata_files) for file in files)
     from pdfmd_filters.lua import pre_citeproc_args
     before_citeproc = pre_citeproc_args(files[0], metadata_files, report_no_auto)
-    any_citations = any_citations or bool(before_citeproc)
+    references = numbered.prepare(files, metadata_files, pandoc_options, args.from_format)
+    numbered_source = references is not None and target_format == "markdown"
+    transform = references.rewrite if references else None
+    if references:
+        report_from = numbered.reader_for(report_from)
+    any_citations = any_citations or bool(before_citeproc) or references is not None
     from pdfmd_crop.build import prepare as prepare_crop
     with (document_filter_scope(), table_width_filter() as width_filter, csv_table_filter() as csv_filter,
           titles.Hidden() as hidden,
           prepare_crop(files[0], output, metadata_files, target_format, args.verbose, variables=variables, report=True) as crop,
           contextlib.ExitStack() as link_scope):
+        reference_args = references.metadata_args(link_scope) if references else []
         if target_format != "pdf":
             # See convert_one's matching comment: a TEX_STANDALONE_FORMATS
             # writer here still gets --standalone plus the same
@@ -262,11 +269,14 @@ def run(core, *,
                     as (report_fonts_header, report_fonts_filter), \
                     office_reference(files[0], metadata_files, variables, target_format, output,
                                      pandoc_options, report_no_auto, report_note) as report_office_arguments:
-                prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters, metadata_files, report_from)
+                prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters, metadata_files, report_from, transform)
                 prepared_files, linked_reader = link_scope.enter_context(
                     linked_inputs(prepared_files, files, report_from, metadata_files, target_format, output))
                 prepared_metadata = prepared[len(files):]
-                cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "-t", target_format]
+                writer = numbered.writer_for(target_format) if references else target_format
+                cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "-t", writer]
+                if numbered_source and not core.has_standalone_option(pandoc_options):
+                    cmd.append("--standalone")
                 if is_tex_target and report_standalone_auto:
                     report_note("STANDALONE", f"REPORT: --to {target_format} needs a complete, "
                                               "independently compilable document; adding --standalone")
@@ -276,7 +286,7 @@ def run(core, *,
                 if metadata is not AUTO_METADATA_DISABLED:
                     for metadata_file in prepared_metadata:
                         cmd += ["--metadata-file", str(metadata_file)]
-                cmd += report_resource_path
+                cmd += [*reference_args, *report_resource_path]
                 if is_tex_target:
                     # See convert_one's matching comment: no
                     # mainfontfallback here -- it's the Pandoc mechanism
@@ -319,7 +329,7 @@ def run(core, *,
                 cmd += document_filter_args(files, files, metadata_files, report_no_auto, csv_filter, pandoc_options,
                                             label="REPORT", named_reader=args.from_format)
                 cmd += before_citeproc
-                if (any_citations
+                if (any_citations and not numbered_source
                         and "--citeproc" not in pandoc_options
                         and not core.CITEPROC_DISABLED):
                     cmd.append("--citeproc")
@@ -433,7 +443,7 @@ def run(core, *,
                         document_header_file(files[0], (bool(preambles) or has_embedded_preamble(files[0])
                                                         or bool(report_pdf_meta_snippet_text))
                                              and engine in LATEX_ENGINES, metadata_files, report_no_auto) as report_header_file:
-                    prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters, metadata_files, report_from)
+                    prepared_files = hidden.copies(core, prepared[:len(files)], files, report_chapters, metadata_files, report_from, transform)
                     prepared_files, linked_reader = link_scope.enter_context(
                         linked_inputs(prepared_files, files, report_from, metadata_files, "pdf", output))
                     prepared_metadata = prepared[len(files):]
@@ -445,7 +455,7 @@ def run(core, *,
                     if metadata is not AUTO_METADATA_DISABLED:
                         for metadata_file in prepared_metadata:
                             cmd += ["--metadata-file", str(metadata_file)]
-                    cmd += report_resource_path
+                    cmd += [*reference_args, *report_resource_path]
                     if geometry_needed and engine in LATEX_ENGINES:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                     elif margin_options and engine in LATEX_ENGINES:

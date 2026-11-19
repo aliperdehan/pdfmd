@@ -504,7 +504,8 @@ def promote_bare_title(text: str, has_external_metadata: bool = False) -> tuple[
 def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
                           disabled: bool = False,
                           override: tuple[str, bool] | None = None,
-                          reader: str | None = None, keep_wikilinks: bool = False) -> Iterator[tuple[Path, bool]]:
+                          reader: str | None = None, keep_wikilinks: bool = False,
+                          transform=None) -> Iterator[tuple[Path, bool]]:
     """Yield the prepared text source and whether its title was promoted.
 
     Keep the original path when the text needs no changes. ``disabled``
@@ -527,6 +528,8 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
         text = repair_controls(text)
     if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
         text = dialect.prepare(text, md_path, metadata_files, relax)
+        if transform is not None:
+            text = transform(text, md_path)
         text = core.obsidian_source(text, md_path, metadata_files, keep_wikilinks=keep_wikilinks)
         if override is None and not disabled:
             text, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))

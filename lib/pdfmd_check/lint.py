@@ -35,6 +35,7 @@ CODES: dict[str, tuple[str, str]] = {
     "ref-missing": ("warning", "a \\ref{x} with no \\label{x} or {#x} in the document"),
     "cite-missing": ("error", "a @key the bibliography does not hold"),
     "cite-no-bibliography": ("warning", "citations in a document that names no bibliography"),
+    "numbered-references-off": ("warning", "a matching numbered source list with conversion switched off"),
     "bibliography-missing": ("error", "a bibliography file that is not there"),
     "footnote-missing": ("warning", "a [^note] with no [^note]: definition"),
     "footnote-unused": ("warning", "a [^note]: definition nothing refers to"),

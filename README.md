@@ -811,6 +811,7 @@ pdfmd report --check --check-ignore heading-jump,link-missing
 | `excerpt-bib`, `excerpt-locator-differs`, `excerpt-quote`, `excerpt-overlap`, `excerpt-remark-narrative` | problems with an excerpt's bibliography key, locator, use in prose or narrative remark marker |
 | `math-digit` | `$\geq$3`, `$\pm$10`: Pandoc reads `$...$` as math only when the closing `$` is not followed by a digit, so this is text with the dollars printed (a build says the same as a WARN, and a `\geq` left in text mode rebuilds the document in another font); write `$\geq 3$` |
 | `footnote-missing`, `footnote-unused` | `[^1]` with no text, a `[^1]:` nobody uses |
+| `numbered-references-off` | the markers match a trailing numbered source list and numbered reference conversion is off |
 | `heading-jump`, `heading-space`, `heading-empty` | `#` then `###`; `#Heading` (a paragraph); a heading with no text |
 | `fence-open`, `comment-open`, `div-open`, `div-stray`, `math-open` | a code fence, `<!--`, `:::` div or `$$` that is never closed, or a stray `:::` |
 | `front-matter`, `front-matter-duplicate` | YAML that does not parse (with its line) or never closes; a key set twice |

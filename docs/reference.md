@@ -768,6 +768,29 @@ follows the ordinary Lua trust check and `--no-auto lua`. An active
 filter enables automatic citation processing even if the source has no
 citations. `--no-citeproc` disables automatic citeproc.
 
+**Numbered source lists.** In the pdfmd and Obsidian flavours, numeric
+markers in prose become Pandoc citations when every marker matches a final
+numbered source list. Write `[1]`, `[[1]](https://example.org/)`, `[1][3]`,
+`[1, 3]` or `[1-3]`. Each source row needs a unique positive number and a
+web URL. Rows can use `1. https://example.org/`, `[1]: https://example.org/`
+or `[1] [A title](https://example.org/)`, with or without a Sources heading.
+Detection skips code, maths, raw markup and comments. An incomplete match
+leaves the Markdown as written and warns. A build with an existing
+bibliography or competing source lists also retains the written syntax.
+
+The default CSL shows the original numbers in square brackets and lists the
+entries in numerical order, keeping their text and links. A named CSL still
+controls formatting. pdfmd makes keys such as `example-org-1` locally and
+never requests a source URL. `--to md` writes the converted Markdown with
+`[@example-org-1]` and `references:` front matter. The native PDF renderers
+show the numbered text and list without running citeproc.
+
+Set `pdfmd-options: {numbered-references: off}` in the document or use
+**Convert numbered source lists to citations** in `--setup` for a folder or
+the global config. With the setting off, `--check` reports
+`numbered-references-off` when the full shape matches. The pandoc, gfm and
+commonmark flavours leave numbered source lists alone.
+
 `embed: true` means all four kinds; `embed: [metadata, lua]` names kinds;
 `embed: false` none. The document's own `embed` wins over its metadata
 files' (first to name it), and the command line over both: --embed-metadata

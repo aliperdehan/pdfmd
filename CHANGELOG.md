@@ -19,6 +19,23 @@ same commit as the change.
 
 ---
 
+## v3.34.30 — 2026-11-19
+
+Pre-edit state: commit `5042464`. Numbered markers copied with a trailing
+source list were plain bracketed text or Markdown links, so Pandoc had
+no citations or bibliography entries for them. The pdfmd and Obsidian
+flavours now turn a complete match into Pandoc citations and inline
+references. The default CSL keeps the source numbers and written entries
+and orders the bibliography numerically. A named CSL keeps control. `--to md` exports citable
+Markdown. The `numbered-references` setting can turn conversion off and
+`--check` identifies an eligible document with the setting off.
+
+- Synthetic tests cover gaps and out-of-order markers, linked and grouped
+  markers, protected text, incomplete matches, the setting and flavour,
+  split inputs, the native tier, a Markdown round trip and writer output
+  with Pandoc 3.13 and 3.1.3. The older Org writer uses its rendered
+  citation path so it includes the bibliography.
+
 ## v3.34.29 — 2026-11-19
 
 Pre-edit state: commit `4848eea`. The callout filter treated both fold

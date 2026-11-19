@@ -44,6 +44,7 @@ UNSET = {
     "options.typst-line-spacing": "latex: LaTeX's line pitch",
     "options.figure-fit": "on: fit images and their captions to one page",
     "options.pagecite-terms": "p., pp.",
+    "options.numbered-references": "on when the markers match a trailing source list (pdfmd and obsidian flavours)",
     "options.excerpt-prefix": "x",
     "options.excerpt-page-terms": "p., pp.",
     "options.excerpt-quote-min-words": "3 words",
@@ -108,7 +109,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 # change nothing. tests/test_setup_folder.py walks this list against the folder layers.
 FOLDER_OPTIONS = frozenset({
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
-    "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.pandoc-memory", "options.css-scope", "options.indent", "options.paragraph-spacing", "options.bibliography-indent",
+    "options.numbered-references", "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.pandoc-memory", "options.css-scope", "options.indent", "options.paragraph-spacing", "options.bibliography-indent",
     "options.typst-line-spacing", "options.figure-fit", "options.page-numbers",
     "options.bibliography-line-spacing",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
@@ -311,6 +312,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.citation-engine", "Citation engine",
                (("citeproc", "Pandoc's citeproc (the default)"), ("natbib", "natbib / BibTeX"),
                 ("biblatex", "biblatex / biber")), "citeproc", "", "Citations"),
+        choice("options.numbered-references", "Convert numbered source lists to citations",
+               (("on", "when the markers match a trailing numbered source list"),
+                ("off", "leave the Markdown as written")), "",
+               "The pdfmd and obsidian flavours use the source's numbers and entries unless a CSL is named.", "Citations"),
         choice("options.pagecite", "Page markers after citations",
                (("off", "leave them as text (the default)"), ("auto", "the CSL style chooses"),
                 ("style", "a real citation with its locator"), ("page", "pages in the style’s brackets"),
