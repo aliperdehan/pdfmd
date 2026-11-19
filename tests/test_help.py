@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
 import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
@@ -130,6 +131,15 @@ class TieredHelp(unittest.TestCase):
             done = run("--help", topic)
             self.assertEqual(done.returncode, 0, topic)
             self.assertIn(topic, done.stdout)
+
+    def test_output_usage_wraps_with_hidden_groups_and_visible_aliases(self):
+        with mock.patch.dict(os.environ, {"COLUMNS": "60"}):
+            done = run("--help", "output")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        usage = done.stdout.partition("\n\n")[0]
+        self.assertIn("[-o OUT]", usage)
+        self.assertIn("[--input FILE]", usage)
+        self.assertNotIn("--stamp-output", usage)
 
     def test_setup_help_explains_the_install_catalogue_and_diagram_group(self):
         text = run("--help", "setup").stdout

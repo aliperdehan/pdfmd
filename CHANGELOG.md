@@ -191,6 +191,9 @@ section. Tests cover translation, collisions, the literal argument boundary,
 and the HTML build. The registered aliases have no overlap with `pandoc --help`
 on 3.1.3 and 3.13. Synthetic builds on both versions checked HTML stylesheets
 and the LaTeX paper, orientation and margin. `pdfmd.py` only changes its version.
+Fix before release: aliases after hidden groups exposed an argparse usage-wrapping
+assertion on Python 3.9 and 3.10. The help formatter collapses the extra spaces,
+and the narrow-terminal regression checks that the visible flags still appear.
 
 ## v3.34.16 — 2026-11-18
 

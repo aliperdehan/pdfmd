@@ -59,6 +59,13 @@ def with_pass_through(arguments: list[str], extras: list[str]) -> list[str]:
     return out + extras[rest:]
 
 
+class HelpFormatter(argparse.HelpFormatter):
+    def _format_actions_usage(self, actions, groups):
+        # Python 3.9/3.10 leave spaces behind when a whole group is hidden,
+        # then assert that wrapping the usage does not change its spacing.
+        return " ".join(super()._format_actions_usage(actions, groups).split())
+
+
 class Parser(argparse.ArgumentParser):
     """pdfmd's parser: the unknown options it returns (Pandoc's) include the `PASS_THROUGH` ones it registers."""
 
@@ -190,7 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     except ImportError:
         TieredHelp = None
     parser = Parser(description="Convert Markdown (and other Pandoc-readable) files to PDF or another format with Pandoc.",
-                                     add_help=TieredHelp is None)
+                    add_help=TieredHelp is None, formatter_class=HelpFormatter)
     if TieredHelp is not None:
         parser.add_argument("-h", "--help", action=TieredHelp)
     parser.add_argument("--version", action="version", version=f"pdfmd {core.PDFMD_VERSION}")
