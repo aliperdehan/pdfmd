@@ -274,6 +274,9 @@ its marker or prose, and the excerpt commands could not check or repair the reco
 reports marker, locator, quotation and overlap findings. `--excerpts check` also checks source PDFs and
 unused records. `reanchor` tries the old page first and reports unresolved positions. `renumber` rewrites
 unambiguous markers after an ID collision and `rekey` follows a renamed bibliography key.
+Fix before release: the reanchor integration tests check that `pdftotext`
+is Poppler's, since Git for Windows can supply an Xpdf executable of the
+same name without the bounding-box output reanchor needs.
 
 - Synthetic tests cover the diagnostic codes, glued text, gaps, insertions, the exact overlap threshold,
   an added PDF cover page, ambiguous IDs and canonical marker rewrites.

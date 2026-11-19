@@ -21,6 +21,20 @@ sys.path.insert(0, str(ROOT))
 import pdfmd  # noqa: E402
 
 
+def has_poppler_pdftotext():
+    program = shutil.which("pdftotext")
+    if not program:
+        return False
+    try:
+        result = subprocess.run([program, "-v"], capture_output=True, encoding="utf-8", errors="replace", timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and "poppler" in (result.stdout + result.stderr).casefold()
+
+
+POPPLER_PDFTOTEXT = has_poppler_pdftotext()
+
+
 class CommandFixture:
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="excerpts-")
@@ -673,7 +687,7 @@ class SourcePDFs(CommandFixture, unittest.TestCase):
         labelled.unlink()
         self.assertEqual(self.command("sources")[0]["state"], "missing")
 
-    @unittest.skipUnless(shutil.which("pdftotext"), "needs Poppler pdftotext")
+    @unittest.skipUnless(POPPLER_PDFTOTEXT, "needs Poppler pdftotext")
     def test_check_and_reanchor_after_a_cover_page_is_added(self):
         source = self.pdf("glass.pdf", count=1)
         self.pdf("missing.pdf", count=1)
@@ -707,7 +721,7 @@ class SourcePDFs(CommandFixture, unittest.TestCase):
         final = self.command("check")
         self.assertEqual({item["code"] for item in final}, {"excerpt-source-missing", "excerpt-unused"})
 
-    @unittest.skipUnless(shutil.which("pdftotext"), "needs Poppler pdftotext")
+    @unittest.skipUnless(POPPLER_PDFTOTEXT, "needs Poppler pdftotext")
     def test_reanchor_lists_unresolved_parts_without_committing_a_source(self):
         source = self.pdf("glass.pdf", count=1)
         self.command("sources", "add", "glass", "glass.pdf")
