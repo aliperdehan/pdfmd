@@ -498,7 +498,7 @@ class SourcePDFs(CommandFixture, unittest.TestCase):
             writer.write(handle)
         return path
 
-    @unittest.skipUnless(shutil.which("pdftotext"), "needs Poppler pdftotext")
+    @unittest.skipUnless(POPPLER_PDFTOTEXT, "needs Poppler pdftotext")
     def test_import_pdf_annotations_previews_page_map_text_notes_and_repeats(self):
         kinds = ("Highlight", "Underline", "StrikeOut", "Squiggly", "Square", "FreeText")
         annotations = []
@@ -553,7 +553,7 @@ class SourcePDFs(CommandFixture, unittest.TestCase):
         self.assertEqual((area["file"], area["page"], area["note"]), ("si", "S2", "An area"))
         self.assertEqual(area["parts"], [{"pdf-page": 2, "boxes": [[10, 20, 30, 40]]}])
 
-    @unittest.skipUnless(shutil.which("pdftotext"), "needs Poppler pdftotext")
+    @unittest.skipUnless(POPPLER_PDFTOTEXT, "needs Poppler pdftotext")
     def test_import_combines_quads_in_default_space_on_rotated_pages(self):
         first_line = (8, 189, 66, 189, 8, 177, 66, 177)
         second_line = (8, 164, 64, 164, 8, 152, 64, 152)
@@ -569,7 +569,7 @@ class SourcePDFs(CommandFixture, unittest.TestCase):
                 self.assertEqual(item["parts"], [{"pdf-page": number, "boxes": [[8, 177, 66, 189], [8, 152, 64, 164]],
                                                   "text": "Amber glass Blue shards", "text-from": "pdf"}])
 
-    @unittest.skipUnless(sys.platform == "darwin" and shutil.which("pdftotext"), "needs macOS xattr and Poppler pdftotext")
+    @unittest.skipUnless(sys.platform == "darwin" and POPPLER_PDFTOTEXT, "needs macOS xattr and Poppler pdftotext")
     def test_import_reads_a_compressed_fragmented_skim_archive(self):
         import bz2
         import plistlib

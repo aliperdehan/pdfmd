@@ -246,6 +246,9 @@ It also reads archived Skim notes on macOS, including bzip2-compressed
 attributes split across fragments. The existing record lock serialises
 imports, repeated positions are skipped, and `--dry-run` previews records
 without writing. The crop precision follows the record format's 0.1 points.
+Fix before release: the text-annotation tests require Poppler's `pdftotext`
+because the same-named Xpdf on Git for Windows cannot provide the extraction
+the tests exercise. The area-only test still runs without Poppler.
 Synthetic tests failed before import existed and now cover all six
 annotation types, partial words, a cover, rotated pages, a supplement,
 repeat imports, previews and a macOS Skim archive. Skim's separate
