@@ -287,16 +287,19 @@ local function raw_is(block, format_pattern, text_pattern)
   return block.text:lower():gsub("^%s+", ""):gsub("%s+$", ""):match(text_pattern) ~= nil
 end
 
--- the pairs <center> ... </center> (and \begin{center} ... \end{center} unless the writer is LaTeX) of one list of blocks
+-- LaTeX and Beamer can render these raw TeX environments directly.
+local writer = FORMAT or ""
+local preserve_tex_environments = writer:match("^latex") ~= nil or writer == "beamer"
+
+-- the pairs <center> ... </center> (and raw TeX centre pairs in other writers) of one list of blocks
 local function center_pairs(blocks)
-  local latex = (FORMAT or ""):match("^latex") ~= nil
   local out, changed, index = pandoc.Blocks({}), false, 1
   while index <= #blocks do
     local block = blocks[index]
     local close_pattern
     if raw_is(block, "^html", "^<center>$") then close_pattern = {"^html", "^</center>$"}
-    elseif not latex and raw_is(block, "^te?x?$", "^\\begin{center}$") then close_pattern = {"^te?x?$", "^\\end{center}$"}
-    elseif not latex and raw_is(block, "^latex$", "^\\begin{center}$") then close_pattern = {"^latex$", "^\\end{center}$"} end
+    elseif not preserve_tex_environments and raw_is(block, "^te?x?$", "^\\begin{center}$") then close_pattern = {"^te?x?$", "^\\end{center}$"}
+    elseif not preserve_tex_environments and raw_is(block, "^latex$", "^\\begin{center}$") then close_pattern = {"^latex$", "^\\end{center}$"} end
     local last
     if close_pattern then
       for position = index + 1, #blocks do
@@ -515,7 +518,7 @@ end
 local ENVIRONMENTS = {center = {"center", make_center}, samepage = {"keep", make_keep}, landscape = {"landscape", make_landscape}}
 
 local function tex_environments(blocks)
-  if (FORMAT or ""):match("^latex") then return nil end
+  if preserve_tex_environments then return nil end
   local out, changed = pandoc.Blocks({}), false
   for _, block in ipairs(blocks) do
     local done = false

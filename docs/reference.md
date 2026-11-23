@@ -659,6 +659,7 @@ Each document in a batch resolves the setting independently. Use `-p` or `--no-p
 file settings for the run.
 
 A presentation uses Pandoc and a LaTeX PDF engine. Use `--stop-at tex` to write the Beamer source.
+Raw LaTeX `center`, `samepage` and `landscape` blocks pass through to Beamer as written.
 Presentation mode requires a PDF target or that TeX stage and cannot be combined with report or book mode,
 section selection, `--stop-at markdown`, Quarto input or office-document input.
 

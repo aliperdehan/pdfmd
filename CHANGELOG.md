@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.34.32 — 2026-11-23
+
+Pre-edit state: commit `b46e6ed`. **Beamer keeps raw LaTeX environments.** The markup filter classified Beamer as a
+foreign writer when matching separate centre delimiters and when converting whole raw environments. The latter read
+their contents as Markdown, which escaped TeX groups. Both passes now preserve the raw blocks for Beamer.
+
+- The checkout TeX regression compares Beamer and LaTeX with raw `center`, `samepage` and `landscape` environments
+  and with separate centre delimiters. The original centred group failed before the fix and passes on Pandoc 3.13.
+
 ## v3.34.31 — 2026-11-23
 
 Pre-edit state: commit `3ca20dc`. **Beamer slides are a setting.** Writer and engine selection previously knew only

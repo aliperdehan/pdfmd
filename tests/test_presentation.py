@@ -124,3 +124,22 @@ modes:
                 self.run_pdfmd("-b", "deck.md", "plain.md", "--stop-at", "tex", "-j", jobs, "-o", f"build-{jobs}")
                 self.assertRegex((self.root / f"build-{jobs}" / "deck.tex").read_text(encoding="utf-8"), BEAMER)
                 self.assertNotRegex((self.root / f"build-{jobs}" / "plain.tex").read_text(encoding="utf-8"), BEAMER)
+
+    def test_raw_latex_environments_keep_their_groups_in_beamer(self):
+        raw = (
+            r"\begin{center}{\itshape grouped}\end{center}",
+            "\n".join((r"\begin{samepage}", r"{\itshape together}", r"\end{samepage}")),
+            "\n".join((r"\begin{landscape}", r"{\itshape wide}", r"\end{landscape}")),
+            r"\begin{center}",
+            r"{\itshape split}",
+            r"\end{center}",
+        )
+        source = "\n\n".join(f"```{{=latex}}\n{block}\n```" for block in raw)
+        self.write("deck.md", f"---\ntitle: Raw environments\n---\n\n## Slide\n\n{source}\n")
+        for args in ((), ("-p",)):
+            with self.subTest(args=args):
+                tex = self.tex(*args)
+                for block in raw:
+                    self.assertIn(block, tex)
+                self.assertEqual(tex.count(r"\begin{center}"), 2)
+                self.assertEqual(tex.count(r"\end{center}"), 2)
