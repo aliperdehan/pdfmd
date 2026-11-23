@@ -498,6 +498,8 @@ package twice with different options. Likewise, a document that
 actually has inline code or a fenced code block, but no `monofont:`,
 gets `JetBrains Mono` for it.
 
+The Beamer writer uses its own frame geometry by default. Explicit margins are still passed to Pandoc.
+
 A document with no `mainfont:` and no -f/--font is first tried with
 STIX Two Text (better Unicode/math coverage than LaTeX's own Latin
 Modern for most prose); if that run reports missing glyphs, the WHOLE
@@ -595,7 +597,7 @@ Targeting `latex`, `beamer`, or `context` (--to, or an -o/--out file
 ending `.tex`) produces a complete, standalone document -- the same
 `\documentclass`...`\begin{document}`...`\end{document}` a direct PDF
 render goes through, not a bare Pandoc-LaTeX fragment that only compiles
-once pasted into a preamble of its own -- so the same margin/mainfont/
+once pasted into a preamble of its own -- so the same margin (except Beamer), mainfont and
 monofont defaults above apply, and a project's own discovered preamble
 (PREAMBLE_FILENAMES beside the document, e.g. `preamble.tex`) and
 `header-includes`/`pdfmd-options` front matter are included the same way

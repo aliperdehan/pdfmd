@@ -234,7 +234,8 @@ def run(core, *,
             report_mainfont_auto = is_tex_target and not auto_disabled(report_no_auto, "mainfont")
             report_standalone_auto = (is_tex_target and not auto_disabled(report_no_auto, "standalone")
                                       and not has_standalone_option(pandoc_options))
-            report_geometry_needed = (is_tex_target and not auto_disabled(report_no_auto, "margin")
+            report_geometry_needed = (is_tex_target and target_format != "beamer"
+                                      and not auto_disabled(report_no_auto, "margin")
                                       and not has_geometry(files[0], variables, metadata_files, report_preambles))
             if report_geometry_needed:
                 report_note("MARGIN", "REPORT: no geometry/margin set; "

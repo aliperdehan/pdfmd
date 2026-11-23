@@ -36,7 +36,8 @@ ON_OFF = (("on", "yes"), ("off", "no"))
 UNSET = {
     "author": "none", "lang": "none",
     "papersize": "US Letter (A4 in WeasyPrint)", "fontsize": "10 pt LaTeX, 11 pt Typst",
-    "geometry": "margin=1in", "mainfont": "STIX Two Text (or a serif with the letters)",
+    "geometry": "margin=1in for LaTeX documents, Beamer's own for slides",
+    "mainfont": "STIX Two Text (or a serif with the letters)",
     "monofont": "JetBrains Mono (or Menlo)", "linestretch": "the engine's own",
     "options.pandoc-memory": "off (no heap cap)",
     "options.presentation": "off (ordinary documents)",

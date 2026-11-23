@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.33 — 2026-11-23
+
+Pre-edit state: commit `e58218d`. **Beamer uses its own frame margins.** pdfmd gave the Beamer writer the same automatic
+one-inch margin as the other LaTeX-family writers, shrinking the frames. The PDF, standalone TeX and direct report writer
+paths now skip that default for Beamer. Explicit margins and the kit's `no-auto: [margin]` still use the ordinary handling.
+
+- Tested `-p --stop-at tex`, direct `--to beamer` with and without report mode, and the ordinary LaTeX default on Pandoc
+  3.13. The Beamer outputs previously carried `margin=1in`. Regression tests also check explicit margins from front
+  matter, configured metadata and `-V`, plus suppression of the ordinary default from a kit.
+
 ## v3.34.32 — 2026-11-23
 
 Pre-edit state: commit `b46e6ed`. **Beamer keeps raw LaTeX environments.** The markup filter classified Beamer as a

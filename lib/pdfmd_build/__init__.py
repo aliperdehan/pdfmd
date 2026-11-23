@@ -457,12 +457,13 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             if citation_engine is not None and citation_engine not in core.CITATION_ENGINES:
                 raise SystemExit(f"{md_path}: unknown pdfmd-options.citation-engine value "
                                  f"{citation_engine!r}. Valid: {', '.join(sorted(core.CITATION_ENGINES))}")
-            geometry_needed = (not core.auto_disabled(no_auto, "margin")
+            geometry_needed = (is_tex_target and target_format != "beamer"
+                              and not core.auto_disabled(no_auto, "margin")
                               and not core.has_geometry(md_path, variables, metadata_files, preamble_files or []))
             monofont_needed = (not core.auto_disabled(no_auto, "monofont")
                               and any_code_spans
                               and not core.has_monofont(md_path, variables, metadata_files))
-            if is_tex_target and geometry_needed:
+            if geometry_needed:
                 note("MARGIN", f"{md_path}: no geometry/margin set; "
                               f"using geometry:margin={core.DEFAULT_MARGIN} on LaTeX-family targets")
             margin_options = (None if core.auto_disabled(no_auto, "margin")
@@ -693,7 +694,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         explicit_font = document_font or bool(font)
         mainfont_auto = not core.auto_disabled(no_auto, "mainfont")
         tablewidth_auto = not core.auto_disabled(no_auto, "tablewidth")
-        geometry_needed = (not core.auto_disabled(no_auto, "margin")
+        geometry_needed = (not presentation and not core.auto_disabled(no_auto, "margin")
                           and not core.has_geometry(md_path, variables, metadata_files, preamble_files or []))
         if geometry_needed:
             note("MARGIN", f"{md_path}: no geometry/margin set; "

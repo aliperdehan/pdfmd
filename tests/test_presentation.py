@@ -143,3 +143,33 @@ modes:
                     self.assertIn(block, tex)
                 self.assertEqual(tex.count(r"\begin{center}"), 2)
                 self.assertEqual(tex.count(r"\end{center}"), 2)
+
+    def test_beamer_uses_its_own_margins(self):
+        self.write("deck.md", "---\ntitle: Wide deck\nclassoption: [aspectratio=169]\n---\n\n## Slide\n")
+        self.assertIn("margin=1in", self.tex())
+        for args in (("deck.md", "-p", "--stop-at", "tex"),
+                     ("deck.md", "--to", "beamer"),
+                     ("-r", "deck.md", "--to", "beamer", "-o", "deck.tex", "-V", "documentclass=beamer")):
+            with self.subTest(args=args):
+                log = self.run_pdfmd(*args, "--verbose")
+                tex = (self.root / "deck.tex").read_text(encoding="utf-8")
+                self.assertRegex(tex, BEAMER)
+                self.assertIn("aspectratio=169", tex)
+                self.assertNotIn("margin=1in", tex)
+                self.assertNotIn("no geometry/margin set", log)
+
+    def test_beamer_keeps_explicit_margins(self):
+        self.write("deck.md", "---\nmargin: 7mm\n---\n\n## Slide\n")
+        self.assertIn(r"\geometry{margin=7mm}", self.tex("-p"))
+        config = self.write("config/settings.yaml", "options: {}\n")
+        self.env["PDFMD_CONFIG"] = str(config)
+        self.write("config/metadata.yaml", "geometry: margin=8mm\n")
+        self.write("deck.md", "## Slide\n")
+        self.assertIn(r"\geometry{margin=8mm}", self.tex("-p"))
+        self.assertIn(r"\geometry{margin=9mm}", self.tex("-p", "-V", "geometry:margin=9mm"))
+
+    def test_kit_can_still_suppress_the_article_default_margin(self):
+        self.write("slides.kit/.kit", "kit-format: 1\nname: slides\nno-auto: [margin]\n")
+        self.write("deck.md", "---\npdfmd-options: {kit: './slides.kit'}\n---\n\n## Slide\n")
+        self.assertNotIn("margin=1in", self.tex())
+        self.assertIn(r"\geometry{margin=9mm}", self.tex("-p", "-V", "geometry:margin=9mm"))
