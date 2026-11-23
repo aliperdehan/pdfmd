@@ -44,7 +44,7 @@ FLAGS: dict[str, str | Omitted] = {
     "excerpts": CMD,
     "pagecite": "options.pagecite",
     "help": CMD, "version": CMD, "path": RUN,
-    "presentation": Omitted("run", "slides are asked for per run"),
+    "presentation": "options.presentation",
     "slide_level": Omitted("document", "the document's own slide-level:"),
     "newest": RUN, "include_never": RUN, "which": CMD,
     "serve": CMD, "api": CMD,
@@ -138,6 +138,7 @@ FLAGS: dict[str, str | Omitted] = {
 OPTIONS: dict[str, str | Omitted] = {
     "alias": Omitted("document", "other names one document answers to (pdfmd NAME)"),
     "priority": Omitted("document", "one document's rank when bare pdfmd must choose: a number or a word (draft, final, never)"),
+    "presentation": "options.presentation",
     "ranking.by": "options.ranking.by", "ranking.names": "options.ranking.names",
     "ranking.ladder": Omitted("document", "the order of the classes of priority words: a ranking.yaml or a `ranking:` mapping"),
     "ranking.classes": Omitted("document", "the classes of priority words (fruit: [cherry, banana]): a ranking.yaml or a `ranking:` mapping"),

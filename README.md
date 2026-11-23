@@ -1993,16 +1993,21 @@ and `--header`.
 pdfmd slides -p                   # Beamer slides; each heading starts a slide
 ```
 
+Set `pdfmd-options: {presentation: true}` in the front matter, a metadata file or a kit mode's metadata to make
+`pdfmd slides` build a deck. In folder and global configuration, use `options: {presentation: true}`. The
+`--setup` menu also offers this setting. Use `--no-presentation` for an ordinary build when a file enables slides.
+
 **Speaker notes** (v3.32.2). A `::: notes` block under a slide is dropped from the PDF unless you ask for it with `slide-notes` in
 `pdfmd-options` (or the config and the `pdfmd --setup` row "Speaker notes"): `show` puts a notes page after each slide, `only` makes
 the PDF the notes pages alone (to print), `off` (the default) leaves them out. It adds Beamer's `show notes` / `show only notes`
-as a header, so the deck's own `classoption` (`aspectratio=169`) stays; `-V classoption=notes=show` would replace it. It acts on a
-`-p` deck built with a LaTeX engine and nothing else.
+as a header, so the deck's own `classoption` (`aspectratio=169`) stays; `-V classoption=notes=show` would replace it. It acts in
+presentation mode with a LaTeX engine.
 
 ```markdown
 ---
 title: Talk
 pdfmd-options:
+  presentation: true
   slide-notes: show
 ---
 

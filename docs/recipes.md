@@ -725,8 +725,12 @@ pdfmd lecture -t typst -o lecture.typ ; typst compile lecture.typ
 pdfmd slides -p --slide-level 2          # Beamer; level 2 headings start slides
 ```
 
+Set `pdfmd-options: {presentation: true}` in the front matter, a metadata file or the kit mode's metadata
+to build slides with just `pdfmd slides`. Use `options: {presentation: true}` in a folder's `.pdfmd/config.yaml`
+or the global config (also available in `--setup`). Use `--no-presentation` to build an ordinary document for one run.
+
 Speaker notes (`::: notes` under a slide) are left out of the PDF; `pdfmd-options: {slide-notes: show}` puts a notes page after
-each slide, `only` gives the notes pages alone for printing (a LaTeX engine, `-p` only; the README's "Slides" has an example).
+each slide, `only` gives the notes pages alone for printing (presentation mode with a LaTeX engine; the README's "Slides" has an example).
 
 ### 7.5 Plain Markdown that any viewer shows
 

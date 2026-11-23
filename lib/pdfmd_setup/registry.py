@@ -39,6 +39,7 @@ UNSET = {
     "geometry": "margin=1in", "mainfont": "STIX Two Text (or a serif with the letters)",
     "monofont": "JetBrains Mono (or Menlo)", "linestretch": "the engine's own",
     "options.pandoc-memory": "off (no heap cap)",
+    "options.presentation": "off (ordinary documents)",
     "options.indent": "the writer's own (no first-line indent)",
     "options.paragraph-spacing": "the engine's own (none with indent: true)",
     "options.typst-line-spacing": "latex: LaTeX's line pitch",
@@ -379,6 +380,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.default-output", "Default output format",
                (("pdf", "PDF"), ("docx", "Word"), ("odt", "OpenDocument"), ("html", "HTML"), ("latex", "LaTeX"),
                 ("typst", "Typst")), "pdf", "What `pdfmd file.md` writes when no -o or --to is given.", "Output"),
+        choice("options.presentation", "Build Beamer slides", on_off, "",
+               "Per document use pdfmd-options.presentation. Per run use -p or --no-presentation.", "Output"),
         choice("options.apply-defaults", "Defaults for .typ and .html files", (("true", "apply metadata.yaml's title, author, font, paper, margin"), ("false", "build them as they are")), "false",
                "A .typ or .html file is built by its own engine and gets no defaults. Per run: --apply-defaults.", "Output"),
         choice("options.odt.engine", "OpenDocument writer",
@@ -442,11 +445,11 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "Words separated by commas: `angle` (`<c>`, `<merge-up, top>`), `amp` (`&mc&`, the form that never clashes), `brace` "
              "(`{mc}`) and `guillemet` (`\u00abmc\u00bb`). The default is `angle, amp`; `brace` is off because `K_{c}` or `\\textbf{b}` can "
              "look like a tag.", "Tables"),
-        choice("options.slide-notes", "Speaker notes (`::: notes`) in a Beamer deck (`-p`)",
+        choice("options.slide-notes", "Speaker notes (`::: notes`) in a Beamer deck",
                (("off", "leave them out of the PDF"), ("show", "a notes page after each slide"),
                 ("only", "the notes pages alone, for printing")), "off",
                "A `::: notes` block under a slide is dropped from the PDF unless asked for. It is Beamer's `show notes` / `show only "
-               "notes`, added as a header, so the deck's own `classoption` (an `aspectratio=169`) is kept. Only a `-p` deck with a "
+               "notes`, added as a header, so the deck's own `classoption` (an `aspectratio=169`) is kept. Only a deck with a "
                "LaTeX engine; any other build ignores it. Per document: `slide-notes` in `pdfmd-options`.", "Output"),
         choice("options.md-macro", "Markdown inside raw LaTeX: \\md{...} and \\begin{md}",
                (("on", "read the argument as Markdown"), ("off", "leave \\md{...} for LaTeX")), "on",

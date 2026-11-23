@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.34.31 — 2026-11-23
+
+Pre-edit state: commit `3ca20dc`. **Beamer slides are a setting.** Writer and engine selection previously knew only
+the command-line `-p` flag. The run now resolves `presentation` from the ordinary option layers before choosing
+the writer, separately for each batch input. Kit modes already supply their settings through the metadata list, so
+both inline `metadata:` and a mode's `defaults:` file work. `-p` and `--no-presentation` override the file layers,
+incompatible routes identify the winning request, and `--setup` can set the global default.
+
+- Regression coverage exercises Beamer TeX from front matter, discovered metadata, folder and global config, and both
+  forms of kit mode metadata. It checks the CLI overrides, incompatible routes, the setup and help entries, and a mixed batch.
+
 ## v3.34.30a — 2026-11-19
 
 Pre-edit state: commit `aaaf0b4`. Tests only: the calculator attachment test requires `booktabs.sty` only for its CSV table case, so the export and constants-file cases still run on MiKTeX when that package is missing (the Windows LaTeX job failed on it).

@@ -649,6 +649,19 @@ of every non-LaTeX build. Not done for HTML: PDF metadata stamping and the
 engine fallback chain (they are PDF/LaTeX only), and a BUILD NOTES comment
 in the source stays in the HTML as a comment, as before.
 
+## Beamer slides
+
+`-p` / `--presentation` builds a Beamer PDF. To make `pdfmd slides.md` build a deck, set
+`pdfmd-options: {presentation: true}` in its front matter or a metadata file. A kit mode can supply the same
+setting in its `metadata:` mapping or a `defaults:` file. In a folder's `.pdfmd/config.yaml` or the global
+config, set `options: {presentation: true}`. The `--setup` row is **Build Beamer slides** and the default is off.
+Each document in a batch resolves the setting independently. Use `-p` or `--no-presentation` to override all
+file settings for the run.
+
+A presentation uses Pandoc and a LaTeX PDF engine. Use `--stop-at tex` to write the Beamer source.
+Presentation mode requires a PDF target or that TeX stage and cannot be combined with report or book mode,
+section selection, `--stop-at markdown`, Quarto input or office-document input.
+
 ## Stopping early (--stop-at, v3.19.0)
 
 A build is a pipeline -- the document's parts are joined into ONE
@@ -677,7 +690,7 @@ changes): in parts mode such a file is never taken for a scaffold, and
 Fed back to pdfmd it builds the same `.tex` the original did (checked
 byte for byte on a parts report, a report/book and a single file). It
 never overwrites one of the files it is made from. `tex` is --to latex
-(beamer with -p); the PDF stage is the default. Not with -p/-w for
+(Beamer in presentation mode); the PDF stage is the default. Not with presentation mode or -w for
 markdown, nor for .qmd/.tex/office inputs.
 
 --embed-metadata [KIND ...] (v3.19.1) folds what pdfmd discovers beside
@@ -1662,7 +1675,7 @@ Each warning uses that diagram's own error, never another tool's success message
 `diagram-timeout` seconds (v3.32.1; default 120, 0 = draw nothing, negative = no limit): pdfmd_lua/limited_run.py stops a
 run that takes longer with the processes it started, and the diagram stays as code with a warning.
 
-`pdfmd-options: {slide-notes: off | show | only}` (v3.32.2) makes a `-p` deck show its `::: notes` blocks (Beamer's
+`pdfmd-options: {slide-notes: off | show | only}` (v3.32.2) makes a deck in presentation mode show its `::: notes` blocks (Beamer's
 `show notes` / `show only notes`, as a header, so the deck's own `classoption` is kept; `off` is the default).
 
 A fenced ```smiles block, ```{.smiles caption="..."} or `::: smiles` div (v3.31.42) is a chemical structure written as text:

@@ -115,8 +115,12 @@ def prepare_epubs(core, args, files: list[Path], output: Path | None) -> dict[Pa
 
 def run(core, *,
         args, embed_request, embeds_preamble, engines,
-        metadata_for, need_engines, pandoc_options, paths,
-        stamp_overrides, target_explicit, target_format, variables) -> list:
+        metadata_for, need_engines, pandoc_options, paths, plan_bridge,
+        stamp_overrides, stop_at, target_explicit, target_format, variables) -> list:
+    from functools import cache
+
+    from pdfmd_run import presentation as slides
+
     # the helpers of pdfmd.py this function calls, bound here so the body reads as it did in run_main()
     ASSEMBLED_FORMAT, AUTO_LOG = core.ASSEMBLED_FORMAT, core.AUTO_LOG
     TEX_STANDALONE_FORMATS, announce_preambles = core.TEX_STANDALONE_FORMATS, core.announce_preambles
@@ -134,15 +138,25 @@ def run(core, *,
         if not files:
             raise SystemExit("No buildable input files remain; the selected files are already assembled")
     jobs = max(1, args.jobs)
-    batch_target = target_format
+    @cache
+    def file_presentation(file):
+        if args.presentation is not None:
+            return slides.source(file, None, args.presentation)
+        # EPUB is unpacked to Markdown before reading its options.
+        if file.suffix.lower() == ".epub":
+            return None
+        return slides.source(file, metadata_for(file), None)
 
+    @cache
     def file_target(file):
         """This file's target: the command line's, else its own default-output."""
+        if file_presentation(file):
+            return "beamer" if stop_at == "tex" else target_format
         if target_explicit or file.suffix.lower() not in (".md", ".markdown"):
-            return batch_target
+            return target_format
         found = metadata_for(file)
         chosen = default_output_format(file, found if isinstance(found, list) else ([found] if found else []))
-        return chosen or batch_target
+        return chosen or target_format
 
     # Compare the ordinary output names before rewrite protection picks a numbered copy.
     # A source must never exclude itself when its input and output suffixes coincide.
@@ -176,6 +190,10 @@ def run(core, *,
         output.mkdir(parents=True, exist_ok=True)
     destinations = prepare_epubs(core, args, files, output)
     files = list(destinations)
+    for file in files:
+        if request := file_presentation(file):
+            slides.validate(request, file_target(file), stop_at, document=file)
+    plan_bridge(target_format)
 
     def preamble_for(file, metadata):
         if file.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS:
@@ -189,34 +207,32 @@ def run(core, *,
     if args.open and args.bopen is None:
         print("WARN  --open is ignored in batch mode (-b); it would open every converted file "
               "(--bopen SPEC opens the ones you say)", file=sys.stderr)
-    def file_metadata_and_engines(file):
+    def file_build(file):
+        request = file_presentation(file)
+        target = file_target(file)
+        if not request:
+            need_engines(target)
         if file.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS:
-            if args.presentation:
-                raise SystemExit("-p/--presentation isn't supported for an office-document input")
-            return None, engines
-        # metadata_for(file) is looked up once and reused for both the
-        # engine restriction (which may now fall through to this same
-        # metadata file's own pdf-engine setting -- see resolve_engines)
-        # and the actual conversion, rather than calling it twice.
+            return False, None, engines
         metadata = metadata_for(file)
         metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
-        return metadata, resolve_engines(file, args.engine, engines, args.presentation, file_target(file), metadata_files, args.verbose)
+        file_engines = (slides.engines(file, metadata_files, args.engine, request, target, args.verbose)
+                        if request else resolve_engines(file, args.engine, engines, False, target, metadata_files, args.verbose))
+        return bool(request), metadata, file_engines
     def work(file):
-        need_engines(file_target(file))
-        metadata, file_engines = file_metadata_and_engines(file)
-        return convert_one(file, destinations[file], args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file, metadata), target_format=file_target(file), from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained, cache_cli=args.cache)
+        presentation, metadata, file_engines = file_build(file)
+        return convert_one(file, destinations[file], presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file, metadata), target_format=file_target(file), from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained, cache_cli=args.cache)
     results = []
     if jobs > 1:
         with ProcessPoolExecutor(max_workers=jobs, initializer=restore_worker_state,
                                  initargs=({**worker_state(), "DISPLAY_ALIAS": core.DISPLAY_ALIAS},)) as executor:
             futures = []
             for file in files:
-                need_engines(file_target(file))
-                metadata, file_engines = file_metadata_and_engines(file)
+                presentation, metadata, file_engines = file_build(file)
                 file_preambles = preamble_for(file, metadata)
                 if not args.verbose:
                     AUTO_LOG.flush()           # what the parent found for this file, before its worker's output
-                futures.append(executor.submit(convert_one, file, destinations[file], args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, file_preambles, file_target(file), args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained, cache_cli=args.cache))
+                futures.append(executor.submit(convert_one, file, destinations[file], presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, file_preambles, file_target(file), args.from_format, args.no_auto, args.verbose, args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained, cache_cli=args.cache))
             results = [future.result() for future in as_completed(futures)]
             results.sort(key=lambda result: result[0].name.casefold())
     else:

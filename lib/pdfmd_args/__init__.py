@@ -203,7 +203,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"pdfmd {core.PDFMD_VERSION}")
     parser.add_argument("path", type=Path, nargs="*", action="extend",
                         help="Markdown name, input files or folders; several paths build separately (default: current directory)")
-    parser.add_argument("-p", "--presentation", action="store_true", help="create Beamer slides")
+    parser.add_argument("-p", "--presentation", action="store_true", default=None,
+                        help="create Beamer slides. Also pdfmd-options.presentation in front matter, metadata and kit "
+                             "modes, or options.presentation in folder and global config")
+    parser.add_argument("--no-presentation", dest="presentation", action="store_false",
+                        help="turn off Beamer slides for this run, overriding the document's settings")
     parser.add_argument("--slide-level", type=int, help="Beamer heading level used for slide breaks")
     parser.add_argument("-b", "--batch", action="store_true", help="build files and folders separately (folders select *.md); skip non-inputs")
     parser.add_argument("-r", "--report", "--book", action="store_true",

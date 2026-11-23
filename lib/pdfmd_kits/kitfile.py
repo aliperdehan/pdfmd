@@ -16,6 +16,8 @@ file is the data. Every path in it is relative to the kit's folder and stays ins
         defaults: qca-metadata.yaml  # a metadata file (a list works too), below the kit-level defaults
         metadata: {course: "CHEM 220L"}   # default text: front-matter keys, over `defaults`
         latex: ['\\LabScheme{word}']      # lines written after the package line, for this mode
+      slides:
+        metadata: {pdfmd-options: {presentation: true}}  # choose the Beamer writer (also works in a defaults file)
     latex: ['\\input{chemicals}']  # lines written after the package line, for every mode
     lua: [nulabreport.lua]         # Lua filters the kit adds to the build
     defaults: metadata.yaml        # metadata file(s) every mode gets (pdfmd-options, fonts, csl, bibliography ...)

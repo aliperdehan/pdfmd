@@ -489,8 +489,11 @@ def run_main() -> None:
                              f"Valid: {', '.join(sorted(core.NO_AUTO_KINDS))}")
     if args.batch and args.report:
         raise SystemExit("Choose either --batch or --report/--book, not both")
-    if args.presentation and args.report:
-        raise SystemExit("--presentation cannot be combined with --report/--book")
+    from pdfmd_run import presentation as slides
+
+    cli_presentation = "-p/--presentation" if args.presentation else None
+    if cli_presentation and args.report:
+        slides.validate(cli_presentation, "pdf", None, report=True)
 
     # Stop-at stage (see STOP_STAGES). --assemble-only is --stop-at markdown;
     # so is an -o ending .assembled.md (single-file/report only, like every
@@ -530,8 +533,6 @@ def run_main() -> None:
             raise SystemExit(f"--stop-at tex writes a .tex file; -o {args.out} names another format")
         if stop_at == "markdown" and out_format not in (None, "markdown"):
             raise SystemExit(f"--stop-at markdown writes Markdown; -o {args.out} names another format")
-        if stop_at == "markdown" and (args.presentation or args.watch):
-            raise SystemExit("--stop-at markdown can't be combined with -p/--presentation or -w/--watch")
         if stop_at == "markdown" and args.engine is not None:
             print("WARN  --engine is ignored for --stop-at markdown: no engine is involved",
                   file=sys.stderr)
@@ -546,64 +547,45 @@ def run_main() -> None:
     )
     target_format, ascii_named = core.split_ascii_target(target_format)      # `-o notes.ascii.txt`
     core.ASCII_CLI["on"] = core.ASCII_CLI["on"] or ascii_named
+    if cli_presentation:
+        slides.validate(cli_presentation, target_format, stop_at)
     if stop_at == "markdown":
         target_format = core.ASSEMBLED_FORMAT
     elif stop_at == "tex":
-        target_format = "beamer" if args.presentation else "latex"
-    if args.presentation and target_format != "pdf" and stop_at != "tex":
-        raise SystemExit("-p/--presentation always produces a PDF (via Beamer); "
-                         "it can't be combined with --to/-o for another format")
-    convert_job = None
-    if stop_at is None:
-        goal = core.calibre_goal(args.engine, target_format)
-        if goal:
-            if args.engine is not None and not core.calibre_asked_first(args.engine):
-                print(f"WARN  --engine is ignored for --to {target_format}: Calibre writes it", file=sys.stderr)
-            convert_job = core.start_calibre_job(args, goal, target_format, pandoc_options)
-            target_format = "epub"
-        else:
-            goal = core.soffice_goal(args.engine, target_format)
-            if goal:
-                if args.engine is not None and not core.soffice_asked_first(args.engine):
-                    print(f"WARN  --engine is ignored for --to {target_format}: LibreOffice writes it", file=sys.stderr)
-                convert_job = core.start_soffice_job(args, goal, target_format)
-                target_format = "docx"
-    if (args.engine is not None and target_format != "pdf" and stop_at != "markdown"
-            and not (target_format == "odt" and args.engine.strip().casefold() == "pandoc")):
-        print(f"WARN  --engine is ignored for "
-              f"{'--stop-at tex' if stop_at == 'tex' else f'--to {target_format}'}: "
-              "no PDF engine is involved", file=sys.stderr)
-    # Explicit: the command line named a format (or a stage), so a document's
-    # pdfmd-options.default-output does not apply.
-    target_explicit = (stop_at is not None or bool(args.to) or args.presentation or args.crop is True
-                       or bool(core.format_from_output(args.out) if args.out and not args.batch else None))
-    engines: list[str] = []
-    engines_error: SystemExit | None = None
-    if target_format == "pdf":
-        try:
-            engines = core.select_engines(args.engine, args.presentation)
-        except SystemExit as error:
-            if target_explicit:
-                raise
-            # A document's default-output may not be PDF: only fail if one is.
-            engines_error = error
-    native_auto = (bool(engines) and not args.engine
-                   and all(core.is_native_engine(engine) for engine in engines))
-    if native_auto:
-        core.native_run_note(engines)
+        target_format = "latex"
+    metadata_by_dir = {}
 
-    def need_engines(format_name: str) -> None:
-        if format_name == "pdf" and engines_error is not None:
-            raise engines_error
-
-    def default_target(document: Path, metadata_files: list[Path]) -> str:
-        """target_format, or the document's own default-output (never over an explicit one)."""
-        if target_explicit:
-            return target_format
-        chosen = core.default_output_format(document, metadata_files)
-        if chosen and chosen != target_format:
-            print(f"AUTO OUTPUT  {core.display_path(document)}: default-output {chosen} (pdfmd-options)")
-        return chosen or target_format
+    def metadata_for(file, document_class=None):
+        directory = file.parent.resolve()
+        cache_key = (directory, file.name.casefold())
+        if cache_key not in metadata_by_dir:
+            if (document_class is None and not args.batch
+                    and file.suffix.lower() not in core.OFFICE_INPUT_EXTENSIONS):
+                document_class = (core.frontmatter_value(file, "documentclass")
+                                  or core.frontmatter_value(file, "class"))
+            # An explicit -y/--metadata-file always wins over --no-auto
+            # metadata; only auto-discovery (args.metadata_file is None) is
+            # what --no-auto metadata/yaml suppresses -- per file, since
+            # each file's own pdfmd-options can differ even in one batch.
+            file_no_auto = core.effective_no_auto(file, args.no_auto)
+            requested = ([] if args.metadata_file is None
+                        and core.auto_disabled(file_no_auto, "metadata")
+                        else args.metadata_file)
+            if requested is None:
+                # pdfmd-options.yaml / .metadata: the document names its own
+                # metadata files (like -y, but written in the document).
+                requested = core.option_names(core.frontmatter_pdfmd_options(file), "yaml") or None
+            metadata_by_dir[cache_key] = core.find_metadata(directory, requested,
+                                                        document_class=document_class,
+                                                        document_stem=file.stem, document=file,
+                                                        discover=not (requested is None and core.discovery_disabled(file_no_auto, "metadata")))
+            discovered = metadata_by_dir[cache_key]
+            if args.metadata_file is None and discovered is not None and discovered is not core.AUTO_METADATA_DISABLED:
+                paths = discovered if isinstance(discovered, list) else [discovered]
+                for path in paths:
+                    core.AUTO_LOG.record_file("YAML", path, args.verbose)
+        value = metadata_by_dir[cache_key]
+        return None if value is core.AUTO_METADATA_DISABLED else value
 
     newest_used: list[bool] = []
 
@@ -657,25 +639,93 @@ def run_main() -> None:
     if args.newest and not newest_used:
         print("WARN  --newest picks among the Markdown files of a folder for a bare `pdfmd` (or `pdfmd '#section'`); "
               "it does nothing with a named file, -b or -r", file=sys.stderr)
-    scaffold_plan = None
-    section_plan = None
     plan_source = None
-    single_document = not args.batch and not args.report and not args.presentation and len(paths) == 1
-    if single_document:
+    single_input = not args.batch and not args.report and len(paths) == 1
+    presentation_request = cli_presentation
+    if single_input:
         try:
             plan_source = core.find_markdown(paths[0])
-        except core.LookupAmbiguous as error:
+            if args.presentation is None:
+                metadata = None if plan_source.suffix.lower() == ".qmd" else metadata_for(plan_source)
+                presentation_request = slides.source(plan_source, metadata, args.presentation)
+        except (FileNotFoundError, ValueError) as error:
             raise SystemExit(str(error))
-        except FileNotFoundError as error:
-            if section_requests or args.list_parts:
-                raise SystemExit(str(error))
-            plan_source = None
-        if plan_source is not None:
-            scaffold_plan = core.plan_scaffold(plan_source, section_requests, args.no_auto, args.metadata_file)
+        if presentation_request:
+            slides.validate(presentation_request, target_format, stop_at, document=plan_source)
+            if stop_at == "tex":
+                target_format = "beamer"
+    presentation = bool(presentation_request)
+    if stop_at == "markdown" and args.watch:
+        raise SystemExit("--stop-at markdown can't be combined with -p/--presentation or -w/--watch")
+
+    def plan_bridge(target_format):
+        if stop_at is not None:
+            return target_format, None
+        goal = core.calibre_goal(args.engine, target_format)
+        if goal:
+            if args.engine is not None and not core.calibre_asked_first(args.engine):
+                print(f"WARN  --engine is ignored for --to {target_format}: Calibre writes it", file=sys.stderr)
+            return "epub", core.start_calibre_job(args, goal, target_format, pandoc_options)
+        goal = core.soffice_goal(args.engine, target_format)
+        if goal:
+            if args.engine is not None and not core.soffice_asked_first(args.engine):
+                print(f"WARN  --engine is ignored for --to {target_format}: LibreOffice writes it", file=sys.stderr)
+            return "docx", core.start_soffice_job(args, goal, target_format)
+        return target_format, None
+
+    convert_job = None
+    if single_input:
+        target_format, convert_job = plan_bridge(target_format)
+    if (args.engine is not None and target_format != "pdf" and stop_at != "markdown"
+            and not (target_format == "odt" and args.engine.strip().casefold() == "pandoc")):
+        print(f"WARN  --engine is ignored for "
+              f"{'--stop-at tex' if stop_at == 'tex' else f'--to {target_format}'}: "
+              "no PDF engine is involved", file=sys.stderr)
+    # Explicit: the command line named a format (or a stage), so a document's
+    # pdfmd-options.default-output does not apply.
+    target_explicit = (stop_at is not None or bool(args.to) or presentation or args.crop is True
+                       or bool(core.format_from_output(args.out) if args.out and not args.batch else None))
+    engines: list[str] = []
+    engines_error: SystemExit | None = None
+    if target_format == "pdf" and not presentation:
+        try:
+            engines = core.select_engines(args.engine, False)
+        except SystemExit as error:
+            if target_explicit and single_input:
+                raise
+            # A document can choose its own output or the Beamer engine chain.
+            engines_error = error
+    native_auto = (bool(engines) and not args.engine
+                   and all(core.is_native_engine(engine) for engine in engines))
+    if native_auto:
+        core.native_run_note(engines)
+
+    def need_engines(format_name: str) -> None:
+        if format_name == "pdf" and engines_error is not None:
+            raise engines_error
+
+    def default_target(document: Path, metadata_files: list[Path]) -> str:
+        """target_format, or the document's own default-output (never over an explicit one)."""
+        if args.report:
+            if request := slides.source(document, metadata_files, args.presentation):
+                slides.validate(request, target_format, stop_at, report=True)
+            plan_bridge(target_format)
+        if target_explicit:
+            return target_format
+        chosen = core.default_output_format(document, metadata_files)
+        if chosen and chosen != target_format:
+            print(f"AUTO OUTPUT  {core.display_path(document)}: default-output {chosen} (pdfmd-options)")
+        return chosen or target_format
+
+    scaffold_plan = None
+    section_plan = None
+    single_document = single_input and not presentation
+    if single_document:
+        scaffold_plan = core.plan_scaffold(plan_source, section_requests, args.no_auto, args.metadata_file)
     if scaffold_plan is None and (section_requests or args.list_parts):
         if not single_document:
             raise SystemExit("--section, --list-parts and 'name#section' take one document, "
-                             "not -b/--batch, -r/--report or -p/--presentation")
+                             f"not -b/--batch, -r/--report or {presentation_request or '-p/--presentation'}")
         if plan_source.suffix.lower() != ".md":
             raise SystemExit(f"{plan_source}: sections can only be taken from a Markdown (.md) document")
         if args.list_parts:
@@ -695,10 +745,7 @@ def run_main() -> None:
         if scaffold_plan is not None:
             watch_source = scaffold_plan.scaffold
         else:
-            try:
-                watch_source = core.find_markdown(paths[0])
-            except FileNotFoundError as error:
-                raise SystemExit(str(error))
+            watch_source = plan_source
         core.run_watch(watch_source, core.pinned_watch_argv(sys.argv[1:], args.path, paths[0]), args, default_target, scaffold_plan, section_plan)
         return
     if args.report:
@@ -706,7 +753,6 @@ def run_main() -> None:
         return run_report(core, args=args, default_target=default_target, embed_request=embed_request,
                           engines=engines, need_engines=need_engines, pandoc_options=pandoc_options, paths=paths,
                           stamp_overrides=stamp_overrides, target_format=target_format, variables=variables)
-    metadata_by_dir = {}
     def embeds_preamble(file) -> bool:
         """Whether the assembled stage folds `file`'s preamble in (so it has to be found)."""
         if target_format != core.ASSEMBLED_FORMAT or embed_request is None:
@@ -719,46 +765,17 @@ def run_main() -> None:
                                embed_request)
         return chosen is not None and "preamble" in chosen[0]
 
-    def metadata_for(file, document_class=None):
-        directory = file.parent.resolve()
-        cache_key = (directory, file.stem.casefold())
-        if cache_key not in metadata_by_dir:
-            # An explicit -y/--metadata-file always wins over --no-auto
-            # metadata; only auto-discovery (args.metadata_file is None) is
-            # what --no-auto metadata/yaml suppresses -- per file, since
-            # each file's own pdfmd-options can differ even in one batch.
-            file_no_auto = core.effective_no_auto(file, args.no_auto)
-            requested = ([] if args.metadata_file is None
-                        and core.auto_disabled(file_no_auto, "metadata")
-                        else args.metadata_file)
-            if requested is None:
-                # pdfmd-options.yaml / .metadata: the document names its own
-                # metadata files (like -y, but written in the document).
-                requested = core.option_names(core.frontmatter_pdfmd_options(file), "yaml") or None
-            metadata_by_dir[cache_key] = core.find_metadata(directory, requested,
-                                                        document_class=document_class,
-                                                        document_stem=file.stem, document=file,
-                                                        discover=not (requested is None and core.discovery_disabled(file_no_auto, "metadata")))
-            discovered = metadata_by_dir[cache_key]
-            if args.metadata_file is None and discovered is not None and discovered is not core.AUTO_METADATA_DISABLED:
-                paths = discovered if isinstance(discovered, list) else [discovered]
-                for path in paths:
-                    core.AUTO_LOG.record_file("YAML", path, args.verbose)
-        value = metadata_by_dir[cache_key]
-        return None if value is core.AUTO_METADATA_DISABLED else value
     if args.batch:
         from pdfmd_batch import run as run_batch
         results = run_batch(core, args=args, embed_request=embed_request, embeds_preamble=embeds_preamble,
                             engines=engines, metadata_for=metadata_for, need_engines=need_engines,
-                            pandoc_options=pandoc_options, paths=paths, stamp_overrides=stamp_overrides,
-                            target_explicit=target_explicit, target_format=target_format, variables=variables)
+                            pandoc_options=pandoc_options, paths=paths, plan_bridge=plan_bridge, stamp_overrides=stamp_overrides,
+                            stop_at=stop_at, target_explicit=target_explicit, target_format=target_format,
+                            variables=variables)
     else:
-        try:
-            if len(paths) != 1:
-                raise FileNotFoundError("Single-file mode accepts one Markdown name or path")
-            source = core.find_markdown(paths[0])
-        except FileNotFoundError as error:
-            raise SystemExit(str(error))
+        if not single_input:
+            raise SystemExit("Single-file mode accepts one Markdown name or path")
+        source = plan_source
         if target_format == core.ASSEMBLED_FORMAT:
             if source.suffix.lower() not in (".md", ".markdown"):
                 raise SystemExit(f"{source}: --stop-at markdown assembles Markdown files only")
@@ -777,8 +794,8 @@ def run_main() -> None:
         source_metadata = core.scaffold_metadata_files(source, args.metadata_file)
         target_format = default_target(source, source_metadata)
         direct_kind = (core.direct_route(source, target_format, args.from_format, args.no_auto, args.engine)
-                       if scaffold_plan is None and section_plan is None and not args.presentation else None)
-        if direct_kind is None:
+                       if scaffold_plan is None and section_plan is None and not presentation else None)
+        if direct_kind is None and not presentation:
             need_engines(target_format)
         output_extension = core.output_extension_for(target_format, source)
         out_dir = None
@@ -797,9 +814,6 @@ def run_main() -> None:
                                  else source.with_name(f"{output_stem}{output_extension}"))
         output = output_file = core.load_package("pdfmd_routing.output").single(source, output, convert_job, target_format, metadata_for)
         if source.suffix.lower() == ".qmd":
-            if args.presentation:
-                raise SystemExit("-p/--presentation isn't supported for .qmd -- set the "
-                                 "format in the document's own Quarto front matter instead")
             core.BUILD["engine"], core.BUILD["failed"] = None, []
             core.begin_timer()
             from pdfmd_crop.build import prepare as prepare_crop
@@ -839,23 +853,19 @@ def run_main() -> None:
             # -- including raising a clear error for --to/--from/--no-auto
             # officedirect combinations that have no working route, rather
             # than reaching this branch's own only-slightly-later crash.
-            if args.presentation:
-                raise SystemExit("-p/--presentation isn't supported for an office-document input")
             # No resolve_engines() call: it would read the file as text
             # looking for a pdf-engine front-matter key, which an office
             # document never has and can't be read as (same crash as
             # above) -- engines (from select_engines(args.engine, ...) at
             # the top of main()) is used as-is.
-            results = [core.convert_one(source, out_dir, args.presentation, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, output_resolved=True)]
+            results = [core.convert_one(source, out_dir, False, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, output_resolved=True)]
         else:
             if scaffold_plan is not None or section_plan is not None:
                 # _convert_one derives the output name from the document's own
                 # stem; a partial build's differs, so hand over the final path.
                 output_file = output
-            document_class = (core.frontmatter_value(source, "documentclass")
-                              or core.frontmatter_value(source, "class"))
             try:
-                metadata = metadata_for(source, document_class=document_class)
+                metadata = metadata_for(source)
             except (FileNotFoundError, ValueError) as error:
                 raise SystemExit(str(error))
             engine_metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
@@ -863,8 +873,10 @@ def run_main() -> None:
             if target_format in {"pdf", *core.TEX_STANDALONE_FORMATS} or embeds_preamble(source):
                 preambles = core.document_preambles(source, pandoc_options, core.effective_no_auto(source, args.no_auto), engine_metadata_files)
                 core.announce_preambles(preambles)
-            file_engines = core.resolve_engines(source, args.engine, engines, args.presentation, target_format, engine_metadata_files, args.verbose)
-            results = [core.convert_one(source, out_dir, args.presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
+            file_engines = (slides.engines(source, engine_metadata_files, args.engine, presentation_request, target_format, args.verbose)
+                            if presentation else core.resolve_engines(source, args.engine, engines, False,
+                                                                     target_format, engine_metadata_files, args.verbose))
+            results = [core.convert_one(source, out_dir, presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, output_file, preambles, target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
                                    extra_inputs=(scaffold_plan.files[1:] if scaffold_plan is not None else None),
                                    all_parts=(scaffold_plan.parts if scaffold_plan is not None else None),
                                    cache_cli=args.cache, embed=embed_request, trust_embedded=args.trust_embedded,

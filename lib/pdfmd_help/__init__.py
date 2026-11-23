@@ -23,7 +23,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--border-top", "--border-left", "--border-bottom", "--border-right", "--as-html",
         "--document-title", "--subject", "--author", "--keywords", "--input", "--workers")),
     "modes": ("several files, one report, slides, a long document in parts", (
-        "-p", "--slide-level", "-b", "-r", "--recursive", "-j", "-i", "--exclude-unnumbered", "--section",
+        "-p", "--no-presentation", "--slide-level", "-b", "-r", "--recursive", "-j", "-i", "--exclude-unnumbered", "--section",
         "--split", "--split-depth", "--list-parts", "--newest", "--all", "--include-never", "--which")),
     "source": ("a PDF that carries its source, an assembled single file, comments", (
         "--stop-at", "--assemble-only", "--merge", "--embed-metadata", "--no-embed-metadata", "--lua-mode", "--strip-comments",

@@ -57,6 +57,11 @@ class Plain(unittest.TestCase):
         self.assertIs(data["options"]["unicode"], True)
         self.assertEqual(len(data["options"]["no-auto"]), 2)                   # two kinds toggled on
 
+    def test_presentation_is_saved_as_a_boolean(self):
+        done, path = self.run_setup([str(number("options.presentation")), "1", "s"])
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIs(yaml.safe_load(path.read_text(encoding="utf-8"))["options"]["presentation"], True)
+
     @unittest.skipUnless(__import__("shutil").which("pandoc"), "needs Pandoc")
     def test_no_families_are_disabled_and_a_separate_reset_restores_defaults(self):
         from pdfmd_setup import plain
