@@ -134,6 +134,7 @@ is low priority. [3di]
 - [ ] Docs: a table of every install kind (pip or download, size, `--uninstall`, `--check-dependencies`), decided together with the lean install [3ei, 3dg, 3dx]
 - [ ] The pre-4.0 pass (code review, edge cases, documentation) reads pdfmd as an agent would, not only as a human: exit codes, output size, non-TTY, name guessing, untrusted documents; then tested with the author's local models on real tasks [3ff, 3dg]
 - [ ] 4.0
+- [ ] Zenodo: CITATION.cff; at 4.0 one GitHub Release for v4.0.0 published by hand, then the concept-DOI badge [D128]
 
 ## Colophon after the review of 2026-11-16, agreed, in this order [3fu 3fw D81]
 
@@ -150,6 +151,8 @@ is low priority. [3di]
 - [ ] `pdfmd --serve`: the cookie named after the port (two projects in one browser overwrite each other's token); the token checked before a body is read; a file with any CRLF becomes all-CRLF at a save [3fu B9]
 - [ ] The rest: the preview pane's width on a small screen, the preview cache never cleaned, repeated line numbers with a stray CR, Save As forcing an extension, a second window exactly over the first, the scroll place after a reload [3fu, 3fw]
 - [ ] Colophon beside CotEditor on a real screen: the same file in both windows at one size, a picture of each state (and the PDF window beside Skim); with it the checks that need a window (the studio's line-number gutter, the Settings tabs, the status bar in dark mode) [3fu G, 3fw, 3fh]
+- [ ] Any folder opens as a project: an empty one offers its first file, a tie lets the author pick the main document; a generic folder-panel hint [D129]
+- [ ] PDF viewer: Skim's background (the system under-page colour, resolved once per appearance), a colour setting; the sidebar collapses when dragged past its minimum; Horizontal Continuous [D129]
 
 ## Investigate first, no commitment
 
