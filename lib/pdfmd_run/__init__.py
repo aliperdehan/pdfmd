@@ -554,8 +554,12 @@ def run_main() -> None:
     elif stop_at == "tex":
         target_format = "latex"
     metadata_by_dir = {}
+    metadata_announced = set()
 
-    def metadata_for(file, document_class=None):
+    def metadata_for(file, document_class=None, announce=True):
+        """The metadata files of a document, looked up once. They are announced (FOUND) at the first call that
+        has ``announce``: a batch looks every file up before building any (announce=False) and announces each file's
+        metadata when it builds it, so each file's FOUND line lists its own files (v3.34.34)."""
         directory = file.parent.resolve()
         cache_key = (directory, file.name.casefold())
         if cache_key not in metadata_by_dir:
@@ -579,6 +583,8 @@ def run_main() -> None:
                                                         document_class=document_class,
                                                         document_stem=file.stem, document=file,
                                                         discover=not (requested is None and core.discovery_disabled(file_no_auto, "metadata")))
+        if announce and cache_key not in metadata_announced:
+            metadata_announced.add(cache_key)
             discovered = metadata_by_dir[cache_key]
             if args.metadata_file is None and discovered is not None and discovered is not core.AUTO_METADATA_DISABLED:
                 paths = discovered if isinstance(discovered, list) else [discovered]

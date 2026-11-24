@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.34 — 2026-11-24
+
+Pre-edit state: commit `25b298e`. **A batch prints one FOUND line again.** Since 3.34.31 a batch looks up every
+file's metadata before building any file, to learn which files are slides. The metadata was therefore announced in that
+early pass, and from the second file on the FOUND line held only the preamble
+(`FOUND     metadata/preamble.tex`), so the repeat filter printed it once more. The early lookups now stay silent,
+and each file announces its metadata when it is built, as before 3.34.31.
+
+- `test_autolog` (batch and `-j 2`): 2 failures before the fix, all 15 tests pass after it.
+
 ## v3.34.33 — 2026-11-23
 
 Pre-edit state: commit `e58218d`. **Beamer uses its own frame margins.** pdfmd gave the Beamer writer the same automatic

@@ -145,7 +145,7 @@ def run(core, *,
         # EPUB is unpacked to Markdown before reading its options.
         if file.suffix.lower() == ".epub":
             return None
-        return slides.source(file, metadata_for(file), None)
+        return slides.source(file, metadata_for(file, announce=False), None)
 
     @cache
     def file_target(file):
@@ -154,7 +154,7 @@ def run(core, *,
             return "beamer" if stop_at == "tex" else target_format
         if target_explicit or file.suffix.lower() not in (".md", ".markdown"):
             return target_format
-        found = metadata_for(file)
+        found = metadata_for(file, announce=False)
         chosen = default_output_format(file, found if isinstance(found, list) else ([found] if found else []))
         return chosen or target_format
 
