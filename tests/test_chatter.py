@@ -87,6 +87,49 @@ class Chatter(unittest.TestCase):
                 self.assertIn("OK    b.md > b.tex", batch.stdout)
                 self.assertNotIn("FOUND", batch.stdout)
 
+    def test_muting_a_warning_accepts_it_under_strict(self):
+        done = self.run_pdfmd("a.md", "--strict", "--mute", "table-mismatch")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("WARN  table-repair:", done.stdout)
+        self.assertIn("OK    a.md > a.tex", done.stdout)
+
+        self.write("a.md", body="A | B\nC | D\n\n| X | Y |\n|---|---|\n| 1 | 2 | 3 |\n")
+        done = self.run_pdfmd("a.md", "--strict", "--mute", "table-mismatch")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("WARN  table-unparsed:", done.stdout)
+        self.assertNotIn("WARN  table-repair:", done.stdout)
+        done = self.run_pdfmd("a.md", "--strict", "--mute", "table-mismatch, table-unparsed")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
+    def test_muting_an_auto_kind_in_both_displays(self):
+        for level in ("normal", "verbose"):
+            with self.subTest(level=level):
+                done = self.run_pdfmd("a.md", "--chatter", level, "--mute", "yAmL")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertNotIn("FOUND", done.stdout)
+                self.assertNotIn("AUTO YAML", done.stdout)
+                self.assertIn("WARN  table-repair:", done.stdout)
+
+    def test_muting_from_setup_and_document_in_workers(self):
+        self.settings("  mute: [table-mismatch]\n")
+        self.write("b.md", "---\npdfmd-options: {mute: []}\n---\n\n")
+        done = self.run_pdfmd("-b", "-j", "2", "a.md", "b.md", "--strict")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("OK    a.md > a.tex", done.stdout)
+        self.assertNotIn("table-repair: a.md", done.stdout)
+        self.assertIn("table-repair: b.md", done.stdout)
+        done = self.run_pdfmd("-b", "-j", "2", "a.md", "b.md", "--strict", "--mute=table-mismatch")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
+    def test_check_accepts_muted_warnings(self):
+        self.write("a.md", body="Opening paragraph.\n\n### Jump\n\nAnother paragraph.\n")
+        done = self.run_pdfmd("a.md", "--check", "--strict")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("[heading-jump]", done.stdout)
+        done = self.run_pdfmd("a.md", "--check", "--strict", "--mute=heading-jump")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("[heading-jump]", done.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

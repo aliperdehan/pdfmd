@@ -212,7 +212,7 @@ def render_row(line: str, cells: list[str], separator: bool) -> str:
     return f"{indent}|{inner}|{ending}"
 
 
-def repair_pipe_tables(text: str, mode: str) -> tuple[str, list[tuple[int, str]]]:
+def repair_pipe_tables(text: str, mode: str) -> tuple[str, list[tuple[int, str, str]]]:
     """Fit pipe rows to the header or widest row. In pandoc mode leave the bytes as received."""
     if "|" not in text:
         return text, []
@@ -229,7 +229,7 @@ def repair_pipe_tables(text: str, mode: str) -> tuple[str, list[tuple[int, str]]
                     found = len(rows[index])
                     if found != count:
                         action = "pad" if found < count else "cut"
-                        notices.append((index + 1, f"Pandoc can {action} a row with {found} cells to {count}"))
+                        notices.append((index + 1, "table-mismatch", f"Pandoc can {action} a row with {found} cells to {count}"))
             continue
         if separator is None and len({len(cells) for cells in rows.values()}) != 1:
             continue
@@ -242,19 +242,19 @@ def repair_pipe_tables(text: str, mode: str) -> tuple[str, list[tuple[int, str]]
             bare = lines[index].strip()
             if found != count:
                 action = "padded" if found < count else "cut"
-                notices.append((index + 1, f"{action} the {'separator' if is_separator else 'row'} from {found} cells to {count}"))
+                notices.append((index + 1, "table-mismatch", f"{action} the {'separator' if is_separator else 'row'} from {found} cells to {count}"))
             elif not bare.startswith("|") or not bare.endswith("|") or bare.endswith(r"\|"):
-                notices.append((index + 1, "normalised the row's outer pipes"))
+                notices.append((index + 1, "table-repair", "normalised the row's outer pipes"))
             else:
                 continue
             fill = "---" if is_separator else ""
             fixed[index] = render_row(lines[index], cells[:count] + [fill] * max(0, count - found), is_separator)
         if separator is None:
             fixed[start] += "\n" + render_row(lines[start], ["---"] * count, True)
-            notices.append((start + 1, "inserted a separator below the header"))
+            notices.append((start + 1, "table-repair", "inserted a separator below the header"))
         elif separator == start:
             fixed[start] = render_row(lines[start], [""] * count, False) + "\n" + fixed[start]
-            notices.append((start + 1, "inserted an empty header above the separator"))
+            notices.append((start + 1, "table-repair", "inserted an empty header above the separator"))
     return "\n".join(fixed), sorted(notices, key=lambda notice: notice[0])
 
 
@@ -268,8 +268,8 @@ def table_source(text: str, label: str, *, colons: str | None = "ignore", reader
     for line in changes:
         emit("warning", "table-separator", f"WARN  table-separator: {label}, line {line}: normalised the pipe-table separator")
     fixed, notices = repair_pipe_tables(fixed, repair)
-    for line, reason in notices:
-        emit("warning", "table-repair", f"WARN  table-repair: {label}, line {line}: {reason}")
+    for line, code, reason in notices:
+        emit("warning", code, f"WARN  table-repair: {label}, line {line}: {reason}")
     if colons is not None and ":" in fixed:
         fixed, _ = normalise_separators(fixed, colons=colons)
     return fixed

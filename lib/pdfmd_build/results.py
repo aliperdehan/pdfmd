@@ -157,7 +157,7 @@ def check_asset_budget(sources: list[Path], md_path: Path, metadata_files: list[
             except OSError:
                 continue
             if size > limit * 1048576:
-                emit("warning", None, f"WARN  {core.display_path(md_path)}: {core.display_path(image)} is {size_text(size)}, over the "
+                emit("warning", "asset-large", f"WARN  {core.display_path(md_path)}: {core.display_path(image)} is {size_text(size)}, over the "
                       f"{limit:g} MB asset budget (--max-asset-mb, pdfmd-options.max-asset-mb)", file=sys.stderr)
 
 
@@ -271,7 +271,7 @@ def check_nonmath_dollars(sources: list[Path], cli_from: str | None, metadata_fi
             continue
         reader = cli_from if fixed_reader else core.resolve_from_format(source, cli_from, metadata_files)[0]   # --no-auto reader: no pick of pdfmd's
         for line, written, instead in nonmath_dollars(source, reader):
-            emit("warning", None, f"WARN  {core.display_path(source)}:{line}: `{written}` is not math (Pandoc needs the closing $ not "
+            emit("warning", "math-digit", f"WARN  {core.display_path(source)}:{line}: `{written}` is not math (Pandoc needs the closing $ not "
                   f"followed by a digit); write {instead}", file=sys.stderr)
 
 

@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.34.65 — 2026-11-26
+
+Pre-edit state: commit `8ecf4eb`. A build could hide warnings, but could not accept a specific diagnostic
+under `--strict`. Add `--mute ID[,ID]` in the command line, document options and setup. Named warnings and
+notes stay in the build record and are omitted from the console. Accepted warnings are exempt from
+`--strict`, and accepted automatic decisions are omitted from the discovery lines. The launchpad gains
+one line for passing the command-line setting to workers. Tests cover ragged and unparsed tables,
+verbose and normal discovery, strict checks and per-document muting in a parallel batch.
+
 ## v3.34.64 — 2026-11-26
 
 Pre-edit state: commit `7bc88f7`. Builds could only select the usual messages or verbose output.

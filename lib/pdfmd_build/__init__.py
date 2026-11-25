@@ -35,7 +35,7 @@ from pdfmd_base import core
 from pdfmd_base import noted, timed
 
 from pdfmd_base import pandoc_run
-from pdfmd_log import chatter_scope, emit, resolve_chatter, verbose_output
+from pdfmd_log import CHATTER, document_chatter, emit, verbose_output
 from pdfmd_cite.aliases import apply as apply_citation_aliases
 from pdfmd_engines.memory import scoped
 
@@ -1082,8 +1082,7 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
-    level = resolve_chatter(md_path, metadata_files)
-    with chatter_scope(level):
+    with document_chatter(md_path, metadata_files):
         bound["verbose"] = verbose_output(bound.get("verbose", False))
         core.deferred("pdfmd_engines.memory", "set_limit")(md_path, metadata_files)
         set_soffice_limit(md_path, metadata_files)
@@ -1108,7 +1107,7 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
             raise
         if recorder:
             built.record_path = recorder.finish(built)
-        built.chatter = level
+        built.chatter = CHATTER.get()
         return built
 
 

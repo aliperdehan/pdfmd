@@ -20,6 +20,7 @@ CHATTER_LEVELS = ("off", "result", "warnings", "normal", "verbose", "debug")
 _MINIMUM = {"result": "result", "warning": "warnings", "error": "warnings",
             "note": "normal", "normal": "normal", "verbose": "verbose", "debug": "debug"}
 CHATTER = ContextVar("chatter", default=None)
+MUTED = ContextVar("muted", default=frozenset())
 WARNING_LINE_RE = re.compile(r"^\s*(?:WARN\b|\[WARNING\])")
 
 
@@ -32,6 +33,9 @@ def visible(level: str) -> bool:
 
 def emit(level: str, id: str | None, text: str, *, file=None, end="\n", flush=False, shown=True) -> None:
     """Send a diagnostic to the console at the selected level and keep it in the build record."""
+    if level not in ("error", "result") and is_muted(id):
+        core.record_note(text)
+        return
     if shown and visible(level):
         if level == "error" and CHATTER.get() == "off":
             file = sys.stderr
@@ -45,13 +49,16 @@ def emit(level: str, id: str | None, text: str, *, file=None, end="\n", flush=Fa
         core.record_note(text)
 
 
+def output_setting(key: str, document: Path | None, metadata):
+    if document is not None and document.suffix.lower() in (".md", ".markdown", ".mdown", ".mkd", ".qmd"):
+        return core.first_pdfmd_option(document, metadata, key)
+    return core.config_options(document).get(key)
+
+
 def resolve_chatter(document: Path | None = None, metadata=()) -> str | None:
     if core.CHATTER_CLI is not None:
         return core.CHATTER_CLI
-    if document is not None and document.suffix.lower() in (".md", ".markdown", ".mdown", ".mkd", ".qmd"):
-        given = core.first_pdfmd_option(document, metadata, "chatter")
-    else:
-        given = core.config_options(document).get("chatter")
+    given = output_setting("chatter", document, metadata)
     if given is None:
         return None
     # YAML 1.1 reads an unquoted 'off' as false.
@@ -68,22 +75,46 @@ def verbose_output(default=False) -> bool:
     return default if level is None else level in ("verbose", "debug")
 
 
-def select_chatter(level: str | None) -> bool:
-    CHATTER.set(level)
+def parse_mutes(value) -> frozenset[str]:
+    if value is None or value is False:
+        return frozenset()
+    items = value if isinstance(value, (tuple, list)) else [value]
+    return frozenset(word.strip().casefold() for item in items for word in str(item).split(",") if word.strip())
+
+
+def resolve_mutes(document: Path | None = None, metadata=()) -> frozenset[str]:
+    if core.MUTE_CLI is not None:
+        return core.MUTE_CLI
+    return parse_mutes(output_setting("mute", document, metadata))
+
+
+def is_muted(id: str | None) -> bool:
+    return id is not None and id.casefold() in MUTED.get()
+
+
+def select_chatter(document: Path | None, metadata=()) -> bool:
+    CHATTER.set(resolve_chatter(document, metadata))
+    MUTED.set(resolve_mutes(document, metadata))
     core.VERBOSE_OUTPUT = verbose_output()
     return core.VERBOSE_OUTPUT
 
 
 @contextmanager
-def chatter_scope(level: str | None = None):
+def chatter_scope(level: str | None = None, muted: frozenset[str] | None = None):
     saved = core.VERBOSE_OUTPUT
     token = CHATTER.set(level)
+    mute_token = MUTED.set(MUTED.get() if muted is None else muted)
     core.VERBOSE_OUTPUT = verbose_output(saved)
     try:
         yield
     finally:
+        MUTED.reset(mute_token)
         CHATTER.reset(token)
         core.VERBOSE_OUTPUT = saved
+
+
+def document_chatter(document: Path, metadata=()):
+    return chatter_scope(resolve_chatter(document, metadata), resolve_mutes(document, metadata))
 
 
 def emit_outcome(text: str, ok: bool) -> None:
@@ -272,7 +303,7 @@ class AutoLog:
             emit("verbose", kind, f"AUTO {kind}  {detail}")
             return
         core.record_note(f"AUTO {kind}  {detail}")           # the record has it whatever --verbose said
-        if not visible("normal"):
+        if not visible("normal") or is_muted(kind):
             return
         if heading is None:
             found = self.classify(kind, detail)
@@ -299,7 +330,7 @@ class AutoLog:
             emit("verbose", kind, line)
             return
         core.record_note(line)
-        if not visible("normal"):
+        if not visible("normal") or is_muted(kind):
             return
         if kind == "YAML" and core.is_global_metadata(path):
             self.items[("DEFAULTS", "global")] = (self.RANK["GLOBAL"], "global metadata" if core.preset_name(path) == "default"

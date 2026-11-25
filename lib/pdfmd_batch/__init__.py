@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from pdfmd_log import chatter_scope, emit, resolve_chatter, verbose_output
+from pdfmd_log import document_chatter, emit, verbose_output
 
 
 # The author wants this source-likeness ranking revised later (master queue 3fi D33).
@@ -222,7 +222,7 @@ def run(core, *,
         return bool(request), metadata, file_engines
     def settings(file):
         given = metadata_for(file, announce=False) if file.suffix.lower() not in core.OFFICE_INPUT_EXTENSIONS else None
-        return chatter_scope(resolve_chatter(file, given if isinstance(given, list) else [given] if given else []))
+        return document_chatter(file, given if isinstance(given, list) else [given] if given else [])
 
     def work(file):
         with settings(file):

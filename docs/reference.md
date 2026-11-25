@@ -1725,6 +1725,12 @@ same discovery and commands as `-v`, and `debug` adds engine failure diagnostics
 unchanged, including `--strict` failures. Set `options.chatter` in `--setup` or `pdfmd-options: {chatter: LEVEL}` in
 the document. The command line wins, then the document, its metadata, folder settings and global settings.
 
+`--mute ID[,ID]` accepts named warnings, notes and automatic discovery messages. For example,
+`--mute table-mismatch,table-unparsed,YAML` accepts table cell-count differences, tables the reader cannot parse,
+and metadata discovery messages. These warnings are exempt from `--strict`. Other warnings still count, and
+errors still fail the run. Use a comma-separated value in `--setup` or a list such as
+`pdfmd-options: {mute: [table-mismatch, YAML]}` in the document. The precedence is the same as for `chatter`.
+
 The closing line says how long the build took (v3.31.4): `OK    report.md > report.pdf  in 3:07  (lualatex)`, also for
 a file that failed. `--verbose` adds a TIME line for every step. `build-time: on|off` (`--build-time` / `--no-build-time`)
 and `time-format: auto|clock|seconds|words|TEMPLATE` (`--time-format`; tokens {d} {h} {hh} {m} {mm} {s} {ss} {s1} {s2}

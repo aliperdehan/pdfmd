@@ -18,7 +18,7 @@ from pathlib import Path
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
-from pdfmd_log import chatter_scope, emit, resolve_chatter
+from pdfmd_log import document_chatter, emit, is_muted
 
 
 # --- pdfmd --check: a linter (v3.26.15) ---------------------------------------------------------------------
@@ -174,7 +174,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
             status = 1
             continue
         metadata_files = core.scaffold_metadata_files(document, args.metadata_file)
-        with chatter_scope(resolve_chatter(document, metadata_files)):
+        with document_chatter(document, metadata_files):
             try:
                 ignore = check.parse_ignore(args.check_ignore) | check.parse_ignore(
                     core.first_pdfmd_option(document, metadata_files, "check-ignore"))
@@ -233,6 +233,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
                         line, label = spot, source.label
                         break
                 problems.insert(0, check.Problem(label, line, "bibliography-missing", f"bibliography file not found: {name}"))
+            problems = [problem for problem in problems if problem.severity == "error" or not is_muted(problem.code)]
             errors = sum(problem.severity == "error" for problem in problems)
             notes = sum(problem.severity == "note" for problem in problems)
             warnings = len(problems) - errors - notes

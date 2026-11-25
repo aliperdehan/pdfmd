@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
-from pdfmd_log import (CHATTER, chatter_scope, emit, emit_outcome, resolve_chatter, select_chatter,
-                       visible, verbose_output)
+from pdfmd_log import (CHATTER, chatter_scope, document_chatter, emit, emit_outcome, parse_mutes,
+                       select_chatter, visible, verbose_output)
 
 
 POLISH_INFO_KEYS = {"title": "/Title", "subject": "/Subject", "author": "/Author", "keywords": "/Keywords"}
@@ -79,7 +79,7 @@ def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action],
                              f"`pdfmd --disabled {name} ...`, or switch them back on.")
 
 
-@chatter_scope()
+@chatter_scope(muted=frozenset())
 def run_main() -> None:
     parser, hidden = command_line_parser()
     argv, excerpts = sys.argv[1:], None
@@ -118,8 +118,9 @@ def run_main() -> None:
             del reader_parser._option_string_actions[flag]     # `-cwd`: older argparse still abbreviates it
         args, pandoc_options = reader_parser.parse_known_args()
     core.CHATTER_CLI = args.chatter or ("debug" if args.debug else "verbose" if args.verbose else None)
+    core.MUTE_CLI = parse_mutes(args.mute) if args.mute is not None else None
     source = args.path[0] if args.path and not (args.batch or args.report) and args.path[0].is_file() else None
-    args.verbose = select_chatter(resolve_chatter(source, args.metadata_file or []))
+    args.verbose = select_chatter(source, args.metadata_file or [])
     core.use_managed_tools()
     if not (args.path and all(path.suffix.lower() == ".pdf" for path in args.path)):
         from pdfmd_args.paths import invocation_paths
@@ -605,7 +606,7 @@ def run_main() -> None:
             if args.metadata_file is None and discovered is not None and discovered is not core.AUTO_METADATA_DISABLED:
                 paths = discovered if isinstance(discovered, list) else [discovered]
                 for path in paths:
-                    with chatter_scope(resolve_chatter(file, paths)):
+                    with document_chatter(file, paths):
                         core.AUTO_LOG.record_file("YAML", path, verbose_output(args.verbose))
         value = metadata_by_dir[cache_key]
         return None if value is core.AUTO_METADATA_DISABLED else value
@@ -635,7 +636,7 @@ def run_main() -> None:
                 f"Multiple Markdown files found: {names}\n"
                 "Specify one file, use -b to convert all separately, or use -r to combine them."
             )
-        with chatter_scope(resolve_chatter(markdown_files[0])):
+        with document_chatter(markdown_files[0]):
             emit("normal", "MD", f"AUTO MD    {core.display_path(markdown_files[0])}")
         return markdown_files[0]
 
@@ -673,7 +674,7 @@ def run_main() -> None:
                 given = metadata_for(plan_source, announce=False)
             else:
                 given = None
-            args.verbose = select_chatter(resolve_chatter(plan_source, given if isinstance(given, list) else [given] if given else []))
+            args.verbose = select_chatter(plan_source, given if isinstance(given, list) else [given] if given else [])
             if args.presentation is None:
                 metadata = None if plan_source.suffix.lower() == ".qmd" else metadata_for(plan_source)
                 presentation_request = slides.source(plan_source, metadata, args.presentation)

@@ -14,7 +14,7 @@ from pathlib import Path
 from pdfmd_report import route, titles
 
 from pdfmd_base import pandoc_run
-from pdfmd_log import emit, emit_outcome, resolve_chatter, select_chatter
+from pdfmd_log import emit, emit_outcome, select_chatter
 from pdfmd_cite.aliases import apply as apply_citation_aliases
 from pdfmd_build import page_numbers
 from pdfmd_engines.memory import scoped
@@ -113,7 +113,7 @@ def run(core, *,
         raise SystemExit(str(error))
     metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
                       (metadata if isinstance(metadata, list) else ([metadata] if metadata else [])))
-    args.verbose = select_chatter(resolve_chatter(files[0], metadata_files))
+    args.verbose = select_chatter(files[0], metadata_files)
     core.deferred("pdfmd_engines.memory", "set_limit")(files[0], metadata_files)
     report_kit_kinds = kit_no_auto_kinds(files[0], metadata_files, report_no_auto)
     if report_kit_kinds:
