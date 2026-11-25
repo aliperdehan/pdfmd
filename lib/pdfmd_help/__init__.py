@@ -58,7 +58,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "serve": ("the local server and JSON API behind the web UI (for the Mac app, a browser, or your own tools)", ("--serve", "--api")),
     "cache": ("faster rebuilds", ("--cache", "--cache-location", "--cache-plots", "--clear-cache", "--cache-info", "--no-cache", "--seed-labels", "--seed-calc")),
     "setup": ("installing, configuring and checking pdfmd itself", (
-        "--setup", "--disabled", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor",
+        "--setup", "--disabled", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor", "--json",
         "--check-dependencies", "--version", "--trust-lua", "--deep", "--init", "--doc", "--print", "--path",
         "--user-path", "--add-to-path", "--remove-from-path", "--show-user-path", "--yes")),
     "debug": ("seeing what pdfmd decided, and turning decisions off", (

@@ -119,6 +119,15 @@ def run_main() -> None:
         from pdfmd_args.paths import invocation_paths
         pandoc_options = invocation_paths(pandoc_options, Path.cwd())
     core.provide_writable_places()
+    if args.json:
+        if args.show_config == args.doctor or args.init_config:
+            raise SystemExit("--json goes with either --show-config or --doctor")
+        if args.deep and not args.doctor:
+            raise SystemExit("--deep goes with --doctor: pdfmd --doctor --deep")
+        if args.show_config:
+            if (args.verbose or args.debug) and core.config_path() is None:
+                core.load_package("pdfmd_config").note_config_off()
+            raise SystemExit(0 if core.config_report(document=args.path[0] if args.path else None, as_json=True) else 1)
     if args.merge:
         # --merge (v3.27.6): one Markdown file that builds alone, = --assemble-only --embed-metadata all
         if args.no_embed_metadata:
@@ -129,7 +138,7 @@ def run_main() -> None:
     if args.debug:
         args.verbose = True
     if args.verbose and core.config_path() is None:
-        print("NOTE  The user config file is switched off by PDFMD_CONFIG.", file=sys.stderr)
+        core.load_package("pdfmd_config").note_config_off()
     args.to_many = None
     if args.to and "," in args.to:
         # `--to png,pdf`: several picture formats from one build (see picture_command)
@@ -290,7 +299,7 @@ def run_main() -> None:
         translit = os.environ["PDFMD_TRANSLIT"]
     else:
         translit = configured
-    if translit and translit.strip().casefold() == "list":
+    if translit and translit.strip().casefold() == "list" and not args.json:
         raise SystemExit(0 if core.translit_report() else 1)
     for problem in core.set_translit(translit):
         print(f"WARN  --translit: {problem}", file=sys.stderr)
@@ -326,7 +335,7 @@ def run_main() -> None:
     if args.deep and not args.doctor:
         raise SystemExit("--deep goes with --doctor: pdfmd --doctor --deep")
     if args.doctor:
-        raise SystemExit(0 if core.doctor_report(deep=args.deep) else 1)
+        raise SystemExit(0 if core.doctor_report(deep=args.deep, as_json=args.json) else 1)
     if args.cache_info or isinstance(args.clear_cache, str):
         status = core.cache_command(args)                        # --cache-info, --clear-cache WHAT (pdfmd_cache.manage)
         if status is not None:

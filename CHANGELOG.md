@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.49 — 2026-11-25
+
+Pre-edit state: commit `a3b50ef`. `--show-config` and `--doctor` produced reports that scripts had to parse as prose. Their `--json` reports now carry a schema version, configuration origins or structured checks and tool discovery, respectively [3bh, D124]. Regressions cover all five configuration layers, an excluded user file, a missing tool and stdout that parses as one object.
+
 ## v3.34.48a — 2026-11-25
 
 Pre-edit state: commit `b87a7cf`. Add GitHub citation metadata for the software [D136]. The packaging test reads it with the bundled YAML parser and checks the copyright holder against LICENSE-MIT and the alternative licences against the project's SPDX expression.

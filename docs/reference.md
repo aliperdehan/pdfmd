@@ -1611,6 +1611,31 @@ refused on the command line unless --disabled is given.
 What pdfmd itself remembers (trusted-filters.txt, the dismissed native-renderer
 offer) lives beside it, not in the cache that --clear-cache empties.
 
+### JSON reports
+
+`pdfmd --show-config --json [DOCUMENT]` and `pdfmd --doctor --json` each write
+one object to stdout. Both include `format`, `version` (schema version 1) and
+`pdfmd` (the running pdfmd version). Diagnostics go to stderr.
+
+- `pdfmd-config` has a `layers` array in increasing priority. Each item has
+  `name`, `path` (a file path or null), `active` (boolean) and `reason` (null
+  for active layers). It includes built-in defaults, user and per-install
+  configuration, folder configuration for this location and environment
+  overrides. Use a directory or document to select the folder, or omit it
+  to use the current folder.
+- Its `settings` object maps dotted configuration keys such as
+  `options.cache.location` to `value`, `layer` and `path` (null for defaults and
+  environment values). A built-in value may be null where the setting has
+  no fixed configured value. Environment values are the strings supplied.
+  The report describes configuration before a build resolves command-line,
+  document and metadata-file options or chooses a writer and engine.
+- `pdfmd-doctor` has `checks` with an `id`, `status` (`ok`, `warn`, `fail` or
+  `info`) and a human-readable `message`. Its `tools` entries have `name`,
+  `found` (boolean), `path`, `version` and `source` (for example `PATH`, a
+  setting name, `managed` or `bundled`). Unknown or inapplicable fields are
+  null. Versions are included for tools the report queries for a version.
+  Add `--deep` to include smoke-test checks.
+
 ## The cache (`pdfmd-options: {cache: {aux: true}}`, or --cache)
 
 Pandoc normally makes a .tex in a throwaway folder, runs the engine two

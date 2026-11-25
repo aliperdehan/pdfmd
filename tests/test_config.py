@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import subprocess
 import sys
@@ -141,6 +142,40 @@ class Precedence(ConfigCase):
         self.install_config("options: {default-output: gfm}\n")
         with mock.patch.dict(os.environ, {"PDFMD_CONFIG": "none"}):
             self.assertEqual(pdfmd.config_options(), {"default-output": "gfm"})
+
+    def test_json_reports_each_configured_layer_and_its_winning_values(self):
+        self.write_config("translit: [greek]\noptions: {cache: {aux: true, location: global}}\n")
+        install = self.install_config("options: {cache: {location: document}, parts: auto}\n")
+        folder = self.root / ".pdfmd" / "config.yaml"
+        folder.parent.mkdir()
+        folder.write_text("options: {parts: false}\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"PDFMD_TRANSLIT": "hangul"}), \
+                mock.patch.object(Path, "cwd", return_value=self.root), contextlib.redirect_stdout(io.StringIO()) as shown:
+            self.assertTrue(pdfmd.config_report(as_json=True))
+        data = json.loads(shown.getvalue())
+        self.assertEqual(set(data), {"format", "version", "pdfmd", "layers", "settings"})
+        self.assertEqual((data["format"], data["version"], data["pdfmd"]), ("pdfmd-config", 1, pdfmd.PDFMD_VERSION))
+        self.assertTrue(all(set(layer) == {"name", "path", "active", "reason"} for layer in data["layers"]))
+        self.assertEqual([layer["name"] for layer in data["layers"] if layer["active"]],
+                         ["built-in default", "user", "per-install", "folder", "environment"])
+        for key, value, layer, path in (
+            ("options.default-output", "pdf", "built-in default", None),
+            ("options.cache.aux", True, "user", str(self.config)),
+            ("options.cache.location", "document", "per-install", str(install)),
+            ("options.parts", False, "folder", str(folder.resolve())),
+            ("translit", "hangul", "environment", None),
+        ):
+            with self.subTest(key=key):
+                self.assertEqual(data["settings"][key], {"value": value, "layer": layer, "path": path})
+
+    def test_show_config_json_is_the_only_stdout(self):
+        result = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--show-config", "--json", "--verbose"],
+                                cwd=self.root, capture_output=True, encoding="utf-8",
+                                env={**os.environ, "PDFMD_CONFIG": "off", "PDFMD_NO_PROMPT": "1"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        layers = json.loads(result.stdout)["layers"]
+        user = next(layer for layer in layers if layer["name"] == "user")
+        self.assertEqual(user, {"name": "user", "path": None, "active": False, "reason": "switched off by PDFMD_CONFIG"})
 
     def test_per_install_options_win_over_user_but_yield_to_local_layers(self):
         self.write_config("translit: [greek]\noptions: {default-output: html, cache: {aux: true}}\n")

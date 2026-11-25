@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import json
 import os
 import shutil
 import subprocess
@@ -36,6 +37,22 @@ def doctor(path: str, home: str, *extra: str) -> subprocess.CompletedProcess:
 
 
 class DoctorTests(unittest.TestCase):
+    def test_json_names_missing_tools_and_preserves_the_exit_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            empty = Path(directory) / "empty"
+            empty.mkdir()
+            result = doctor(str(empty), directory, "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(set(data), {"format", "version", "pdfmd", "checks", "tools"})
+        self.assertEqual((data["format"], data["version"]), ("pdfmd-doctor", 1))
+        checks = {check["id"]: check for check in data["checks"]}
+        self.assertEqual(len(checks), len(data["checks"]))
+        self.assertEqual(checks["pandoc"], {"id": "pandoc", "status": "warn", "message": "pandoc"})
+        self.assertTrue(all(check["status"] in {"ok", "warn", "fail", "info"} for check in checks.values()))
+        tools = {tool["name"]: tool for tool in data["tools"]}
+        self.assertEqual(tools["pandoc"], {"name": "pandoc", "found": False, "path": None, "version": None, "source": None})
+
     def test_with_nothing_on_path_it_names_what_to_install(self):
         with tempfile.TemporaryDirectory() as directory:
             empty = Path(directory) / "empty"

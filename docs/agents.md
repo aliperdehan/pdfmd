@@ -19,6 +19,8 @@ pdfmd report.md --kit apa7         # build with a kit (a house style); `pdfmd --
 pdfmd --install diagram:resvg        # SVG to PNG tool, GitHub SHA-256 checked, in pdfmd’s tools folder
 pdfmd --doctor                      # tools, shared SVG image/diagram converter chain, found converters and fixes
 pdfmd --doctor --deep               # also builds a small page with every engine: "installed" is not "works"
+pdfmd --doctor --json               # versioned checks and tool discovery
+pdfmd --show-config --json          # configured values and origins
 pdfmd report.md --check             # what would go wrong, without building (links, images, labels, citations ...)
 pdfmd report.md --verbose           # the exact Pandoc command and every automatic decision, with its reason
 pdfmd report.md --stop-at tex       # stop at the .tex Pandoc made, to read what LaTeX will see

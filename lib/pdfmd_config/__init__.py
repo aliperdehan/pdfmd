@@ -138,6 +138,10 @@ def config_path() -> Path | None:
     return core.config_root() / CONFIG_FILENAME
 
 
+def note_config_off() -> None:
+    print("NOTE  The user config file is switched off by PDFMD_CONFIG.", file=sys.stderr)
+
+
 def install_config_path() -> Path:
     return Path(sys.prefix) / "etc" / "pdfmd" / CONFIG_FILENAME
 
@@ -235,8 +239,13 @@ def config_options(md_path: Path | None = None) -> dict:
     return options
 
 
-def config_report(init: bool = False, document: Path | None = None, no_auto=None, metadata_request=None) -> bool:
+def config_report(init: bool = False, document: Path | None = None, no_auto=None, metadata_request=None,
+                  *, as_json: bool = False) -> bool:
     """--show-config / --init-config."""
+    if as_json:
+        from .report import configured_report
+
+        return configured_report(document)
     path = core.config_path()
     if path is None and init:
         print("The config file is switched off by PDFMD_CONFIG.")

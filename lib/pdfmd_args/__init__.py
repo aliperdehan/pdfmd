@@ -563,6 +563,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--check-fonts", action="store_true",
                         help="say which fonts a document would be set in, which characters need a fallback "
                              "font and which no installed font draws (and what to install), without building")
+    parser.add_argument("--json", action="store_true",
+                        help="with --show-config or --doctor, write one versioned JSON object. "
+                             "--show-config reports configured values and their sources, before resolving a build")
     parser.add_argument("--show-config", action="store_true",
                         help="print the global config files and what they set. PDFMD_CONFIG names another user "
                              "file, or switches it off with off or none; empty uses the usual file")

@@ -154,59 +154,71 @@ def foreign_commands() -> list[tuple[str, str]]:
     return found
 
 
-def doctor_report(deep: bool = False) -> bool:
+def doctor_report(deep: bool = False, *, as_json: bool = False) -> bool:
     """`--doctor`: one page on everything pdfmd uses (tools, fonts, PDF reading, config, cache) and
     what to run to fix what is missing. True unless no PDF can be made at all. ``deep`` also builds a small
     page with each engine, to find the one that is installed but cannot make a PDF."""
     import platform
     problems: list[tuple[str, str]] = []
 
-    def line(ok: bool | None, text: str, fix: str | None = None, why: str | None = None) -> None:
-        print(f"{'OK  ' if ok else 'MISS' if ok is False else 'NOTE'}  {text}")
+    checks = []
+
+    def say(*args) -> None:
+        if not as_json:
+            print(*args)
+
+    def line(check_id: str, ok: bool | None, text: str, fix: str | None = None, why: str | None = None,
+             *, required: bool = False) -> None:
+        if as_json:
+            status = "info" if ok is None else "ok" if ok else "fail" if required else "warn"
+            checks.append({"id": check_id, "status": status, "message": text})
+        else:
+            print(f"{'OK  ' if ok else 'MISS' if ok is False else 'NOTE'}  {text}")
         if ok is False and fix:
             problems.append((why or text, fix))
 
-    print(f"pdfmd {core.PDFMD_VERSION} -- Python {platform.python_version()}, {platform.system()} {platform.machine()}")
-    print(f"  {Path(core.__file__).resolve()}")
-    print("\nMarkdown to PDF:")
+    say(f"pdfmd {core.PDFMD_VERSION} -- Python {platform.python_version()}, {platform.system()} {platform.machine()}")
+    say(f"  {Path(core.__file__).resolve()}")
+    say("\nMarkdown to PDF:")
     pandoc = core.which("pandoc")
     version = ".".join(map(str, core.pandoc_version())) if pandoc else ""
-    line(bool(pandoc), "pandoc" + (f" {version}  ({pandoc})" if pandoc else "")
+    line("pandoc", bool(pandoc), "pandoc" + (f" {version}  ({pandoc})" if pandoc else "")
          + (f"  -- {tool_note('pandoc')}" if pandoc and tool_note("pandoc") else ""),
          "pdfmd --install pandoc", "Pandoc (without it only the plain built-in renderer runs)")
     if pandoc and core.pandoc_version() < core.PANDOC_MIN:
-        line(False, f"pandoc {version} is older than {'.'.join(map(str, core.PANDOC_MIN))}, the oldest pdfmd is tested with",
+        line("pandoc-version", False, f"pandoc {version} is older than {'.'.join(map(str, core.PANDOC_MIN))}, the oldest pdfmd is tested with",
              "pdfmd --install pandoc", "a newer Pandoc (this one may work, but is not tested)")
     if pandoc:
-        for limit in pandoc_limits(core.pandoc_version()):
-            line(None, f"with Pandoc {version}, not available: {limit}")
+        for index, limit in enumerate(pandoc_limits(core.pandoc_version())):
+            line(f"pandoc-limit:{index}", None, f"with Pandoc {version}, not available: {limit}")
     engines = core.installed_engines()
     if core.TEX_FOUND_AT is not None:
-        line(None, f"TeX found at {core.TEX_FOUND_AT}, which is not on PATH; pdfmd uses it for its own runs "
+        line("tex-location", None, f"TeX found at {core.TEX_FOUND_AT}, which is not on PATH; pdfmd uses it for its own runs "
                    "(add the folder to PATH to use it elsewhere, or set PDFMD_TEX_BIN for another place)")
-    line(bool(engines), "PDF engines: " + (", ".join(engines) if engines else "none"),
+    line("pdf-engines", bool(engines), "PDF engines: " + (", ".join(engines) if engines else "none"),
          "pdfmd --install typst", "a PDF engine (Typst is the quickest)")
     if engines:
-        print(f"      used first: {engines[0]}" + ("" if any(e in core.LATEX_ENGINES for e in engines)
+        say(f"      used first: {engines[0]}" + ("" if any(e in core.LATEX_ENGINES for e in engines)
                                                else "  (no TeX: LaTeX packages and some math will not work)"))
         last = [engine for engine in core.automatic_engines() if engine in (*core.BROWSER_ENGINES, "calibre")]
         if last:
-            print(f"      last resorts, after those: {', '.join(last)}")
+            say(f"      last resorts, after those: {', '.join(last)}")
     if not deep:
-        print("NOTE  Run pdfmd --doctor --deep to test-compile a page with each engine.")
+        say("NOTE  Run pdfmd --doctor --deep to test-compile a page with each engine.")
     if not pandoc or not engines:
         native = core.available_native_engines()
-        line(bool(native), "built-in renderer: " + (", ".join(native) if native else "none"))
+        line("native-renderer", bool(native), "built-in renderer: " + (", ".join(native) if native else "none"), required=True)
     for name in ("typst", "chrome"):
         if tool_note(name):
-            line(None, f"{name}: {core.TOOLS_FOUND.get(name, (core.locate_tool(name)[0],))[0]}  -- {tool_note(name)}")
+            line(f"tool-location:{name}", None, f"{name}: {core.TOOLS_FOUND.get(name, (core.locate_tool(name)[0],))[0]}  -- {tool_note(name)}")
     quarto = core.which("quarto")
-    line(None, "quarto: " + (quarto or "not installed (only .qmd files need it)"))
+    line("quarto", None, "quarto: " + (quarto or "not installed (only .qmd files need it)"))
     soffice = core.resolve_soffice()
-    line(None, "LibreOffice: " + (soffice or ("turned off by `soffice-timeout: 0`" if core.soffice_limit() == 0
+    line("soffice", None, "LibreOffice: " + (soffice or ("turned off by `soffice-timeout: 0`" if core.soffice_limit() == 0
                                               else "not installed (only Office files need it)"))
          + (f"  -- {tool_note('soffice')}" if soffice and tool_note("soffice") else ""))
-    line(None, "Calibre: " + (core.resolve_calibre() or "not installed (only -e calibre and the ebook formats azw3, mobi ... need it; `pdfmd --install calibre`)"))
+    calibre = core.resolve_calibre()
+    line("calibre", None, "Calibre: " + (calibre or "not installed (only -e calibre and the ebook formats azw3, mobi ... need it; `pdfmd --install calibre`)"))
     if core.which("weasyprint"):
         jax, runtime = core.mathjax_runtime(), core.katex_runtime()
         if jax and runtime:
@@ -220,14 +232,14 @@ def doctor_report(deep: bool = False) -> bool:
                     "(pdfmd --install math:mathjax)")
         else:
             said = "printed as text, no MathJax or KaTeX"
-        line(bool(jax or runtime), "math in WeasyPrint's PDFs: " + said,
+        line("weasyprint-math", bool(jax or runtime), "math in WeasyPrint's PDFs: " + said,
              "pdfmd --install math:mathjax" if not jax else "pdfmd --install math:katex",
              "MathJax, for math in WeasyPrint's PDFs (WeasyPrint itself prints it as text)" if not jax
              else "KaTeX, behind MathJax, for what it cannot read")
     try:
         import pdfmd_direct as direct
         browsers = [name for name in direct.BROWSER_NAMES if direct.find_browser(name, core.which)]
-        line(None, "HTML files go straight to: " + (", ".join(["weasyprint" if core.which("weasyprint") else "", *browsers])
+        line("direct-routes", None, "HTML files go straight to: " + (", ".join(["weasyprint" if core.which("weasyprint") else "", *browsers])
                                                      .strip(", ") or "no engine (pip install weasyprint)")
                    + "; .typ files to: " + ("typst" if core.engine_executable("typst") else "no Typst (pdfmd --install typst)"))
     except ImportError:
@@ -235,46 +247,47 @@ def doctor_report(deep: bool = False) -> bool:
     try:
         import pdfmd_images
         converters = pdfmd_images.available_converters(core.which, core.resolve_soffice)
-        line(None, "SVG converter chain: " + " -> ".join(pdfmd_images.CONVERTERS))
-        line(None, "SVG images and diagrams to PDF/PNG: " + (", ".join(converters) if converters else
+        line("svg-chain", None, "SVG converter chain: " + " -> ".join(pdfmd_images.CONVERTERS))
+        line("svg-converters", None, "SVG images and diagrams to PDF/PNG: " + (", ".join(converters) if converters else
              "nothing installed (" + pdfmd_images.install_hint() + ")"))
     except ImportError:
         pass
     drawn_by = [f"{name} ({tool}{', ' + tool_note(tool) if tool_note(tool) else ''})" for tool, name, _ in core.DIAGRAM_TOOLS if core.which(tool)]
-    line(None, "diagrams written as code (```dot, ```d2, ```mermaid) are drawn with: "
+    line("diagrams", None, "diagrams written as code (```dot, ```d2, ```mermaid) are drawn with: "
          + (", ".join(drawn_by) if drawn_by else "nothing installed ("
             + "; ".join(f"{name}: {hint.split('  |')[0]}" for _, name, hint in core.DIAGRAM_TOOLS) + ")"))
     has_rdkit = importlib.util.find_spec("rdkit") is not None
-    line(None, "chemical structures (```smiles blocks) are drawn with: "
+    line("rdkit", None, "chemical structures (```smiles blocks) are drawn with: "
          + ("RDKit" if has_rdkit else "nothing installed (pip install rdkit)"))
     from pdfmd_yaml_support import description
-    line(core.yaml is not None, "YAML: " + description(core.yaml), "pip install --force-reinstall pdfmd-cli",
+    line("yaml", core.yaml is not None, "YAML: " + description(core.yaml), "pip install --force-reinstall pdfmd-cli",
          "YAML support (installation is incomplete)")
     found = importlib.util.find_spec("pypdf") is not None
-    line(found, "python package pypdf", "pip install pypdf", "the Python package pypdf (PDF stamping is skipped without it)")
+    line("pypdf", found, "python package pypdf", "pip install pypdf", "the Python package pypdf (PDF stamping is skipped without it)")
 
-    print("\nFonts and scripts:")
+    say("\nFonts and scripts:")
     module = core.unicode_module()
     if module is None:
-        line(False, "pdfmd_unicode package", "pip install --force-reinstall pdfmd-cli", "the pdfmd_unicode package")
+        line("unicode", False, "pdfmd_unicode package", "pip install --force-reinstall pdfmd-cli", "the pdfmd_unicode package")
     else:
-        for family, fix in ((core.PREFERRED_FONT, "pdfmd --install fonts:core"), (core.DEFAULT_MONOFONT, "pdfmd --install fonts:core")):
-            line(not core.font_missing(family), f"{family}" + ("" if not core.font_missing(family) else "  (a stand-in is used)"),
+        for role, family in (("main", core.PREFERRED_FONT), ("mono", core.DEFAULT_MONOFONT)):
+            fix = "pdfmd --install fonts:core"
+            line(f"font:{role}", not core.font_missing(family), f"{family}" + ("" if not core.font_missing(family) else "  (a stand-in is used)"),
                  fix, f"the default font {family}")
         from pdfmd_unicode import install as font_installer
         installed = font_installer.installed(core.fonts_directory())
-        line(None, f"fonts installed by pdfmd: {', '.join(sorted(installed)) if installed else 'none'}"
+        line("managed-fonts", None, f"fonts installed by pdfmd: {', '.join(sorted(installed)) if installed else 'none'}"
                    f"  ({core.fonts_directory()})")
         try:
             index = module.FontIndex(core.fonts_directory())
             emoji = core.managed_face("Noto Color Emoji") or index.regular("Noto Color Emoji") or index.regular("Apple Color Emoji")
         except Exception:  # noqa: BLE001 -- a broken font folder must not stop the report
             emoji = None
-        line(bool(emoji), "colour emoji font" + (f": {emoji.family}" if emoji else ""),
+        line("emoji-font", bool(emoji), "colour emoji font" + (f": {emoji.family}" if emoji else ""),
              "pdfmd --install emoji", "a colour emoji font (emoji are labels or boxes without one)")
         cjk = [family for family in ("Songti SC", "PingFang SC", "Noto Serif CJK SC", "Source Han Serif SC",
                                      "SimSun", "Microsoft YaHei", "WenQuanYi Zen Hei") if not core.system_font_missing(family)]
-        line(bool(cjk) or "cjk-sc" in installed, "Chinese/Japanese/Korean font" + (f": {cjk[0]}" if cjk else ""),
+        line("cjk-font", bool(cjk) or "cjk-sc" in installed, "Chinese/Japanese/Korean font" + (f": {cjk[0]}" if cjk else ""),
              "pdfmd --install fonts:cjk-sc  (cjk-jp, cjk-kr...)", "a CJK font (only needed for documents in those scripts)")
         packs = sorted(core.TRANSLIT_PACKS)
         rest = [pack for pack in module.translit.PACKS if pack not in core.TRANSLIT_PACKS]
@@ -285,91 +298,97 @@ def doctor_report(deep: bool = False) -> bool:
             hint = f"  (--translit list; ready, off until turned on: {', '.join(ready)}; pdfmd --install translit for the rest)"
         else:
             hint = "  (--translit list; pdfmd --install translit for Chinese and the rest)"
-        line(None, "name lookup in other scripts: Cyrillic" + (", " + ", ".join(packs) if packs else "") + hint)
+        line("translit", None, "name lookup in other scripts: Cyrillic" + (", " + ", ".join(packs) if packs else "") + hint)
 
-    print("\nReading PDFs (PDF to Markdown):")
+    say("\nReading PDFs (PDF to Markdown):")
     reader = core.find_batchocr()
     reader_version = core.batchocr_version(reader) if reader else None
-    line(bool(reader_version and reader_version >= core.BATCHOCR_MIN),
+    line("batchocr", bool(reader_version and reader_version >= core.BATCHOCR_MIN),
          "batchocr" + (f" {'.'.join(map(str, reader_version))}" if reader_version else ""),
          "pdfmd --install batchocr", "batchocr (reading PDFs)")
     for tool, programs in (("tesseract", ("tesseract",)), ("poppler", ("pdftotext", "pdftoppm"))):
         found = [program for program in programs if core.which(program)]
-        line(len(found) == len(programs), f"{tool}: " + (", ".join(found) or "not found")
+        line(tool, len(found) == len(programs), f"{tool}: " + (", ".join(found) or "not found")
              + (f"  ({core.which(found[0])})" if found else "")
              + (f"  -- {tool_note(tool)}" if found and tool_note(tool) else ""),
              core.tesseract_install_hint(), f"{tool} (scanned PDFs)")
     if module is not None:
         from pdfmd_unicode import tessdata
         own = tessdata.installed(core.tessdata_directory())
-        line(None, f"OCR languages from pdfmd: {', '.join(own) if own else 'none'}  (pdfmd --install ocr:rus)")
+        line("ocr-languages", None, f"OCR languages from pdfmd: {', '.join(own) if own else 'none'}  (pdfmd --install ocr:rus)")
 
-    print("\nSmaller PDFs (lossless; --shrink):")
+    say("\nSmaller PDFs (lossless; --shrink):")
     shrinkers = core.load_package("pdfmd_shrink").available()
     if shrinkers:
         for number, (name, where) in enumerate(shrinkers):
-            line(True, f"{name}  ({where})" + ("  -- shrinks every PDF" if number == 0 else "  -- takes over when the one above is gone"))
+            line(f"shrinker:{name}", True, f"{name}  ({where})" + ("  -- shrinks every PDF" if number == 0 else "  -- takes over when the one above is gone"))
     else:
-        line(None, f"no PDF shrinker (optional: PDFs stay about a tenth larger)  ({core.load_package('pdfmd_shrink').install_hint()})")
+        line("shrinker", None, f"no PDF shrinker (optional: PDFs stay about a tenth larger)  ({core.load_package('pdfmd_shrink').install_hint()})")
 
     foreign = foreign_commands()
     if foreign:
-        print("\nCommand names:")
+        say("\nCommand names:")
         for name, path in foreign:
-            line(None, f"`{name}` on the PATH is another program's, not pdfmd's: {core.display_path(Path(path))}  "
+            line(f"command-conflict:{name}", None, f"`{name}` on the PATH is another program's, not pdfmd's: {core.display_path(Path(path))}  "
                        f"(the last install owns a name; `pdfmd-cli` is always pdfmd's; to take `{name}` back: "
                        "pip install --force-reinstall --no-deps pdfmd-cli)")
 
     if deep:
-        print("\nSmoke test (a small page with maths, code and a table, built with each engine):")
+        say("\nSmoke test (a small page with maths, code and a table, built with each engine):")
         candidates = [*engines, *(core.available_native_engines() if not (pandoc and engines) else [])]
         if pandoc:           # the last resorts (v3.29.5): each browser and Calibre print the page, and Calibre writes an ebook
             candidates += [engine for engine in core.automatic_engines() if engine in (*core.BROWSER_ENGINES, "calibre")]
             if core.resolve_calibre():
                 candidates.append("calibre:azw3")
         if not candidates:
-            line(False, "nothing to try: no engine is installed", "pdfmd --install typst", "a PDF engine")
+            line("smoke-test", False, "nothing to try: no engine is installed", "pdfmd --install typst", "a PDF engine", required=True)
         for name, built, detail in deep_checks(candidates):
             engine_name, _, ebook = name.partition(":")
             what = f"an {ebook.upper()} ebook" if ebook else "a PDF"
-            line(built, f"{name}: " + (f"built {what} in {detail}" if built else f"could not build it ({detail})"),
+            line(f"smoke-test:{name}", built, f"{name}: " + (f"built {what} in {detail}" if built else f"could not build it ({detail})"),
                  f"pdfmd --setup, or rerun with: pdfmd sample.md -e {engine_name}{' -o sample.' + ebook if ebook else ''} --debug",
-                 f"{engine_name} is installed but cannot build a page")
+                 f"{engine_name} is installed but cannot build a page", required=True)
 
-    print("\nSettings and cache:")
+    say("\nSettings and cache:")
     from pdfmd_config import global_config_layers
 
     for layer, path, _ in global_config_layers():
         if layer == "per-install":
-            line(None, f"per-install config file: {path}")
+            line("per-install-config", None, f"per-install config file: {path}")
     config = core.config_path()
-    line(None, "config file: " + ("switched off by PDFMD_CONFIG" if config is None else
+    line("user-config", None, "config file: " + ("switched off by PDFMD_CONFIG" if config is None else
                                   f"{config} ({'present' if config.is_file() else 'none; pdfmd --init-config writes one'})"))
     setup = core.setup_module()
     screens = "numbered list" + (", full screen too" if setup is not None and setup.fancy.available()
                                  else " (full screen: pdfmd --install tui)")
-    line(None, f"pdfmd --setup: {screens}")
+    line("setup", None, f"pdfmd --setup: {screens}")
     cache = core.cache_root()
     size = folder_size(cache) if cache.is_dir() else 0
-    line(None, f"cache: {cache} ({f'{size / 1e6:.1f} MB' if size else 'empty'}; pdfmd --cache-info, pdfmd --clear-cache)")
+    line("cache", None, f"cache: {cache} ({f'{size / 1e6:.1f} MB' if size else 'empty'}; pdfmd --cache-info, pdfmd --clear-cache)")
     over = core.cache_size_note(size)                  # v3.33.74: larger than cache.max-mb
     if over:
-        line(None, over)
-    line(None, f"installed tools and fonts: {core.data_root()}")
+        line("cache-size", None, over)
+    line("data", None, f"installed tools and fonts: {core.data_root()}")
 
-    print()
+    say()
     if problems:
-        print(f"{len(set(fix for _, fix in problems))} thing(s) to fix:")
+        say(f"{len(set(fix for _, fix in problems))} thing(s) to fix:")
         merged: dict[str, list[str]] = {}
         for what, fix in problems:
             merged.setdefault(fix, []).append(what)
         for number, (fix, what) in enumerate(merged.items(), start=1):
-            print(f"  {number}. {' and '.join(what)}\n       {fix}")
+            say(f"  {number}. {' and '.join(what)}\n       {fix}")
     else:
-        print("Everything pdfmd uses is in place.")
+        say("Everything pdfmd uses is in place.")
     hint = user_path_hint()
     if hint:
-        print(hint)
+        say(hint)
+    if as_json:
+        import json
+        from .tools import tool_reports
+
+        print(json.dumps({"format": "pdfmd-doctor", "version": 1, "pdfmd": core.PDFMD_VERSION, "checks": checks,
+                          "tools": tool_reports(pandoc, version, quarto, soffice, calibre, reader, reader_version, shrinkers)}))
     return bool(pandoc and engines) or bool(core.available_native_engines())
 
 
