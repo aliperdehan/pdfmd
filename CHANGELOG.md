@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.48 — 2026-11-25
+
+Pre-edit state: commit `8fabc4c`. `PDFMD_CONFIG` treated `off` and `none` as filenames. Both now switch off the user config regardless of case or surrounding spaces [D139]. `--show-config`, `--doctor` and verbose runs name the switch. Regressions cover those reports, both words, whitespace, and the default, explicit and per-install files.
+
 ## v3.34.47b — 2026-11-25
 
 Pre-edit state: commit `152320a`. The author offers pdfmd under MIT or Apache-2.0 [D127]. The original MIT text moves to LICENSE-MIT and the canonical Apache text is copied byte for byte to LICENSE-APACHE. The source distribution, Python metadata, zipapp, Homebrew and Scoop carry the licence choice. Vendored licences remain in their own files. The packaging regression checks the expression, files, checksum and manifests.

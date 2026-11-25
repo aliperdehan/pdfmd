@@ -564,7 +564,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="say which fonts a document would be set in, which characters need a fallback "
                              "font and which no installed font draws (and what to install), without building")
     parser.add_argument("--show-config", action="store_true",
-                        help="print where pdfmd's global config file is, and what it sets")
+                        help="print the global config files and what they set. PDFMD_CONFIG names another user "
+                             "file, or switches it off with off or none; empty uses the usual file")
     parser.add_argument("--text-to-markdown", nargs="?", const="auto", choices=("auto", "force", "paragraphs"), metavar="MODE",
                         help="read .txt input as Markdown: headings, lists, tables and paragraphs guessed from how the text "
                              "is typed, the words never changing (needs batchocr 1.2.5: pdfmd --install batchocr). MODE: "

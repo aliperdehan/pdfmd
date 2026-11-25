@@ -76,7 +76,7 @@ Use `--page-numbers` when a cropped result should keep them.
 - `PDFMD_NO_PROMPT=1` stops every question and every offer (an install, the setup hint). An explicitly requested
   `--install calibre` takes the default package manager if available, otherwise the SHA-256-checked GitHub download.
 - An empty or unset `PDFMD_CONFIG` uses the usual user config.
-  `PDFMD_CONFIG=file.yaml` names another. `sys.prefix/etc/pdfmd/config.yaml`
+  `PDFMD_CONFIG=file.yaml` names another, and `PDFMD_CONFIG=off` or `none` skips the user file. `sys.prefix/etc/pdfmd/config.yaml`
   is the per-install config and wins over the user file. A `.pdfmd/` folder in the document's folder or above it still applies (it is a
   project's own setting; `--verbose` lists it as `AUTO SETTINGS`, the closing `FOUND` line as `.pdfmd`).
   Kits: the config's `kits:` entries and the `kits/` folder beside the config are off too; a `kits/` folder in the

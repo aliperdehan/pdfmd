@@ -132,7 +132,9 @@ def config_root() -> Path:
 def config_path() -> Path | None:
     override = os.environ.get("PDFMD_CONFIG")
     if override:
-        return Path(override).expanduser() if override.strip() else None
+        if override.strip().casefold() in {"", "off", "none"}:
+            return None
+        return Path(override).expanduser()
     return core.config_root() / CONFIG_FILENAME
 
 
@@ -237,7 +239,7 @@ def config_report(init: bool = False, document: Path | None = None, no_auto=None
     """--show-config / --init-config."""
     path = core.config_path()
     if path is None and init:
-        print("The config file is switched off (PDFMD_CONFIG contains only whitespace).")
+        print("The config file is switched off by PDFMD_CONFIG.")
         return True
     if init:
         if path.exists():
@@ -252,7 +254,7 @@ def config_report(init: bool = False, document: Path | None = None, no_auto=None
             print(f"Wrote {path} (every setting is commented out; edit it).")
         return True
     if path is None:
-        print("The user config file is switched off (PDFMD_CONFIG contains only whitespace).")
+        print("The user config file is switched off by PDFMD_CONFIG.")
     for layer, file, data in global_config_layers():
         state = 'present' if file.is_file() else 'not there: pdfmd --init-config writes one'
         print(f"{layer} config file: {file} ({state})")

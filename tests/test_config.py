@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -105,6 +106,24 @@ class Loading(ConfigCase):
         os.environ["PDFMD_CONFIG"] = " "
         self.assertEqual(pdfmd.config_options(), {})
 
+    def test_config_off_spellings_disable_the_user_file(self):
+        self.write_config("options: {parts: auto}\n")
+        for value in ("off", "OFF", " none "):
+            with self.subTest(value=value), mock.patch.dict(os.environ, {"PDFMD_CONFIG": value}):
+                pdfmd.load_config.cache_clear()
+                self.assertIsNone(pdfmd.config_path())
+                self.assertEqual(pdfmd.config_options(), {})
+
+    def test_reports_explain_why_the_user_config_is_off(self):
+        self.write_config("options: {parts: auto}\n")
+        for args in (("--show-config",), ("--doctor",), ("--verbose", "--show-config")):
+            with self.subTest(args=args):
+                result = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), *args],
+                                        cwd=self.root, capture_output=True, encoding="utf-8",
+                                        env={**os.environ, "PDFMD_CONFIG": " OFF ", "PDFMD_NO_PROMPT": "1"})
+                report = result.stderr if "--verbose" in args else result.stdout
+                self.assertIn("switched off by PDFMD_CONFIG", report)
+
 
 class Precedence(ConfigCase):
     def install_config(self, text):
@@ -116,6 +135,12 @@ class Precedence(ConfigCase):
         patch.start()
         self.addCleanup(patch.stop)
         return path
+
+    def test_off_leaves_the_per_install_config_active(self):
+        self.write_config("options: {parts: auto}\n")
+        self.install_config("options: {default-output: gfm}\n")
+        with mock.patch.dict(os.environ, {"PDFMD_CONFIG": "none"}):
+            self.assertEqual(pdfmd.config_options(), {"default-output": "gfm"})
 
     def test_per_install_options_win_over_user_but_yield_to_local_layers(self):
         self.write_config("translit: [greek]\noptions: {default-output: html, cache: {aux: true}}\n")

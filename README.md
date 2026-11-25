@@ -3583,6 +3583,7 @@ document's `pdfmd-options:` and applies to every document, below anything the
 document or its metadata files say (the command line beats all of them);
 `translit:` is the romanization packs of the name lookup. `PDFMD_CONFIG=other.yaml`
 uses another user file. An empty or unset `PDFMD_CONFIG` uses the usual user file.
+`PDFMD_CONFIG=off` or `none` skips the user file, regardless of case or surrounding spaces.
 The optional per-install config at `sys.prefix/etc/pdfmd/config.yaml` uses the
 same format and takes precedence over the user config. `--show-config` and
 `--which` name the per-install file when it is present.

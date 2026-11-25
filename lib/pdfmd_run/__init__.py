@@ -128,6 +128,8 @@ def run_main() -> None:
             args.embed_metadata = ["all"]
     if args.debug:
         args.verbose = True
+    if args.verbose and core.config_path() is None:
+        print("NOTE  The user config file is switched off by PDFMD_CONFIG.", file=sys.stderr)
     args.to_many = None
     if args.to and "," in args.to:
         # `--to png,pdf`: several picture formats from one build (see picture_command)

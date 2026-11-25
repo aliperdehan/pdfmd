@@ -343,7 +343,7 @@ def doctor_report(deep: bool = False) -> bool:
         if layer == "per-install":
             line(None, f"per-install config file: {path}")
     config = core.config_path()
-    line(None, "config file: " + ("switched off (PDFMD_CONFIG contains only whitespace)" if config is None else
+    line(None, "config file: " + ("switched off by PDFMD_CONFIG" if config is None else
                                   f"{config} ({'present' if config.is_file() else 'none; pdfmd --init-config writes one'})"))
     setup = core.setup_module()
     screens = "numbered list" + (", full screen too" if setup is not None and setup.fancy.available()
