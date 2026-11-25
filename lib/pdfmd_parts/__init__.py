@@ -290,17 +290,23 @@ class ScaffoldPlan:
 
 
 def warn_shared_parts_folder(scaffold: Path, directory: Path, setting: str, include_never: bool = False) -> None:
-    """Explain why Markdown files beside an automatic parts folder are outside the build."""
+    """With `parts: auto`, every Markdown file beside a parts/ folder is a scaffold of it when built on its own.
+    Name the siblings that would take the same parts that way, saying plainly that they are not merged into this
+    build (N123: the old wording read as if they were). A sibling with `parts: false` stays silent, and so does
+    one marked `priority: never`, which folder builds leave out (D137) unless ``include_never`` (`--all`)."""
     if setting != "auto":
         return
     siblings = [file for file in core.source_markdown(sorted(scaffold.parent.glob("*.md")))
                 if file != scaffold and not file.name.startswith(".")]
-    kept = set(core.skip_never(siblings, include_never, announce=False))
-    for file in siblings:
-        reason = ("it is outside the `parts` folder and absent from the parts order"
-                  if file in kept else "it has `priority: never`")
-        print(f"WARN  {core.display_path(scaffold)}: {core.display_path(file)} is not merged from "
-              f"{core.display_path(directory)} because {reason}.", file=sys.stderr)
+    others = []
+    for file in core.skip_never(siblings, include_never, announce=False):
+        probed = _probe_scaffold(file, directory, None)
+        if probed is not None and probed[1] == "auto":
+            others.append(file)
+    for file in others:
+        print(f"WARN  {core.display_path(scaffold)}: {core.display_path(file)} beside it is not merged into this "
+              f"build, but built on its own it would take {core.display_path(directory)} too (`parts: auto`); "
+              "put `pdfmd-options: {parts: false}` in it if it is not a report", file=sys.stderr)
 
 
 def _probe_scaffold(

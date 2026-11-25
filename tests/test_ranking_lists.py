@@ -114,12 +114,20 @@ class Lists(unittest.TestCase):
         scaffold = self.doc("report.md")
         scaffold.write_text("---\npdfmd-options: {parts: auto}\n---\nReport lead.\n", encoding="utf-8")
         self.doc("kept.md", folder=self.dir / "parts")
+        # the case N123 met: parts: auto set for the folder, so a sibling without front matter inherits it
+        (self.dir / "metadata.yaml").write_text("pdfmd-options: {parts: auto}\n", encoding="utf-8")
         self.doc("notes.md")
         self.doc("excluded.md", "never")
+        (self.dir / "readme.md").write_text("---\npdfmd-options: {parts: false}\n---\n# readme\n", encoding="utf-8")
         result = self.run_pdfmd("--merge", "report.md", stop=False)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertRegex(result.stderr, r"notes\.md.*not merged.*parts.*order")
-        self.assertRegex(result.stderr, r"excluded\.md.*not merged.*priority: never")
+        self.assertRegex(result.stderr, r"notes\.md beside it is not merged into this build.*parts: false")
+        self.assertNotIn("readme.md", result.stderr)              # it said parts: false
+        self.assertNotIn("excluded.md", result.stderr)            # folder builds leave it out (D137)
+        self.assertNotIn("# notes.md", (self.dir / "report.assembled.md").read_text(encoding="utf-8"))
+        result = self.run_pdfmd("--merge", "report.md", "--all", stop=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr, r"excluded\.md beside it is not merged")
 
     def test_the_viewer_lists_without_never(self):
         self.setup_three()
