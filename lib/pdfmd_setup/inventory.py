@@ -270,6 +270,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "column-estimate": "options.column-estimate", "column-widths": "options.column-widths", "table-widths": "options.column-widths",
     "column-word-floor": "options.column-word-floor", "table-word-floor": "options.column-word-floor",
     "column-word-floor-limit": "options.column-word-floor-limit",
+    "column-word-ceil": "options.column-word-ceil", "column-ceil-margin": "options.column-ceil-margin",
     "column-outlier": "options.column-outlier", "column-outlier-rows": "options.column-outlier-rows",
     "column-outlier-length": "options.column-outlier-length", "column-count-raw-tex": "options.column-count-raw-tex",
     "text-to-markdown": "options.text-to-markdown",

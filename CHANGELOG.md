@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.56 — 2026-11-25
+
+Pre-edit state: commit `a2a51ab`. [tables] A chosen pipe-table column could keep most of the line even when its cells were short.
+The column ceiling now gives excess width to columns that need it. Its default margin is 25% of the line.
+Tests cover the LaTeX fractions, long cells beside airy ones, disabled settings and caption overrides.
+
 ## v3.34.55 — 2026-11-25
 
 Pre-edit state: commit `fe6c096`. Calibre's macOS installer detached by mount point and ignored

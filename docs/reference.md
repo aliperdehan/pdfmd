@@ -1888,9 +1888,13 @@ Unequal dashes (`--|-----`) are a choice and kept, but only under Pandoc's own M
 linked metadata file): the `gfm` reader of a plain file gives the dashes no width. Pandoc counts colons as dashes.
 v3.31.0: a chosen column too narrow for its longest word (a word of up to 16 characters) is widened to it and the
 other columns give up the room (`column-word-floor: off` for a table where breaking a word is meant).
+With `column-word-ceil: on` (the default), a chosen column wider than its longest cell plus `column-ceil-margin`
+gives the excess room to columns with cells that need it. The default margin is `25%` of the line. Use a percentage
+or a fraction from 0 to 1. `0`, `off` or `column-word-ceil: off` disables the ceiling. Use `{word-ceil=off}` or
+`{column-ceil-margin=40%}` after a table's caption (Pandoc 3.8.2 or newer) to override it for that table.
 A cell more than `column-outlier` (2) times longer than the next one in its column, at least 30 characters, in a
 column of four rows or more, does not size its column: it wraps and the others keep their room (0 switches it off).
-`pdfmd-options: {column-widths: keep}` (or the same in the config, or --setup; `table-widths` is the older name) leaves every table as written;
+`pdfmd-options: {column-widths: keep}` (or the same in the config, or --setup; `table-widths` is the older name) bypasses both the floor and the ceiling;
 `force` ignores the dashes and balances every table. A table's own `{widths=force word-floor=off}` after its
 caption wins. `--no-auto tablewidth` switches the filter off. In count mode this applies to LaTeX engines only:
 the other writers take Pandoc's widths as given. Typst PDF builds can opt in to measure below.

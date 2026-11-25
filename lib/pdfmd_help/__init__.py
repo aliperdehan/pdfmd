@@ -201,7 +201,9 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
     if topic == "tables":
         parser.description += (". pdfmd-options: column-estimate: count (default) | measure; "
                                "measure uses the selected LaTeX or Typst PDF engine and caches cell and unbreakable word widths. "
-                               "Exports keep count; --verbose reports measured/cached widths; --setup also offers this setting.")
+                               "Exports keep count; --verbose reports measured/cached widths. "
+                               "column-word-ceil: on (default) | off. column-ceil-margin: 25% (default), a percentage "
+                               "or fraction; 0 or off disables the ceiling. --setup offers these settings.")
     try:
         text = parser.format_help()
         if topic == "output":

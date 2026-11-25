@@ -100,7 +100,8 @@ CSV_TABLE_LUA_FILTER = "csv_table"   # pdfmd_lua/csv_table.lua
 
 def width_filter_args(width_filter: Path) -> list[str]:
     """``--lua-filter`` for the table-width filter, with the global column settings of the config or `--setup` handed
-    to it (`column-widths`, `column-estimate`, `column-word-floor`, `column-count-raw-tex`, and the numbers `column-outlier`,
+    to it (`column-widths`, `column-estimate`, `column-word-floor`, `column-word-ceil`, `column-ceil-margin`,
+    `column-count-raw-tex`, and the numbers `column-outlier`,
     `column-outlier-rows`, `column-outlier-length`, `column-word-floor-limit`); a document's own `pdfmd-options` reaches
     it through the metadata and wins. `table-widths` and `table-word-floor` are the older names, still read."""
     args = ["--lua-filter", str(width_filter)]
@@ -108,6 +109,7 @@ def width_filter_args(width_filter: Path) -> list[str]:
     words = (("column-widths", "table-widths", ("auto", "keep", "force")),
              ("column-estimate", None, ("count", "measure")),
              ("column-word-floor", "table-word-floor", ("on", "off", "true", "false")),
+             ("column-word-ceil", None, ("on", "off", "true", "false")),
              ("column-count-raw-tex", None, ("on", "off", "true", "false")))
     for key, older, allowed in words:
         value = options.get(key)
@@ -117,6 +119,11 @@ def width_filter_args(width_filter: Path) -> list[str]:
             value = "on" if value else "off"
         if isinstance(value, str) and value.strip().casefold() in allowed:
             args += ["-M", f"pdfmd-{key}={value.strip().casefold()}"]
+    margin = options.get("column-ceil-margin")
+    if margin is False:
+        margin = "off"
+    if isinstance(margin, (int, float, str)) and not isinstance(margin, bool):
+        args += ["-M", f"pdfmd-column-ceil-margin={str(margin).strip()}"]
     for key in ("column-outlier", "column-outlier-rows", "column-outlier-length", "column-word-floor-limit"):
         number = options.get(key)
         if isinstance(number, str) and number.strip().casefold() in ("off", "false"):
@@ -486,8 +493,9 @@ def tablewidth_note(md_path, note) -> None:
         log.unlink(missing_ok=True)
     except OSError:
         return
-    count = sum(1 for mark in seen if not mark.endswith("w"))
-    widened = sum(1 for mark in seen if mark.endswith("w"))
+    count = sum(1 for mark in seen if mark.isdigit())
+    widened = sum(1 for mark in seen if "w" in mark)
+    narrowed = sum(1 for mark in seen if "c" in mark)
     if count:
         note("TABLEWIDTH", f"{md_path}: {count} wide table{'s' if count != 1 else ''} had no column widths (or "
                            "`column-widths: force` is set); pdfmd balanced the columns (--no-auto tablewidth stops it)")
@@ -495,6 +503,9 @@ def tablewidth_note(md_path, note) -> None:
         note("TABLEWIDTH", f"{md_path}: {widened} table{'s' if widened != 1 else ''} had a column too narrow for its "
                            "longest word; pdfmd widened it and took the room from the others (`column-widths: keep` "
                            "leaves the widths as written)")
+    if narrowed:
+        note("TABLEWIDTH", f"{md_path}: {narrowed} table{'s' if narrowed != 1 else ''} had a column wider than its "
+                           "longest cell plus the ceiling margin; pdfmd narrowed it (`column-word-ceil: off` stops it)")
 
 
 # Text tables Pandoc does not read as tables (v3.31.47-52, entry 3el): ASCII tables without the inner `+` of a grid table

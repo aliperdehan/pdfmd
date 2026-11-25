@@ -107,6 +107,7 @@ local function collect(tbl, count_raw)
     for _, row in ipairs(body.head) do add(row) end
     for _, row in ipairs(body.body) do add(row) end
   end
+  for _, row in ipairs(tbl.foot.rows) do add(row) end
   return rows, longest, word
 end
 
@@ -302,44 +303,78 @@ end
 -- than `column-word-floor-limit` characters, a URL say, is not worth the room) and the other columns give up the space in
 -- proportion to what they were given, none below its own floor. A table where every column already holds its
 -- longest word is returned untouched; one whose floors do not fit at all keeps the choice.
-local function keep_words(tbl, o)
-  local ncols = #tbl.colspecs
-  local _, longest, word, room, _, scale = dimensions(tbl, o)
-  if room <= 0 then return nil end
-  local floor_, chars, floor_sum, short = {}, {}, 0, false
-  local data = o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]
-  for c = 1, ncols do
+local function keep_words(chars, longest, word, room, scale, o)
+  local floor_, floor_sum, short = {}, 0, false
+  for c = 1, #chars do
     floor_[c] = math.min(word[c], longest[c], o["column-word-floor-limit"] * (scale and scale[c] or 1))
-    chars[c] = tbl.colspecs[c][2] * room
-    if data and data.inset then chars[c] = tbl.colspecs[c][2] * data.line - data.inset end
     floor_sum = floor_sum + floor_[c]
     if chars[c] < floor_[c] - 1e-9 then short = true end
   end
   if not short or floor_sum >= room then return nil end
   local widths, locked = {}, {}
-  for c = 1, ncols do
+  for c = 1, #chars do
     if chars[c] < floor_[c] then widths[c] = floor_[c]; locked[c] = true end
   end
   local changed = true
   while changed do
     changed = false
     local left, free = room, 0
-    for c = 1, ncols do
+    for c = 1, #chars do
       if locked[c] then left = left - widths[c] else free = free + chars[c] end
     end
-    for c = 1, ncols do
+    for c = 1, #chars do
       if not locked[c] then
         widths[c] = chars[c] * left / free
         if widths[c] < floor_[c] then widths[c] = floor_[c]; locked[c] = true; changed = true end
       end
     end
   end
+  return widths
+end
+
+-- Leave the margin above the longest cell. Share the released space in proportion to the
+-- room the other columns are missing, up to their longest cells.
+local function take_air(widths, longest, margin)
+  local released, wanted = 0, 0
+  for c, width in ipairs(widths) do
+    local cap = longest[c] + margin
+    if width > cap then
+      released = released + width - cap
+      widths[c] = cap
+    end
+    wanted = wanted + math.max(0, longest[c] - width)
+  end
+  if released <= 0 then return false end
+  if wanted > 0 then
+    local share = math.min(1, released / wanted)
+    for c, width in ipairs(widths) do
+      widths[c] = width + math.max(0, longest[c] - width) * share
+    end
+  end
+  return true
+end
+
+local function adjust_chosen(tbl, o)
+  local margin = o.ceil and o["column-ceil-margin"] or 0
+  if not o.floor and margin == 0 then return nil end
+  local _, longest, word, room, _, scale = dimensions(tbl, o)
+  if room <= 0 then return nil end
+  local data = o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]
+  local chars = {}
+  for c, spec in ipairs(tbl.colspecs) do
+    chars[c] = spec[2] * room
+    if data and data.inset then chars[c] = spec[2] * data.line - data.inset end
+  end
+  local widened = o.floor and keep_words(chars, longest, word, room, scale, o)
+  local widths = widened or chars
+  local narrowed = margin > 0 and take_air(widths, longest, margin * (data and data.line or CHAR_BUDGET))
+  if not widened and not narrowed then return nil end
   for c, spec in ipairs(tbl.colspecs) do
     local width = widths[c] / room
     if data and data.inset then width = (widths[c] + data.inset) / data.line end
     tbl.colspecs[c] = {spec[1], width}
   end
-  report("w")
+  report((widened and "w" or "") .. (narrowed and "c" or ""))
   return tbl
 end
 
@@ -352,7 +387,7 @@ end
 local MODES = {auto = true, keep = true, force = true}
 local SWITCH = {on = true, ["true"] = true, yes = true, off = false, ["false"] = false, no = false}
 local GLOBAL = {
-  mode = "auto", floor = true, count_raw = true, estimate = "count",
+  mode = "auto", floor = true, ceil = true, count_raw = true, estimate = "count", ["column-ceil-margin"] = 0.25,
   ["column-outlier"] = 2, ["column-outlier-rows"] = 4, ["column-outlier-length"] = 30, ["column-word-floor-limit"] = 16,
 }
 local NUMBERS = {"column-outlier", "column-outlier-rows", "column-outlier-length", "column-word-floor-limit"}
@@ -363,6 +398,18 @@ local function number_of(text)
   if text == "off" or text == "false" then return 0 end
   local value = tonumber(text)
   if value ~= nil and value >= 0 then return value end
+  return nil
+end
+
+local function margin_of(text)
+  if text == nil then return nil end
+  text = text:match("^%s*(.-)%s*$"):lower()
+  local percent = text:sub(-1) == "%"
+  local value = number_of(percent and text:sub(1, -2) or text)
+  if value ~= nil then
+    if percent then value = value / 100 end
+    if value <= 1 then return value end
+  end
   return nil
 end
 
@@ -386,6 +433,13 @@ local function table_options(attributes)
     if SWITCH[given:lower()] ~= nil then o.floor = SWITCH[given:lower()] end
     attributes["word-floor"] = nil
   end
+  given = attributes["word-ceil"]
+  if given ~= nil then
+    if SWITCH[given:lower()] ~= nil then o.ceil = SWITCH[given:lower()] end
+    attributes["word-ceil"] = nil
+  end
+  o["column-ceil-margin"] = margin_of(attributes["column-ceil-margin"]) or o["column-ceil-margin"]
+  attributes["column-ceil-margin"] = nil
   given = attributes["count-raw-tex"]
   if given ~= nil then
     if SWITCH[given:lower()] ~= nil then o.count_raw = SWITCH[given:lower()] end
@@ -428,12 +482,9 @@ local function rebalance(tbl)
   if o.mode == "keep" then return nil end
   local chosen = not has_default(tbl.colspecs) and not equal_widths(tbl.colspecs) and o.mode ~= "force"
   if chosen then
-    if o.floor then
-      local widened = keep_words(tbl, o)
-      if typst and widened then widened.attributes["data-pdfmd-measured"] = "true" end
-      return widened
-    end
-    return nil
+    local adjusted = adjust_chosen(tbl, o)
+    if typst and adjusted then adjusted.attributes["data-pdfmd-measured"] = "true" end
+    return adjusted
   end
   if ncols == 1 and not has_default(tbl.colspecs) then
     tbl.colspecs[1] = {tbl.colspecs[1][1]}
@@ -486,6 +537,9 @@ function Pandoc(doc)
   if mode ~= nil and MODES[mode] then GLOBAL.mode = mode end
   local floor = SWITCH[setting(doc.meta, "column-word-floor") or setting(doc.meta, "table-word-floor") or ""]
   if floor ~= nil then GLOBAL.floor = floor end
+  local ceil = SWITCH[setting(doc.meta, "column-word-ceil") or ""]
+  if ceil ~= nil then GLOBAL.ceil = ceil end
+  GLOBAL["column-ceil-margin"] = margin_of(setting(doc.meta, "column-ceil-margin")) or GLOBAL["column-ceil-margin"]
   local raw = SWITCH[setting(doc.meta, "column-count-raw-tex") or ""]
   if raw ~= nil then GLOBAL.count_raw = raw end
   for _, key in ipairs(NUMBERS) do

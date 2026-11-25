@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -59,7 +61,7 @@ class Auto(unittest.TestCase):
         self.assertEqual(cols, [None, None])
 
     def test_unequal_dashes_are_the_authors_choice(self):
-        [cols] = widths(f"| A | B |\n|--|-----------|\n| {LONG} | ok |\n")
+        [cols] = widths(f"| A | B |\n|--|-----------|\n| {LONG} | {LONG} |\n")
         self.assertAlmostEqual(cols[0], 2 / 13, places=6)
         self.assertAlmostEqual(cols[1], 11 / 13, places=6)
 
@@ -109,7 +111,7 @@ class Modes(unittest.TestCase):
         self.assertGreater(cols[1], cols[2])                           # the others keep their order
 
     def test_a_chosen_table_that_already_fits_is_left_exactly_as_written(self):
-        [cols] = widths(f"| A | B |\n|----------|-----------|\n| {LONG} | ok |\n")
+        [cols] = widths(f"| A | B |\n|----------|-----------|\n| {LONG} | several words that fit |\n")
         self.assertAlmostEqual(cols[0], 10 / 21, places=9)
         self.assertAlmostEqual(cols[1], 11 / 21, places=9)
 
@@ -171,6 +173,50 @@ class Config(unittest.TestCase):
             self.assertEqual(pdfmd.width_filter_args(Path("f.lua"))[2:], args[2:])
         with mock.patch.object(pdfmd, "config_options", lambda *a: {"column-widths": "sideways"}):
             self.assertEqual(len(pdfmd.width_filter_args(Path("f.lua"))), 2)
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class Ceiling(unittest.TestCase):
+    TEXT = f"| A | B | C |\n|---|---------------|---------|\n| {LONG} | ok | yes |\n"
+
+    def test_airy_columns_give_up_room_to_the_long_cells(self):
+        [cols] = widths(self.TEXT)
+        self.assertAlmostEqual(sum(cols), 1)
+        self.assertAlmostEqual(cols[1], (2 + 95 * 0.25) / 86)
+        self.assertAlmostEqual(cols[2], (3 + 95 * 0.25) / 86)
+        self.assertGreater(cols[0], 0.35)
+
+    def test_switch_margin_and_keep(self):
+        [original] = widths(self.TEXT, "-M", "pdfmd-column-widths=keep")
+        for key, value in (("column-word-ceil", "off"), ("column-ceil-margin", "0"), ("column-ceil-margin", "off")):
+            with self.subTest(key=key, value=value):
+                self.assertEqual(widths(self.TEXT, "-M", f"pdfmd-{key}={value}"), [original])
+        self.assertEqual(widths(self.TEXT, "-M", "pdfmd-column-ceil-margin=50%"),
+                         widths(self.TEXT, "-M", "pdfmd-column-ceil-margin=0.5"))
+        self.assertGreater(original[1], 0.5)
+
+    def test_latex_exports_the_redistributed_fractions(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            document, output = root / "doc.md", root / "doc.tex"
+            document.write_text(self.TEXT, encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--from", "markdown",
+                                   "--to", "latex", str(document), "-o", str(output)], cwd=root,
+                                  capture_output=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            result = output.read_text(encoding="utf-8")
+        shares = [float(value) for value in re.findall(r"\\real\{([0-9.]+)\}", result)]
+        self.assertEqual(len(shares), 3)
+        for drawn, expected in zip(shares, widths(self.TEXT)[0]):
+            self.assertAlmostEqual(drawn, expected, delta=0.0001)
+        self.assertLess(shares[1], 0.31)
+
+    @unittest.skipUnless(pandoc_version() >= (3, 8, 2), "caption attributes need Pandoc 3.8.2")
+    def test_caption_overrides_the_document(self):
+        for attrs in ("word-ceil=off", "column-ceil-margin=0", "widths=keep"):
+            with self.subTest(attrs=attrs):
+                self.assertEqual(widths(self.TEXT + f"\n: Caption {{{attrs}}}\n"),
+                                 widths(self.TEXT, "-M", "pdfmd-column-widths=keep"))
 
 
 SITES = ("| Site | pH of mucus | Clearance of mucus |\n|---|---|---|\n"
