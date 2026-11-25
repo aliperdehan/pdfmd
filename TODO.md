@@ -97,8 +97,6 @@ wait for an answer before any code.
 
 ## Raw TeX inputs, a standalone `.tex`, `--crop` as a build mode [3fg]
 
-- [ ] Paths inside an `\input`-ed `.tex` resolve against that file's folder [3fg]
-
 ## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]
 
 - [ ] The rest of Obsidian's syntax: note embeds (`![[note#Heading]]`, `#^block`), links between notes, tags, block ids, properties, foldable and custom callouts, extra task statuses [3ee]

@@ -435,7 +435,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
         where = f"kept at {tex_path} (--keep-aux)" if keep_aux else "discarded after compiling"
         core.vprint(verbose, f"AUTO CITATIONENGINE  {md_path}: routing bibliography through --{citation_engine} "
                f"instead of --citeproc; intermediate .tex {where}")
-        return core.compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug)
+        return core.compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,
+                                       document_directory=md_path.parent)
     finally:
         # Under --keep-aux, leave the intermediate .tex for inspection too --
         # it's the one artifact from THIS function (compile_tex_direct's own

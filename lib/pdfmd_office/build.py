@@ -213,7 +213,14 @@ def office_finish(arguments, md_path: Path, verbose: bool) -> None:
 def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path, verbose: bool, debug: bool = False, *, prepare_command=None):
     """The Pandoc command of a docx/odt build (see build_office_pandoc), and then the one finishing every Word
     file it writes, the soffice route's included: the tables pdfmd styles are centred in the file itself."""
-    result = build_office_pandoc(cmd, output, arguments, pandoc_cwd, verbose, debug, prepare_command=prepare_command)
+    if arguments.filter_arguments and arguments.context:
+        from pdfmd_tex.references import pandoc_sources
+
+        document = arguments.context["md_path"]
+        with pandoc_sources(cmd, document.parent, pandoc_cwd, set()) as prepared:
+            result = build_office_pandoc(prepared, output, arguments, pandoc_cwd, verbose, debug, prepare_command=prepare_command)
+    else:
+        result = build_office_pandoc(cmd, output, arguments, pandoc_cwd, verbose, debug, prepare_command=prepare_command)
     target = Path(cmd[cmd.index("-o") + 1]) if "-o" in cmd else None
     module = core.office_module()
     if result.returncode == 0 and module is not None and target is not None and target.suffix.lower() == ".odt":

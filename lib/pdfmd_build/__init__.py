@@ -154,6 +154,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         core.BUILD["partial"] = {"parts": [Path(item) for item in chosen], "root": parts_root,
                             "cut": source_override[0] if source_override is not None else None}
     measurement_state = {}
+    tex_path_warnings: set = set()
     noted: set[tuple[str, str]] = set()
 
     def note(kind: str, detail: str) -> None:
@@ -966,10 +967,15 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
 
                     def run_pandoc(command: list[str], target: Path):
                         command = measure_command(command)
-                        command = core.headers_as_metadata(command)
-                        core.log_cmd(command, pandoc_cwd, verbose)
-                        return pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
-                                              env=core.tex_search_env(md_path.parent, pandoc_cwd, md_path))
+                        from pdfmd_tex.references import pandoc_sources
+
+                        sources = (pandoc_sources(command, md_path.parent, pandoc_cwd, tex_path_warnings)
+                                   if engine in core.LATEX_ENGINES else contextlib.nullcontext(command))
+                        with sources as prepared_command:
+                            prepared_command = core.headers_as_metadata(prepared_command)
+                            core.log_cmd(prepared_command, pandoc_cwd, verbose)
+                            return pandoc_run(prepared_command, capture_output=True, encoding="utf-8", errors="replace",
+                                              cwd=pandoc_cwd, env=core.tex_search_env(md_path.parent, pandoc_cwd, md_path))
                     return run_engine_command(cmd, engine, output, run_pandoc, page_options, verbose,
                                               numbered=page_numbers.enabled(md_path, metadata_files))
 
@@ -1431,7 +1437,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                                               for name in aliases.get("dir", [])) + tex_text,
                                     encoding="utf-8")
         ok, reason = core.compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,
-                                        aux_dir=base, cwd=pandoc_cwd, env=tex_env)
+                                        aux_dir=base, cwd=pandoc_cwd, env=tex_env, document_directory=md_path.parent)
         if ok and plot_dir is not None:
             requests = {}
             for suffix in (*aliases.get("requests", []), ".pdfmdreq"):

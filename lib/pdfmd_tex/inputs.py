@@ -535,7 +535,7 @@ def compile_tex_source(source: Path, output: Path, engines: list[str], keep_aux:
                 core.vprint(verbose, f"AUTO TEXFRAGMENT  {core.display_path(source)}: compiling with its project preamble")
                 env = tex_search_env(cwd, source.parent, source)
                 ok, reason = core.compile_tex_direct(wrapper, output, engines, keep_aux, verbose, debug,
-                                                     cwd=source.parent, env=env)
+                                                     cwd=source.parent, env=env, document_directory=source.parent)
                 return ok, reason, True
 
             if keep_aux:

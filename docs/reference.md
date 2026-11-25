@@ -1048,6 +1048,11 @@ metadata.yaml's own relative `bibliography:`/`csl:` paths can live in that
 same `metadata/` folder and still resolve -- pdfmd adds `--resource-path`
 pointing back at the document's own directory in that case, so the
 document's own relative image paths keep resolving too.
+When a build reads a local TeX file through `\input`, it first looks beside
+that file for literal paths in commands such as `\includegraphics`,
+`\input` and `\lstinputlisting`. It then looks beside the main document.
+If both folders have a match, pdfmd uses the one beside the included file
+and warns once, naming both paths.
 With `--no-citeproc`, native Typst omits the bibliography block and heading when there are no citations, unless
 `nocite` or `full-bibliography: true` explicitly requests uncited entries. Cited lists keep Typst's automatic title
 ("Bibliography" in English); `reference-section-title` names the citeproc list. Bibliography and CSL names are resolved

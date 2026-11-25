@@ -590,7 +590,7 @@ AUX_CLEAN_SUFFIXES = (".aux", ".toc", ".out", ".lof", ".lot", ".bbl", ".blg", ".
 def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                        keep_aux: bool, verbose: bool, debug: bool,
                        aux_dir: Path | None = None, cwd: Path | None = None,
-                       env: dict | None = None) -> tuple[bool, str]:
+                       env: dict | None = None, document_directory: Path | None = None) -> tuple[bool, str]:
     """Compile a standalone .tex document directly, without Pandoc.
 
     See the module-level comment above for why, and this file's docstring
@@ -609,6 +609,10 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
     failed_families: set[str] = set()
     failed_engines: list[str] = []
     last_reason = ""
+    from .references import tex_source
+
+    work_dir = cwd or tex_path.parent
+    warned: set = set()
     for engine_index, engine in enumerate(tex_engines):
         log_tail = ""
         family = core.ENGINE_FAMILY.get(engine, engine)
@@ -631,16 +635,18 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
             kept = Path(name)
             shutil.copy2(in_place, kept)
         try:
-            ok, reason = run_tex_engine(engine, tex_path, output_dir, verbose, cwd=cwd, env=env)
-            if not ok and aux_dir:
-                # A poisoned cache (a half-written .aux from an interrupted or
-                # failed build) must never trap the user: wipe LaTeX's own
-                # files for this document and retry once from scratch.
-                for leftover in output_dir.glob(f"{tex_path.stem}.*"):
-                    if leftover.name.endswith(AUX_CLEAN_SUFFIXES):
-                        leftover.unlink(missing_ok=True)
-                core.vprint(verbose, f"AUTO CACHE  {tex_path.stem}: first attempt failed; retrying with a clean aux")
-                ok, reason = run_tex_engine(engine, tex_path, output_dir, verbose, cwd=cwd, env=env)
+            with tex_source(tex_path, document_directory or work_dir, work_dir, warned) as prepared:
+                prepared_cwd = work_dir if prepared != tex_path else cwd
+                ok, reason = run_tex_engine(engine, prepared, output_dir, verbose, cwd=prepared_cwd, env=env)
+                if not ok and aux_dir:
+                    # A poisoned cache (a half-written .aux from an interrupted or
+                    # failed build) must never trap the user: wipe LaTeX's own
+                    # files for this document and retry once from scratch.
+                    for leftover in output_dir.glob(f"{tex_path.stem}.*"):
+                        if leftover.name.endswith(AUX_CLEAN_SUFFIXES):
+                            leftover.unlink(missing_ok=True)
+                    core.vprint(verbose, f"AUTO CACHE  {tex_path.stem}: first attempt failed; retrying with a clean aux")
+                    ok, reason = run_tex_engine(engine, prepared, output_dir, verbose, cwd=prepared_cwd, env=env)
             if ok:
                 produced = output_dir / f"{tex_path.stem}.pdf"
                 output.parent.mkdir(parents=True, exist_ok=True)

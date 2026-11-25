@@ -538,11 +538,18 @@ def run(core, *,
                         return prepare(command, engine, list(files), metadata_files, pandoc_cwd,
                                        args.verbose, enabled=report_tablewidth_auto, state=measurement_state)
 
+                    tex_path_warnings: set = set()
+
                     def run_report_pandoc(command: list[str], target: Path):
                         command = measure_command(command)
-                        log_cmd(command, pandoc_cwd, args.verbose)
-                        return pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd,
-                                              env=tex_search_env(files[0].parent, pandoc_cwd, files[0]))
+                        from pdfmd_tex.references import pandoc_sources
+
+                        sources = (pandoc_sources(command, files[0].parent, pandoc_cwd, tex_path_warnings)
+                                   if engine in LATEX_ENGINES else contextlib.nullcontext(command))
+                        with sources as prepared_command:
+                            log_cmd(prepared_command, pandoc_cwd, args.verbose)
+                            return pandoc_run(prepared_command, capture_output=True, encoding="utf-8", errors="replace",
+                                              cwd=pandoc_cwd, env=tex_search_env(files[0].parent, pandoc_cwd, files[0]))
                     report_page = lambda: (browser_page_css(files[0], metadata_files, variables) if engine in BROWSER_ENGINES
                                          else calibre_page_options(files[0], metadata_files, variables))
                     if engine == "calibre" or engine in BROWSER_ENGINES or (engine in ("typst", "weasyprint") and office_fallback_wanted(

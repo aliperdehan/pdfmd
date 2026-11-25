@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 import shutil
 import stat
@@ -10,6 +11,8 @@ import sys
 import tempfile
 import types
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from unittest import mock
 from pathlib import Path
 
@@ -326,6 +329,128 @@ class TexFallback(unittest.TestCase):
             self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertIn("LaTeX fragment needs its project preamble", done.stdout + done.stderr)
             self.assertFalse((root / "missing.pdf").exists())
+
+
+TEST_TEX = next((name for name in ("lualatex", "xelatex", "pdflatex") if shutil.which(name)), None)
+
+
+class IncludedTexResolution(unittest.TestCase):
+    def test_fragment_paths_and_missing_reference(self):
+        from pdfmd_tex.references import pandoc_sources, tex_source
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            fragment = root / "fragments"
+            fragment.mkdir()
+            main = root / "main.tex"
+            main.write_text(r"\input{fragments/fragment}", encoding="utf-8")
+            markdown = root / "main.md"
+            raw = r"\input{fragments/fragment}"
+            markdown.write_text(f"`{raw}`\n\n```{{=latex}}\n{raw}\n```\n", encoding="utf-8")
+            original = ("% \\includegraphics{picture.png}\n"
+                        "\\includegraphics[width=1cm]{picture.png}\n"
+                        "\\input{nested}\n\\verbatiminput{data.txt}\n\\input{missing}\n")
+            body = fragment / "fragment.tex"
+            body.write_text(original, encoding="utf-8")
+            for path in (root / "picture.png", fragment / "picture.png", fragment / "nested.tex", root / "data.txt"):
+                path.write_text("fixture\n", encoding="utf-8")
+            warned = set()
+            log = StringIO()
+            with redirect_stderr(log), tex_source(main, root, root, warned) as prepared:
+                head = prepared.read_text(encoding="utf-8")
+                shadow = Path(head.split("{")[1].split("}")[0])
+                rendered = shadow.read_text(encoding="utf-8")
+                self.assertIn("% \\includegraphics{picture.png}", rendered)
+                self.assertIn(f"{{{(fragment / 'picture.png').as_posix()}}}", rendered)
+                self.assertIn(f"{{{(fragment / 'nested.tex').as_posix()}}}", rendered)
+                self.assertIn(f"{{{(root / 'data.txt').as_posix()}}}", rendered)
+                self.assertIn(r"\input{missing}", rendered)
+            self.assertFalse(shadow.exists())
+            self.assertEqual(body.read_text(encoding="utf-8"), original)
+            command = ["pandoc", str(markdown), "-o", str(root / "out.pdf")]
+            with redirect_stderr(log), pandoc_sources(command, root, root, warned) as prepared:
+                source = Path(prepared[1]).read_text(encoding="utf-8")
+                self.assertEqual(source.count(raw), 1)
+                self.assertIn(f"`{raw}`", source)
+            self.assertEqual(log.getvalue().count("WARN  TeX input path:"), 1)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_the_office_filter_uses_the_fragment_before_the_document(self):
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = root / "fragments"
+            files.mkdir()
+            (root / "d.md").write_text(
+                "---\ntitle: Example\npdfmd-options: {office: {latex: auto, labels: off}}\n---\n\n"
+                "```{=latex}\n\\input{fragments/body}\n```\n", encoding="utf-8")
+            (files / "body.tex").write_text("\\input{extra}\n", encoding="utf-8")
+            (files / "extra.tex").write_text("Fragment content.\n", encoding="utf-8")
+            (root / "extra.tex").write_text("Document content.\n", encoding="utf-8")
+            done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "d.md", "--to", "docx",
+                                   "--no-backup", "-o", "result.docx"], cwd=root, capture_output=True,
+                                  encoding="utf-8", timeout=120)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            with zipfile.ZipFile(root / "result.docx") as package:
+                xml = package.read("word/document.xml")
+            self.assertIn(b"Fragment content.", xml)
+            self.assertNotIn(b"Document content.", xml)
+            self.assertEqual(done.stderr.count("WARN  TeX input path:"), 1, done.stderr)
+
+
+@unittest.skipUnless(TEST_TEX and shutil.which("pdftotext"), "needs a LaTeX engine and pdftotext")
+class IncludedTexPaths(unittest.TestCase):
+    def build_cases(self, suffix):
+        pixel = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==")
+        for where in ("fragment", "document", "both", "missing"):
+            with self.subTest(where=where), tempfile.TemporaryDirectory(prefix="pdfmd-input-") as folder:
+                root = Path(folder)
+                fragment = root / "fragments"
+                fragment.mkdir()
+                (fragment / "body.tex").write_text(
+                    "\\includegraphics[width=1cm]{figure.png}\n\\input{extra}\n\\verbatiminput{data.txt}\n", encoding="utf-8")
+                (fragment / "data.txt").write_text("Local data\n", encoding="utf-8")
+                for place, word in ((root, "Root copy"), (fragment, "Fragment copy")):
+                    if where in ("both", "document" if place == root else "fragment"):
+                        (place / "figure.png").write_bytes(pixel)
+                        (place / "extra.tex").write_text(word + "\n", encoding="utf-8")
+                include = r"\input{fragments/body}"
+                packages = "\\usepackage{graphicx}\n\\usepackage{verbatim}\n"
+                if suffix == "tex":
+                    recipe = "\\documentclass{article}\n" + packages + "\\begin{document}\n" + include + "\n\\end{document}\n"
+                else:
+                    recipe = "---\ntitle: Example\npdfmd-options: {cache: off}\n---\n\n```{=latex}\n" + include + "\n```\n"
+                    (root / "preamble.tex").write_text(packages, encoding="utf-8")
+                (root / f"d.{suffix}").write_text(recipe, encoding="utf-8")
+                done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), f"d.{suffix}",
+                                       "-e", TEST_TEX, "--engine-fallback", "off", "--no-stamp", "--no-backup"],
+                                      cwd=root, capture_output=True, encoding="utf-8", timeout=120)
+                if where == "missing":
+                    self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
+                    self.assertIn("figure.png", done.stdout + done.stderr)
+                    continue
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                read = subprocess.run(["pdftotext", "d.pdf", "-"], cwd=root, capture_output=True, encoding="utf-8", check=True)
+                self.assertIn("Root copy" if where == "document" else "Fragment copy", read.stdout)
+                self.assertIn("Local data", read.stdout)
+                warnings = [line.replace("\\", "/") for line in done.stderr.splitlines() if "TeX input path" in line]
+                self.assertEqual(len(warnings), 2 if where == "both" else 0, done.stderr)
+                if where == "both":
+                    for name in ("extra.tex", "figure.png"):
+                        line = next(warning for warning in warnings if name in warning)
+                        document_path = pdfmd.under_home((root / name).resolve()).replace("\\", "/")
+                        chosen_path = pdfmd.under_home((fragment / name).resolve()).replace("\\", "/")
+                        self.assertIn(document_path, line)
+                        self.assertIn(chosen_path, line)
+                        self.assertIn(f"using {chosen_path}", line)
+
+    def test_direct_tex(self):
+        self.build_cases("tex")
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_markdown_to_pdf(self):
+        self.build_cases("md")
 
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")

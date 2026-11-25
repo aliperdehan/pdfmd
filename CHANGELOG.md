@@ -19,6 +19,23 @@ same commit as the change.
 
 ---
 
+## v3.34.37 — 2026-11-25
+
+Pre-edit state: commit `9ef4f86`. Local references inside an included TeX
+file could be read relative to the build's working directory, so a file
+beside the fragment was missed or a same-name file beside the main
+document was used. pdfmd now searches beside the included file first and
+the main document second, for nested inputs, pictures and recognised data
+commands. It warns once per clash and leaves unresolved references for
+the writer or engine to diagnose. The source files stay intact.
+
+The Word regression chose the root copy before the fix and now chooses
+the fragment copy with one warning on Pandoc 3.13. Resolver tests cover
+both folders, a missing nested input, literal code and temporary file
+cleanup. Direct and Markdown PDF tests were added. The sandbox's local
+TeX engines timed out on a minimal document, so those builds could not
+be verified here. `pdfmd.py` changes only its version.
+
 ## v3.34.36a — 2026-11-25
 
 Pre-edit state: commit `e8b988e`. The page-marker unit test still called
