@@ -69,6 +69,35 @@ class NumberedReferences(unittest.TestCase):
         rebuilt, _ = self.build("html", text)
         self.assertIn('data-cites="example-com-10">[10]', rebuilt.read_text(encoding="utf-8"))
 
+    def test_numbered_sources_and_citeproc_bibliography_keep_their_own_lists(self):
+        bib = self.folder / "sources.bib"
+        bib.write_text("@book{book, author={Example, A.}, title={Real Book}, year={2020}}\n", encoding="utf-8")
+        style = self.folder / "numeric.csl"
+        style.write_text("""<style xmlns="http://purl.org/net/xbiblio/csl" version="1.0" class="in-text">
+<info><title>Numeric test</title><id>urn:numeric</id><updated>2026-11-25T00:00:00+00:00</updated></info>
+<citation><layout prefix="[" suffix="]"><text variable="citation-number"/></layout></citation>
+<bibliography><layout><text variable="citation-number" suffix=". "/><text variable="title"/></layout></bibliography>
+</style>""", encoding="utf-8")
+        header = "---\nbibliography: sources.bib\ncsl: numeric.csl\n---\n\n"
+        real = "## Bibliography\n\n::: {#refs}\n:::\n"
+        ai = "## Sources\n\n[7]: [First web source](https://example.org/one)\n"
+        ai += "[12]: [Second web source](https://example.org/two)\n"
+        baseline, _ = self.build("html", header + "Real citation [@book].\n\n" + real)
+        expected = baseline.read_text(encoding="utf-8").split('<div id="refs"', 1)[1]
+        for first in ("real", "numbered"):
+            with self.subTest(first=first):
+                body = "Real citation [@book]. Numbered sources [7, 12].\n\n"
+                output, done = self.build("html", header + body + (real + "\n" + ai if first == "real" else ai + "\n" + real))
+                html = output.read_text(encoding="utf-8")
+                joined = " ".join(html.split())
+                self.assertIn('data-cites="book">[1]', joined)
+                self.assertIn(expected, html)
+                self.assertIn('Numbered sources [7], [12].', joined)
+                self.assertIn('[7] <a href="https://example.org/one">First web source</a>', joined)
+                self.assertIn('[12] <a href="https://example.org/two">Second web source</a>', joined)
+                self.assertEqual(joined.index('id="ref-book"') < joined.index("First web source"), first == "real")
+                self.assertNotIn("numbered references left unchanged", done.stderr)
+
 
     def test_pdfmd_and_obsidian_convert_but_other_flavours_leave_source_alone(self):
         base = "Claim [1].\n\n1. https://example.org/\n"

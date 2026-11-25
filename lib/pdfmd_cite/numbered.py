@@ -32,6 +32,11 @@ QUOTED_FENCE = re.compile(
 )
 RAW_TEX = re.compile(r"\\[a-zA-Z]+(?:\[[^\[\]\n]*\])?(?:\{[^{}]*\})+")
 BARE_URL = re.compile(r"(?<![<(\w])https?://[^\s<>\"']+", re.I)
+REFS_TAIL = re.compile(
+    r"(?m)^(?: {0,3}(?:#{1,6}[ \t]+[^\n]+|[^\n]+\n {0,3}(?:=+|-+))[ \t]*\n(?:[ \t]*\n)*)?"
+    r" {0,3}:{3,}[ \t]+\{(?:[^}\n]*[ \t])?#refs(?=[ \t}])[^}\n]*\}[ \t]*\n"
+    r"(?:[ \t]*\n)* {0,3}:{3,}[ \t]*\s*\Z"
+)
 
 # Citeproc's citation-number is reassigned after sorting. A citation-label retains the actual
 # label (including gaps), and a padded sort key orders it numerically on both supported Pandocs.
@@ -117,6 +122,26 @@ def tail(text: str, scanned: str) -> tuple[int, list[Entry], bool]:
     return offset, list(reversed(entries)), complete
 
 
+def numbered_tail(text, scanned):
+    """The numbered list can sit just before a final citeproc placeholder."""
+    refs = REFS_TAIL.search(scanned)
+    end = refs.start() if refs else len(text)
+    stop, entries, complete = tail(text[:end], scanned[:end])
+    return stop, end, entries, complete
+
+
+def separate_rows(text: str, entries: dict[str, Entry]) -> str:
+    """Keep the written numbers and links and one source row per input line."""
+    lines = text.splitlines(keepends=True)
+    rows = {index: match for index, line in enumerate(lines) if (match := ROW.fullmatch(line.rstrip("\n")))}
+    for index, match in rows.items():
+        entry = entries[match["ordered"] or match["bracket"]]
+        linebreak = "\\" if index + 1 in rows else ""
+        newline = "\n" if lines[index].endswith("\n") else ""
+        lines[index] = f"\\[{entry.number}\\] {link_bare_url(entry.written)}{linebreak}{newline}"
+    return "".join(lines)
+
+
 def markers(text: str, scanned: str):
     """Yield whole numeric markers with offsets, keeping ordinary Markdown links and images."""
     from pdfmd_check.lint import LINK_TARGET_RE, blank_matches
@@ -166,13 +191,20 @@ class Plan:
     tail_source: Path
     entries: dict[str, Entry]
     custom_csl: bool
+    separate: bool = False
 
     def rewrite(self, text: str, source: Path, *, native: bool = False) -> str:
         scanned = prose(text, source, self.metadata)
         if source == self.tail_source:
-            stop, found, _ = tail(text, scanned)
+            if self.separate:
+                stop, end, found, _ = numbered_tail(text, scanned)
+            else:
+                stop, found, _ = tail(text, scanned)
+                end = len(text)
             if found and {entry.number: entry for entry in found} == self.entries:
-                if native:
+                if self.separate:
+                    text = text[:stop] + separate_rows(text[stop:end], self.entries) + text[end:]
+                elif native:
                     rows = [f"[{entry.number}] {link_bare_url(entry.written)}" for entry in self.entries.values()]
                     text = text[:stop].rstrip() + "\n\n" + "\n\n".join(rows) + "\n"
                 else:
@@ -200,6 +232,8 @@ class Plan:
                 return piece
             if native:
                 return ", ".join(f"[{number}]" for number in piece)
+            if self.separate:
+                return ", ".join(f"\\[{number}\\]" for number in piece)
             return "[" + "; ".join("@" + self.entries[number].key for number in piece) + "]"
 
         return "".join(map(render, pieces))
@@ -221,6 +255,8 @@ class Plan:
         return data
 
     def metadata_args(self, scope, *, include_uncited=True) -> list[str]:
+        if self.separate:
+            return []
         scratch = scope.enter_context(TemporaryDirectory(prefix="pdfmd-numbered-references-"))
         target = Path(scratch) / "numbered.yaml"
         target.write_text(core.yaml.safe_dump(self.data(include_uncited), sort_keys=False, allow_unicode=True, width=1000000),
@@ -249,7 +285,7 @@ def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reade
             return None, None
     enabled = core.option_flag(core.first_pdfmd_option(document, metadata, KEY)) is not False
     scanned = [prose(text, path, metadata) for text, path in zip(texts[:last + 1], sources)]
-    stop, rows, complete = tail(texts[last], scanned[last])
+    stop, end, rows, complete = numbered_tail(texts[last], scanned[last])
     eligible = texts[:last] + [texts[last][:stop]]
     visible = scanned[:last] + [scanned[last][:stop]]
     matches = [marker for text, mask in zip(eligible, visible) for marker in markers(text, mask)]
@@ -266,8 +302,6 @@ def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reade
             return None, "incomplete numbered references: a marker does not match the trailing source list" if enabled else None
     if any((match[1] or match[2]) in entries for body in visible for match in NUMERIC_LINK_LABEL.finditer(body)):
         return None, "numbered references left unchanged because a Markdown link uses a source number" if enabled else None
-    if not enabled:
-        return None, CHECK
     from pdfmd_args import metadata_command_layers
     from pdfmd_bibliography.sources import command_sources
     from pdfmd_excerpts.markers import CITATION, REFERENCE_PREFIXES
@@ -275,10 +309,14 @@ def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reade
     existing = {"references", "references+", "bibliography", "bibliography+", "nocite"}
     cli, _ = metadata_command_layers(list(arguments))[0]
     layers = [mapping for mapping, _ in core.load_package("pdfmd_metadata").metadata_layers(sources, list(metadata))]
-    if (any(existing.intersection(layer) for layer in [cli, *layers]) or command_sources(arguments)
-            or any((cite[1] or cite[2]).split(":", 1)[0] not in REFERENCE_PREFIXES
-                   for body in visible for cite in CITATION.finditer(body)) or
-            core.first_pdfmd_option(document, metadata, "citation-engine") in ("natbib", "biblatex") or
+    separate = bool(any(existing.intersection(layer) for layer in [cli, *layers]) or command_sources(arguments)
+                    or any((cite[1] or cite[2]).split(":", 1)[0] not in REFERENCE_PREFIXES
+                           for body in visible for cite in CITATION.finditer(body)))
+    if end != len(texts[last]) and not separate:
+        return None, "incomplete numbered references: expected markers and a trailing numbered source list" if enabled else None
+    if not enabled:
+        return None, CHECK
+    if (core.first_pdfmd_option(document, metadata, "citation-engine") in ("natbib", "biblatex") or
             any(option in ("--natbib", "--biblatex") for option in arguments)):
         return None, "numbered references left unchanged alongside an existing bibliography or citation system"
     if not native and core.CITEPROC_DISABLED:
@@ -287,7 +325,7 @@ def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reade
         return None, "numbered references left unchanged because the chosen reader does not parse citations"
     custom = bool(core.document_csl(sources, list(metadata)) or "csl" in cli
                   or any(option == "--csl" or option.startswith("--csl=") for option in arguments))
-    return Plan(list(metadata), sources[last], entries, custom), None
+    return Plan(list(metadata), sources[last], entries, custom, separate), None
 
 
 def prepare(sources, metadata, arguments=(), reader=None, *, native_text=None):

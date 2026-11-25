@@ -192,11 +192,12 @@ def run(core, *,
     from pdfmd_filters.lua import pre_citeproc_args
     before_citeproc = pre_citeproc_args(files[0], metadata_files, report_no_auto)
     references = numbered.prepare(files, metadata_files, pandoc_options, args.from_format)
-    numbered_source = references is not None and target_format == "markdown"
+    numbered_citations = references is not None and not references.separate
+    numbered_source = numbered_citations and target_format == "markdown"
     transform = references.rewrite if references else None
-    if references:
+    if numbered_citations:
         report_from = numbered.reader_for(report_from)
-    any_citations = any_citations or bool(before_citeproc) or references is not None
+    any_citations = any_citations or bool(before_citeproc) or numbered_citations
     from pdfmd_crop.build import prepare as prepare_crop
     with (document_filter_scope(), table_width_filter() as width_filter, csv_table_filter() as csv_filter,
           titles.Hidden() as hidden,
@@ -275,7 +276,7 @@ def run(core, *,
                 prepared_files, linked_reader = link_scope.enter_context(
                     linked_inputs(prepared_files, files, report_from, metadata_files, target_format, output))
                 prepared_metadata = prepared[len(files):]
-                writer = numbered.writer_for(target_format) if references else target_format
+                writer = numbered.writer_for(target_format) if numbered_citations else target_format
                 cmd = ["pandoc", *map(str, prepared_files), "-o", str(output), "-t", writer]
                 if numbered_source and not core.has_standalone_option(pandoc_options):
                     cmd.append("--standalone")

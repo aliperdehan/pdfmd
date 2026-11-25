@@ -387,8 +387,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     from pdfmd_obsidian.links import linked_inputs
 
     references = numbered.prepare([md_path, *parts_inputs], metadata_files, pandoc_options, from_format)
-    numbered_source = references is not None and target_format == "markdown"
-    if references is not None:
+    numbered_citations = references is not None and not references.separate
+    numbered_source = numbered_citations and target_format == "markdown"
+    if numbered_citations:
         effective_from = numbered.reader_for(effective_from)
     transform_part = core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format)
     with contextlib.ExitStack() as reference_files, document_filter_scope(), core.prepared_title_source(md_path, metadata_files, disabled=core.auto_disabled(no_auto, "title") or flat_target or target_format == "ansi",
@@ -416,7 +417,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             all_inputs or [md_path], metadata_files, pandoc_options, no_auto, from_format)
         if any_citations is None:
             any_citations = any(core.contains_citations(item, metadata_files) for item in [md_path, *parts_inputs])
-        any_citations = any_citations or bool(before_citeproc) or references is not None
+        any_citations = any_citations or bool(before_citeproc) or numbered_citations
         any_code_spans = any(core.has_code_spans(item.read_text(encoding="utf-8-sig"))
                              for item in [md_path, *parts_inputs])
         if parts_inputs:
@@ -507,7 +508,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 ansi_json = Path(ansi_scratch.name) / "document.json" if ansi_scratch is not None else None
                 if ansi_json is not None:
                     writer = "json"                              # pdfmd_ansi draws Pandoc's AST (v3.30.3)
-                if references:
+                if numbered_citations:
                     writer = numbered.writer_for(writer)
                 cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(ansi_json or output), "-t", writer]
                 if numbered_source and not core.has_standalone_option(pandoc_options):

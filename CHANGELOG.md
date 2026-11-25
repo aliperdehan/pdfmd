@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.34.41 — 2026-11-25
+
+Pre-edit state: commit `102d95c`. A bibliography disabled the numbered-source pass, leaving some web
+source rows to Pandoc as link definitions. Keep a separate web list
+with its written numbers and links when citeproc owns the bibliography.
+The web list can follow it or precede its final placeholder.
+
+- Synthetic HTML builds put the two lists in both orders, checking
+  that numeric CSL still gives the real entry number 1 and that
+  the web references keep 7 and 12.
+
 ## v3.34.40 — 2026-11-25
 
 Pre-edit state: commit `0c3ff8b`. An empty PDFMD_CONFIG previously switched off the user file. Treat it like an

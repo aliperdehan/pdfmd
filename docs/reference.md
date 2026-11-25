@@ -803,12 +803,16 @@ numbered source list. Write `[1]`, `[[1]](https://example.org/)`, `[1][3]`,
 web URL. Rows can use `1. https://example.org/`, `[1]: https://example.org/`
 or `[1] [A title](https://example.org/)`, with or without a Sources heading.
 Detection skips code, maths, raw markup and comments. An incomplete match
-leaves the Markdown as written and warns. A build with an existing
-bibliography or competing source lists also retains the written syntax.
+leaves the Markdown as written and warns. Competing numbered source lists
+also retain the written syntax. When there is a citeproc bibliography,
+the web sources keep their written numbers and links in a separate list.
+It can sit at the end of the document or just before an empty
+`::: {#refs}` bibliography placeholder and its optional heading.
 
 The default CSL shows the original numbers in square brackets and lists the
 entries in numerical order, keeping their text and links. A named CSL still
-controls formatting. pdfmd makes keys such as `example-org-1` locally and
+controls formatting when the numbered list is the only bibliography.
+pdfmd makes keys such as `example-org-1` locally and
 never requests a source URL. `--to md` writes the converted Markdown with
 `[@example-org-1]` and `references:` front matter. The native PDF renderers
 show the numbered text and list without running citeproc.
