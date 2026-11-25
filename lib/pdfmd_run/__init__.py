@@ -120,7 +120,7 @@ def run_main() -> None:
     core.CHATTER_CLI = args.chatter or ("debug" if args.debug else "verbose" if args.verbose else None)
     core.MUTE_CLI = parse_mutes(args.mute) if args.mute is not None else None
     source = args.path[0] if args.path and not (args.batch or args.report) and args.path[0].is_file() else None
-    args.verbose = select_chatter(source, args.metadata_file or [])
+    args.verbose = select_chatter(source)
     core.use_managed_tools()
     if not (args.path and all(path.suffix.lower() == ".pdf" for path in args.path)):
         from pdfmd_args.paths import invocation_paths

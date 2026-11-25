@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.34.66 — 2026-11-26
+
+Pre-edit state: commit `610137e`. The early chatter lookup treated raw `-y` arguments as file paths and
+crashed on an explicit metadata file. Use the document and config at startup, then read the settings in
+metadata once discovery has resolved the paths. A regression test builds with `-y` and checks that both
+chatter and mute from the explicitly selected file take effect.
+
 ## v3.34.65 — 2026-11-26
 
 Pre-edit state: commit `8ecf4eb`. A build could hide warnings, but could not accept a specific diagnostic

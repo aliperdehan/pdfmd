@@ -65,6 +65,13 @@ class Chatter(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(done.stdout, "OK    a.md > a.tex\n")
 
+    def test_explicit_metadata_is_resolved_before_reading_its_settings(self):
+        (self.folder / "explicit.yaml").write_text(
+            "pdfmd-options: {chatter: result, mute: [table-mismatch]}\n", encoding="utf-8")
+        done = self.run_pdfmd("a.md", "--strict", "-y", "explicit.yaml")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(done.stdout, "OK    a.md > a.tex\n")
+
     def test_report_result_only_shows_the_report(self):
         self.write("b.md")
         done = self.run_pdfmd("-r", "a.md", "b.md", "--chatter=result")
