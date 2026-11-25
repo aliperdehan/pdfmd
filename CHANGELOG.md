@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.53 — 2026-11-25
+
+Pre-edit state: commit `e6d3ab3`. [kits] Package helper lookup missed sidecars under `.pdfmd/` and read folded blocks only from a `.kit` beside the style file. It now checks both sidecar names in the hidden folder after the existing locations, then reads folded blocks from the winning package kit [D134]. `--kits NAME` shows the helper source and identifies blocks ignored in favour of a sidecar. Regressions cover the full sidecar order, both kit names in all three locations with and without folded blocks, and helper discovery during a build.
+
 ## v3.34.52 — 2026-11-25
 
 Pre-edit state: commit `57b6b47`. [kits] TeX-tree kit discovery only checked beside the style file. It now checks there, then in `pdfmd/` and `.pdfmd/`, and `--kits NAME` names the chosen kit and any shadowed locations [D134]. Regressions cover both kit names in all three places, precedence with and without a warm cache, the package version, and kit-relative Lua and defaults in a Pandoc build.

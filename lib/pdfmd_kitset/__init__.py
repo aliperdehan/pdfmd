@@ -347,7 +347,7 @@ def kit_embedded_preambles(document: Path, metadata_files: list[Path], preamble_
 
 def package_helper(folder: Path, package: str, no_auto: list[str] | None = None, document: Path | None = None) -> tuple[dict, Path] | None:
     """What a package tells pdfmd about itself: `<package>-pdfmd.yaml` beside its `.sty`, else the same file
-    (or a plain `pdfmd.yaml`) in a `pdfmd/` folder there; (its mapping, its path) or None. Keys: `latex-keys:`
+    (or a plain `pdfmd.yaml`) in `pdfmd/` or `.pdfmd/`, else the package kit's blocks; (mapping, path) or None. Keys: `latex-keys:`
     (front-matter key -> the macro it fills), `office:` (defaults of a Word/ODT build, as `<package>-office.yaml`), `lua:` (Lua
     filters besides `<package>.lua`), `draft-skip:` (`commands:`, `spans:` a draft pass need not draw) and `picture-cache:`
     (the names the package uses for the picture cache's protocol).

@@ -20,6 +20,9 @@ from pathlib import Path
 
 from pdfmd_base import core
 
+from .discovery import package_kit_files, package_kit_places
+from .kitfile import HELPER_BLOCKS
+
 
 def package_places(folder: Path) -> list[Path]:
     """Where a local LaTeX package keeps what it ships for pdfmd: beside its `.sty`, else in an `office/` or a
@@ -42,25 +45,49 @@ def kpsewhich_locate(names: list[str], cwd: str | None = None) -> dict[str, Path
 
 
 def read_package_helper(folder: Path, package: str) -> tuple[dict, Path] | None:
-    """`<package>-pdfmd.yaml` (or a plain `pdfmd.yaml`) in this one folder or its `pdfmd/` folder; (mapping, path) or None."""
+    """The first sidecar file, else the helper blocks of the package's kit, as (mapping, path) or None."""
     if core.yaml is None:
         return None
-    for candidate in (folder / f"{package}-pdfmd.yaml", folder / "pdfmd" / f"{package}-pdfmd.yaml", folder / "pdfmd" / "pdfmd.yaml"):
+    name = f"{package}-pdfmd.yaml"
+    candidates = [folder / name]
+    for place in package_kit_places(folder)[1:]:
+        candidates.extend((place / name, place / "pdfmd.yaml"))
+    for candidate in candidates:
         if candidate.is_file():
             try:
                 data = core.yaml.safe_load(candidate.read_text(encoding="utf-8"))
             except (OSError, core.yaml.YAMLError):
                 return None
             return (data, candidate) if isinstance(data, dict) else None
-    kit = folder / ".kit"
-    if kit.is_file():                  # a kit's own file carries the same blocks, for the package it ships
-        try:
-            data = core.yaml.safe_load(kit.read_text(encoding="utf-8-sig"))
-        except (OSError, core.yaml.YAMLError):
-            return None
-        if isinstance(data, dict) and str(data.get("package") or "").casefold() == package.casefold():
-            return {key: data[key] for key in ("latex-keys", "picture-cache", "draft-skip", "office", "lua") if key in data}, kit
+    return _folded_package_helper(folder, package)
+
+
+def _folded_package_helper(folder: Path, package: str) -> tuple[dict, Path] | None:
+    files = package_kit_files(folder)
+    if not files:
+        return None
+    kit = files[0]
+    try:
+        data = core.yaml.safe_load(kit.read_text(encoding="utf-8-sig"))
+    except (OSError, core.yaml.YAMLError):
+        return None
+    if isinstance(data, dict) and str(data.get("package") or "").casefold() == package.casefold():
+        return {key: data[key] for key in (*HELPER_BLOCKS, "lua") if key in data}, kit
     return None
+
+
+def _report_package_helper(folder: Path, package: str) -> None:
+    helper = read_package_helper(folder, package)
+    if helper is None:
+        return
+    data, path = helper
+    if path.suffix == ".yaml":
+        print(f"  helper    {core.display_path(path)} (sidecar)")
+        folded = _folded_package_helper(folder, package)
+        if folded and folded[0]:
+            print(f"  ignored   helper blocks in {core.display_path(folded[1])}")
+    elif data:
+        print(f"  helper    {core.display_path(path)} (kit blocks: {', '.join(data)})")
 
 
 def kit_package_folders(package: str, document: Path | None = None) -> list[Path]:
@@ -110,7 +137,9 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
             for label, value in (("lua", kit.lua), ("defaults", kit.defaults)):
                 if value:
                     print(f"  {label:<9} {', '.join(item.name for item in value)}")
-            if kit.helper:
+            if kit.package:
+                _report_package_helper(found.package_folder or kit.folder, kit.package)
+            elif kit.helper:
                 print(f"  helper    {', '.join(kit.helper)}")
             if kit.carry:
                 print(f"  carries   {', '.join(kit.carry)}")

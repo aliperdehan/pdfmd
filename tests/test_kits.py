@@ -451,6 +451,10 @@ class Wiring(Scratch):
 
 @unittest.skipUnless(shutil.which("kpsewhich"), "a package is found by kpsewhich")
 class PackageKits(Scratch):
+    KIT = "kit-format: 1\nname: fixture\npackage: fixture\n"
+    FOLDED = ("latex-keys: {example: FoldedExample}\npicture-cache: {enabled: true}\n"
+              "draft-skip: {commands: [folded]}\noffice: {margin: 1in}\nlua: [folded.lua]\n")
+
     def setUp(self):
         super().setUp()
         tree = self.root / "texmf"
@@ -466,15 +470,66 @@ class PackageKits(Scratch):
     def test_both_kit_names_in_each_package_folder(self):
         for place in (".", "pdfmd", ".pdfmd"):
             for name in (".kit", "fixture.kit"):
-                with self.subTest(place=place, name=name):
-                    path = write(self.package / place / name, "kit-format: 1\nname: fixture\npackage: fixture\n")
-                    try:
-                        shown = self.run_kits("fixture")
-                        self.assertEqual(shown.returncode, 0, shown.stderr)
-                        self.assertIn(str(path.relative_to(self.root)), shown.stdout)
-                        self.assertIn("fixture 1.2.3", shown.stdout)
-                    finally:
-                        path.unlink()
+                for folded in (False, True):
+                    with self.subTest(place=place, name=name, folded=folded):
+                        if folded:
+                            write(self.package / place / "folded.lua", "return {}\n")
+                        path = write(self.package / place / name, self.KIT + (self.FOLDED if folded else ""))
+                        try:
+                            shown = self.run_kits("fixture")
+                            self.assertEqual(shown.returncode, 0, shown.stderr)
+                            self.assertIn(str(path.relative_to(self.root)), shown.stdout)
+                            self.assertIn("fixture 1.2.3", shown.stdout)
+                            helper = pdfmd.read_package_helper(self.package, "fixture")
+                            if folded:
+                                self.assertEqual(helper, (pdfmd.yaml.safe_load(self.FOLDED), path))
+                                self.assertIn(f"helper    {path.relative_to(self.root)} (kit blocks", shown.stdout)
+                            else:
+                                self.assertFalse(helper and helper[0])
+                                self.assertNotIn("  helper    ", shown.stdout)
+                        finally:
+                            path.unlink()
+
+    def test_sidecar_names_and_places_in_precedence_order_ahead_of_the_kit(self):
+        kit = write(self.package / "pdfmd" / "fixture.kit", self.KIT + self.FOLDED)
+        write(kit.parent / "folded.lua", "return {}\n")
+        files = ["fixture-pdfmd.yaml", "pdfmd/fixture-pdfmd.yaml", "pdfmd/pdfmd.yaml",
+                 ".pdfmd/fixture-pdfmd.yaml", ".pdfmd/pdfmd.yaml"]
+        sidecars = [write(self.package / name, f"latex-keys: {{example: Sidecar{index}}}\n")
+                    for index, name in enumerate(files)]
+        for index, path in enumerate(sidecars):
+            with self.subTest(path=path.name, place=path.parent.name):
+                self.assertEqual(pdfmd.read_package_helper(self.package, "fixture"),
+                                 ({"latex-keys": {"example": f"Sidecar{index}"}}, path))
+                if path == sidecars[-1]:
+                    shown = self.run_kits("fixture")
+                    self.assertEqual(shown.returncode, 0, shown.stderr)
+                    self.assertIn(f"helper    {path.relative_to(self.root)} (sidecar)", shown.stdout)
+                    self.assertIn(f"ignored   helper blocks in {kit.relative_to(self.root)}", shown.stdout)
+            path.unlink()
+        self.assertEqual(pdfmd.read_package_helper(self.package, "fixture"), (pdfmd.yaml.safe_load(self.FOLDED), kit))
+
+    def test_build_discovery_reads_the_installed_package_helper(self):
+        kit = write(self.package / ".pdfmd" / "fixture.kit", self.KIT + self.FOLDED)
+        write(kit.parent / "folded.lua", "return {}\n")
+        document = write(self.root / "doc.md", "Body\n")
+        selected = write(self.root / "selected.md", "---\npdfmd-options: {kit: fixture}\n---\nBody\n")
+        metadata = write(self.root / "metadata.yaml", "header-includes: ['\\usepackage{fixture}']\n")
+        with mock.patch.dict(os.environ, self.env):
+            self.assertEqual(pdfmd.package_latex_keys(document, [metadata]), {"example": "FoldedExample"})
+            self.assertIn("folded.lua", pdfmd.package_lua_names(document, [metadata]))
+            write(kit.parent / "fixture-pdfmd.yaml", "latex-keys: {example: SidecarExample}\nlua: [sidecar.lua]\n")
+            self.assertEqual(pdfmd.package_latex_keys(document, [metadata]), {"example": "SidecarExample"})
+            self.assertEqual(pdfmd.package_latex_keys(selected, []), {"example": "SidecarExample"})
+            names = pdfmd.package_lua_names(document, [metadata])
+            self.assertIn("sidecar.lua", names)
+            self.assertNotIn("folded.lua", names)
+
+    def test_the_shadowed_package_kit_does_not_supply_helper_blocks(self):
+        write(self.package / "pdfmd" / ".kit", self.KIT)
+        write(self.package / ".pdfmd" / "fixture.kit", self.KIT + self.FOLDED)
+        helper = pdfmd.read_package_helper(self.package, "fixture")
+        self.assertFalse(helper and helper[0])
 
     def test_precedence_and_warning_with_two_package_kits(self):
         visible = write(self.package / "pdfmd" / "fixture.kit", "kit-format: 1\nname: fixture\npackage: fixture\n")
