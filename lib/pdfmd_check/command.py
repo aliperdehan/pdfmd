@@ -146,6 +146,38 @@ def check_documents(target: Path, args) -> tuple[list[Path], Path]:
     return files, document
 
 
+def check_heading_ids(sources, document: Path, metadata_files: list[Path], args) -> list[tuple[int, str]]:
+    """Read the ids with the selected Pandoc reader, only when a repeated heading needs them."""
+    pandoc = core.which("pandoc")
+    if not pandoc:
+        return []
+    no_auto = core.effective_no_auto(document, args.no_auto)
+    reader = args.from_format if core.auto_disabled(no_auto, "reader") else core.resolve_from_format(
+        document, args.from_format, metadata_files)[0]
+    text = "\n\n".join([sources[0].text, *(core.strip_part_front_matter(source.text) for source in sources[1:])])
+    try:
+        done = pandoc_run([pandoc, "-f", reader or "markdown", "-t", "json"], input=text, capture_output=True,
+                          text=True, encoding="utf-8", errors="replace", cwd=core.pandoc_working_directory(document.parent))
+        if done.returncode:
+            return []
+        blocks = json.loads(done.stdout)["blocks"]
+    except (OSError, ValueError, KeyError):
+        return []
+
+    def identifiers(value):
+        if isinstance(value, list):
+            for item in value:
+                yield from identifiers(item)
+        elif isinstance(value, dict):
+            if value.get("t") == "Header":
+                level, attributes, _ = value["c"]
+                yield level, attributes[0]
+            elif "c" in value:
+                yield from identifiers(value["c"])
+
+    return list(identifiers(blocks))
+
+
 def check_command(args, pandoc_options: list[str]) -> int:
     """Read and check the source, then measure figure heights if the document has pictures."""
     import pdfmd_check as check
@@ -193,7 +225,8 @@ def check_command(args, pandoc_options: list[str]) -> int:
                                           "numbered source list matches but numbered-references is off"))
         problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None,
                               citation_key=citation_key, extra_problems=excerpts,
-                              calc=calc_check_records(files, metadata_files))
+                              calc=calc_check_records(files, metadata_files),
+                              read_heading_ids=lambda: check_heading_ids(sources, document, metadata_files, args))
         if "figure-too-tall" not in ignore:
             from pdfmd_check.figures import figure_problems
             problems.extend(figure_problems(sources, document, metadata_files, args, pandoc_options))

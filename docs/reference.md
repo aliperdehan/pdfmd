@@ -1679,6 +1679,8 @@ error (a warning too with `--strict`); `--check-ignore`, `pdfmd-options.check-ig
 line or at the start of the body and would print as text. `pdfmd --help debug` lists the check codes and severities.
 `emphasis-empty` warns about empty emphasis markers such as `****`, `__` or `**  **` in prose. The check skips
 thematic breaks, code, maths and raw blocks.
+`heading-repeated` is a note for the same heading text at the same level, with its IDs. Repeating a heading can be
+intentional, for example when each part has its own Results section.
 
 For a part's local file references, `--check` looks in the part's folder, then
 the scaffold's folder, then the accessory folders.

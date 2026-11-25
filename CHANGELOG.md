@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.45 — 2026-11-25
+
+Pre-edit state: commit `750222e`. Repeated heading text at one level was silent. `--check` prints a note with the count and IDs across the document, including parts. When available, Pandoc supplies the IDs using the selected reader. Regressions cover visible text, heading level, parts and both Markdown and GFM IDs.
+
 ## v3.34.44 — 2026-11-25
 
 Pre-edit state: commit `931dff4`. Empty emphasis delimiters printed literally without a warning. `--check` reports `emphasis-empty` in prose and skips thematic breaks, code, maths and raw blocks. The regression covers literal markers, balanced emphasis and protected text.

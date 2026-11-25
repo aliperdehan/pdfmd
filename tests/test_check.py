@@ -114,11 +114,19 @@ class Reading(unittest.TestCase):
     def test_ids_and_anchors(self):
         text = "# Intro {#a}\n\n## Intro\n\n## Intro\n\n[x](#a) [y](#intro) [z](#intro-1) [w](#intro-2) [v](#missing)\n"
         found = lint([Source("d.md", None, text)])
-        self.assertEqual([problem.code for problem in found], ["anchor-missing"])
-        self.assertIn("missing", found[0].message)
+        self.assertEqual([problem.code for problem in found], ["heading-repeated", "anchor-missing"])
+        self.assertIn("missing", found[-1].message)
         self.assertEqual(codes("# A {#x}\n\n## B {#x .c}\n"), ["id-duplicate"])
         self.assertEqual(codes("# A\n\n`{#x}` and {#1} and \\textbf{#1}.\n\n{#1}\n"), ["attr-stray"])
         self.assertEqual(codes("# The $\\alpha$ decay\n\n[x](#the-alpha-decay)\n"), [])         # math is part of the id
+
+    def test_repeated_headings_group_by_visible_text_and_level(self):
+        sources = [Source("doc.md", None, "# Report\n\n## Results {#results-1}\n\n### Results\n\nText.\n"),
+                   Source("parts/one.md", None, "## *Results*\n\nText.\n\nResults\n-------\n\nText.\n")]
+        found = [p for p in lint(sources) if p.code == "heading-repeated"]
+        self.assertEqual([(p.file, p.line, p.severity) for p in found], [("doc.md", 3, "note")])
+        self.assertIn("'Results' appears 3 times at level 2", found[0].message)
+        self.assertIn("#results-1, #results-2, #results-3", found[0].message)
 
     def test_crossref_and_latex_refs(self):
         text = "# A\n\n![cap](a.png){#fig:one}\n\nSee @fig:one, @fig:two and \\ref{eq:e}.\n\n\\begin{equation}\\label{eq:e}\\end{equation}\n"
@@ -228,6 +236,15 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(self.run_pdfmd("doc", "--check", "--check-ignore", "heading-jump").returncode, 0)
         clean = self.run_pdfmd("doc", "--check", "--check-ignore", "heading-jump")
         self.assertIn("no problems", clean.stdout)
+
+    @needs_pandoc(3, 1, 3)
+    def test_repeated_heading_ids_follow_the_selected_pandoc_reader(self):
+        self.write("doc.md", "## 2. Results\n\nText.\n\n## 2. Results\n\nText.\n")
+        for reader, ids in (("gfm", "#2-results, #2-results-1"), ("markdown", "#results, #results-1")):
+            with self.subTest(reader=reader):
+                done = self.run_pdfmd("doc.md", "--check", "--strict", "--from", reader)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertIn(f"({ids})  [heading-repeated]", done.stdout)
 
     def test_ignore_in_the_document_and_unknown_codes(self):
         self.write("doc.md", "---\ntitle: T\npdfmd-options:\n  check-ignore: [heading-jump]\n---\n\n# A\n\n### C\n")

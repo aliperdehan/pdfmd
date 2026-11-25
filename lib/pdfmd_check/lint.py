@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import bisect
 import difflib
+import html
 import re
 import urllib.parse
 from dataclasses import dataclass, field
@@ -44,6 +45,7 @@ CODES: dict[str, tuple[str, str]] = {
     "heading-jump": ("warning", "a heading level that skips one (# then ###)"),
     "heading-space": ("warning", "#Heading without a space after the # (it is a paragraph)"),
     "heading-empty": ("warning", "a heading with no text"),
+    "heading-repeated": ("note", "the same heading text at one level, with its ids (repeats can be intentional, e.g. Results in each part)"),
     "asset-large": ("warning", "an image or data file bigger than the size budget (--max-asset-mb)"),
     "calc-undefined": ("error", "a calculator span, `::: calc` line or {ans} that uses a name nothing defines"),
     "calc-redefined": ("note", "a calculator name defined more than once (a use sees the nearest definition above it, else the first below)"),
@@ -291,6 +293,13 @@ def heading_identifiers(text: str) -> set[str]:
     return found
 
 
+def default_heading_id(text: str) -> str:
+    """Approximate Pandoc Markdown's auto identifier when its reader is unavailable."""
+    text = re.sub(r"--+", "", text)
+    identifier = "".join(char for char in text if char.isalnum() or char in "_-. ").lower().replace(" ", "-")
+    return re.sub(r"^[\W\d_]+", "", identifier) or "section"
+
+
 def find_file(name: str, folders: list[Path], extensions: tuple[str, ...] = ("",)) -> Path | None:
     path = Path(name)
     places = [path] if path.is_absolute() else [folder / path for folder in folders]
@@ -370,7 +379,7 @@ def suggestion(word: str, known) -> str:
 def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore: frozenset = frozenset(),
          folders: list[Path] | None = None, asset_limit: int | None = None,
          calc: "tuple[list, list] | None" = None, citation_key: Callable | None = None,
-         extra_problems=()) -> list[Problem]:
+         extra_problems=(), read_heading_ids: Callable | None = None) -> list[Problem]:
     """The problems of ``sources`` taken as one document (a scaffold and its parts, or a single file), in order.
     ``folders`` are searched for files after the source's own folder; ``asset_limit`` (bytes) is the size budget of an
     image or data file; ``calc`` is what the calculator's filter found (see calc_names): the uses of undefined names and
@@ -384,7 +393,7 @@ def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore
                 "fence-open": "this code fence is never closed (the rest of the document is code)",
                 "comment-open": "this <!-- is never closed (the rest of the document is hidden)"}[code])
     ids = document_ids(analyses, findings)
-    headings(analyses, findings, ids)
+    headings(analyses, findings, ids, read_heading_ids)
     for analysis in analyses:
         places = list(dict.fromkeys([analysis.source.path or Path.cwd(), *(folders or [])]))
         images_and_files(analysis, findings, places, asset_limit)
@@ -455,18 +464,29 @@ def document_ids(analyses: list[Analysis], findings: Findings) -> set[str]:
     return known
 
 
-def headings(analyses: list[Analysis], findings: Findings, ids: set[str]) -> None:
+@dataclass(frozen=True)
+class Heading:
+    analysis: Analysis
+    line: int
+    level: int
+    text: str
+
+
+def headings(analyses: list[Analysis], findings: Findings, ids: set[str], read_heading_ids: Callable | None) -> None:
     """Heading levels in document order (a jump), empty headings, `#Heading`, and the ids headings get."""
     previous = 0
     counts: dict[str, int] = {}
+    found: list[Heading] = []
     for analysis in analyses:
         lines = analysis.masked.split("\n")
+        original = analysis.source.text.split("\n")
         for index, line in enumerate(lines):
             number = index + 1
             level, text = 0, ""
             atx = ATX_RE.match(line)
             if atx:
-                level, text = len(atx.group(1)), re.sub(r"[ \t]+#+$", "", atx.group(2))
+                level = len(atx.group(1))
+                text = re.sub(r"[ \t]+#+$", "", original[index][atx.end(1):].strip())
             elif ATX_EMPTY_RE.match(line):
                 findings.add(analysis, number, "heading-empty", "a heading with no text")
                 continue
@@ -477,17 +497,54 @@ def headings(analyses: list[Analysis], findings: Findings, ids: set[str]) -> Non
             elif (line.strip() and index + 1 < len(lines) and (index == 0 or not lines[index - 1].strip())
                   and SETEXT_RE.match(lines[index + 1]) and not SETEXT_RE.match(line)
                   and not line.startswith(("    ", "\t", ">", "- ", "* ", "+ ", "|", ":"))):
-                level, text = (1 if lines[index + 1].lstrip().startswith("=") else 2), line.strip()
+                level, text = (1 if lines[index + 1].lstrip().startswith("=") else 2), original[index].strip()
             if not level:
                 continue
             if previous and level > previous + 1:
                 findings.add(analysis, number, "heading-jump",
                              f"heading level {previous} is followed by level {level} (level {previous + 1} is skipped)")
             previous = level
+            found.append(Heading(analysis, number, level, text))
             for identifier in heading_identifiers(text):
                 count = counts.get(identifier, 0)
                 counts[identifier] = count + 1
                 ids.add(identifier if count == 0 else f"{identifier}-{count}")
+    repeated_headings(found, findings, ids, read_heading_ids)
+
+
+def repeated_headings(headings: list[Heading], findings: Findings, ids: set[str], read_heading_ids: Callable | None) -> None:
+    groups: dict[tuple[int, str], list[int]] = {}
+    used: set[str] = set()
+    identifiers: list[str] = []
+    for index, heading in enumerate(headings):
+        visible = html.unescape(plain_heading(HTML_TAG_RE.sub("", heading.text)))
+        text = " ".join(visible.split())
+        if text:
+            groups.setdefault((heading.level, text), []).append(index)
+        attr = ATTRIBUTES_RE.search(heading.text)
+        explicit = re.search(r"(?:^|\s)#([^\s{}]+)", attr[1]) if attr and attr.end() == len(heading.text) else None
+        if explicit:
+            identifier = explicit[1]
+        else:
+            base = default_heading_id(text)
+            identifier, suffix = base, 1
+            while identifier in used:
+                identifier = f"{base}-{suffix}"
+                suffix += 1
+        used.add(identifier)
+        identifiers.append(identifier)
+    if read_heading_ids is not None and any(len(group) > 1 for group in groups.values()):
+        parsed = read_heading_ids()
+        if [level for level, _ in parsed] == [heading.level for heading in headings]:
+            identifiers = [identifier for _, identifier in parsed]
+    ids.update(identifiers)
+    for (level, text), group in groups.items():
+        if len(group) < 2:
+            continue
+        heading = headings[group[0]]
+        names = ", ".join(f"#{identifiers[index]}" if identifiers[index] else "(no id)" for index in group)
+        findings.add(heading.analysis, heading.line, "heading-repeated",
+                     f"{text!r} appears {len(group)} times at level {level} ({names})")
 
 
 def images_and_files(analysis: Analysis, findings: Findings, folders: list[Path], limit: int | None = None) -> None:

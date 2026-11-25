@@ -813,6 +813,7 @@ pdfmd report --check --check-ignore heading-jump,link-missing
 | `footnote-missing`, `footnote-unused` | `[^1]` with no text, a `[^1]:` nobody uses |
 | `numbered-references-off` | the markers match a trailing numbered source list and numbered reference conversion is off |
 | `heading-jump`, `heading-space`, `heading-empty` | `#` then `###`; `#Heading` (a paragraph); a heading with no text |
+| `heading-repeated` | a note listing the IDs of repeated heading text at the same level, across parts too |
 | `fence-open`, `comment-open`, `div-open`, `div-stray`, `math-open` | a code fence, `<!--`, `:::` div or `$$` that is never closed, or a stray `:::` |
 | `attr-stray` | an attribute block alone at the start of the body or after a blank line, which prints as text |
 | `emphasis-empty` | empty emphasis markers in prose, such as `****`, `__` or `**  **` |
