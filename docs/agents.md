@@ -258,7 +258,7 @@ or a positive factor (`1` for single spacing) to override it in LaTeX, Typst, Wo
 `pdfmd-options.csl` takes a path or `{file: apa.csl, spacing: style}`. For the file, `--csl` wins over the alias,
 then root `csl:`. For spacing, `bibliography-line-spacing` wins over `csl.spacing`. Conflicting values produce a WARN.
 
-Table width estimation: `pdfmd-options: {column-estimate: measure}` opts in to measured cell and word widths
-for LaTeX and Typst PDF builds with their selected engine. The default `count` is unchanged. `--setup` offers the key;
-a table caption can carry `{column-estimate=measure}` (recent Pandoc). Exports keep count with a NOTE;
-measurement failures keep count with a cause-naming WARN. See the reference for caching and character limits.
+Table width estimation: `pdfmd-options: {column-estimate: measure}` opts in to measured cell and unbreakable word widths
+for LaTeX and Typst PDF builds with their selected engine, including the word breaks in inline code. `--setup` offers the key,
+and a table caption can carry `{column-estimate=measure}` (recent Pandoc). Exports use count with a NOTE.
+Measurement failures use count with a WARN that names the cause. See the reference for caching and character limits.

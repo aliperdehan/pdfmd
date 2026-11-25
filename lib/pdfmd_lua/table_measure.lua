@@ -16,11 +16,20 @@ local HEADER = [[
 
 -- Split on breakable whitespace, preserving formatting around every resulting fragment. Raw commands, images
 -- and maths are indivisible; they must be measured by the engine rather than by their source spelling.
-local function pieces(inlines)
+local function pieces(inlines, code_breaks)
   local out = {}
   for _, inline in ipairs(inlines) do
     if inline.t == "Space" or inline.t == "SoftBreak" or inline.t == "LineBreak" then
       out[#out + 1] = false
+    elseif inline.t == "Code" and inline.text:find(" ", 1, true) and code_breaks(inline) then
+      for segment, spaces in inline.text:gmatch("([^ ]*)( *)") do
+        if segment ~= "" then
+          local clone = inline:clone()
+          clone.text = segment
+          out[#out + 1] = clone
+        end
+        if spaces ~= "" then out[#out + 1] = false end
+      end
     elseif inline.content and inline.t ~= "Image" then
       local pending = pandoc.List()
       local function flush()
@@ -31,7 +40,7 @@ local function pieces(inlines)
           pending = pandoc.List()
         end
       end
-      for _, child in ipairs(pieces(inline.content)) do
+      for _, child in ipairs(pieces(inline.content, code_breaks)) do
         if child == false then flush(); out[#out + 1] = false else pending:insert(child) end
       end
       flush()
@@ -98,6 +107,18 @@ function M.dump(doc, options)
   if not typst then blocks:insert(pandoc.RawBlock("latex", HEADER)) end
   local assets = doc.meta["pdfmd-measure-assets"]
   local image = measurement_image(assets and pandoc.utils.stringify(assets))
+  local latex_probe_options
+  local function code_breaks(inline)
+    if typst then return true end -- Typst's inline raw text wraps at spaces.
+    -- LaTeX's texttt breaks at spaces, while the writer can also emit verbatim
+    -- code for syntax highlighting or listings. Inspect its inline output.
+    if not latex_probe_options then
+      latex_probe_options = pandoc.WriterOptions(PANDOC_WRITER_OPTIONS)
+      latex_probe_options.template = pandoc.template.compile("$body$")
+    end
+    local source = pandoc.write(pandoc.Pandoc({pandoc.Plain({inline})}), "latex", latex_probe_options)
+    return source:match("^\\texttt{") ~= nil
+  end
   local number = 0
   local function table_dump(tbl)
     number = number + 1
@@ -141,7 +162,7 @@ function M.dump(doc, options)
         end
         for _, block in ipairs(cell.contents) do
           if block.content and (block.t == "Plain" or block.t == "Para") then
-            for _, part in ipairs(pieces(block.content)) do
+            for _, part in ipairs(pieces(block.content, code_breaks)) do
               if part == false then flush() else word:insert(part) end
             end
           end

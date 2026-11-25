@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest import mock
 
@@ -30,6 +31,30 @@ pdfmd-options:
 |---|---|
 | iiiiiiiiii iiiiiiiiii iiiiiiiiii | WWWWWWWWWW WWWWWWWWWW WWWWWWWWWW |
 | `\\rule{20pt}{1pt}`{=latex} | fixed width |
+"""
+
+INLINE_CODE = """---
+pdfmd-options: {column-estimate: measure, stamp: off}
+---
+
+| Phrase | Longest segment | Identifier |
+|---|---|---|
+| **`read configuration twice`** | **`configuration`** | `cached_configuration_revision` |
+"""
+
+CODE_LAYOUT = """---
+geometry: textwidth=450pt
+pdfmd-options: {column-widths: force, column-estimate: measure, stamp: off}
+---
+
+| Signal | Inspect | Explanation |
+|-------------|----------|---------------------|
+| Local and remote catalogues disagree | A copy of the local manifest | Refresh the local catalogue before asking the operator to restore the latest backup. |
+| Stale copy | Recorded revision number | Compare the recorded revision with the manifest and repeat the export once they agree. |
+| `the current configuration file could not be found` | Settings in the active runner | Read the runner settings and check if the file moved when the workspace was restored. |
+| Blank status | Log from the previous attempt | Find the last completed step in the process log and verify its write permission. |
+| Timeout | Jobs still active in the queue | Let active jobs finish, then check for a slow step in the queue before retrying. |
+| Retry | Most recent complete result | Publish the new report once the last result is complete and the checks have passed. |
 """
 
 
@@ -172,7 +197,8 @@ class Fallbacks(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class MeasuredAlgorithm(unittest.TestCase):
-    def apply(self, text, table, *args):
+    @staticmethod
+    def apply(text, table, *args):
         from tests.test_table_widths import widths
         with tempfile.TemporaryDirectory(prefix="pdfmd-measured-algorithm-") as folder:
             path = Path(folder) / "widths.json"
@@ -188,6 +214,17 @@ class MeasuredAlgorithm(unittest.TestCase):
         self.assertGreater(measured[1], measured[0])
         self.assertAlmostEqual(sum(measured), 1)
         self.assertEqual(self.apply("---\npdfmd-options: {column-estimate: count}\n---\n" + text, data), [None, None])
+
+    def test_latex_word_dump_respects_the_writer_syntax(self):
+        from tests.test_table_widths import FILTER
+        text = "| Plain | Language |\n|---|---|\n| `word  word` | `word word`{.python} |\n"
+        command = ["pandoc", "-f", "markdown", "-t", "latex", "--lua-filter", str(FILTER),
+                   "-M", "pdfmd-column-estimate=measure", "-M", "pdfmd-measure-role=dump"]
+        for options, expected in (([], (2, 1)), (["--listings"], (1, 1)), (["--no-highlight"], (2, 2))):
+            with self.subTest(options=options):
+                done = subprocess.run([*command, *options], input=text, capture_output=True, encoding="utf-8", check=True)
+                actual = tuple(done.stdout.count(rf"\pdfmdword{{1}}{{2}}{{{col}}}{{") for col in (1, 2))
+                self.assertEqual(actual, expected)
 
     def test_word_floor_cap_uses_measured_points_per_character(self):
         # Equal counted lengths, but 4 points/character in the first column. Limit 4 means a 16-point floor.
@@ -245,8 +282,7 @@ class MeasuredAlgorithm(unittest.TestCase):
         self.assertGreater(off[1], base[1])
 
 
-@unittest.skipUnless(shutil.which("pandoc") and shutil.which("xelatex"), "needs Pandoc and XeLaTeX")
-class Latex(unittest.TestCase):
+class Build(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="pdfmd-measure-test-")
         self.addCleanup(self.temp.cleanup)
@@ -265,6 +301,56 @@ class Latex(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         return done, target.read_bytes()
 
+    def measurements(self, done):
+        records = list((self.folder / "cache").rglob("column-measure/*.json"))
+        self.assertEqual(len(records), 1, done.stderr)
+        return json.loads(records[0].read_text(encoding="utf-8"))["tables"]["1"]
+
+
+@unittest.skipUnless(shutil.which("pandoc") and shutil.which("pdflatex"), "needs Pandoc and pdfLaTeX")
+class InlineCodeLatex(Build):
+    engine = "pdflatex"
+
+    def test_inline_code_measures_the_full_phrase_and_each_word(self):
+        done, _ = self.build(INLINE_CODE)
+        phrase, longest, identifier = self.measurements(done)["cells"][1]
+        self.assertGreater(phrase["width"], 1.5 * longest["width"])
+        self.assertAlmostEqual(phrase["word"], longest["width"], places=3)
+        self.assertGreater(identifier["word"], longest["width"])
+        self.assertAlmostEqual(identifier["word"], identifier["width"], places=3)
+
+    def test_forced_measured_layout_gives_the_explanation_room(self):
+        done, _ = self.build(CODE_LAYOUT)
+        table = self.measurements(done)
+        with self.subTest("balanced widths"):
+            fractions = MeasuredAlgorithm.apply(CODE_LAYOUT, table)
+            self.assertLess(fractions[0], 0.35, fractions)
+            self.assertGreater(fractions[2], 0.43, fractions)
+        with self.subTest("author-specified widths"):
+            kept = CODE_LAYOUT.replace("column-widths: force", "column-widths: keep")
+            self.assertEqual(MeasuredAlgorithm.apply(kept, table), [13 / 44, 10 / 44, 21 / 44])
+
+        def height():
+            done = subprocess.run(["pdftotext", "-bbox", str(self.folder / "out.pdf"), "-"],
+                                  capture_output=True, encoding="utf-8", check=True)
+            pages = ET.fromstring(done.stdout).findall(".//{*}page")
+            self.assertEqual(len(pages), 1)
+            words = pages[0].findall(".//{*}word")
+            top = next(float(word.attrib["yMin"]) for word in words if word.text == "Signal")
+            bottom = next(float(word.attrib["yMax"]) for word in words if word.text == "passed.")
+            return bottom - top
+
+        with self.subTest("rendered height"):
+            if not shutil.which("pdftotext"):
+                self.skipTest("needs pdftotext")
+            measured = height()
+            self.build(CODE_LAYOUT.replace("column-estimate: measure", "column-estimate: count"))
+            counted = height()
+            self.assertLessEqual(measured, 1.10 * counted, (measured, counted))
+
+
+@unittest.skipUnless(shutil.which("pandoc") and shutil.which("xelatex"), "needs Pandoc and XeLaTeX")
+class Latex(Build):
     def test_a_temporary_folder_with_a_tilde_is_measured(self):
         # Windows' short folder names (C:\\Users\\RUNNER~1\\...) put `~` in the temporary folder. The engine was given the
         # measuring file's absolute path, which TeX reads with `~` active: "I can't find file", and the build fell back
@@ -302,15 +388,16 @@ class Latex(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("pandoc") and shutil.which("typst"), "needs Pandoc and Typst")
-class Typst(unittest.TestCase):
+class Typst(Build):
     engine = "typst"
-    setUp = Latex.setUp
 
     def build(self, text=TEXT, *args):
         text = text.replace("`\\rule{20pt}{1pt}`{=latex}", "`#box(width:20pt,height:1pt)`{=typst}")
-        return Latex.build(self, text, *args)
+        return super().build(text, *args)
 
     test_printed_widths_and_linewidth_are_cached = Latex.test_printed_widths_and_linewidth_are_cached
+    test_inline_code_measures_the_full_phrase_and_each_word = (
+        InlineCodeLatex.test_inline_code_measures_the_full_phrase_and_each_word)
 
     def test_relative_image_is_measured_from_its_document_folder(self):
         import struct

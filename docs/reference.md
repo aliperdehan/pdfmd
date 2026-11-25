@@ -1902,6 +1902,8 @@ measures each formatted cell, its unbreakable words, the line width and twice `\
 Typst uses contextual `measure` calls and labelled metadata read by `typst query`, with the same template,
 fonts and page setup. It measures the table's inset and column gutter; column percentages include their inset
 and leave the measured gutters free. Relative cell images use content-addressed copies in the measurement cache.
+Word measurements split inline code at spaces in LaTeX's `\texttt` and Typst's inline raw text. The full-cell
+measurement includes the entire phrase.
 The existing balancing algorithm then works in points. `column-outlier-length` and `column-word-floor-limit`
 still mean characters: the former qualifies the longest measured cell before the outlier ratio is judged;
 the latter caps a chosen column's word floor at its limit times that column's measured points per character

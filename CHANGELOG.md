@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.54 — 2026-11-25
+
+Pre-edit state: commit `b4c579f`. [tables] Measured widths treated each inline code span as a single word, so a phrase
+could take room from neighbouring columns even when the writer could wrap it [N145]. Measure space-separated fragments
+in LaTeX's texttt output and Typst's inline raw text. Measure the full cell with its original styling and give
+unbreakable identifiers their full width. Regressions cover measured words, LaTeX writer options, a synthetic
+three-column PDF against the forced count layout, and explicit divider ratios. On Pandoc 3.13 with pdfLaTeX,
+the first column fell from 62% to 33%, the explanation column grew from 27% to 49%, and the table
+measured 157 pt high against forced count's 169 pt. LuaLaTeX met the same layout thresholds.
+
 ## v3.34.53a — 2026-11-25
 
 Pre-edit state: commit `c89197b`. [kits] Document the TeX package kit and sidecar search order, kit-relative paths, folded helpers and the locations reported by `--kits` [D134].
