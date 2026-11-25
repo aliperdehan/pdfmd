@@ -70,7 +70,7 @@ def resource_path_option(document_directory: Path, pandoc_cwd: Path,
 
 
 def kit_search_folders(document: Path | None) -> list[str]:
-    """The TeX search path entries of the kits chosen for ``document``: each kit's folder (its package, the library it `\\input`s)
+    """The TeX search path entries of the kits chosen for ``document``: each kit's folder and its package's folder
     and, `//` recursive, the folders its `carry:` names (a logo found by its bare name). The kit's whole folder is not searched
     recursively: it may hold a repository's worth of data. They come after the default path, so an installed copy is the same file
     or stays where it was."""
@@ -79,6 +79,7 @@ def kit_search_folders(document: Path | None) -> list[str]:
     found: list[str] = []
     for item in core.active_kits(document, None, None):
         found.append(str(item.kit.folder))
+        found.append(str(item.package_folder))
         found += [f"{item.kit.folder / entry.rstrip('/')}//" for entry in item.kit.carry
                   if (item.kit.folder / entry.rstrip("/")).is_dir()]
     return list(dict.fromkeys(found))

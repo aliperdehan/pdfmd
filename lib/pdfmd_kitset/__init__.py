@@ -137,6 +137,10 @@ class ActiveKit:
     def __init__(self, kit, mode, found, selection):
         self.kit, self.mode, self.found, self.selection = kit, mode, found, selection
 
+    @property
+    def package_folder(self) -> Path:
+        return self.found.package_folder or self.kit.folder
+
     def describe(self) -> str:
         return (f"{self.kit.name} {self.kit.version}".rstrip() + (f" mode {self.mode.name}" if self.mode else "")
                 + f" (chosen in the {self.selection.layer or 'command line'})")
@@ -233,7 +237,7 @@ def _active_kits(md_path: Path, metadata_files: list[Path] | None, no_auto: list
     for choice in selection.combine(layers, core.KIT_CLI, setting):
         try:
             found = find_kit(choice.ref, md_path.parent, no_auto, named_only=choice.layer == "folder")
-            kit = load_kit(found.path, found.aliases)
+            kit = load_kit(found.path, found.aliases, package_folder=found.package_folder)
             mode = resolve_mode(kit, choice.mode)
         except KitError as error:
             raise SystemExit(f"{md_path.name}: kit `{choice.ref}` (chosen in the {choice.layer}): {error}")
@@ -396,7 +400,7 @@ def office_packages(md_path: Path, metadata_files: list[Path], no_auto: list[str
     """(folder, package name) of each LaTeX package the document's preamble loads that is not part of the TeX
     distribution: a package may ship its Word support beside its .sty (`<name>-office.lua`,
     `<name>-office.yaml`, `<name>-reference.dotx`), found here."""
-    chosen = [(item.kit.folder, item.kit.package, list(item.mode.options) if item.mode else [])
+    chosen = [(item.package_folder, item.kit.package, list(item.mode.options) if item.mode else [])
               for item in active_kits(md_path, metadata_files, None) if item.kit.package]
     if core.discovery_disabled(no_auto, "preamble"):
         return chosen

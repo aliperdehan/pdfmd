@@ -69,7 +69,7 @@ def kit_package_folders(package: str, document: Path | None = None) -> list[Path
     if not chosen:
         return []
     from pdfmd_kits import normalise
-    return [item.kit.folder for item in chosen if normalise(item.kit.package) == normalise(package)]
+    return [item.package_folder for item in chosen if normalise(item.kit.package) == normalise(package)]
 
 
 def kit_install_record(folder: Path) -> dict | None:
@@ -87,13 +87,16 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
         for reference in names:
             try:
                 found = core.find_kit(reference, base, no_auto)
-                kit = load_kit(found.path, found.aliases)
+                kit = load_kit(found.path, found.aliases, package_folder=found.package_folder)
             except KitError as error:
                 print(f"ERROR  {error}", file=sys.stderr)
                 ok = False
                 continue
             print(f"{kit.name} {kit.version}".rstrip() + (f"  {kit.description}" if kit.description else ""))
             print(f"  kit file  {core.display_path(found.path)}  ({found.source}{', cached' if found.cached else ''})")
+            if found.shadowed:
+                ignored = ", ".join(core.display_path(path) for path in found.shadowed)
+                print(f"WARN  package kit: using {core.display_path(found.path)}; ignoring {ignored}", file=sys.stderr)
             record = kit_install_record(found.folder)
             if record:
                 print(f"  from      {record.get('source', '?')}" + (f"@{record['ref']}" if record.get("ref") else "")
@@ -126,7 +129,7 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
             print(f"WARN  kits: {core.display_path(path)} (in the config) is not a folder", file=sys.stderr)
     for found in rows:
         try:
-            kit = load_kit(found.path, found.aliases)
+            kit = load_kit(found.path, found.aliases, package_folder=found.package_folder)
         except KitError as error:
             print(f"ERROR  {error.problems[0]}", file=sys.stderr)
             ok = False

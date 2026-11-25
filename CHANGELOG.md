@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.52 — 2026-11-25
+
+Pre-edit state: commit `57b6b47`. [kits] TeX-tree kit discovery only checked beside the style file. It now checks there, then in `pdfmd/` and `.pdfmd/`, and `--kits NAME` names the chosen kit and any shadowed locations [D134]. Regressions cover both kit names in all three places, precedence with and without a warm cache, the package version, and kit-relative Lua and defaults in a Pandoc build.
+
 ## v3.34.51 — 2026-11-25
 
 Pre-edit state: commit `3dd6255`. Front-matter properties could travel in file metadata but had no visible block. The `properties` settings select, label and place fields from the document's YAML, and a Lua filter gives Pandoc a table, list or inline block [N138]. Regressions cover selection, lexical values, layer inheritance, the writer styles, LaTeX and Typst PDFs, and slide decks with inherited and local settings.

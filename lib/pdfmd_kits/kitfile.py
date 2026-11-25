@@ -160,9 +160,10 @@ def _yaml(path: Path):
         raise KitError(f"{path}: not valid YAML ({first})", path) from None
 
 
-def load_kit(path: Path, extra_aliases: dict | None = None) -> Kit:
+def load_kit(path: Path, extra_aliases: dict | None = None, *, package_folder: Path | None = None) -> Kit:
     """The kit of the `.kit` file ``path``, checked. ``extra_aliases`` ({mode: [alias, ...]}) are names a user added without
-    editing the kit (the config's `kits:` entry). Raises KitError listing every fault found, not just the first."""
+    editing the kit (the config's `kits:` entry). A TeX lookup supplies the style file's folder for the version fallback.
+    Raises KitError listing every fault found, not just the first."""
     path = Path(path)
     data = _yaml(path)
     if not isinstance(data, dict):
@@ -283,7 +284,7 @@ def load_kit(path: Path, extra_aliases: dict | None = None) -> Kit:
     if problems:
         raise KitError([f"{path}: {problem}" for problem in problems], path)
     if not version and package:
-        version = package_file_version(folder, package)
+        version = package_file_version(package_folder if package_folder is not None else folder, package)
     return Kit(path=path, folder=folder, name=str(name), version=version, description=description, package=package,
                default_mode=default_mode, modes=modes, latex=latex, lua=lua, defaults=defaults, metadata=metadata,
                helper=helper, carry=tuple(carry), no_auto=tuple(no_auto), markup_off=tuple(markup_off),

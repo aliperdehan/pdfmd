@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import pdfmd  # noqa: E402
 from env_support import can_symlink  # noqa: E402
+from pandoc_support import tex_tree_env  # noqa: E402
 from pdfmd_kits import Cache, KitError, Location, find, list_kits, load_kit, normalise, resolve_mode  # noqa: E402
 
 FULL = """\
@@ -252,6 +254,18 @@ class Discovery(Scratch):
         self.assertIsNone(find("thing", [], lambda name: None, cache))
         self.assertFalse((self.root / "cache").exists())
 
+    def test_the_tex_tree_cache_checks_for_kits_in_higher_precedence_folders(self):
+        package = self.root / "tex" / "thing"
+        hidden = self.kit("tex/thing/.pdfmd", "thing")
+        lookup = mock.Mock(return_value=package)
+        file = self.root / "cache" / "kits.json"
+        self.assertEqual(find("thing", [], lookup, Cache(file)).path, hidden)
+        visible = self.kit("tex/thing/pdfmd", "thing")
+        found = find("thing", [], lookup, Cache(file))
+        self.assertEqual((found.path, found.cached), (visible, True))
+        self.assertEqual(list_kits([], Cache(file))[0].path, visible)
+        lookup.assert_called_once_with("thing")
+
     def test_the_lookup_is_asked_for_the_name_as_typed_and_normalised(self):
         asked = []
         find("Nu-Lab", [], lambda name: asked.append(name))
@@ -433,6 +447,67 @@ class Wiring(Scratch):
                  "pdfmd.configured_kits; assert 'pdfmd_kits' not in sys.modules; print('clean')" % str(ROOT))
         done = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True)
         self.assertEqual(done.stdout.strip(), "clean", done.stderr)
+
+
+@unittest.skipUnless(shutil.which("kpsewhich"), "a package is found by kpsewhich")
+class PackageKits(Scratch):
+    def setUp(self):
+        super().setUp()
+        tree = self.root / "texmf"
+        self.package = tree / "tex" / "latex" / "fixture"
+        write(self.package / "fixture.sty", "\\ProvidesPackage{fixture}[2026/11/25 v1.2.3 A fixture]\n")
+        self.env = {**os.environ, **tex_tree_env(tree), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1",
+                    "XDG_CACHE_HOME": str(self.root / "cache")}
+
+    def run_kits(self, *names):
+        return subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "--kits", *names],
+                              capture_output=True, text=True, cwd=self.root, env=self.env)
+
+    def test_both_kit_names_in_each_package_folder(self):
+        for place in (".", "pdfmd", ".pdfmd"):
+            for name in (".kit", "fixture.kit"):
+                with self.subTest(place=place, name=name):
+                    path = write(self.package / place / name, "kit-format: 1\nname: fixture\npackage: fixture\n")
+                    try:
+                        shown = self.run_kits("fixture")
+                        self.assertEqual(shown.returncode, 0, shown.stderr)
+                        self.assertIn(str(path.relative_to(self.root)), shown.stdout)
+                        self.assertIn("fixture 1.2.3", shown.stdout)
+                    finally:
+                        path.unlink()
+
+    def test_precedence_and_warning_with_two_package_kits(self):
+        visible = write(self.package / "pdfmd" / "fixture.kit", "kit-format: 1\nname: fixture\npackage: fixture\n")
+        hidden = write(self.package / ".pdfmd" / ".kit", "kit-format: 1\nname: fixture\npackage: fixture\n")
+        for _ in range(2):   # the same choices and warning from a warm cache
+            shown = self.run_kits("fixture")
+            self.assertEqual(shown.returncode, 0, shown.stderr)
+            self.assertIn(str(visible.relative_to(self.root)), shown.stdout)
+            self.assertIn("WARN  package kit: using", shown.stderr)
+            for path in (visible, hidden):
+                self.assertIn(str(path.relative_to(self.root)), shown.stderr)
+        beside = write(self.package / ".kit", "kit-format: 1\nname: fixture\npackage: fixture\n")
+        write(self.package / "fixture.kit", "kit-format: 1\nname: another\n")
+        shown = self.run_kits("fixture")
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertIn(str(beside.relative_to(self.root)), shown.stdout)
+        self.assertNotIn(str((self.package / "fixture.kit").relative_to(self.root)), shown.stderr)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "Pandoc is needed")
+    def test_a_package_kit_uses_lua_and_defaults_relative_to_its_folder(self):
+        kit = self.package / "pdfmd"
+        write(kit / "fixture.kit", "kit-format: 1\nname: fixture\npackage: fixture\n"
+              "lua: assets/filter.lua\ndefaults: assets/defaults.yaml\n")
+        write(kit / "assets" / "filter.lua", "function Str(s) if s.text == 'Body' then return pandoc.Str('FromKitLua') end end\n")
+        write(kit / "assets" / "defaults.yaml", "title: Kit Defaults Title\n")
+        write(self.root / "doc.md", "Body\n")
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "doc.md", "--kit", "fixture",
+                               "--to", "latex", "-o", "out.tex", "--no-backup", "--no-stamp"],
+                              capture_output=True, text=True, cwd=self.root, env=self.env)
+        self.assertEqual(done.returncode, 0, done.stderr + done.stdout)
+        output = (self.root / "out.tex").read_text(encoding="utf-8")
+        for text in ("Kit Defaults Title", "FromKitLua", r"\usepackage{fixture}"):
+            self.assertIn(text, output)
 
 
 if __name__ == "__main__":

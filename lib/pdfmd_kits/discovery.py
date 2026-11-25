@@ -6,10 +6,9 @@ to one name WITHIN one location stop the search (nothing is guessed between them
 the caller can print the winner. A name matches the folder's name, the `NAME.kit` file's name or the `name:` the file
 declares, compared with `normalise` (case, `-` `_` `.` and spaces ignored).
 
-After the locations come two steps that cost a process or a file read: a *lookup* (the folder of `NAME.sty` that kpsewhich
-finds, handed in by the caller) and the *cache*, which remembers only where a kit was found: name -> the `.kit`'s path, its
-size and its modification time. A hit is trusted only while that file still has that size and time; an unreadable or
-corrupt cache is a miss; a miss is never written. The cache is read before the lookup and written after it.
+After the locations come the cache and the TeX lookup (the folder of `NAME.sty` that kpsewhich finds, handed in by the
+caller). The cache remembers the kit's path, size, modification time and package folder. A hit rechecks the package's
+kit locations while the recorded file has the same size and time. A miss is never written.
 """
 
 from __future__ import annotations
@@ -38,6 +37,8 @@ class Found:
     source: str
     cached: bool = False
     aliases: dict = field(default_factory=dict, hash=False, compare=False)
+    package_folder: Path | None = None
+    shadowed: tuple[Path, ...] = ()
 
     @property
     def folder(self) -> Path:
@@ -55,6 +56,16 @@ def kit_files(folder: Path, wanted: str | None = None) -> list[Path]:
     if wanted is None:
         return named
     return [item for item in named if normalise(item.stem) == wanted]
+
+
+def package_kit_places(folder: Path) -> tuple[Path, ...]:
+    """The kit folders of a LaTeX package, starting at the folder of its style file."""
+    return folder, folder / "pdfmd", folder / ".pdfmd"
+
+
+def package_kit_files(folder: Path) -> list[Path]:
+    """The first kit file in each place, in precedence order."""
+    return [files[0] for place in package_kit_places(folder) if (files := kit_files(place))]
 
 
 def _declared_name(path: Path) -> str | None:
@@ -135,13 +146,27 @@ class Cache:
             pass
         return None
 
-    def put(self, wanted: str, path: Path) -> None:
+    def found(self, wanted: str) -> Found | None:
+        path = self.get(wanted)
+        if path is None:
+            return None
+        # Before packages could put kits in subfolders, the kit's parent was the package folder.
+        folder = self._load()[wanted].get("package_folder")
+        folder = Path(folder) if isinstance(folder, str) else path.parent
+        files = package_kit_files(folder)
+        if files:
+            return Found(files[0], "the TeX tree", cached=True, package_folder=folder, shadowed=tuple(files[1:]))
+        return None
+
+    def put(self, wanted: str, path: Path, package_folder: Path | None = None) -> None:
         if self.path is None:
             return
         try:
             seen = path.stat()
             entries = dict(self._load())
             entries[wanted] = {"path": str(path), "size": seen.st_size, "mtime_ns": seen.st_mtime_ns}
+            if package_folder is not None:
+                entries[wanted]["package_folder"] = str(package_folder)
             self.path.parent.mkdir(parents=True, exist_ok=True)
             handle, temporary = tempfile.mkstemp(prefix=self.path.name + ".", suffix=".tmp", dir=self.path.parent)
             try:
@@ -167,18 +192,19 @@ def find(name: str, locations: list[Location], lookup=None, cache: Cache | None 
         if path is not None:
             return Found(path, location.source, aliases=location.aliases)
     if cache is not None:
-        path = cache.get(wanted)
-        if path is not None:
-            return Found(path, "the TeX tree", cached=True)
+        found = cache.found(wanted)
+        if found is not None:
+            return found
     if lookup is not None:
         for spelling in dict.fromkeys((name, wanted)):
-            folder = lookup(spelling)
-            if folder is not None:
-                path = next(iter(kit_files(Path(folder))), None)
-                if path is not None:
-                    if cache is not None:
-                        cache.put(wanted, path)
-                    return Found(path, "the TeX tree")
+            located = lookup(spelling)
+            if located is None:
+                continue
+            folder = Path(located)
+            if files := package_kit_files(folder):
+                if cache is not None:
+                    cache.put(wanted, files[0], folder)
+                return Found(files[0], "the TeX tree", package_folder=folder, shadowed=tuple(files[1:]))
     return None
 
 
@@ -201,7 +227,7 @@ def list_kits(locations: list[Location], cache: Cache | None = None) -> list[Fou
             add(Found(path, location.source, aliases=location.aliases))
     if cache is not None:
         for wanted in sorted(cache._load()):
-            path = cache.get(wanted)
-            if path is not None:
-                add(Found(path, "the TeX tree", cached=True))
+            item = cache.found(wanted)
+            if item is not None:
+                add(item)
     return found
