@@ -289,15 +289,13 @@ class Settings(unittest.TestCase):
             style.write_text("<not-xml", encoding="utf-8")
             self.assertEqual(package.style_settings("auto", [document], [], ["--csl", str(style)])[0], "style")
 
-    def test_native_does_not_note_escaped_or_protected_markers(self):
-        import io
-        from contextlib import redirect_stderr
+    def test_native_does_not_count_escaped_or_protected_markers(self):
         package = pdfmd.load_package("pdfmd_excerpts.pagecite")
         with tempfile.TemporaryDirectory() as folder:
             document = Path(folder) / "d.md"
             document.write_text("---\npdfmd-options:\n  pagecite: auto\n---\n", encoding="utf-8")
             for text in (r"\[p. 5]", "`[p. 5]`", "[a [p. 5]](https://example.invalid)", "    [p. 5]", "<!-- [p. 5] -->"):
-                with self.subTest(text=text), redirect_stderr(io.StringIO()) as said:
-                    package.native_note(document, [], text)
-                    self.assertNotIn("pagecite: native tier", said.getvalue())
+                with self.subTest(text=text):
+                    self.assertFalse(package.native_uses(document, [], text))
+            self.assertTrue(package.native_uses(document, [], "See [p. 5]."))
 

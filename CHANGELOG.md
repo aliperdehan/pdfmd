@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.34.36a — 2026-11-25
+
+Pre-edit state: commit `e8b988e`. The page-marker unit test still called
+the old native note emitter after the combined warning moved its detection
+to a predicate. Test the same protected spellings against that predicate
+and verify that a real marker is detected. No shipped code changes.
+
 ## v3.34.36 — 2026-11-25
 
 Pre-edit state: commit `f5432a6`. Word and Typst received the page and body
