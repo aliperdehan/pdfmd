@@ -93,8 +93,6 @@ wait for an answer before any code.
 - [ ] Runtime: lazy heavy imports (pypdf alone is about half of every start), a probe cache, fewer engine re-runs; no Rust/Go rewrite [3fj]
 - [ ] After the whole queue: pytest + pytest-xdist as an optional development extra (CI stays on unittest); `scripts/test_parallel.py` stays the runner unless it keeps failing in the waves [3fi D62]
 
-## Raw TeX inputs, a standalone `.tex`, `--crop` as a build mode [3fg]
-
 ## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]
 
 - [ ] The rest of Obsidian's syntax: note embeds (`![[note#Heading]]`, `#^block`), links between notes, tags, block ids, properties, foldable and custom callouts, extra task statuses [3ee]
