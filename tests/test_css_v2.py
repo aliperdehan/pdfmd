@@ -10,8 +10,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
+from xml.etree import ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
 import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
@@ -151,6 +153,83 @@ class Build(unittest.TestCase):
             source = (root / "d.tex").read_text(encoding="utf-8")
             self.assertIn("\\titleformat*{\\section}", source)
             self.assertIn("\\color[HTML]{FF0000}", source)
+
+
+@unittest.skipUnless(PANDOC, "needs Pandoc")
+class HeadingWriters(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        (self.root / "d.md").write_text(
+            "---\ntitle: Example\n---\n\n# FirstHeading\n\n## SecondHeading\n\nBody text.\n", encoding="utf-8")
+        (self.root / "pdfmd.css").write_text(
+            'body { font-size: 11pt }\nh1 {color: #369; font-size: 2em; font-weight: normal; font-style: italic; '
+            'font-family: "Example Serif", serif}\nh2 {color: red}', encoding="utf-8")
+
+    def run_pdfmd(self, *args):
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "d.md", "--no-stamp", *args],
+                              cwd=self.root, capture_output=True, encoding="utf-8", timeout=300)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
+    def test_word_headings_follow_css_until_a_reference_document_supplies_them(self):
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        val = f'{{{ns["w"]}}}val'
+
+        def heading(name, level=1):
+            with zipfile.ZipFile(self.root / name) as package:
+                styles = ElementTree.fromstring(package.read("word/styles.xml"))
+            return styles.find(f'w:style[@w:styleId="Heading{level}"]/w:rPr', ns)
+
+        self.run_pdfmd("--to", "docx", "-o", "default.docx")
+        self.run_pdfmd("--to", "docx", "-o", "css.docx", "--css-scope", "all")
+        styled = heading("css.docx")
+        self.assertEqual(styled.find("w:color", ns).get(val), "336699")
+        self.assertEqual(styled.find("w:sz", ns).get(val), "44")
+        self.assertEqual(styled.find("w:b", ns).get(val), "0")
+        self.assertIsNotNone(styled.find("w:i", ns))
+        self.assertEqual(styled.find("w:rFonts", ns).get(f'{{{ns["w"]}}}ascii'), "Example Serif")
+        self.assertEqual(heading("css.docx", 2).find("w:color", ns).get(val), "FF0000")
+        (self.root / "default.docx").rename(self.root / "reference.docx")
+        original = heading("reference.docx")
+        self.assertNotEqual(original.find("w:color", ns).get(val), "336699")
+        self.run_pdfmd("--to", "docx", "-o", "own.docx", "--css-scope", "all")
+        self.assertEqual(ElementTree.tostring(heading("own.docx")), ElementTree.tostring(original))
+
+    def test_typst_fragment_headings_respect_the_css_scope(self):
+        self.run_pdfmd("--to", "typst", "-o", "css.typ", "--css-scope", "all")
+        plain = (self.root / "css.typ").read_text(encoding="utf-8")
+        self.assertIn('#show heading.where(level: 1): set text(fill: rgb("#336699"), size: 22pt', plain)
+        self.assertIn('#show heading.where(level: 2): set text(fill: rgb("#FF0000"))', plain)
+        self.run_pdfmd("--to", "typst", "-o", "off.typ")
+        self.assertNotIn("#336699", (self.root / "off.typ").read_text(encoding="utf-8"))
+
+    @unittest.skipUnless(shutil.which("typst") and shutil.which("pdftotext"), "needs Typst and pdftotext")
+    def test_typst_template_heading_styles_win_in_the_pdf(self):
+        # A template that styles headings also styles the CSS-free control.
+        template = self.root / "own.typst"
+        template.write_text('#show heading: set text(fill: rgb("#12AB34"), size: 29pt, style: "normal", weight: "bold")\n'
+                            '#show heading: set text(font: "Libertinus Serif")\n$body$\n', encoding="utf-8")
+        settings = ("-e", "typst", "--template", template.name)
+        self.run_pdfmd(*settings, "-o", "control.pdf")
+        self.run_pdfmd(*settings, "-o", "custom.pdf", "--css-scope", "all")
+
+        def boxes(name):
+            result = subprocess.run(["pdftotext", "-bbox", name, "-"], cwd=self.root,
+                                    capture_output=True, encoding="utf-8", check=True)
+            root = ElementTree.fromstring(result.stdout)
+            return [word.attrib for word in root.iter("{http://www.w3.org/1999/xhtml}word")
+                    if word.text in ("FirstHeading", "SecondHeading")]
+
+        control = boxes("control.pdf")
+        self.assertEqual(len(control), 2)
+        self.assertEqual(boxes("custom.pdf"), control)
+        self.run_pdfmd("-e", "typst", "-o", "default.pdf", "--css-scope", "all")
+        self.assertNotEqual(boxes("default.pdf"), control)
+        template.write_text("$body$\n", encoding="utf-8")
+        self.run_pdfmd(*settings, "-o", "unstyled.pdf", "--css-scope", "all")
+        self.run_pdfmd(*settings, "-o", "unstyled-control.pdf")
+        self.assertNotEqual(boxes("unstyled.pdf"), boxes("unstyled-control.pdf"))
 
 
 if __name__ == "__main__":

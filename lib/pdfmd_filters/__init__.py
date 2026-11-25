@@ -830,7 +830,8 @@ def chem_filter_args(sources: list[Path], metadata_files: list[Path], preamble_f
     return args + ["--lua-filter", str(shipped)]
 
 
-def typst_filter_args(writer: str, command: list[str] | None = None, directory: Path | None = None) -> list[str]:
+def typst_filter_args(writer: str, command: list[str] | None = None, directory: Path | None = None, *,
+                      document: Path | None = None, metadata_files: list[Path] = (), no_auto: list[str] | None = None) -> list[str]:
     """``--lua-filter typst.lua`` for Typst (v3.27.11): a link to an anchor the document does not have becomes its
     text with one WARN, where Typst would stop the build; with a Pandoc before 3.2, a picture's relative path is made
     absolute. Last, after citeproc and the document's own filters."""
@@ -846,5 +847,9 @@ def typst_filter_args(writer: str, command: list[str] | None = None, directory: 
     # Explicitly use that text; current Pandoc writes the same output with either extension setting.
     citations = ["-t", "typst-citations"] if "--citeproc" in (command or []) else []
     paths = core.deferred("pdfmd_bibliography", "typst_path_args")(command or [])
-    from pdfmd_lua.typst import heading_args
-    return heading_args() + citations + core.typst_template_args(writer, command or [], directory) + paths + ["--lua-filter", str(shipped)] if shipped is not None else []
+    if shipped is None:
+        return []
+    from pdfmd_lua.typst import css_heading_rules, heading_args
+    rules = css_heading_rules(document, metadata_files, no_auto, command or []) if document is not None else ""
+    return (heading_args() + citations + core.typst_template_args(writer, command or [], directory, rules)
+            + paths + ["--lua-filter", str(shipped)])

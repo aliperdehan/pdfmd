@@ -366,7 +366,8 @@ def run(core, *,
                 cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
                 if target_format == "typst":
                     cmd += page_numbers.arguments(target_format, files[0], metadata_files)
-                cmd += typst_filter_args(target_format, cmd, pandoc_cwd)
+                cmd += typst_filter_args(target_format, cmd, pandoc_cwd, document=files[0],
+                                         metadata_files=metadata_files, no_auto=report_no_auto)
                 from pdfmd_filters.lua import figure_fit_module
                 figure_fit = figure_fit_module()
                 cmd += figure_fit.arguments(target_format, files[0], metadata_files)
@@ -523,7 +524,8 @@ def run(core, *,
                     report_last = core.deferred("pdfmd_filters.hidden", "finish_args")()
                     if engine == "typst":
                         cmd += page_numbers.arguments(engine, files[0], metadata_files)
-                    report_last += typst_filter_args(engine, cmd, pandoc_cwd) + weasyprint_math_args(
+                    report_last += typst_filter_args(engine, cmd, pandoc_cwd, document=files[0],
+                                                     metadata_files=metadata_files, no_auto=report_no_auto) + weasyprint_math_args(
                         engine, pandoc_options,
                         args.font or document_font_setting("mainfont", list(files), metadata_files, variables),
                         report_no_auto)

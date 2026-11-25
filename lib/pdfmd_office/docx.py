@@ -261,6 +261,33 @@ def patch_styles(styles: str, spec: OfficeSpec, house: bool) -> str:
             styles = _edit_style(styles, style_id, "pPr", "ind", f'<w:ind w:firstLine="{indent}"/>')
     if house:
         styles = _house(styles, base)
+    if spec.css_headings:
+        styles = css_heading_styles(styles, spec.css_headings, base)
+    return styles
+
+
+def css_heading_styles(styles: str, headings: dict[int, dict[str, str]], base: float) -> str:
+    from html import escape
+
+    from pdfmd_css.headings import heading_values
+
+    for level, rule in headings.items():
+        style_id = f"Heading{level}"
+        properties = heading_values(rule, base)
+        elements = {}
+        if "colour" in properties:
+            elements["color"] = f'<w:color w:val="{properties["colour"]}"/>'
+        if "size" in properties:
+            elements["sz"], elements["szCs"] = _sz(properties["size"])
+        if "font" in properties:
+            elements["rFonts"] = _fonts_element(escape(properties["font"], quote=True))
+        for property_name, tag in (("bold", "b"), ("italic", "i")):
+            if property_name in properties:
+                value = int(properties[property_name])
+                elements[tag] = f'<w:{tag} w:val="{value}"/>'
+                elements[tag + "Cs"] = f'<w:{tag}Cs w:val="{value}"/>'
+        for tag, element in elements.items():
+            styles = _edit_style(styles, style_id, "rPr", tag, element)
     return styles
 
 

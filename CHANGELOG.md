@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.34.36 — 2026-11-25
+
+Pre-edit state: commit `f5432a6`. Word and Typst received the page and body
+rules from `css-scope: all`, but ignored the heading declarations. Word now
+applies them to its generated reference document and preserves styles supplied
+by the document's reference. Typst emits the rules before any template rules,
+so styling supplied by the template wins.
+
+The Word styles and Typst fragment regressions failed before the change.
+Afterwards both passed with Pandoc 3.13, along with Typst PDF builds with a
+styled template, a template without heading styles and the default template.
+`pdfmd.py` changes only its version.
+
 ## v3.34.35 — 2026-11-25
 
 Pre-edit state: commit `68f810b`. The native renderer stripped fenced block

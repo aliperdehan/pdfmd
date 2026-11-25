@@ -338,7 +338,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--css-scope", dest="css_scope", choices=core.CSS_SCOPES, default=None,
                         help="what a style sheet is for: html (default) the writers that read CSS, all those and the "
                              "settings LaTeX, Typst and Word take from the parts of it that say them (@page size and "
-                             "margin, body and a and code rules; @media print counts, @media screen does not), below "
+                             "margin, body, a, code and heading rules; @media print counts, @media screen does not), below "
                              "what the document, its metadata and the command line set. A document sets it with "
                              "pdfmd-options.css-scope")
     parser.add_argument("--attach-csl", dest="attach_csl", action="store_true", default=None,

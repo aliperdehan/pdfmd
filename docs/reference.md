@@ -1027,6 +1027,10 @@ geometry sides (CSS pixels are converted to points). `--document-title`,
 properties. The `mdpdf` command's automatic bookmarks, linked attachments
 and report mode belong to that command.
 
+With `--css-scope all`, Word and Typst take colour, font size, family,
+weight and style from `h1`–`h6` rules. A Word reference document keeps
+its heading styles. Typst's template can override the CSS rules.
+
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 

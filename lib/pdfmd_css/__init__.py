@@ -7,8 +7,8 @@ did not use. It is a v1 on purpose: a CSS cascade has no counterpart in LaTeX, s
 (`@page`, `html`/`body`/`:root`, `a`, `code`/`pre`) count, the last one wins. A media query is read as a browser prints it
 (v3.29.8): `print` and `all` apply, `screen` does not, a comma is "or", `only` and `not` count, `(orientation: ...)` is read
 against the sheet's own `@page` size, any other condition (a width, a resolution, a colour scheme) is not for the page and is
-named. Headings (`h1`-`h6`: colour, size, family, weight, style) are kept for LaTeX, which uses them only when the document does
-not format its headings itself; table and everything else are named as not used.
+named. Heading declarations (`h1`-`h6`: colour, size, family, weight, style) are passed to the LaTeX, Word and Typst writers.
+The document's own heading styles take precedence. Table and other rules are named as unused.
 """
 
 from __future__ import annotations

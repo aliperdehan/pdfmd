@@ -2608,6 +2608,11 @@ query is read as a browser prints (v3.29): `print` and `all` apply, `screen` and
 a width (`(min-width: 600px)`) is not for a printed page and is named. A body size LaTeX has no class for (anything but 10, 11
 and 12 pt) is named, not used. It is a small reader on purpose: a CSS cascade has no counterpart in LaTeX.
 
+Word and Typst also take `h1`–`h6` rules for colour, font size, family,
+weight and style. A Word reference document keeps its own styles. Typst
+applies the sheet's rules before the template's own rules, so a template
+can override them.
+
 pdfmd shows its own options in British spelling. Use `--colour`, `--flavour`, `markup: centre` and
 `smiles: {palette: colour}`, or their American spellings `--color`, `--flavor`, `center` and `color`.
 

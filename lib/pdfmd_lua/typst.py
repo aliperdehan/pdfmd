@@ -7,6 +7,7 @@ cache; custom templates' partials are copied with distinct names so relative loo
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -143,21 +144,50 @@ def copy_partials(text: str, origin: Path, command: list[str], target: Path, sta
     return re.sub(r"\$\$|\$\{([^}]+)\}|\$([^$\n]+)\$", token, text)
 
 
-def template_args(writer: str, command: list[str], directory: Path | None = None) -> list[str]:
+def css_heading_rules(document: Path, metadata_files: list[Path], no_auto, command: list[str]) -> str:
+    from pdfmd_css.headings import heading_values, stylesheet_headings
+
+    headings = stylesheet_headings(document, metadata_files, no_auto)
+    if not headings:
+        return ""
+    variables = option_values(command, "--variable", "-V")
+    size = core.document_font_setting("fontsize", [document], metadata_files, variables)
+    points = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*pt\s*", str(size))
+    base = float(points[1]) if points else 11.0    # Pandoc's default Typst text size
+    lines = []
+    for level, rule in headings.items():
+        values = heading_values(rule, base)
+        options = []
+        if "colour" in values:
+            options.append(f'fill: rgb("#{values["colour"]}")')
+        if "size" in values:
+            options.append(f'size: {values["size"]:g}pt')
+        if "font" in values:
+            options.append("font: " + json.dumps(values["font"], ensure_ascii=False))
+        if "bold" in values:
+            options.append('weight: "bold"' if values["bold"] else 'weight: "regular"')
+        if "italic" in values:
+            options.append('style: "italic"' if values["italic"] else 'style: "normal"')
+        if options:
+            lines.append(f"#show heading.where(level: {level}): set text({', '.join(options)})")
+    return "\n".join(lines)
+
+
+def template_args(writer: str, command: list[str], directory: Path | None = None, heading_rules: str = "") -> list[str]:
     """A cached template whose default rules yield separately to every custom setting."""
     if writer != "typst" or not command:
         return []
     metadata = option_values(command, "--metadata", "-M")
     spacing = "pdfmd-typst-line-spacing=pandoc" not in metadata
     unnumbered = "pdfmd-page-numbers=off" in metadata
-    if not (spacing or unnumbered):
+    if not (spacing or unnumbered or heading_rules):
         return []
     directory = directory or Path.cwd()
     try:
         custom = custom_template(command, directory)
         pdf = any(word.lower().endswith(".pdf") for word in option_values(command, "--output", "-o"))
         if not pdf and custom is None and not any(word in ("-s", "--standalone") for word in command):
-            return []
+            return ["-V", f"pdfmd-css-headings={heading_rules}"] if heading_rules else []
         folder = core.cache_root() / "typst"
         folder.mkdir(parents=True, exist_ok=True)
         if custom is not None:
@@ -182,7 +212,7 @@ def template_args(writer: str, command: list[str], directory: Path | None = None
                                                 "spacing: $pdfmd-typst-spacing$)")
                 else:
                     spacing = False
-                    if not unnumbered:
+                    if not (unnumbered or heading_rules):
                         return []
         if unnumbered:
             # Newer Pandoc passes this argument to conf; 3.1.3 hard-codes the setting inside conf.
@@ -195,6 +225,9 @@ def template_args(writer: str, command: list[str], directory: Path | None = None
         if spacing:
             template = ('#set text(top-edge: $pdfmd-typst-top-edge$, bottom-edge: "baseline")\n'
                         '#set par(leading: $pdfmd-typst-leading$, spacing: $pdfmd-typst-spacing$)\n' + template)
+        if heading_rules:
+            # Rules in the user's template or its imported conf take precedence.
+            template = heading_rules.replace("$", "$$") + "\n" + template
         target = folder / (hashlib.sha256(template.encode()).hexdigest() + ".typ")
         if not target.is_file():
             target.write_text(template, encoding="utf-8")

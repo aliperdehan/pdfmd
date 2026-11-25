@@ -651,7 +651,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += core.paragraph_spacing_typst_args(md_path, metadata_files, target_format)
                 if target_format == "typst":
                     cmd += page_numbers.arguments(target_format, md_path, metadata_files)
-                cmd += core.typst_filter_args(target_format, cmd, pandoc_cwd)
+                cmd += core.typst_filter_args(target_format, cmd, pandoc_cwd, document=md_path,
+                                               metadata_files=metadata_files, no_auto=no_auto)
                 cmd += figure_fit.arguments(target_format, md_path, metadata_files)
                 if target_format == "epub" and core.EBOOK_MATH.get("mode") == "text":
                     cmd += core.ebook_filter_args()                          # a Calibre ebook with no math: after \ce is converted
@@ -929,7 +930,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     last_filters = core.deferred("pdfmd_filters.hidden", "finish_args")()
                     if engine == "typst":
                         cmd += page_numbers.arguments(engine, md_path, metadata_files)
-                    last_filters += core.typst_filter_args(engine, cmd, pandoc_cwd) + core.weasyprint_math_args(
+                    last_filters += core.typst_filter_args(engine, cmd, pandoc_cwd, document=md_path,
+                                                          metadata_files=metadata_files, no_auto=no_auto) + core.weasyprint_math_args(
                         engine, pandoc_options,
                         selected_font or core.document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables),
                         no_auto)

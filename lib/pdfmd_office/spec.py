@@ -25,6 +25,7 @@ class OfficeSpec:
     indent_length: int | None = None           # explicit document length in twips
     house: bool = True                          # pdfmd's own look (black headings, centred title...)
     aliases: dict[str, str] = field(default_factory=dict)   # Pandoc style -> the template's style it should look like
+    css_headings: dict[int, dict[str, str]] = field(default_factory=dict)
     replace: dict[str, str] = field(default_factory=dict)   # text of the template's headers and footers -> new text
     title_page: bool = False                    # a first page of its own: no header or footer on it
     media: dict[str, bytes] = field(default_factory=dict)   # picture of the template (zip path) -> new bytes
@@ -35,7 +36,7 @@ class OfficeSpec:
 
     def has_text(self) -> bool:
         return any((self.main, self.sans, self.mono, self.cjk, self.size, self.stretch, self.lang, self.indent, self.indent_length is not None,
-                    self.aliases, self.replace, self.title_page, self.media))
+                    self.aliases, self.css_headings, self.replace, self.title_page, self.media))
 
     def page_size(self) -> tuple[int, int]:
         width, height = self.paper or PAPER_TWIPS["letter"]

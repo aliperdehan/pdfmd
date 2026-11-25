@@ -473,5 +473,8 @@ return {{Meta = meta_rules, Pandoc = function(doc)
       if source then return pandoc.RawBlock("typst", source) end
     end})
   end
+  if variables["pdfmd-css-headings"] then
+    doc.blocks:insert(1, pandoc.RawBlock("typst", tostring(variables["pdfmd-css-headings"])))
+  end
   return doc
 end}}
