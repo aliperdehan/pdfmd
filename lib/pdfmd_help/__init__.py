@@ -208,6 +208,8 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
             text += ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
                      "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"
                      + FIGURE_FIT_HELP + PRE_CITEPROC_HELP + CITATION_ALIASES_HELP + NUMBERED_REFERENCES_HELP + PROPERTIES_HELP)
+        if topic == "setup":
+            text += ("\nOn macOS, if a downloaded Calibre disk image stays attached, pdfmd prints the manual detach command.\n")
         if topic == "debug":
             text += _check_codes()
         return text

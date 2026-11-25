@@ -814,8 +814,8 @@ def safe_unpack_tar(archive: Path, target: Path) -> None:
         bundle.extractall(target)
 
 
-def detach_disk_image(mount: Path, attempts: int = 4, pause: float = 1.0) -> bool:
-    """`hdiutil detach` for a mounted image, tried `attempts` times with a pause between (macOS answers "resource busy" for a
+def detach_disk_image(mount: str | Path, attempts: int = 4, pause: float = 1.0) -> bool:
+    """`hdiutil detach` by device or mount point, tried `attempts` times with a pause between (macOS answers "resource busy" for a
     moment after a copy, e.g. while Spotlight looks at the volume), then once with -force. True when it is detached."""
     for attempt in range(attempts):
         if attempt:
@@ -825,17 +825,37 @@ def detach_disk_image(mount: Path, attempts: int = 4, pause: float = 1.0) -> boo
     return subprocess.run(["hdiutil", "detach", "-force", str(mount)], capture_output=True).returncode == 0
 
 
+def _disk_image_device(output: bytes) -> str | None:
+    """Read the first whole-disk device from hdiutil's attach plist."""
+    import plistlib
+    from xml.parsers.expat import ExpatError
+
+    try:
+        info = plistlib.loads(output)
+    except (plistlib.InvalidFileException, ValueError, ExpatError):
+        return None
+    entities = info.get("system-entities") if isinstance(info, dict) else None
+    if isinstance(entities, list):
+        for entity in entities:
+            device = entity.get("dev-entry") if isinstance(entity, dict) else None
+            if isinstance(device, str) and re.fullmatch(r"/dev/disk[0-9]+", device):
+                return device
+    return None
+
+
 def install_calibre_dmg(image: Path, applications: Path) -> Path:
     """Mount Calibre's disk image read-only and copy calibre.app into `applications` (replacing a copy there);
     returns the app's ebook-convert."""
     mount = Path(mkdtemp(prefix="pdfmd-calibre-dmg-"))
-    attached = False
+    attached_to: str | Path | None = None
     try:
-        done = subprocess.run(["hdiutil", "attach", "-nobrowse", "-readonly", "-noverify", "-mountpoint", str(mount), str(image)],
-                              capture_output=True, encoding="utf-8", errors="replace")
+        done = subprocess.run(["hdiutil", "attach", "-plist", "-nobrowse", "-readonly", "-noverify",
+                               "-mountpoint", str(mount), str(image)], capture_output=True)
         if done.returncode != 0:
-            raise OSError("hdiutil could not open the disk image: " + (done.stderr.strip().splitlines() or ["?"])[-1])
-        attached = True
+            reason = done.stderr.decode("utf-8", errors="replace").strip().splitlines()
+            raise OSError("hdiutil could not open the disk image: " + (reason or ["?"])[-1])
+        # Keep the mount-point cleanup if attach succeeded without a usable device entry.
+        attached_to = _disk_image_device(done.stdout) or mount
         app = mount / "calibre.app"
         if not app.is_dir():
             raise OSError("calibre.app is not in the disk image")
@@ -847,9 +867,16 @@ def install_calibre_dmg(image: Path, applications: Path) -> Path:
         if copied.returncode != 0:
             raise OSError("ditto could not copy calibre.app: " + (copied.stderr.strip().splitlines() or ["?"])[-1])
     finally:
-        if attached:
-            detach_disk_image(mount)
-        shutil.rmtree(mount, ignore_errors=True)
+        if attached_to is not None:
+            detached = False
+            with contextlib.suppress(OSError):
+                detached = detach_disk_image(attached_to)
+            if not detached:
+                print(f"WARN  Calibre: could not detach {attached_to}. Run hdiutil detach -force "
+                      f"{shlex.quote(str(attached_to))}", file=sys.stderr)
+        # If the volume is still mounted, leave its contents alone.
+        with contextlib.suppress(OSError):
+            mount.rmdir()
     return destination / "Contents" / "MacOS" / "ebook-convert"
 
 

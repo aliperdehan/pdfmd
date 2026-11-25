@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -164,6 +165,7 @@ class Install(unittest.TestCase):
         done, out, err = self.run_install(fetch=self.fetch_with(image), release=release("calibre-9.99.0.dmg"))
         self.assertTrue(done, out + err)
         self.assertTrue((self.apps / "calibre.app" / "Contents" / "MacOS" / "ebook-convert").is_file())
+        self.assertNotIn("WARN  Calibre: could not detach", err)
         for _ in range(10):                                         # macOS may take a moment to drop the image after the detach
             listing = subprocess.run(["hdiutil", "info"], capture_output=True, text=True).stdout
             if str(image.resolve()) not in listing:
@@ -279,6 +281,66 @@ class Detach(unittest.TestCase):
         seen, fake = self.calls([1] * 5)
         with mock.patch.object(pdfmd.subprocess, "run", fake), mock.patch.object(pdfmd.time, "sleep"):
             self.assertFalse(pdfmd.detach_disk_image(Path("/Volumes/x"), attempts=2))
+
+
+class DiskImageInstall(unittest.TestCase):
+    warning = "WARN  Calibre: could not detach"
+
+    def install(self, detach_status, plist=None):
+        from pdfmd_install import install_calibre_dmg
+
+        with tempfile.TemporaryDirectory(prefix="pdfmd-calibre-plist-") as folder:
+            root = Path(folder)
+            image = root / "calibre.dmg"
+            apps = root / "Applications"
+            mount = root / "disk image"
+            (mount / "calibre.app").mkdir(parents=True)
+            if plist is None:
+                plist = plistlib.dumps({"system-entities": [
+                    {"dev-entry": "/dev/disk47s1"},
+                    {"dev-entry": "/dev/disk47", "content-hint": "GUID_partition_scheme"},
+                    {"dev-entry": "/dev/disk48"},
+                    {"dev-entry": "/dev/disk48s1", "mount-point": str(mount)},
+                ]})
+            err = io.StringIO()
+
+            def run(command, **kwargs):
+                if command[:2] == ["hdiutil", "attach"]:
+                    return subprocess.CompletedProcess(command, 0, stdout=plist)
+                if command[0] == "ditto":
+                    return subprocess.CompletedProcess(command, 0)
+                self.assertEqual(command[:2], ["hdiutil", "detach"])
+                self.assertEqual(err.getvalue(), "")
+                return subprocess.CompletedProcess(command, detach_status)
+
+            with mock.patch("pdfmd_install.mkdtemp", return_value=str(mount)), \
+                    mock.patch("pdfmd_install.subprocess.run", side_effect=run) as invoked, \
+                    mock.patch("pdfmd_install.time.sleep"), contextlib.redirect_stderr(err):
+                target = install_calibre_dmg(image, apps)
+            self.assertEqual(target, apps / "calibre.app" / "Contents" / "MacOS" / "ebook-convert")
+            return [call.args[0] for call in invoked.call_args_list], err.getvalue(), mount, (mount / "calibre.app").is_dir()
+
+    def test_detaches_the_whole_device_from_the_attach_plist(self):
+        calls, err, _, _ = self.install(0)
+        self.assertIn("-plist", calls[0])
+        self.assertEqual(calls[2:], [["hdiutil", "detach", "/dev/disk47"]])
+        self.assertNotIn(self.warning, err)
+
+    def test_warns_once_after_the_forced_detach_also_fails(self):
+        calls, err, _, image_intact = self.install(1)
+        self.assertEqual(err.count(self.warning), 1, err)
+        self.assertIn("hdiutil detach -force /dev/disk47", err)
+        self.assertEqual(calls[2:], [["hdiutil", "detach", "/dev/disk47"]] * 4
+                         + [["hdiutil", "detach", "-force", "/dev/disk47"]])
+        self.assertTrue(image_intact)
+
+    def test_unusable_plist_falls_back_to_detaching_the_mount_point(self):
+        for plist in (b"<?xml version='1.0'?><plist>", plistlib.dumps([]),
+                      plistlib.dumps({"system-entities": [{"dev-entry": "/dev/disk47s1"}]})):
+            with self.subTest(plist=plist):
+                calls, err, mount, _ = self.install(0, plist)
+                self.assertEqual(calls[2:], [["hdiutil", "detach", str(mount)]])
+                self.assertNotIn(self.warning, err)
 
 
 class OwnFolder(unittest.TestCase):

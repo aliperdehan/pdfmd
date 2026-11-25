@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.34.55 — 2026-11-25
+
+Pre-edit state: commit `fe6c096`. Calibre's macOS installer detached by mount point and ignored
+failure, so a disk image could stay attached silently. Read the whole-disk device from the attach plist and use it for
+the existing retries and forced detach. If detach still fails, warn once with the device and manual command. Mocked
+regressions cover whole-disk selection, successful detach, the final warning and fallback to the mount point when the
+plist provides no usable device. The real disk-image test requires macOS outside the sandbox.
+
 ## v3.34.54 — 2026-11-25
 
 Pre-edit state: commit `b4c579f`. [tables] Measured widths treated each inline code span as a single word, so a phrase

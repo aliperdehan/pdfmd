@@ -517,6 +517,7 @@ references numbered by a LaTeX build per `office: {labels}`), as for
 LibreOffice. Found on PATH, in calibre.app or in Program Files\Calibre2.
 `pdfmd --install calibre` defaults to the available package manager, including without a terminal or with
 `PDFMD_NO_PROMPT=1`; if none is available, it uses the SHA-256-checked GitHub download. One line names the method.
+If the macOS disk image stays attached after retries, a WARN gives the device and the manual detach command.
 Calibre as a writer (v3.29.0): `-o book.azw3` / `--to azw3` (azw3, mobi, kepub, lit, lrf, pdb, rb, snb, tcr, pmlz, htmlz,
 txtz: the twelve only Calibre writes) has Pandoc write an EPUB 3 in a scratch folder and `ebook-convert` make the ebook
 from it; epub, docx, rtf, txt and fb2 go the same way only with `-e calibre` on the command line. One document at a
