@@ -184,6 +184,7 @@ def run(core, *,
     measurement_state = {}
     from pdfmd_cite import numbered
     from pdfmd_filters import document_filter_scope
+    from pdfmd_filters.properties import arguments as properties_arguments
     from pdfmd_obsidian.links import linked_inputs
     any_citations = core.deferred("pdfmd_excerpts.resolution", "citation_use")(
         files, metadata_files, pandoc_options, report_no_auto, args.from_format)
@@ -203,6 +204,7 @@ def run(core, *,
           titles.Hidden() as hidden,
           prepare_crop(files[0], output, metadata_files, target_format, args.verbose, variables=variables, report=True) as crop,
           contextlib.ExitStack() as link_scope):
+        properties_args = properties_arguments(files[0], metadata_files, report_no_auto)
         reference_args = references.metadata_args(link_scope) if references else []
         if target_format != "pdf":
             # See convert_one's matching comment: a TEX_STANDALONE_FORMATS
@@ -374,6 +376,7 @@ def run(core, *,
                 from pdfmd_filters.lua import figure_fit_module
                 figure_fit = figure_fit_module()
                 cmd += figure_fit.arguments(target_format, files[0], metadata_files)
+                cmd += properties_args
                 from pdfmd_tables.measure import prepare
                 cmd = prepare(cmd, target_format, list(files), metadata_files, pandoc_cwd, args.verbose,
                               enabled=not auto_disabled(report_no_auto, "tablewidth"), export=True, state=measurement_state)
@@ -536,6 +539,7 @@ def run(core, *,
                     from pdfmd_filters.lua import figure_fit_module
                     figure_fit = figure_fit_module()
                     report_last += figure_fit.arguments(engine, files[0], metadata_files)
+                    report_last += properties_args
 
                     def measure_command(command):
                         from pdfmd_tables.measure import prepare

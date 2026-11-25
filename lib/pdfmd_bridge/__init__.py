@@ -153,6 +153,9 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                     cmd += ["--lua-filter", str(lua_filter)]
                 cmd += office_arguments.filter_arguments
                 cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
+                from pdfmd_filters.properties import arguments as properties_arguments
+
+                cmd += properties_arguments(md_path, metadata_files, no_auto)
                 if office_arguments.filter_arguments:
                     result = core.run_office_pandoc(cmd, odt, office_arguments, pandoc_cwd, verbose)
                 else:

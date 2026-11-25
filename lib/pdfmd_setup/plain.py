@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .registry import Setting, from_stored, parse_citation_aliases, read, to_stored, write
+from .registry import Setting, from_stored, parse_citation_aliases, parse_properties_value, read, to_stored, write
 from .registry import shown as shown_value
 
 
@@ -103,6 +103,12 @@ def edit(stores: dict, setting: Setting, read_line: Callable[[str], str], say: C
         elif setting.check == "citation-aliases":
             try:
                 answer = parse_citation_aliases(answer)
+            except ValueError as error:
+                say(str(error))
+                return False
+        elif setting.check in ("properties-show", "properties-labels"):
+            try:
+                answer = parse_properties_value(setting.check, answer)
             except ValueError as error:
                 say(str(error))
                 return False

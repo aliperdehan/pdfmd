@@ -698,8 +698,8 @@ def document_filter_scope():
             _FILTER_FILES.reset(token)
 
 
-def temporary_filter_directory():
-    return _FILTER_FILES.get().enter_context(TemporaryDirectory(prefix="pdfmd-excerpts-"))
+def temporary_filter_directory(prefix="pdfmd-excerpts-"):
+    return _FILTER_FILES.get().enter_context(TemporaryDirectory(prefix=prefix))
 
 
 def document_filter_args(inputs: Path | list[Path], md_path: Path | list[Path], metadata_files: list[Path], no_auto: list[str] | None,

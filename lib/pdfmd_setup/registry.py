@@ -39,6 +39,9 @@ UNSET = {
     "geometry": "margin=1in for LaTeX documents, Beamer's own for slides",
     "mainfont": "STIX Two Text (or a serif with the letters)",
     "monofont": "JetBrains Mono (or Menlo)", "linestretch": "the engine's own",
+    "options.properties.show": "false: print no properties",
+    "options.properties.hide": "no keys hidden after selection",
+    "options.properties.labels": "the keys as written",
     "options.pandoc-memory": "off (no heap cap)",
     "options.presentation": "off (ordinary documents)",
     "options.indent": "the writer's own (no first-line indent)",
@@ -115,6 +118,8 @@ FOLDER_OPTIONS = frozenset({
     "options.numbered-references", "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.pandoc-memory", "options.css-scope", "options.indent", "options.paragraph-spacing", "options.bibliography-indent",
     "options.typst-line-spacing", "options.figure-fit", "options.page-numbers",
     "options.bibliography-line-spacing",
+    "options.properties.show", "options.properties.hide", "options.properties.labels",
+    "options.properties.place", "options.properties.style",
     "options.csv.enabled", "options.csv.rows", "options.csv.cols", "options.csv.cut", "options.csv.note", "options.csv.delimiter", "options.table-keep", "options.table-ascii", "options.cell-align", "options.table-tag-brackets", "options.table-align", "options.table-valign", "options.md-macro", "options.linebreak", "options.table-captions", "options.table-caption-label", "options.table-caption-need-label", "options.table-caption-colon-words", "options.table-caption-words", "options.pager", "options.pager_command",
     "options.code-wrap", "options.line-numbers", "options.line-number-step", "options.office.latex", "options.office.labels",
     "options.keep-source", "options.hybrid", "options.shrink", "options.shrink-timeout", "options.odt.engine",
@@ -381,6 +386,17 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("options.editor", "Editor for pdfmd --edit",
              "A command: code --wait, vim, \"nano -l\". Without one --edit uses its built-in editor (pdfmd --install tui). "
              "Per run: --editor.", "Output"),
+        text("options.properties.show", "Print front-matter properties",
+             "false, true (skip internal, title, layout and empty keys), all, or a list of keys in display order.",
+             "Output", check="properties-show"),
+        text("options.properties.hide", "Property keys to hide", "A comma-separated list of keys to remove after show.",
+             "Output", check="list"),
+        text("options.properties.labels", "Property labels", "A YAML mapping, e.g. {stage: Stage of review}.",
+             "Output", check="properties-labels"),
+        choice("options.properties.place", "Place of property block",
+               (("top", "after the title block"), ("end", "at the end")), "top", "", "Output"),
+        choice("options.properties.style", "Style of property block",
+               (("table", "two columns"), ("list", "a bulleted list"), ("inline", "one line")), "table", "", "Output"),
         choice("options.default-output", "Default output format",
                (("pdf", "PDF"), ("docx", "Word"), ("odt", "OpenDocument"), ("html", "HTML"), ("latex", "LaTeX"),
                 ("typst", "Typst")), "pdf", "What `pdfmd file.md` writes when no -o or --to is given.", "Output"),
@@ -964,6 +980,34 @@ def parse_citation_aliases(text: str) -> dict:
     if not valid_mapping(aliases):
         raise ValueError(message)
     return aliases
+
+
+def parse_properties_value(kind: str, text: str):
+    """Read either of the properties settings with more than one YAML shape."""
+    from pdfmd_base import core
+
+    if kind == "properties-show":
+        word = text.casefold()
+        flag = core.option_flag(word)
+        if flag is not None:
+            return flag
+        if word == "all":
+            return word
+        if not text.startswith("["):
+            return [item.strip() for item in text.split(",") if item.strip()]
+
+    message = ("A YAML list of property keys, e.g. [stage, tags], please." if kind == "properties-show"
+               else "A YAML mapping of property keys and labels, e.g. {stage: Phase}, please.")
+    try:
+        value = core.yaml.safe_load(text)
+    except core.yaml.YAMLError as error:
+        raise ValueError(message) from error
+    if kind == "properties-show" and isinstance(value, list) and all(isinstance(key, str) for key in value):
+        return value
+    if kind == "properties-labels" and isinstance(value, dict) and all(
+            isinstance(key, str) and isinstance(label, str) for key, label in value.items()):
+        return value
+    raise ValueError(message)
 
 
 def get(config: dict, key: str):

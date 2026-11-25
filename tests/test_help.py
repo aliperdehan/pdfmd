@@ -72,6 +72,12 @@ class TieredHelp(unittest.TestCase):
         for topic in ("output", "all"):
             self.assertIn("pdfmd-options.figure-fit", run("--help", topic).stdout)
 
+    def test_properties_help_explains_the_slide_rule(self):
+        for topic in ("output", "all"):
+            help_text = " ".join(run("--help", topic).stdout.split())
+            self.assertIn("pdfmd-options.properties", help_text)
+            self.assertIn("Slides use properties only when the document sets properties in its own front matter", help_text)
+
     def test_check_codes_are_listed_in_debug_and_full_help(self):
         from pdfmd_check import CODES
 

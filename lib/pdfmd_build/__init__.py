@@ -409,7 +409,10 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             linked_inputs([title_source, *scaffold_files[1:]], [md_path, *parts_inputs], effective_from, metadata_files,
                           "pdf" if link_output else target_format, link_output or output,
                           not core.auto_disabled(no_auto, "title")) as (linked, effective_from):
+        from pdfmd_filters.properties import arguments as properties_arguments
+
         title_source, *part_files = linked
+        properties_args = properties_arguments(md_path, metadata_files, no_auto)
         reference_args = references.metadata_args(reference_files, include_uncited=not partial) if references else []
         lua_filters = [*lua_filters, *embedded_filters]
         all_inputs = [md_path, *parts_inputs] if parts_inputs else None
@@ -658,6 +661,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += core.typst_filter_args(target_format, cmd, pandoc_cwd, document=md_path,
                                                metadata_files=metadata_files, no_auto=no_auto)
                 cmd += figure_fit.arguments(target_format, md_path, metadata_files)
+                cmd += properties_args
                 if target_format == "epub" and core.EBOOK_MATH.get("mode") == "text":
                     cmd += core.ebook_filter_args()                          # a Calibre ebook with no math: after \ce is converted
                 if flat_target:
@@ -941,6 +945,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         selected_font or core.document_font_setting("mainfont", [md_path, *parts_inputs], metadata_files, variables),
                         no_auto)
                     last_filters += figure_fit.arguments("beamer" if presentation else engine, md_path, metadata_files)
+                    last_filters += properties_args
                     def measure_command(command):
                         from pdfmd_tables.measure import prepare
                         return prepare(command, engine, [md_path, *parts_inputs], metadata_files, pandoc_cwd,

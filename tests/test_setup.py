@@ -62,6 +62,16 @@ class Plain(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIs(yaml.safe_load(path.read_text(encoding="utf-8"))["options"]["presentation"], True)
 
+    def test_properties_fields_save_their_yaml_shapes(self):
+        fields = (("show", "[stage, tags]"), ("hide", "private, scratch"), ("labels", "{stage: Phase}"),
+                  ("place", "2"), ("style", "3"))
+        replies = [reply for key, value in fields for reply in (str(number(f"options.properties.{key}")), value)]
+        done, path = self.run_setup([*replies, "s"])
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(yaml.safe_load(path.read_text(encoding="utf-8"))["options"]["properties"],
+                         {"show": ["stage", "tags"], "hide": ["private", "scratch"], "labels": {"stage": "Phase"},
+                          "place": "end", "style": "inline"})
+
     @unittest.skipUnless(__import__("shutil").which("pandoc"), "needs Pandoc")
     def test_no_families_are_disabled_and_a_separate_reset_restores_defaults(self):
         from pdfmd_setup import plain

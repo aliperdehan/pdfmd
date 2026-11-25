@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.51 — 2026-11-25
+
+Pre-edit state: commit `3dd6255`. Front-matter properties could travel in file metadata but had no visible block. The `properties` settings select, label and place fields from the document's YAML, and a Lua filter gives Pandoc a table, list or inline block [N138]. Regressions cover selection, lexical values, layer inheritance, the writer styles, LaTeX and Typst PDFs, and slide decks with inherited and local settings.
+
 ## v3.34.50 — 2026-11-25
 
 Pre-edit state: commit `46e47b4`. A scaffold's `--merge` joined every discovered part, bypassing the priority exclusion used for folder reports [D137]. It uses the same exclusion and note as `-r`, with named parts and `--all` still included. The adjacent-file warning now names the file that stays out and the reason [N123]. Regressions cover discovery, explicit parts, `--all` and adjacent files with and without front matter.

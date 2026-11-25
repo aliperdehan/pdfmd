@@ -150,6 +150,11 @@ FIGURE_FIT_HELP = ("pdfmd-options.figure-fit: on (default) or off. LaTeX and Typ
                    "to the page body. A figure image can override it with fit=on or fit=off. "
                    "Typst still warns about figures that are too tall when fitting is off.\n")
 
+PROPERTIES_HELP = ("pdfmd-options.properties: show: false (default), true (ordinary non-empty keys), all, "
+                   "or a list of keys. hide removes keys, labels renames them, place is top (default) or end, "
+                   "and style is table (default), list or inline. Slides use properties only when the document "
+                   "sets properties in its own front matter. Also in --setup.\n")
+
 PRE_CITEPROC_HELP = ("pdfmd-options.lua-filter-before-citeproc: named Lua filters run before citation processing. "
                     "Use a path or list, or append with lua-filter-before-citeproc+. Default: none.\n")
 
@@ -175,7 +180,7 @@ def _check_codes() -> str:
 def _full(parser: argparse.ArgumentParser) -> str:
     return parser.format_help() + ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
                                  "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"
-                                 + FIGURE_FIT_HELP + PRE_CITEPROC_HELP + CITATION_ALIASES_HELP + NUMBERED_REFERENCES_HELP
+                                 + FIGURE_FIT_HELP + PRE_CITEPROC_HELP + CITATION_ALIASES_HELP + NUMBERED_REFERENCES_HELP + PROPERTIES_HELP
                                  + _check_codes())
 
 
@@ -202,7 +207,7 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
         if topic == "output":
             text += ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
                      "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"
-                     + FIGURE_FIT_HELP + PRE_CITEPROC_HELP + CITATION_ALIASES_HELP + NUMBERED_REFERENCES_HELP)
+                     + FIGURE_FIT_HELP + PRE_CITEPROC_HELP + CITATION_ALIASES_HELP + NUMBERED_REFERENCES_HELP + PROPERTIES_HELP)
         if topic == "debug":
             text += _check_codes()
         return text

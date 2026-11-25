@@ -174,6 +174,10 @@ or `--attach-source private` keeps the markers and record. An explicit strip
 setting for excerpts overrides the private shortcut. Build text and metadata
 use citation fields alone.
 
+Print a document's YAML front matter with `pdfmd-options.properties.show`.
+Use `true` for ordinary properties, `all` to include internal fields, or a
+list for specific keys. Slides read this setting from their own front matter.
+
 ## When a build fails
 
 In the Obsidian flavour, wikilinks can target local headings, other parts of the build or a note's same-format output.

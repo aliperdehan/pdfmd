@@ -428,6 +428,9 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             for lua_filter in lua_filters:
                 cmd += ["--lua-filter", str(lua_filter)]
             cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
+            from pdfmd_filters.properties import arguments as properties_arguments
+
+            cmd += properties_arguments(md_path, metadata_files, no_auto)
             cmd += core.deferred("pdfmd_bibliography", "native_path_args")(cmd)
             cmd = core.headers_as_metadata(cmd)
             core.log_cmd(cmd, pandoc_cwd, verbose)

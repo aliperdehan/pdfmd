@@ -306,6 +306,45 @@ later) or LibreOffice PDF's Title and Author, a Word or OpenDocument file's Titl
 A title or authors with LaTeX in them (`\emph{trans}`) keep its words in every PDF's Title and Author, a LaTeX
 engine's included (v3.28.6: Pandoc leaves raw LaTeX out of `title-meta`, hyperref's pdftitle).
 
+## Print front-matter properties
+
+Use `pdfmd-options.properties` to print properties from the document's own YAML
+front matter in its output. Set it in front matter, metadata, folder settings or
+either config file, or use the five `--setup` rows. A parts build uses the
+scaffold's front matter.
+
+```yaml
+pdfmd-options:
+  properties:
+    show: [tags, reviewed, project.owner]
+    hide: [reviewed]
+    labels: {project.owner: Project owner}
+    place: top
+    style: table
+```
+
+- `show: false` (default) omits the block. `true` prints non-empty keys,
+  leaving out pdfmd's settings, title-block fields, Pandoc layout and
+  processing keys, the active kit's `latex-keys`, and Obsidian's `cssclasses`,
+  `publish`, `permalink` and `position`. `all` includes them. A list selects
+  keys in the given order. Otherwise the front-matter order applies.
+- `hide` removes keys after selection. `labels` maps keys to display labels
+  and defaults to the keys as written. A nested mapping uses dotted keys
+  such as `project.owner`.
+- `place: top` (default) puts the block just after the title block. Use
+  `end` for the end of the document.
+- `style: table` (default) uses two columns, label and value. `list` uses
+  bullets. `inline` joins label–value pairs with middle dots and omits
+  labels for tags and dates. Lists are comma-separated, and tags appear
+  as space-separated `#tag` items. Dates and booleans retain their spelling.
+
+The block uses Pandoc's writers. Style it via `.pdfmd-properties` in HTML,
+the `pdfmdproperties` LaTeX environment (a kit can define it), or the
+`Properties` Word paragraph style. In a Typst template, define
+`pdfmd-properties(body)` after the header includes to override its default.
+Slides such as Beamer, reveal.js and PowerPoint include the block only if
+their own front matter sets `pdfmd-options.properties`.
+
 ## Links Typst would stop on (v3.27.11)
 
 LaTeX and HTML only warn about a link to an anchor the document does not have; Typst stops the build. For Typst (a
