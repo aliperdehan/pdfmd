@@ -23,6 +23,7 @@ CODES: dict[str, tuple[str, str]] = {
     "comment-open": ("error", "an HTML comment is never closed, so the rest of the document is hidden"),
     "div-open": ("warning", "a fenced div (:::) is never closed"),
     "div-stray": ("warning", "a closing ::: with no div open"),
+    "attr-stray": ("warning", "a detached attribute block that Pandoc prints as text"),
     "math-open": ("warning", "an odd number of $$ (a display formula is never closed)"),
     "math-digit": ("warning", "a $...$ that is not math because its closing $ is followed by a digit ($\\geq$3)"),
     "image-missing": ("error", "an image file is not there"),
@@ -381,6 +382,7 @@ def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore
         images_and_files(analysis, findings, places, asset_limit)
         links(analysis, findings, places, ids)
         structure(analysis, findings)
+        stray_attributes(analysis, findings)
         digit_math(analysis, findings)
     cross_references(analyses, findings, ids)
     footnotes(analyses, findings)
@@ -569,6 +571,25 @@ def digit_math(analysis: Analysis, findings: Findings) -> None:
             findings.add(analysis, analysis.line(found.start()), "math-digit",
                          f"`{found.group(0)}` is not math (Pandoc needs the closing $ not followed by a digit); "
                          f"write ${found.group(1)} {found.group(2)}$")
+
+
+def stray_attributes(analysis: Analysis, findings: Findings) -> None:
+    lines = analysis.plain.split("\n")
+    original = analysis.source.text.split("\n")
+    candidates = [index for index, line in enumerate(lines)
+                  if line.lstrip().startswith("{") and (index == 0 or not lines[index - 1].strip())
+                  and ATTRIBUTES_RE.fullmatch(original[index].strip())]
+    if not candidates:
+        return
+    from pdfmd_tables.celltags import _find_attribute_line
+    from pdfmd_tables.scan import _scan_tables
+
+    table_attributes = {_find_attribute_line(original, table.end)
+                        for table in _scan_tables(analysis.masked) if table.kind == "pipe"}
+    for index in candidates:
+        if index not in table_attributes:
+            findings.add(analysis, index + 1, "attr-stray",
+                         "this attribute block has nothing to attach to and prints as text")
 
 
 def cross_references(analyses: list[Analysis], findings: Findings, ids: set[str]) -> None:

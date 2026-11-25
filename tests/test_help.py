@@ -72,6 +72,14 @@ class TieredHelp(unittest.TestCase):
         for topic in ("output", "all"):
             self.assertIn("pdfmd-options.figure-fit", run("--help", topic).stdout)
 
+    def test_check_codes_are_listed_in_debug_and_full_help(self):
+        from pdfmd_check import CODES
+
+        for topic in ("debug", "all"):
+            lines = run("--help", topic).stdout.splitlines()
+            for code in CODES:
+                self.assertTrue(any(line.startswith(f"  {code} (") for line in lines), code)
+
     def test_numbered_references_has_a_help_topic(self):
         for topic in ("output", "all"):
             text = run("--help", topic).stdout

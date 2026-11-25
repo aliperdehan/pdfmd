@@ -1675,6 +1675,9 @@ never closed, front matter that does not parse. The reading is in the pdfmd_chec
 error (a warning too with `--strict`); `--check-ignore`, `pdfmd-options.check-ignore` and
 `<!-- pdfmd-check: ignore CODE -->` turn checks off.
 
+`attr-stray` warns when an attribute block such as `{.class}`, `{#id}` or `{key="value"}` is alone after a blank
+line or at the start of the body and would print as text. `pdfmd --help debug` lists the check codes and severities.
+
 For a part's local file references, `--check` looks in the part's folder, then
 the scaffold's folder, then the accessory folders.
 

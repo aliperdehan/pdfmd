@@ -46,6 +46,19 @@ class Reading(unittest.TestCase):
                 "\\newcommand{\\a}[1]{\\b{#1}}\n")
         self.assertEqual(codes(text, Bibliography(True, frozenset(), True)), [])
 
+    def test_stray_attributes_are_reported_as_literal_text(self):
+        text = ('{.class}\n\n{#id}\n\n{key="a value" .second}\n\n'
+                '## A {#heading}\n\n[A]{.class}\n\n'
+                '::: {#div}\nText.\n:::\n\n'
+                '```{.text}\n{#code}\n```\n\n'
+                '`code`{.class}\n\n<!--\n{#comment}\n-->\n\n'
+                '$$\n{#math}\n$$\n\n    {#indented}\n\n'
+                '| A | B |\n|---|---|\n| a | b |\n\n{widths="30%, 70%"}\n')
+        found = [p for p in lint([Source("doc.md", None, text)]) if p.code == "attr-stray"]
+        self.assertEqual([(p.line, p.severity) for p in found], [(1, "warning"), (3, "warning"), (5, "warning")])
+        self.assertIn("prints", found[-1].message)
+        self.assertEqual(codes("<!-- pdfmd-check: ignore attr-stray -->\n{.class}\n"), [])
+
     def test_indented_code_is_masked_but_list_and_paragraph_continuations_are_checked(self):
         text = "# A\n\n    @fig:code ![x](missing.png)\n\n\t@fig:other\n\nText\n    @fig:paragraph\n\n- item\n\n    @fig:list ![x](list.png)\n"
         found = lint([Source("d.md", None, text)])
@@ -93,7 +106,7 @@ class Reading(unittest.TestCase):
         self.assertEqual([problem.code for problem in found], ["anchor-missing"])
         self.assertIn("missing", found[0].message)
         self.assertEqual(codes("# A {#x}\n\n## B {#x .c}\n"), ["id-duplicate"])
-        self.assertEqual(codes("# A\n\n`{#x}` and {#1} and \\textbf{#1}.\n\n{#1}\n"), [])
+        self.assertEqual(codes("# A\n\n`{#x}` and {#1} and \\textbf{#1}.\n\n{#1}\n"), ["attr-stray"])
         self.assertEqual(codes("# The $\\alpha$ decay\n\n[x](#the-alpha-decay)\n"), [])         # math is part of the id
 
     def test_crossref_and_latex_refs(self):

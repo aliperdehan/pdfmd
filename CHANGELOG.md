@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.43 — 2026-11-25
+
+Pre-edit state: commit `e36c018`. Detached attribute blocks printed literally without a warning. `--check` reports `attr-stray` for a block alone at a paragraph boundary, allowing attached attributes and pdfmd pipe-table settings. Debug and full help list the check codes and severities. Regression tests cover detached blocks, attachment, protected text and help.
+
 ## v3.34.42 — 2026-11-25
 
 Pre-edit state: commit `17a0192`. The strict Markdown flavours skipped numbered source detection before
