@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 POLISH_INFO_KEYS = {"title": "/Title", "subject": "/Subject", "author": "/Author", "keywords": "/Keywords"}
@@ -36,7 +37,7 @@ def disabled_topics() -> list[str]:
     wrong = [name for name in names if name not in DISABLEABLE]
     if wrong and not core.DISABLED_WARNED:
         core.DISABLED_WARNED = True
-        print(f"WARN  config {core.config_path()}: disabled: {', '.join(wrong)} "
+        emit("warning", None, f"WARN  config {core.config_path()}: disabled: {', '.join(wrong)} "
               f"{'is not a feature that can be switched off' if len(wrong) == 1 else 'are not features that can be switched off'}"
               f" (can: {', '.join(DISABLEABLE)}; {', '.join(CORE)} stay on)", file=sys.stderr)
     return [name for name in names if name in DISABLEABLE]
@@ -303,7 +304,7 @@ def run_main() -> None:
     if translit and translit.strip().casefold() == "list" and not args.json:
         raise SystemExit(0 if core.translit_report() else 1)
     for problem in core.set_translit(translit):
-        print(f"WARN  --translit: {problem}", file=sys.stderr)
+        emit("warning", None, f"WARN  --translit: {problem}", file=sys.stderr)
     core.CACHE_PLOTS_CLI = args.cache_plots or None
     core.SEED_LABELS_CLI = args.seed_labels
     core.SEED_CALC_CLI = args.seed_calc
@@ -546,7 +547,7 @@ def run_main() -> None:
         if stop_at == "markdown" and out_format not in (None, "markdown"):
             raise SystemExit(f"--stop-at markdown writes Markdown; -o {args.out} names another format")
         if stop_at == "markdown" and args.engine is not None:
-            print("WARN  --engine is ignored for --stop-at markdown: no engine is involved",
+            emit("warning", None, "WARN  --engine is ignored for --stop-at markdown: no engine is involved",
                   file=sys.stderr)
 
     # Target format: explicit --to wins; otherwise a recognized -o/--out
@@ -630,7 +631,7 @@ def run_main() -> None:
                 f"Multiple Markdown files found: {names}\n"
                 "Specify one file, use -b to convert all separately, or use -r to combine them."
             )
-        print(f"AUTO MD    {core.display_path(markdown_files[0])}")
+        emit("normal", "MD", f"AUTO MD    {core.display_path(markdown_files[0])}")
         return markdown_files[0]
 
     if not args.path and not args.batch and not args.report:
@@ -655,7 +656,7 @@ def run_main() -> None:
         # `doc#name` asks for `name`; `doc##name` for `##name`, a level-2 heading.
         section_requests += core.split_section_requests(["#" + suffix.replace("@", "#", 1) if suffix.startswith(("#", "@")) else suffix])
     if args.newest and not newest_used:
-        print("WARN  --newest picks among the Markdown files of a folder for a bare `pdfmd` (or `pdfmd '#section'`); "
+        emit("warning", None, "WARN  --newest picks among the Markdown files of a folder for a bare `pdfmd` (or `pdfmd '#section'`); "
               "it does nothing with a named file, -b or -r", file=sys.stderr)
     plan_source = None
     single_input = not args.batch and not args.report and len(paths) == 1
@@ -682,12 +683,12 @@ def run_main() -> None:
         goal = core.calibre_goal(args.engine, target_format)
         if goal:
             if args.engine is not None and not core.calibre_asked_first(args.engine):
-                print(f"WARN  --engine is ignored for --to {target_format}: Calibre writes it", file=sys.stderr)
+                emit("warning", None, f"WARN  --engine is ignored for --to {target_format}: Calibre writes it", file=sys.stderr)
             return "epub", core.start_calibre_job(args, goal, target_format, pandoc_options)
         goal = core.soffice_goal(args.engine, target_format)
         if goal:
             if args.engine is not None and not core.soffice_asked_first(args.engine):
-                print(f"WARN  --engine is ignored for --to {target_format}: LibreOffice writes it", file=sys.stderr)
+                emit("warning", None, f"WARN  --engine is ignored for --to {target_format}: LibreOffice writes it", file=sys.stderr)
             return "docx", core.start_soffice_job(args, goal, target_format)
         return target_format, None
 
@@ -696,7 +697,7 @@ def run_main() -> None:
         target_format, convert_job = plan_bridge(target_format)
     if (args.engine is not None and target_format != "pdf" and stop_at != "markdown"
             and not (target_format == "odt" and args.engine.strip().casefold() == "pandoc")):
-        print(f"WARN  --engine is ignored for "
+        emit("warning", None, f"WARN  --engine is ignored for "
               f"{'--stop-at tex' if stop_at == 'tex' else f'--to {target_format}'}: "
               "no PDF engine is involved", file=sys.stderr)
     # Explicit: the command line named a format (or a stage), so a document's
@@ -732,7 +733,7 @@ def run_main() -> None:
             return target_format
         chosen = core.default_output_format(document, metadata_files)
         if chosen and chosen != target_format:
-            print(f"AUTO OUTPUT  {core.display_path(document)}: default-output {chosen} (pdfmd-options)")
+            emit("normal", "OUTPUT", f"AUTO OUTPUT  {core.display_path(document)}: default-output {chosen} (pdfmd-options)")
         return chosen or target_format
 
     scaffold_plan = None
@@ -909,57 +910,57 @@ def run_main() -> None:
                                    calc_text_override=(section_plan.calc_text if section_plan is not None else None), output_resolved=True)]
             if section_plan is not None and results[0][1] and target_format != core.ASSEMBLED_FORMAT:
                 if core.LAST_WHOLE:
-                    print("NOTE  section build: the whole document was numbered and this section kept, so its "
+                    emit("note", None, "NOTE  section build: the whole document was numbered and this section kept, so its "
                           "numbers and the references to the rest are the full document's (a reference written "
                           "as raw LaTeX \\ref is not resolved outside LaTeX; use @sec:/@fig: with pandoc-crossref)")
                 elif core.LAST_SEEDED:
-                    print("NOTE  section build: references to other sections come from the last full build "
+                    emit("note", None, "NOTE  section build: references to other sections come from the last full build "
                           "(cache); they are stale if you have since changed the document. This section's "
                           "own heading, figure, table and equation numbers restart at its first one")
                 elif core.LAST_SCANNED and core.LAST_EXACT:
-                    print(f"NOTE  section build: references to other sections ({core.LAST_SCANNED} labels) come from a draft "
+                    emit("note", None, f"NOTE  section build: references to other sections ({core.LAST_SCANNED} labels) come from a draft "
                           "pass over the whole document, so they are exact. This section's own heading, figure, "
                           "table and equation numbers restart at its first one")
                 elif core.LAST_SCANNED:
-                    print(f"NOTE  section build: references to other sections ({core.LAST_SCANNED} labels) are counted "
+                    emit("note", None, f"NOTE  section build: references to other sections ({core.LAST_SCANNED} labels) are counted "
                           "from the document's sources: approximate where it defines its own macros; a full build "
                           "with the cache on (--cache) first makes them exact. This section's own heading, "
                           "figure, table and equation numbers restart at its first one")
                 else:
-                    print("NOTE  section build: references to other sections print as ??, and heading, "
+                    emit("note", None, "NOTE  section build: references to other sections print as ??, and heading, "
                           "figure and table numbers restart from this section's own first one (with the "
                           "cache on -- pdfmd-options: {cache: {aux: true}}, or --cache -- a full build "
                           "first lets later section builds fill the references in)")
             if (scaffold_plan is not None and scaffold_plan.selected is not None and results[0][1]
                     and target_format != core.ASSEMBLED_FORMAT):
                 if core.LAST_WHOLE:
-                    print("NOTE  partial build: the whole document was numbered and these parts kept, so their "
+                    emit("note", None, "NOTE  partial build: the whole document was numbered and these parts kept, so their "
                           "numbers and the references to the rest are the full document's (a reference written "
                           "as raw LaTeX \\ref is not resolved outside LaTeX; use @sec:/@fig: with pandoc-crossref)")
                 elif core.LAST_SEEDED:
-                    print("NOTE  partial build: numbers of parts left out come from the last full build "
+                    emit("note", None, "NOTE  partial build: numbers of parts left out come from the last full build "
                           "(--cache); they are stale if you have since added or moved a figure or table there"
                           + (f" (and {core.LAST_SCANNED} labels counted from the sources fill in what it lacks)"
                              if core.LAST_SCANNED else ""))
                 elif core.LAST_SCANNED and core.LAST_EXACT:
-                    print(f"NOTE  partial build: numbers of parts left out ({core.LAST_SCANNED} labels) come from a draft "
+                    emit("note", None, f"NOTE  partial build: numbers of parts left out ({core.LAST_SCANNED} labels) come from a draft "
                           "pass over the whole document, so they are exact")
                 elif core.LAST_SCANNED:
-                    print(f"NOTE  partial build: numbers of parts left out are counted from the sources "
+                    emit("note", None, f"NOTE  partial build: numbers of parts left out are counted from the sources "
                           f"({core.LAST_SCANNED} labels); approximate where the document defines its own macros -- "
                           "a full build with the cache on (--cache) makes them exact")
                 else:
-                    print("NOTE  partial build: references to parts left out print as ??, and figure/"
+                    emit("note", None, "NOTE  partial build: references to parts left out print as ??, and figure/"
                           "table numbers restart from this build's own first one (pdfmd-options: "
                           "{cache: {aux: true}} carries them over from the last full build)")
                 if scaffold_plan.cuts:
-                    print("NOTE  a section or element cut out of a part is numbered from its own start, "
+                    emit("note", None, "NOTE  a section or element cut out of a part is numbered from its own start, "
                           "cache or not: its heading, figure, table and equation numbers restart there "
                           "(only whole parts get their numbers from the last full build)")
             if (core.LAST_SKIPPED and not (core.LAST_EXACT or core.LAST_SEEDED or core.LAST_WHOLE) and results[0][1]
                     and target_format != core.ASSEMBLED_FORMAT
                     and (section_plan is not None or (scaffold_plan is not None and scaffold_plan.selected is not None))):
-                print(f"NOTE  {core.LAST_SKIPPED} label{'' if core.LAST_SKIPPED == 1 else 's'} came after a caption in an "
+                emit("note", None, f"NOTE  {core.LAST_SKIPPED} label{'' if core.LAST_SKIPPED == 1 else 's'} came after a caption in an "
                       "environment pdfmd does not know, so a reference to one outside this build prints ?? rather "
                       "than the number of the heading before it (--seed-labels draft counts them exactly)")
         if args.open and results[0][1]:
@@ -969,7 +970,7 @@ def run_main() -> None:
     failures = [result for result in results if not result[1]]
     for result in results:
         source, ok, error = result
-        print(f"{'OK  ' if ok else 'FAIL'}  {core.display_path(source)}{core.built_name(result)}{core.time_label(result)}{core.engine_label(result)}")
+        emit("result" if ok else "error", None, f"{'OK  ' if ok else 'FAIL'}  {core.display_path(source)}{core.built_name(result)}{core.time_label(result)}{core.engine_label(result)}")
         if args.verbose:
             for line in core.time_breakdown(result):
                 print(line)

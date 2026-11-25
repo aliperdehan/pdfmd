@@ -11,6 +11,7 @@ from functools import cache
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 @cache
@@ -44,7 +45,7 @@ def from_mapping(data, source):
             seen = core.BUILD.setdefault("top-level-option-notes", [])
             if message not in seen:
                 seen.append(message)
-                print(message)
+                emit("note", None, message)
     return options
 
 

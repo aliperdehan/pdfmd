@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 # Pandoc's default templates (including partials) and its manual's Variables section.
 ALIASES = {key.replace("color", "colour"): key for key in (
@@ -24,7 +25,7 @@ def ignored(alias, key, where):
     seen = core.BUILD.setdefault("metadata-alias-notes", [])
     if message not in seen:
         seen.append(message)
-        print(message)
+        emit("note", None, message)
 
 
 def command_aliases(arguments):

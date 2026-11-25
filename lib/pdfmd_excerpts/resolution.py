@@ -6,6 +6,7 @@ import re
 import sys
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 from .discovery import discover
 from .markers import CITATION, canonical, marker, prefix_setting
@@ -27,7 +28,7 @@ def might_cite(text):
 
 
 def warn(message):
-    print("WARN  " + message, file=sys.stderr)
+    emit("warning", None, "WARN  " + message, file=sys.stderr)
 
 
 def terms(document, metadata):

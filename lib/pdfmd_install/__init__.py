@@ -43,6 +43,7 @@ from pathlib import Path, PurePosixPath
 from tempfile import NamedTemporaryFile, mkdtemp
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 # `pdfmd --install KIND` / `pdfmd-cli[KIND]`; the version ranges match the
@@ -176,7 +177,7 @@ def install_typst() -> bool:
             archive = Path(temporary.name)
         try:
             core.download_file(url, archive, sha256)
-            print(f"SHA-256 verified ({sha256[:12]}..., as listed by GitHub for this release)" if sha256
+            emit("note", None, f"SHA-256 verified ({sha256[:12]}..., as listed by GitHub for this release)" if sha256
                   else "NOTE  no checksum was available for this download, so it could not be verified")
             target = extract_executable(archive, executable, core.tools_directory())
         finally:
@@ -253,7 +254,7 @@ def install_node() -> bool:
             archive = Path(temporary.name)
         try:
             core.download_file(url, archive, sha256)
-            print(f"SHA-256 verified ({sha256[:12]}..., as listed by nodejs.org for this release)" if sha256
+            emit("note", None, f"SHA-256 verified ({sha256[:12]}..., as listed by nodejs.org for this release)" if sha256
                   else "NOTE  no checksum was available for this download, so it could not be verified")
             target = extract_executable(archive, executable, core.tools_directory(),
                                         inside="" if executable == "node.exe" else "bin")
@@ -339,7 +340,7 @@ def install_katex() -> bool:
     print(f"SHA-256 verified ({KATEX_SHA256[:12]}..., pinned in pdfmd for KaTeX {core.KATEX_VERSION})")
     node = core.which("node")
     if node is None:
-        print(f"NOTE  KaTeX runs with node, which is not on PATH: pdfmd fetches node's own release (a package manager "
+        emit("note", None, f"NOTE  KaTeX runs with node, which is not on PATH: pdfmd fetches node's own release (a package manager "
               f"would do too: {node_install_hint()})")
         if not install_node():
             return False
@@ -456,7 +457,7 @@ def ensure_node(what: str) -> str | None:
     """node's path: the one on PATH, else pdfmd fetches node's own release (as for Typst); None when neither works."""
     node = core.which("node")
     if node is None:
-        print(f"NOTE  {what} runs with node, which is not on PATH: pdfmd fetches node's own release (a package manager "
+        emit("note", None, f"NOTE  {what} runs with node, which is not on PATH: pdfmd fetches node's own release (a package manager "
               f"would do too: {node_install_hint()})")
         if not install_node():
             return None
@@ -555,7 +556,7 @@ def install_d2() -> bool:
             archive = Path(temporary.name)
         try:
             core.download_file(asset["browser_download_url"], archive, sha256)
-            print(f"SHA-256 verified ({sha256[:12]}..., as listed by GitHub for this release)" if sha256
+            emit("note", None, f"SHA-256 verified ({sha256[:12]}..., as listed by GitHub for this release)" if sha256
                   else "NOTE  no checksum was available for this download, so it could not be verified")
             target = extract_executable(archive, executable, core.tools_directory(), inside="bin")
         finally:
@@ -626,7 +627,7 @@ def install_graphviz() -> bool:
     try:
         import pdfmd_lua
     except ImportError:
-        print("ERROR  --install diagram:dot needs the pdfmd_lua package (a full install of pdfmd-cli).", file=sys.stderr)
+        emit("error", None, "ERROR  --install diagram:dot needs the pdfmd_lua package (a full install of pdfmd-cli).", file=sys.stderr)
         return False
     target = core.data_root() / "graphviz" / GRAPHVIZ_VERSION
     print(f"INSTALL  Graphviz {GRAPHVIZ_VERSION} as WebAssembly (about 2 MB): {GRAPHVIZ_PACKAGE}")
@@ -645,7 +646,7 @@ def install_graphviz() -> bool:
         return False
     print(f"SHA-256 verified ({GRAPHVIZ_SHA256[:12]}..., pinned in pdfmd for wasm-graphviz {GRAPHVIZ_VERSION})")
     if core.which("node") is None:
-        print(f"NOTE  Graphviz runs with node, which is not on PATH: pdfmd fetches node's own release (a package manager "
+        emit("note", None, f"NOTE  Graphviz runs with node, which is not on PATH: pdfmd fetches node's own release (a package manager "
               f"would do too: {node_install_hint()})")
         if not install_node():
             return False
@@ -872,7 +873,7 @@ def install_calibre_dmg(image: Path, applications: Path) -> Path:
             with contextlib.suppress(OSError):
                 detached = detach_disk_image(attached_to)
             if not detached:
-                print(f"WARN  Calibre: could not detach {attached_to}. Run hdiutil detach -force "
+                emit("warning", None, f"WARN  Calibre: could not detach {attached_to}. Run hdiutil detach -force "
                       f"{shlex.quote(str(attached_to))}", file=sys.stderr)
         # If the volume is still mounted, leave its contents alone.
         with contextlib.suppress(OSError):
@@ -886,7 +887,7 @@ def install_calibre(fetch=None, release: dict | None = None, applications: Path 
     `interactive` and `find` (what says Calibre is there) are for the tests."""
     present = (find or core.resolve_calibre)()
     if present:
-        print(f"OK    Calibre is already installed: {present}")
+        emit("result", None, f"OK    Calibre is already installed: {present}")
         return True
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty() and not os.environ.get("PDFMD_NO_PROMPT")
@@ -1067,7 +1068,7 @@ def kit_install_settings() -> dict:
         try:
             return max(int(value), 0)
         except (TypeError, ValueError):
-            print(f"WARN  config: {key} must be a whole number (got {value!r}); using {default}", file=sys.stderr)
+            emit("warning", None, f"WARN  config: {key} must be a whole number (got {value!r}); using {default}", file=sys.stderr)
             return default
 
     sources = options.get("kit-sources", KIT_SOURCES_DEFAULT)
@@ -1081,7 +1082,7 @@ def install_kits(value: str, assume_yes: bool = False) -> bool:
     from pdfmd_kits import install as kit_installer
     target = core.kits_install_directory()
     if target is None:
-        print("ERROR  PDFMD_CONFIG switches off the user config: there is no config folder to install kits beside", file=sys.stderr)
+        emit("error", None, "ERROR  PDFMD_CONFIG switches off the user config: there is no config folder to install kits beside", file=sys.stderr)
         return False
     if not value.strip():
         installed = kit_installer.installed_kits(target)
@@ -1119,16 +1120,16 @@ def install_kits(value: str, assume_yes: bool = False) -> bool:
                 print(f"INSTALLED  {item.name} {item.version}".rstrip() + f"  {core.display_path(item.folder)}"
                       + ("  (replaced the one installed before)" if item.replaced else "") + (f"\n           modes: {modes}" if modes else ""))
                 for warning in item.warnings:
-                    print(f"WARN  {warning}", file=sys.stderr)
+                    emit("warning", None, f"WARN  {warning}", file=sys.stderr)
             code = [item for item in done if item.lua]
             if code:
-                print("NOTE  " + ", ".join(f"{item.name} ({', '.join(item.lua)})" for item in code) + " ships a Lua filter: pdfmd "
+                emit("note", None, "NOTE  " + ", ".join(f"{item.name} ({', '.join(item.lua)})" for item in code) + " ships a Lua filter: pdfmd "
                       "runs it, and a Lua filter can run any command, so read it (pdfmd --kits NAME shows where it is) before you "
                       "use a kit from a source you do not know. Choose a kit with --kit NAME[:MODE].")
             return True
         raise kit_installer.InstallError(f"no kit {value!r} in the repositories of `kit-sources`: " + "; ".join(problems))
     except kit_installer.InstallError as error:
-        print(f"ERROR  {error}", file=sys.stderr)
+        emit("error", None, f"ERROR  {error}", file=sys.stderr)
         return False
 
 
@@ -1223,7 +1224,7 @@ def install_extra(kind: str, assume_yes: bool = False) -> bool:
               file=sys.stderr)
         return False
     if kind == "batchocr":
-        print("NOTE  PyMuPDF (AGPL-3.0) is installed by batchocr as its own package; pdfmd does not bundle it")
+        emit("note", None, "NOTE  PyMuPDF (AGPL-3.0) is installed by batchocr as its own package; pdfmd does not bundle it")
         specs = [core.batchocr_spec()]
     else:
         specs = INSTALL_SPECS[kind]
@@ -1238,7 +1239,7 @@ def install_extra(kind: str, assume_yes: bool = False) -> bool:
                 # PEP 668 (Homebrew's or Debian's Python): not the system's packages, pdfmd's own folder (v3.28.26)
                 folder = core.own_python_folder()
                 command = [sys.executable, "-m", "pip", "install", "--upgrade", "--target", str(folder), *specs]
-                print(f"NOTE  this Python is managed by the system (PEP 668); installing into pdfmd's own folder {core.display_path(folder)}: "
+                emit("note", None, f"NOTE  this Python is managed by the system (PEP 668); installing into pdfmd's own folder {core.display_path(folder)}: "
                       + " ".join(shlex.quote(part) for part in command))
                 folder.mkdir(parents=True, exist_ok=True)
                 completed = subprocess.run(command)

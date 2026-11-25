@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 def user_path_command(args) -> int:
@@ -219,7 +220,7 @@ def setup_command(screen: str = "") -> bool:
             if hand_written:
                 backup = file.with_name(file.name + ".bak")
                 core.atomic_write_text(backup, texts[name])
-                print(f"NOTE  your comments are not kept in the rewritten file; the old one is {backup.name}")
+                emit("note", None, f"NOTE  your comments are not kept in the rewritten file; the old one is {backup.name}")
             if stores[name]:
                 core.atomic_write_text(file, header + core.yaml.safe_dump(stores[name], sort_keys=False, allow_unicode=True,
                                                                 default_flow_style=False))

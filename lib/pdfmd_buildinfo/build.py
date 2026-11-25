@@ -25,6 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 def begin_timer() -> None:
@@ -54,7 +55,7 @@ def resolve_build_time(md_path: Path, metadata_files: list[Path]) -> tuple[bool,
     timing = core.timing_module()
     problem = timing.check_style(style) if timing else None
     if problem:
-        print(f"WARN  {core.display_path(md_path)}: {problem}; using auto", file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(md_path)}: {problem}; using auto", file=sys.stderr)
         style = "auto"
     return show, style
 
@@ -244,7 +245,7 @@ def last_build_command(args) -> int:
     """`pdfmd --last-build FILE [--failed]`: the newest record of FILE."""
     record = record_module()
     if record is None:
-        print("ERROR  --last-build needs the pdfmd_buildinfo package (a full install of pdfmd-cli).", file=sys.stderr)
+        emit("error", None, "ERROR  --last-build needs the pdfmd_buildinfo package (a full install of pdfmd-cli).", file=sys.stderr)
         return 1
     status = 0
     targets = args.path or [Path.cwd()]

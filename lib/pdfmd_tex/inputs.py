@@ -14,6 +14,7 @@ from textwrap import dedent
 from typing import Iterator
 
 from pdfmd_base import core
+from pdfmd_log import emit
 from pdfmd_reader.controls import repair_controls
 
 
@@ -456,7 +457,7 @@ def announce_preambles(preambles: list[Path]) -> None:
     for preamble in preambles:
         core.AUTO_LOG.record_file("TEX", preamble, core.VERBOSE_OUTPUT)
     if len(preambles) > 1:
-        print("WARN  Multiple preambles discovered; later files may override earlier definitions.",
+        emit("warning", None, "WARN  Multiple preambles discovered; later files may override earlier definitions.",
               file=sys.stderr)
 
 
@@ -533,7 +534,7 @@ def compile_tex_source(source: Path, output: Path, engines: list[str], keep_aux:
                 wrapper = folder / source.name
                 wrapper.write_text("\n".join([r"\documentclass{article}", *headers, r"\begin{document}", text,
                                              r"\end{document}", ""]), encoding="utf-8")
-                core.vprint(verbose, f"AUTO TEXFRAGMENT  {core.display_path(source)}: compiling with its project preamble")
+                emit("verbose", "TEXFRAGMENT", f"AUTO TEXFRAGMENT  {core.display_path(source)}: compiling with its project preamble", shown=verbose)
                 env = tex_search_env(cwd, source.parent, source)
                 ok, reason = core.compile_tex_direct(wrapper, output, engines, keep_aux, verbose, debug,
                                                      cwd=source.parent, env=env, document_directory=source.parent)
@@ -541,7 +542,7 @@ def compile_tex_source(source: Path, output: Path, engines: list[str], keep_aux:
 
             if keep_aux:
                 folder = Path(mkdtemp(prefix="pdfmd-tex-fragment-"))
-                print(f"NOTE  LaTeX fragment and auxiliary files kept in {core.display_path(folder)}")
+                emit("note", None, f"NOTE  LaTeX fragment and auxiliary files kept in {core.display_path(folder)}")
                 return compile_wrapped(folder)
             with TemporaryDirectory(prefix="pdfmd-tex-fragment-") as folder:
                 return compile_wrapped(Path(folder))

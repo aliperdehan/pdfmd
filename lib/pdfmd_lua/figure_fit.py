@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 from pdfmd_lua import path
 
 
@@ -56,4 +57,4 @@ def diagnostics(output: str, source: Path) -> None:
     messages = {"s": "shrunk to fit the page body", "c": "caption alone is too tall for the page body",
                 "o": "image and caption are too tall for the page body"}
     for _, status, name in records:
-        print(f"WARN  {core.display_path(source)}: figure {name!r}: {messages[status]}", file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(source)}: figure {name!r}: {messages[status]}", file=sys.stderr)

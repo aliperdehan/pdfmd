@@ -14,6 +14,7 @@ from pathlib import Path
 from pdfmd_report import route, titles
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 from pdfmd_cite.aliases import apply as apply_citation_aliases
 from pdfmd_build import page_numbers
 from pdfmd_engines.memory import scoped
@@ -127,7 +128,7 @@ def run(core, *,
         pandoc_options = [*pandoc_options, *class_options]
         title_notes = [*title_notes, *([class_note] if class_note else [])]
     for note in (title_notes if report_build == "patch" else []):
-        print(f"NOTE  {note}")
+        emit("note", None, f"NOTE  {note}")
     if report_build == "route" and target_format != ASSEMBLED_FORMAT:
         route.build(core, args=args, files=files, excluded=excluded, metadata=metadata, metadata_files=metadata_files,
                     target_format=target_format, engines=engines, variables=variables, pandoc_options=pandoc_options,
@@ -161,7 +162,7 @@ def run(core, *,
                 ([] if "preamble" not in kinds else document_preambles(files[0], pandoc_options, report_no_auto, metadata_files)),
                 [])  # a report build applies no discovered Lua filter
             if "lua" in kinds:
-                print("NOTE  a report/book build applies no discovered Lua filter, so none is embedded")
+                emit("note", None, "NOTE  a report/book build applies no discovered Lua filter, so none is embedded")
         ok, reason = write_assembled_markdown(files, output, False, report_plan,
                                               strip_comments=resolve_strip_comments(files[0], metadata_files),
                                               metadata_files=metadata_files, no_auto=report_no_auto,
@@ -170,11 +171,11 @@ def run(core, *,
             raise SystemExit(reason)
         for file in files:
             if not has_chapter_field(file):
-                print(f"[WARNING] unnumbered Markdown included: {display_path(file)}")
-            print(f"OK    {display_path(file)}")
+                emit("warning", None, f"[WARNING] unnumbered Markdown included: {display_path(file)}")
+            emit("result", None, f"OK    {display_path(file)}")
         for file in excluded:
             print(f"SKIP  {display_path(file)}")
-        print(f"OK    REPORT  {display_path(output)}")
+        emit("result", None, f"OK    REPORT  {display_path(output)}")
         if args.open:
             open_file(output)
         return
@@ -623,8 +624,8 @@ def run(core, *,
     history_record.finish_history(result.returncode == 0 and not report_strict_failed)
     for file in files:
         if not has_chapter_field(file):
-            print(f"[WARNING] unnumbered Markdown included: {display_path(file)}")
-        print(f"OK    {display_path(file)}")
+            emit("warning", None, f"[WARNING] unnumbered Markdown included: {display_path(file)}")
+        emit("result", None, f"OK    {display_path(file)}")
     for file in excluded:
         print(f"SKIP  {display_path(file)}")
     if metadata is not AUTO_METADATA_DISABLED:
@@ -637,7 +638,7 @@ def run(core, *,
         AUTO_LOG.flush()
     report_built = attach_time(Built((output, result.returncode == 0), BUILD["engine"], BUILD["failed"]), files[0], metadata_files)
     report_built.stopped = core.chain_stopped()
-    print(f"{'OK  ' if result.returncode == 0 and not report_strict_failed else 'FAIL'}  REPORT  {display_path(output)}"
+    emit("result" if result.returncode == 0 and (not report_strict_failed) else "error", None, f"{'OK  ' if result.returncode == 0 and not report_strict_failed else 'FAIL'}  REPORT  {display_path(output)}"
           + time_label(report_built) + engine_label(report_built))
     if args.verbose:
         for line in time_breakdown(report_built):

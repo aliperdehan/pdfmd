@@ -24,6 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from .core import API_VERSION, ApiError, Core
+from pdfmd_log import emit
 
 COOKIE = "pdfmd_token"
 
@@ -67,7 +68,7 @@ def watched_parent() -> int | None:
         if pid <= 0:
             raise ValueError(value)
     except ValueError:
-        print(f"WARN  PDFMD_SERVE_PARENT is not a positive process id ({value!r}): the server does not watch a parent", file=sys.stderr)
+        emit("warning", None, f"WARN  PDFMD_SERVE_PARENT is not a positive process id ({value!r}): the server does not watch a parent", file=sys.stderr)
         return None
     return pid
 

@@ -28,6 +28,7 @@ except ImportError:
 from pdfmd_pdfimages import extract_pdf_images, rewrite_image_paths, rewrite_tex_image_paths
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 def folder_counts(names: list[str]) -> str:
@@ -98,7 +99,7 @@ def check_source_command(paths: list[Path], recursive: bool = False) -> bool:
         elif path.suffix.lower() == ".pdf" and path.is_file():
             pdfs.append(path)
         else:
-            print(f"WARN  {core.display_path(path)}: not a PDF or a folder", file=sys.stderr)
+            emit("warning", None, f"WARN  {core.display_path(path)}: not a PDF or a folder", file=sys.stderr)
     carrying = 0
     missing: list[str] = []
     for pdf in pdfs:
@@ -106,7 +107,7 @@ def check_source_command(paths: list[Path], recursive: bool = False) -> bool:
         try:
             attachments = core.read_pdf_attachments(pdf)
         except Exception as error:  # noqa: BLE001
-            print(f"{'ERROR':<9} {name}  not readable as a PDF ({str(error)[:60]})")
+            emit("error", None, f"{'ERROR':<9} {name}  not readable as a PDF ({str(error)[:60]})")
             missing.append(name)
             continue
         beside = [pdf.with_suffix(suffix) for suffix in (".md", ".markdown", ".qmd") if pdf.with_suffix(suffix).is_file()]
@@ -202,7 +203,7 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
     merged = attachments.get(manifest.get("source", core.ATTACH_SOURCE), b"").decode("utf-8")
     status = 0
     if core.sha256_text(merged) != manifest.get("sha256"):
-        print("WARN  the attached source does not match its recorded hash (edited since it was attached)",
+        emit("warning", None, "WARN  the attached source does not match its recorded hash (edited since it was attached)",
               file=sys.stderr)
         status = 1
     chunks = manifest.get("chunks") or []
@@ -212,7 +213,7 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
     for line in manifest.get("bibliography") or []:
         print(f"          bibliography {line}")
     if manifest.get("csl_left"):
-        print(f"NOTE  the citation style {', '.join(manifest['csl_left'])} is not in the source (--attach-csl carries it): "
+        emit("note", None, f"NOTE  the citation style {', '.join(manifest['csl_left'])} is not in the source (--attach-csl carries it): "
               "a build needs a style of that name (Pandoc's own csl/ folder, or beside the document)")
     # The files are counted by folder unless --verbose or --list asks for each (v3.28.15)
     compact = not core.VERBOSE_OUTPUT and not list_only
@@ -255,12 +256,12 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
         where = restore_target_name(item["path"])
         data = attachments.get(core.extra_key(item["path"]))
         if where is None or data is None:
-            print(f"WARN  {item['path']}: {'not a path that can be restored' if where is None else 'missing from the PDF'}; skipped",
+            emit("warning", None, f"WARN  {item['path']}: {'not a path that can be restored' if where is None else 'missing from the PDF'}; skipped",
                   file=sys.stderr)
             status = 1
             continue
         if hashlib.sha256(data).hexdigest() != item.get("sha256"):
-            print(f"WARN  {item['path']} does not match its recorded hash (edited since it was attached)",
+            emit("warning", None, f"WARN  {item['path']} does not match its recorded hash (edited since it was attached)",
                   file=sys.stderr)
             status = 1
         files[str(where)] = data
@@ -270,7 +271,7 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
 
         data = attachments.get(ATTACH_EXCERPTS)
         if data is None or hashlib.sha256(data).hexdigest() != private_record.get("sha256"):
-            print("WARN  excerpts.json is missing from the PDF or does not match its recorded hash; skipped", file=sys.stderr)
+            emit("warning", None, "WARN  excerpts.json is missing from the PDF or does not match its recorded hash; skipped", file=sys.stderr)
             status = 1
         else:
             files[str(name.with_name(ATTACH_EXCERPTS))] = data
@@ -291,7 +292,7 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
     pictures, renamed, failed = (extract_pdf_images(pdf_path, manifest.get("images") or [], stored)
                                  if is_pdf else ({}, {}, []))
     for name in failed:
-        print(f"WARN  {name}: the PDF's picture could not be taken out; put the file back beside the document",
+        emit("warning", None, f"WARN  {name}: the PDF's picture could not be taken out; put the file back beside the document",
               file=sys.stderr)
     for name, data in pictures.items():
         where = restore_target_name(name)
@@ -316,7 +317,7 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
             own = own.get("options") if isinstance(own.get("options"), dict) else {}
             differ = [f"{key}: {value}" for key, value in layers.items() if own.get(key) != value]
             if differ:
-                print(f"NOTE  {settings} is already in {core.display_path(target)} and is kept as it is; the build also used "
+                emit("note", None, f"NOTE  {settings} is already in {core.display_path(target)} and is kept as it is; the build also used "
                       f"{'; '.join(differ)}")
         else:
             files[settings] = ("# written by pdfmd --restore: the folder settings (the options of the .pdfmd/config.yaml files above\n"
@@ -340,10 +341,10 @@ def restore_attachments_in_place(pdf_path: Path, attachments: dict[str, bytes], 
              + (f"; {len(pictures)} picture{'s' if len(pictures) != 1 else ''} taken out of the PDF" if pictures else "")
              + ")" if compact else ""))
     if manifest.get("mode") == "report":
-        print(f"NOTE  this PDF came from a -r/--report build: `pdfmd -r {core.display_path(target)}` builds it again")
+        emit("note", None, f"NOTE  this PDF came from a -r/--report build: `pdfmd -r {core.display_path(target)}` builds it again")
     filters = [item for item in files if item.lower().endswith(".lua")]
     if filters:
-        print(f"NOTE  {', '.join(filters)}: a Lua filter is code, and pdfmd runs one that sits beside a "
+        emit("note", None, f"NOTE  {', '.join(filters)}: a Lua filter is code, and pdfmd runs one that sits beside a "
               "document when it builds -- read it first if the PDF is not from you")
     return status
 
@@ -371,7 +372,7 @@ def restore_from_markdown(path: Path, out_dir: Path | None, list_only: bool = Fa
     if core.ATTACH_MANIFEST not in attachments:
         raise SystemExit(f"{core.display_path(path)}: the kept source has no manifest")
     if trailer.body_hash and keep.digest(body) != trailer.body_hash:
-        print("NOTE  the Markdown was edited since pdfmd wrote it; the restored source is what it was made from, "
+        emit("note", None, "NOTE  the Markdown was edited since pdfmd wrote it; the restored source is what it was made from, "
               "not these edits", file=sys.stderr)
     return restore_attachments(path, attachments, out_dir, list_only)
 
@@ -578,10 +579,10 @@ def layout_from_source(merged: str, manifest: dict, main_name: PurePosixPath,
         moved.append(where + (f" (was {entry['path']})" if entry is not None else ""))
     if moved:
         order = " ".join(f"-y {item['restored']}" for item in metadata_entries if item.get("restored"))
-        print(f"WARN  {', '.join(moved)}: metadata from outside the document's folder, where no build finds it by "
+        emit("warning", None, f"WARN  {', '.join(moved)}: metadata from outside the document's folder, where no build finds it by "
               f"itself; build with {order} to layer it as before", file=sys.stderr)
     if global_keys:
-        print(f"NOTE  {', '.join(str(key) for key in global_keys)}: from pdfmd's global metadata (pdfmd --setup) on "
+        emit("note", None, f"NOTE  {', '.join(str(key) for key in global_keys)}: from pdfmd's global metadata (pdfmd --setup) on "
               "the machine that built it; not restored: a build here uses this machine's own")
     # The document itself: the assembled marker is how a build knew the text was
     # finished, so it goes (a restored file is a source again).

@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 from decimal import Decimal
 import hashlib
 import os
@@ -414,7 +415,7 @@ def presets_report(path: Path | None = None) -> bool:
         local = [] if local is AUTO_METADATA_DISABLED or local is None else (local if isinstance(local, list) else [local])
         used = chosen_global_metadata(document, local)
     except (SystemExit, FileNotFoundError, ValueError) as error:
-        print(f"WARN  {error}", file=sys.stderr)
+        emit("warning", None, f"WARN  {error}", file=sys.stderr)
         used = None
     for name, file, where in rows:
         keys = [("options" if key == "pdfmd-options" else key) for key in core.metadata_file_yaml(file)] if file else []

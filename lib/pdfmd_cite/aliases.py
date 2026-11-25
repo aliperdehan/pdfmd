@@ -3,6 +3,7 @@
 import sys
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 KEY = "citation-aliases"
 
@@ -23,7 +24,7 @@ def apply(command, document, metadata_files):
     if aliases is None:
         return
     if not valid_mapping(aliases):
-        print(f"WARN  {core.display_path(document)}: {KEY} expects a mapping of citation keys; ignoring it", file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(document)}: {KEY} expects a mapping of citation keys; ignoring it", file=sys.stderr)
         return
     if not aliases:
         return

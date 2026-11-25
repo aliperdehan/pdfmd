@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 LATEX = ("pdflatex", "xelatex", "lualatex", "tectonic")
 
@@ -166,7 +167,7 @@ def prepare(command: list[str], engine: str, sources: list[Path], metadata: list
         return command
     if export or engine not in (*LATEX, "typst"):
         if not state.get("noted"):
-            print(f"NOTE  column-estimate: measure is unavailable for {engine}{' exports' if export else ''}; using count", file=sys.stderr)
+            emit("note", None, f"NOTE  column-estimate: measure is unavailable for {engine}{' exports' if export else ''}; using count", file=sys.stderr)
             state["noted"] = True
         return command
     try:
@@ -243,5 +244,5 @@ def prepare(command: list[str], engine: str, sources: list[Path], metadata: list
             return [*command, "-M", "pdfmd-column-measurements=" + str(cache)]
     except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError) as exc:
         state["failed"] = True
-        print(f"WARN  column-estimate: measurement failed ({exc}); using count", file=sys.stderr)
+        emit("warning", None, f"WARN  column-estimate: measurement failed ({exc}); using count", file=sys.stderr)
         return command

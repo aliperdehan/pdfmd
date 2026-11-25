@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 HISTORY_TIME_RE = re.compile(r"^(?P<text>.*?)\s+--\s+(?P<when>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*$")
@@ -81,7 +82,7 @@ def record_history(md_path: Path, metadata_files: list[Path], line: str, output:
         try:
             before = path.read_bytes() if path.exists() else None
         except OSError as error:
-            print(f"WARN  {core.display_path(md_path)}: cannot read {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
+            emit("warning", None, f"WARN  {core.display_path(md_path)}: cannot read {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
             return True
         if write_history(path, entry, md_path, metadata_files, verbose):
             pending.append((path, entry, md_path, core.BUILD.get("history-reader", {}), before, path.read_bytes()))
@@ -100,10 +101,10 @@ def write_history(path, entry, md_path, metadata_files, verbose) -> bool:
         else:
             history.add_entry(path, entry, md_path.name)
     except OSError as error:
-        print(f"WARN  {core.display_path(md_path)}: cannot write {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(md_path)}: cannot write {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
         return False
     backup_notice(path.parent, core.resolve_backup_options(md_path, list(metadata_files), None))
-    core.vprint(verbose, f"AUTO HISTORY  {core.display_path(path)}: {entry.when} compiled")
+    emit("verbose", "HISTORY", f"AUTO HISTORY  {core.display_path(path)}: {entry.when} compiled", shown=verbose)
     return True
 
 
@@ -150,7 +151,7 @@ def reader_warnings() -> list[str]:
             reason = f" ({state['reason']})" if state.get("reason") else ""
             warning = f"WARN  {core.display_path(md_path)}: reader changed from {previous} to {current}{reason}"
             warning = " ".join(warning.splitlines())
-            print(warning, file=sys.stderr)
+            emit("warning", None, warning, file=sys.stderr)
             warnings.append(warning)
     return warnings
 
@@ -171,7 +172,7 @@ def finish_history(success: bool) -> None:
                     partial.write_bytes(before)
                     partial.replace(path)
             except OSError as error:
-                print(f"WARN  {core.display_path(md_path)}: cannot restore {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
+                emit("warning", None, f"WARN  {core.display_path(md_path)}: cannot restore {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
 
 
 DEFAULT_BACKUP_OPTIONS = {
@@ -198,7 +199,7 @@ def notice_once(name: str, text: str) -> None:
     path = core.config_root() / f"notice-{name}"
     if os.environ.get("PDFMD_NO_PROMPT") or path.exists():
         return
-    print(text)
+    emit("note", None, text)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("shown\n", encoding="utf-8")
@@ -327,5 +328,5 @@ def backup_before_edit(md_path: Path, metadata_files: list[Path] | None = None) 
         shutil.copy2(md_path, target)
         return target
     except OSError as error:
-        print(f"WARN  {core.display_path(md_path)}: backup failed: {error}", file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(md_path)}: backup failed: {error}", file=sys.stderr)
         return None

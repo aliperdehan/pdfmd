@@ -36,6 +36,7 @@ from pdfmd_base import core
 from pdfmd_base import timed
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 from pdfmd_cite.aliases import apply as apply_citation_aliases
 
 
@@ -76,7 +77,7 @@ def convert_office_direct(input_path: Path, output: Path, verbose: bool, debug: 
     """Convert an office document straight to PDF -- no Pandoc involved."""
     ok, reason = run_soffice_convert(input_path, output, verbose)
     if ok:
-        core.vprint(verbose, f"AUTO OFFICEDIRECT  {input_path}: converted with soffice directly (no Pandoc)")
+        emit("verbose", "OFFICEDIRECT", f"AUTO OFFICEDIRECT  {input_path}: converted with soffice directly (no Pandoc)", shown=verbose)
     else:
         fake_result = subprocess.CompletedProcess(args=["soffice"], returncode=1, stdout="", stderr=reason)
         core.report_engine_failure(str(input_path), "soffice", fake_result, [], debug)
@@ -108,7 +109,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
         pandoc_cwd = core.pandoc_working_directory(core.metadata_cwd(metadata_files, md_path.parent))
 
         def note(kind: str, detail: str) -> None:
-            core.vprint(verbose, f"AUTO {kind}  {detail}")
+            emit("verbose", kind, f"AUTO {kind}  {detail}", shown=verbose)
         with core.prepared_latex_inputs([title_source or md_path, *core.pandoc_metadata_order(metadata_files)], False, drop_embedded_preamble=True, named_reader=named_reader) as prepared:
             source, *prepared_metadata = prepared
             cmd = ["pandoc", str(source), *map(str, part_files), "-o", str(odt), "-t", "docx"]
@@ -352,7 +353,7 @@ def drop_calibre_author(pdf: Path, verbose: bool) -> None:
         if changed:
             core.atomic_write_pdf(writer, pdf)
     except Exception as error:  # noqa: BLE001 -- best effort, like set_pdf_info
-        core.vprint(verbose, f"WARN  calibre: could not take out Calibre's `Unknown` author ({error})", file=sys.stderr)
+        emit("warning", None, f"WARN  calibre: could not take out Calibre's `Unknown` author ({error})", file=sys.stderr, shown=verbose)
 
 
 def start_soffice_job(args, goal: str, target_format: str) -> dict:
@@ -365,7 +366,7 @@ def start_soffice_job(args, goal: str, target_format: str) -> dict:
                          "standard macOS app bundle). Install it: `brew install --cask libreoffice`, "
                          "`winget install TheDocumentFoundation.LibreOffice`, your package manager, or libreoffice.org.")
     if goal in core.SOFFICE_SHARED_FORMATS:
-        print(f"NOTE  -e soffice: {goal} is made by LibreOffice from the Word file Pandoc writes; without -e soffice Pandoc "
+        emit("note", None, f"NOTE  -e soffice: {goal} is made by LibreOffice from the Word file Pandoc writes; without -e soffice Pandoc "
               "writes it from the document itself", file=sys.stderr)
     scratch = Path(mkdtemp(prefix="pdfmd-soffice-target-"))
     atexit.register(shutil.rmtree, scratch, ignore_errors=True)

@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 TOP = ("pdfmd-excerpts", "next-id", "sources", "excerpts")
 SOURCE = ("file", "sha256", "size", "pages", "more")
@@ -138,7 +139,7 @@ def read(path: Path, create=False, *, allow_duplicate_ids=False):
         raise RecordError("invalid JSON") from None
     validate(data, allow_duplicate_ids=allow_duplicate_ids)
     if data["pdfmd-excerpts"] > 1:
-        print("WARN  excerpts.json: newer record version; reading only", file=sys.stderr)
+        emit("warning", None, "WARN  excerpts.json: newer record version; reading only", file=sys.stderr)
     return data
 
 

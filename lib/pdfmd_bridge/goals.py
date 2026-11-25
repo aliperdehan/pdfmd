@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import mkdtemp
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 OFFICE_INPUT_EXTENSIONS = frozenset({
@@ -158,7 +159,7 @@ def start_calibre_job(args, goal: str, target_format: str, pandoc_options: list[
                          "or in Calibre2 under Program Files). Install Calibre: `pdfmd --install calibre`, `brew install --cask calibre`, "
                          "`winget install calibre.calibre`, your package manager, or calibre-ebook.com.")
     if goal in CALIBRE_SHARED_FORMATS and goal != "epub":
-        print(f"NOTE  -e calibre: {goal} is made by Calibre from an EPUB; without -e calibre Pandoc writes it from the "
+        emit("note", None, f"NOTE  -e calibre: {goal} is made by Calibre from an EPUB; without -e calibre Pandoc writes it from the "
               "document itself, with more of its own features (styles, tables, footnotes)", file=sys.stderr)
     scratch = Path(mkdtemp(prefix="pdfmd-calibre-target-"))
     atexit.register(shutil.rmtree, scratch, ignore_errors=True)

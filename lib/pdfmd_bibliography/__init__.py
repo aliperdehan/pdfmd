@@ -27,6 +27,7 @@ from math import isfinite
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 ENV = "PDFMD_BIBLIOGRAPHY_INDENT"         # --bibliography-indent, set by main(), so -j workers read it too
 KEY = "bibliography-indent"
@@ -153,7 +154,7 @@ def bibliography_spacing_args(source: Path, metadata_files: list[Path], command:
             mode = checked_spacing(options[SPACING_KEY], SPACING_KEY, source)
             break
     if mode is not None and alias is not None and mode != alias:
-        print(f"WARN  {core.display_path(source)}: pdfmd-options.{SPACING_KEY} ({mode}) overrides csl.spacing ({alias})",
+        emit("warning", None, f"WARN  {core.display_path(source)}: pdfmd-options.{SPACING_KEY} ({mode}) overrides csl.spacing ({alias})",
               file=sys.stderr)
     mode = mode or alias
     if mode in (None, "off") or "--citeproc" not in command:

@@ -16,6 +16,7 @@ from tempfile import mkstemp
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 from pdfmd_cite.aliases import apply as apply_citation_aliases
 
 
@@ -154,17 +155,17 @@ def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | No
     if text is not None:
         folder.mkdir(parents=True, exist_ok=True)
         core.atomic_write_text(cached, text)
-        print(f"AUTO CSL   {url} -> {core.display_path(cached)}")
+        emit("normal", "CSL", f"AUTO CSL   {url} -> {core.display_path(cached)}")
         return cached
     if cached.is_file():
         when = time.strftime("%Y-%m-%d", time.localtime(cached.stat().st_mtime))
-        print(f"NOTE  {core.display_path(md_path)}: {url} could not be fetched ({why}); using the copy fetched on {when}")
+        emit("note", None, f"NOTE  {core.display_path(md_path)}: {url} could not be fetched ({why}); using the copy fetched on {when}")
         return cached
     data_dir = core.pandoc_user_data_dir()
     own = next((place / name for place in ((data_dir / "csl", data_dir) if data_dir else ()) if (place / name).is_file()),
                None)
     if own is not None:
-        print(f"WARN  {core.display_path(md_path)}: {url} could not be fetched ({why}); using Pandoc's own "
+        emit("warning", None, f"WARN  {core.display_path(md_path)}: {url} could not be fetched ({why}); using Pandoc's own "
               f"{core.display_path(own)} instead", file=sys.stderr)
         return own
     if csl_fallback(md_path, metadata_files) == "error":
@@ -181,7 +182,7 @@ def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | No
             return None
         folder.mkdir(parents=True, exist_ok=True)
         core.atomic_write_text(default, done.stdout)
-    print(f"WARN  {core.display_path(md_path)}: {url} could not be fetched ({why}) and Pandoc's csl/ folder has no {name}; "
+    emit("warning", None, f"WARN  {core.display_path(md_path)}: {url} could not be fetched ({why}) and Pandoc's csl/ folder has no {name}; "
           "the citations use Pandoc's default style (Chicago author-date). pdfmd-options: {csl-fallback: error} stops "
           "instead", file=sys.stderr)
     return default
@@ -231,7 +232,7 @@ def csl_args(sources: list[Path], metadata_files: list[Path], pandoc_options: li
         conflicts = [f"{other_key} {other!r}" for other_key, other in choices[1:]
                      if identity(other) != winner]
         if conflicts:
-            print(f"WARN  {core.display_path(source)}: {key} {value!r} overrides {', '.join(conflicts)}", file=sys.stderr)
+            emit("warning", None, f"WARN  {core.display_path(source)}: {key} {value!r} overrides {', '.join(conflicts)}", file=sys.stderr)
     if cli is not None or "csl" in metadata:
         return []
     value = alias or root
@@ -346,7 +347,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     # because they're only ever Pandoc INPUT (--metadata-file/a title
     # source) -- Pandoc has no concept of "jobname" to derive.
     def note(kind: str, detail: str) -> None:
-        core.vprint(verbose, f"AUTO {kind}  {detail}")
+        emit("verbose", kind, f"AUTO {kind}  {detail}", shown=verbose)
 
     nativebib_font = core.mainfont_choice([md_path], metadata_files, variables, font or None, document_font,
                                      mainfont_auto, no_auto, note)
@@ -438,8 +439,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
         if result.returncode != 0 or not tex_path.exists():
             return False, result.stderr.strip() or "pandoc failed to produce an intermediate .tex"
         where = f"kept at {tex_path} (--keep-aux)" if keep_aux else "discarded after compiling"
-        core.vprint(verbose, f"AUTO CITATIONENGINE  {md_path}: routing bibliography through --{citation_engine} "
-               f"instead of --citeproc; intermediate .tex {where}")
+        emit("verbose", "CITATIONENGINE", f"AUTO CITATIONENGINE  {md_path}: routing bibliography through --{citation_engine} "
+               f"instead of --citeproc; intermediate .tex {where}", shown=verbose)
         return core.compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,
                                        document_directory=md_path.parent)
     finally:

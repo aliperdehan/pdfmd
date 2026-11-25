@@ -50,6 +50,7 @@ from pdfmd_base import core
 from pdfmd_base import timed
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 
 
 PARTIAL_KEY = "pdfmd-partial"
@@ -70,7 +71,7 @@ def mark_assembled(text: str, no_auto: list[str] | None = None, partial: bool = 
         marks = f"{core.ASSEMBLED_KEY}: true\n" + (f"{PARTIAL_KEY}: true\n" if partial else "")
         return re.sub(r"^---[ \t]*\n", f"---\n{marks}", text, count=1)
     if partial:
-        print(f"WARN  a partial build with no front matter cannot record {PARTIAL_KEY}; a filter "
+        emit("warning", None, f"WARN  a partial build with no front matter cannot record {PARTIAL_KEY}; a filter "
               "that reads it will not see it when the assembled file is built", file=sys.stderr)
     comment = (ASSEMBLED_COMMENT if not no_auto else
                f"<!-- pdfmd-assembled: true; no-auto: {','.join(no_auto)} -->")
@@ -568,7 +569,7 @@ def unpack_assembled(path: Path, out_dir: Path | None, slim: bool = False) -> in
                  if kinds and not core.VERBOSE_OUTPUT else ""))
     if slim:
         if files and target.resolve() != default_target.resolve():
-            print(f"WARN  --slim: pdfmd finds {default_target.name}/ beside the document by itself; "
+            emit("warning", None, f"WARN  --slim: pdfmd finds {default_target.name}/ beside the document by itself; "
                   f"{core.display_path(target)} it will not, unless you move it there", file=sys.stderr)
         slim_assembled(path, text, front, data, options, kept_header, blocks,
                        preamble_unpacked, metadata_unpacked, origin, bool(data_blocks), bool(history_blocks),
@@ -684,7 +685,7 @@ def embedded_resources(md_path: Path) -> Iterator[None]:
                 else:
                     core.write_text_lf(target, block["source"])
         if away:
-            print(f"NOTE  {', '.join(away[:3])}{' and %d more' % (len(away) - 3) if len(away) > 3 else ''} "
+            emit("note", None, f"NOTE  {', '.join(away[:3])}{' and %d more' % (len(away) - 3) if len(away) > 3 else ''} "
                   f"{'is' if len(away) == 1 else 'are'} held by the source but not where the document reads "
                   f"{'it' if len(away) == 1 else 'them'}: `pdfmd --restore` (or --edit) puts the folders back", file=sys.stderr)
         added.append(folder)
@@ -789,7 +790,7 @@ def apply_lua_filters(front_text: str, body: str, filters: list[Path], first: Pa
             cmd += ["--lua-filter", str(lua_filter)]
         result = pandoc_run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=first.parent)
         if result.returncode != 0:
-            print(f"WARN  --lua-mode apply: Pandoc failed ({result.stderr.strip().splitlines()[-1:] or ['?']}); "
+            emit("warning", None, f"WARN  --lua-mode apply: Pandoc failed ({result.stderr.strip().splitlines()[-1:] or ['?']}); "
                   "the filters are embedded instead", file=sys.stderr)
             return None
         return result.stdout
@@ -837,7 +838,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             and core.promote_bare_title(text, False)[1]):
         # A new front-matter block would stop the leading `# Title` being
         # promoted to the document's title (see promote_bare_title).
-        print(f"WARN  {core.display_path(first)}: has no front matter and starts with a bare '# Title'; "
+        emit("warning", None, f"WARN  {core.display_path(first)}: has no front matter and starts with a bare '# Title'; "
               "embedding a preamble would change how that reads, so it was left out. Give the "
               "document front matter (a `title:`) to embed it", file=sys.stderr)
         kinds = kinds - {"preamble"}
@@ -1024,7 +1025,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         limit = float(core.option_flag_number(core.first_pdfmd_option(first, plan.metadata_files, "bundle-max-mb"))
                       or core.BUNDLE_MAX_MB) * 1024 * 1024
         if sum(item.stat().st_size for item in found) > limit:
-            print(f"WARN  embed files: {len(found)} files, {sum(item.stat().st_size for item in found) / 1048576:.0f} MB, is "
+            emit("warning", None, f"WARN  embed files: {len(found)} files, {sum(item.stat().st_size for item in found) / 1048576:.0f} MB, is "
                   f"over the {limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); none was embedded", file=sys.stderr)
             found = []
         from pdfmd_excerpts.discovery import private_paths
@@ -1036,7 +1037,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
             file_blocks += "\n" + blocks_text
             file_names.append(core.relative_posix(base, item))
         for name in outside_files:
-            print(f"WARN  embed files: {name} is outside the document's folder; not embedded", file=sys.stderr)
+            emit("warning", None, f"WARN  embed files: {name} is outside the document's folder; not embedded", file=sys.stderr)
     blocks = blocks[:files_at] + file_blocks + blocks[files_at:]
     for key in ("bibliography", "csl"):
         value = merged.get(key)
@@ -1142,7 +1143,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
         summary.append("bibliography " + ", ".join(bib_embedded)
                        + (f" ({'; '.join(plan.bib_report)})" if plan.bib_report else ""))
     for problem in bib_problems:
-        print(f"WARN  not embedded: {problem}", file=sys.stderr)
+        emit("warning", None, f"WARN  not embedded: {problem}", file=sys.stderr)
     summary += left_out
     print("EMBEDDED  " + ("; ".join(summary) if summary else "nothing was found to embed"))
     # What the text points at is not embedded: say which of it the file still needs.
@@ -1156,10 +1157,10 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     if re.search(r"!\[[^\]\n]*\]\(", body) and not file_names:
         outside.append("the images in the text")
     if outside:
-        print("NOTE  not embedded: " + "; ".join(outside) + " -- keep them where the document "
+        emit("note", None, "NOTE  not embedded: " + "; ".join(outside) + " -- keep them where the document "
               "finds them (relative to the assembled file's folder)")
     if summary and not file_names:
-        print("NOTE  not embedded, and not detected: data a macro in the text reads (CSV tables "
+        emit("note", None, "NOTE  not embedded, and not detected: data a macro in the text reads (CSV tables "
               "for plots, images in raw LaTeX) -- they stay beside the document; `--embed-metadata files` embeds "
               "what the text and the preamble name")
     return result

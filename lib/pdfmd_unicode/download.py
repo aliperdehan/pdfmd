@@ -82,4 +82,10 @@ def fetch(url: str, opener: Callable, log: Callable[[str], None], retries: int =
             tries += 1
             host = mirror or urlsplit(recorder.last).hostname or "an unknown mirror"
             more = "" if retries < 0 else f" of {retries}"
-            log(f"WARN  {REDIRECTOR} sent the download to {host}, which failed: {error}; asking again (retry {tries}{more})")
+            message = (f"WARN  {REDIRECTOR} sent the download to {host}, which failed: {error}; asking again (retry {tries}{more})")
+            if log is print:
+                from pdfmd_log import emit
+
+                emit("warning", None, message)
+            else:
+                log(message)

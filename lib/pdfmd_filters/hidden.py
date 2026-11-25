@@ -6,6 +6,7 @@ import re
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 
 
 DIV = re.compile(r"(?m)^[ \t]*(?:(?:>[ \t]*)+)?(:{3,})[ \t]*(.*?)[ \t]*$")
@@ -123,7 +124,7 @@ def attachment_warning(files, metadata_files, stripped):
     if "hidden" in stripped or show_hidden(files[0], metadata_files):
         return
     if any(ranges(core.read_text_best_effort(path)) for path in files):
-        print("WARN  hidden: hidden content travels in the attached source; strip it with "
+        emit("warning", None, "WARN  hidden: hidden content travels in the attached source; strip it with "
               "--strip-comments-in hidden (pdfmd-options: {strip-comments: [hidden]})", file=sys.stderr)
 
 
@@ -170,5 +171,5 @@ def stripped_calc_note(files, metadata_files):
         except OSError:
             return
     if before is not None and after is not None and after - before:
-        print("NOTE  hidden: the restored source will not define calculator names used outside stripped hidden content: "
+        emit("note", None, "NOTE  hidden: the restored source will not define calculator names used outside stripped hidden content: "
               + ", ".join(sorted(after - before)), file=sys.stderr)

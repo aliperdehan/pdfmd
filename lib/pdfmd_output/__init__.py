@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 PICTURE_ONLY = ("png", "jpg", "tiff", "eps", "ps", "svg")   # the targets only this command writes
@@ -133,7 +134,7 @@ def rewrite_template(md_path: Path, metadata_files: list[Path]) -> str:
         return REWRITE_NAME
     template = str(value)
     if "{n}" not in template or re.search(r"[\\/]", template):
-        print(f"WARN  rewrite-name '{template}' needs {{n}} and no folder; using {REWRITE_NAME}", file=sys.stderr)
+        emit("warning", None, f"WARN  rewrite-name '{template}' needs {{n}} and no folder; using {REWRITE_NAME}", file=sys.stderr)
         return REWRITE_NAME
     return template
 

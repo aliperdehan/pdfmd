@@ -14,6 +14,14 @@ from pathlib import Path
 from pdfmd_base import core
 
 
+def emit(level: str, id: str | None, text: str, *, file=None, end="\n", flush=False, shown=True) -> None:
+    """Send a diagnostic to its existing stream, or to the build record when hidden."""
+    if shown:
+        print(text, file=file, end=end, flush=flush)
+    else:
+        core.record_note(text)
+
+
 # v3.31.41 (entry 3ea): how a path is written in a message. `auto`: relative to the working folder (up to PATH_UP `..` steps above
 # it), else `~/...` under the home folder, else absolute; `relative`: the same without `~`; `home`: `~/...` under the home
 # folder, else absolute; `full`: absolute. --path-style / --path-up, `options: {path-style, path-up}` of the config and of a folder's
@@ -185,7 +193,7 @@ class AutoLog:
                short: str | None = None) -> None:
         """One decision: printed at once with ``verbose``, else kept for ``flush``."""
         if verbose:
-            print(f"AUTO {kind}  {detail}")
+            emit("verbose", kind, f"AUTO {kind}  {detail}")
             return
         core.record_note(f"AUTO {kind}  {detail}")           # the record has it whatever --verbose said
         if heading is None:
@@ -210,7 +218,7 @@ class AutoLog:
         """A file pdfmd picked up (AUTO YAML / AUTO TEX): FOUND, but the global metadata is a default."""
         line = self.file_line(kind, path)
         if verbose:
-            print(line)
+            emit("verbose", kind, line)
             return
         core.record_note(line)
         if kind == "YAML" and core.is_global_metadata(path):
@@ -276,12 +284,12 @@ class AutoLog:
                     parts = self.grouped(parts)
                 line = self.fit(heading, parts)
                 if not (self.dedupe and self.shown.get(heading) == line):
-                    print(line)
+                    emit("normal", None, line)
                 self.shown[heading] = line
         if self.other:
             line = f"AUTO: {' '.join(self.other)}. Use --verbose to see in full"
             if not (self.dedupe and self.shown.get("AUTO") == line):
-                print(line)
+                emit("normal", None, line)
             self.shown["AUTO"] = line
         self.items.clear()
         self.other.clear()
@@ -310,17 +318,17 @@ def open_file(path: Path) -> None:
         try:
             os.startfile(path)  # Windows' own "open with default app"
         except OSError as error:
-            print(f"WARN  --open: could not open {path}: {error}", file=sys.stderr)
+            emit("warning", None, f"WARN  --open: could not open {path}: {error}", file=sys.stderr)
         return
     opener = "open" if sys.platform == "darwin" else "xdg-open" if sys.platform.startswith("linux") else None
     if opener is None or not core.which(opener):
-        print(f"WARN  --open: no '{opener or 'file opener'}' found for this platform; "
+        emit("warning", None, f"WARN  --open: no '{opener or 'file opener'}' found for this platform; "
               f"open {path} yourself", file=sys.stderr)
         return
     try:
         subprocess.run([opener, str(path)])
     except OSError as error:
-        print(f"WARN  --open: could not open {path}: {error}", file=sys.stderr)
+        emit("warning", None, f"WARN  --open: could not open {path}: {error}", file=sys.stderr)
 
 
 def cmd_part(text: str, quote: bool = True) -> str:
@@ -357,4 +365,4 @@ def log_cmd(cmd: list, cwd: Path, verbose: bool) -> None:
     if not verbose:
         core.record_note(line)             # the record has it whatever --verbose said
         return
-    print(line, file=sys.stderr)
+    emit("verbose", None, line, file=sys.stderr)

@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 ENV = "PDFMD_PAGECITE"
 MODES = ("off", "auto", "style", "page", "drop", "bare", "full")
@@ -202,7 +203,7 @@ def filter_args(sources: Path | list[Path], metadata: list[Path], options: list[
         return []
     mode, opening, closing, dropped = style_settings(mode, files, metadata, options)
     if dropped:
-        print("NOTE  pagecite: citation style never prints a locator; dropping page markers", file=sys.stderr)
+        emit("note", None, "NOTE  pagecite: citation style never prints a locator; dropping page markers", file=sys.stderr)
     # JSON metadata keeps literal punctuation and non-ASCII terms without Markdown smartening.
     config = {"pdfmd-pagecite": {"mode": mode, "opening": opening, "closing": closing, "terms": terms,
                                  "escaped": ESCAPED_OPEN}}

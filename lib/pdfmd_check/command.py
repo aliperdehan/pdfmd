@@ -18,6 +18,7 @@ from pathlib import Path
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 
 
 # --- pdfmd --check: a linter (v3.26.15) ---------------------------------------------------------------------
@@ -85,7 +86,7 @@ def calc_check_records(files: list[Path], metadata_files: list[Path]) -> "tuple[
         return None
     pandoc = core.which("pandoc")
     if not pandoc:
-        print("NOTE  --check: the names of the calculator are not checked without Pandoc", file=sys.stderr)
+        emit("note", None, "NOTE  --check: the names of the calculator are not checked without Pandoc", file=sys.stderr)
         return None
     arguments = core.calc_filter_args(files, metadata_files)
     if not arguments:
@@ -100,7 +101,7 @@ def calc_check_records(files: list[Path], metadata_files: list[Path]) -> "tuple[
         except OSError:
             return None
         if done.returncode != 0 or not report.is_file():
-            print("NOTE  --check: the names of the calculator are not checked (Pandoc could not read the document)", file=sys.stderr)
+            emit("note", None, "NOTE  --check: the names of the calculator are not checked (Pandoc could not read the document)", file=sys.stderr)
             return None
         unescape = {"t": "\t", "n": "\n", "r": "\r", "\\": "\\"}
         uses, definitions = [], []
@@ -236,7 +237,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
         warnings = len(problems) - errors - notes
         for problem in problems:
             place = f"{problem.file}:{problem.line}" if problem.line else problem.file
-            print(f"{place}: {problem.severity}: {problem.message}  [{problem.code}]")
+            emit(problem.severity, problem.code, f"{place}: {problem.severity}: {problem.message}  [{problem.code}]")
         name = core.display_path(document) + (f" and {len(files) - 1} part(s)" if len(files) > 1 else "")
         if not problems:
             print(f"CHECK  {name}: no problems")

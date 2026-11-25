@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 from .discovery import package_kit_files, package_kit_places
 from .kitfile import HELPER_BLOCKS
@@ -116,14 +117,14 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
                 found = core.find_kit(reference, base, no_auto)
                 kit = load_kit(found.path, found.aliases, package_folder=found.package_folder)
             except KitError as error:
-                print(f"ERROR  {error}", file=sys.stderr)
+                emit("error", None, f"ERROR  {error}", file=sys.stderr)
                 ok = False
                 continue
             print(f"{kit.name} {kit.version}".rstrip() + (f"  {kit.description}" if kit.description else ""))
             print(f"  kit file  {core.display_path(found.path)}  ({found.source}{', cached' if found.cached else ''})")
             if found.shadowed:
                 ignored = ", ".join(core.display_path(path) for path in found.shadowed)
-                print(f"WARN  package kit: using {core.display_path(found.path)}; ignoring {ignored}", file=sys.stderr)
+                emit("warning", None, f"WARN  package kit: using {core.display_path(found.path)}; ignoring {ignored}", file=sys.stderr)
             record = kit_install_record(found.folder)
             if record:
                 print(f"  from      {record.get('source', '?')}" + (f"@{record['ref']}" if record.get("ref") else "")
@@ -148,19 +149,19 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
             if kit.markup_off:
                 print(f"  markup-off {', '.join(kit.markup_off)}")
             for warning in kit.warnings:
-                print(f"WARN  {warning}", file=sys.stderr)
+                emit("warning", None, f"WARN  {warning}", file=sys.stderr)
         return ok
     locations = core.kit_locations(base, no_auto)
     cache = core.kit_cache() if not (core.auto_disabled(no_auto, "kit") or core.auto_disabled(no_auto, "kpsewhich")) else None
     rows = list_kits(locations, cache)
     for path, _ in core.configured_kits():
         if not path.is_dir():
-            print(f"WARN  kits: {core.display_path(path)} (in the config) is not a folder", file=sys.stderr)
+            emit("warning", None, f"WARN  kits: {core.display_path(path)} (in the config) is not a folder", file=sys.stderr)
     for found in rows:
         try:
             kit = load_kit(found.path, found.aliases, package_folder=found.package_folder)
         except KitError as error:
-            print(f"ERROR  {error.problems[0]}", file=sys.stderr)
+            emit("error", None, f"ERROR  {error.problems[0]}", file=sys.stderr)
             ok = False
             continue
         modes = ", ".join(mode.name + (f" ({', '.join(mode.aliases)})" if mode.aliases else "") for mode in kit.modes.values())
@@ -169,7 +170,7 @@ def kits_report(names: list[str], no_auto: list[str] | None = None) -> bool:
         print(f"{kit.name} {kit.version}".rstrip().ljust(24) + f"  {core.display_path(found.path)}  ({found.source}{', cached' if found.cached else ''})"
               + (f"\n{'':<26}modes: {modes}" if modes else "") + origin)
         for warning in kit.warnings:
-            print(f"WARN  {warning}", file=sys.stderr)
+            emit("warning", None, f"WARN  {warning}", file=sys.stderr)
     if not rows:
         print("No kit found. A kit is a folder with a `.kit` file: put it in a kits/ folder beside your documents, or list its "
               "folder under `kits:` in the config file (pdfmd --setup). A named kit that only the TeX tree knows is found "
@@ -243,9 +244,9 @@ def kit_header_resolve(cmd: list[str], document: Path, metadata_files: list[Path
     body, texts, events = kit_header_settle(document, kits, places)
     for event in events:
         if event.warn:
-            print(f"WARN  {event.id}  {event.message}", file=sys.stderr)
+            emit("warning", None, f"WARN  {event.id}  {event.message}", file=sys.stderr)
         elif core.VERBOSE_OUTPUT:
-            print(f"AUTO {event.id}  {event.message}")
+            emit("normal", event.id, f"AUTO {event.id}  {event.message}")
     for (index, equals, path), text in zip(found, texts):
         if text != core.read_text_best_effort(path):
             copy = kit_cache_tex(f"kit-{path.stem}-", text, 12)

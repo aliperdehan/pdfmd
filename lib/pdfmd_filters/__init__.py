@@ -15,6 +15,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 CODE_FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(?![`~])[ \t]*(.*)$")          # indented too: in a list item
@@ -97,7 +98,7 @@ def image_dpi_for(source: Path, metadata_files=(), default=192):
             return dpi
     except (TypeError, ValueError):
         pass
-    print(f"WARN  image-dpi must be a number above 0; using {default}", file=sys.stderr)
+    emit("warning", None, f"WARN  image-dpi must be a number above 0; using {default}", file=sys.stderr)
     return default
 
 
@@ -133,7 +134,7 @@ def image_filter_args(no_auto: list[str] | None, sources: list[Path], metadata_f
         if pdf is None and str(file) not in SVG_WARNED:
             SVG_WARNED.add(str(file))
             reason = "LaTeX cannot read it" if format == "pdf" else "could not be converted to PNG"
-            print(f"WARN  {core.display_path(source)}: {written} is an SVG and {reason}; {why}", file=sys.stderr)
+            emit("warning", None, f"WARN  {core.display_path(source)}: {written} is an SVG and {reason}; {why}", file=sys.stderr)
         return str(pdf) if pdf is not None else None
 
     for source in sources:
@@ -154,11 +155,11 @@ def image_filter_args(no_auto: list[str] | None, sources: list[Path], metadata_f
                     mapping[reference.path] = ""  # remove it before any writer or engine tries the URL again
                     if down:
                         offline = True
-                        print(f"WARN  {core.display_path(source)}: no network, so remote images ({reference.path} and the "
+                        emit("warning", None, f"WARN  {core.display_path(source)}: no network, so remote images ({reference.path} and the "
                               "others) cannot be fetched; leaving their descriptions instead", file=sys.stderr)
                     elif reference.path not in SVG_WARNED:
                         SVG_WARNED.add(reference.path)
-                        print(f"WARN  {core.display_path(source)}: {reference.path} could not be fetched ({why})", file=sys.stderr)
+                        emit("warning", None, f"WARN  {core.display_path(source)}: {reference.path} could not be fetched ({why})", file=sys.stderr)
                     continue
                 if local.suffix == ".svg":
                     converted = convert(local, source, reference.path)
@@ -212,7 +213,7 @@ def resolve_raw(md_path: Path, metadata_files: list[Path], flat: bool = False) -
     except ImportError:
         return None
     except ValueError as error:
-        print(f"WARN  raw: {error}; the raw option was ignored", file=sys.stderr)
+        emit("warning", None, f"WARN  raw: {error}; the raw option was ignored", file=sys.stderr)
         return None
     return table
 
@@ -236,7 +237,7 @@ def pagebreak_value(value) -> list[str]:
         return list(PAGEBREAK_KINDS)
     unknown = [word for word in words if word not in PAGEBREAK_KINDS and word not in ("false", "no", "off", "none")]
     if unknown:
-        print(f"WARN  pagebreak: {', '.join(unknown)} {'is' if len(unknown) == 1 else 'are'} not a page-break family "
+        emit("warning", None, f"WARN  pagebreak: {', '.join(unknown)} {'is' if len(unknown) == 1 else 'are'} not a page-break family "
               f"({', '.join(PAGEBREAK_KINDS)}, or all)", file=sys.stderr)
     return [kind for kind in PAGEBREAK_KINDS if kind in words]
 
@@ -317,7 +318,7 @@ def cover_filter_args(sources: Path | list[Path], metadata_files: list[Path]) ->
         return args
     picture = (files[0].parent / str(value).strip()).resolve()
     if not picture.is_file():
-        print(f"WARN  {core.display_path(files[0])}: cover: {value} was not found beside the document; no cover is made", file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(files[0])}: cover: {value} was not found beside the document; no cover is made", file=sys.stderr)
         return []
     return ["-M", "pdfmd-cover=image", "-M", f"pdfmd-cover-image={picture}", *args]
 
@@ -397,7 +398,7 @@ def linebreak_value(value) -> tuple[str, list[str]]:
         return "all", list(LINEBREAK_KINDS)
     unknown = [word for word in words if word not in LINEBREAK_KINDS and word not in ("auto", "false", "no", "off", "none")]
     if unknown:
-        print(f"WARN  linebreak: {', '.join(unknown)} {'is' if len(unknown) == 1 else 'are'} not a line-break family "
+        emit("warning", None, f"WARN  linebreak: {', '.join(unknown)} {'is' if len(unknown) == 1 else 'are'} not a line-break family "
               f"({', '.join(LINEBREAK_KINDS)}, all, or auto)", file=sys.stderr)
     return "all", [kind for kind in LINEBREAK_KINDS if kind in words]
 
@@ -472,7 +473,7 @@ def md_macro_args(sources: Path | list[Path], metadata_files: list[Path]) -> lis
     if not any(MD_MACRO_RE.search(MD_MACRO_CODE_RE.sub("", core.read_text_best_effort(file))) for file in files):
         return []
     if not any(md_macro_in(core.read_text_best_effort(file)) for file in files):
-        print(f"NOTE  {files[0]}: \\md is defined by the document itself, so pdfmd does not read Markdown inside it "
+        emit("note", None, f"NOTE  {files[0]}: \\md is defined by the document itself, so pdfmd does not read Markdown inside it "
               "(`md-macro: off` silences this)", file=sys.stderr)
         return []
     try:
@@ -653,7 +654,7 @@ def raw_filter_args(sources: Path | list[Path], no_auto: list[str] | None, metad
                 config["pdfmd-diagram-python"] = literal(Path(sys.executable).as_posix())
                 config["pdfmd-diagram-runner"] = literal(runner.as_posix())
             else:       # a copy of pdfmd without its runner, or a Python that cannot say where it is: the tools run as before
-                print("NOTE  diagram-timeout is not applied: pdfmd_lua/limited_run.py or the Python interpreter was not found",
+                emit("note", None, "NOTE  diagram-timeout is not applied: pdfmd_lua/limited_run.py or the Python interpreter was not found",
                       file=sys.stderr)
     if smiles:
         config.update(smiles_config(files[0], metadata_files))

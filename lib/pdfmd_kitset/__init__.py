@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 KPSEWHICH_FOLDERS: dict[tuple, Path | None] = {}   # (package, the variables that steer TeX's search) -> its folder
@@ -47,11 +48,11 @@ def configured_kits() -> list[tuple[Path, dict]]:
             aliases = entry.get("aliases") or {}
             entry = entry.get("path")
             if not isinstance(aliases, dict):
-                print(f"WARN  config {config}: `aliases:` of a kits: entry must be a mapping of mode -> names; ignored",
+                emit("warning", None, f"WARN  config {config}: `aliases:` of a kits: entry must be a mapping of mode -> names; ignored",
                       file=sys.stderr)
                 aliases = {}
         if not isinstance(entry, str) or not entry.strip():
-            print(f"WARN  config {config}: an entry of `kits:` is a path (or a mapping with `path:`); skipped", file=sys.stderr)
+            emit("warning", None, f"WARN  config {config}: an entry of `kits:` is a path (or a mapping with `path:`); skipped", file=sys.stderr)
             continue
         path = Path(os.path.expandvars(entry)).expanduser()
         if not path.is_absolute() and config is not None:
@@ -116,7 +117,7 @@ def find_kit(reference: str, base: Path | None = None, no_auto: list[str] | None
                            + (f"; did you mean {', '.join(near)}?" if near else "")
                            + "; a kit is a folder with a `.kit` file: name its folder in `kits:` of the config, or give its path")
     if core.VERBOSE_OUTPUT:
-        print(f"AUTO KIT  {reference}: {core.display_path(found.path)} ({found.source}{', cached' if found.cached else ''})")
+        emit("normal", "KIT", f"AUTO KIT  {reference}: {core.display_path(found.path)} ({found.source}{', cached' if found.cached else ''})")
     return found
 
 
@@ -242,14 +243,14 @@ def _active_kits(md_path: Path, metadata_files: list[Path] | None, no_auto: list
         except KitError as error:
             raise SystemExit(f"{md_path.name}: kit `{choice.ref}` (chosen in the {choice.layer}): {error}")
         for warning in kit.warnings:
-            print(f"WARN  {warning}", file=sys.stderr)
+            emit("warning", None, f"WARN  {warning}", file=sys.stderr)
         resolved.append(ActiveKit(kit, mode, found, choice))
         if core.VERBOSE_OUTPUT and choice.layer == "command line":        # a KIT line with its file and how to read about it (v3.33.72)
             line = selection.command_line_line(resolved[-1].describe(), kit.name, core.display_path(kit.path))
             if line:
                 print(line)
         elif core.VERBOSE_OUTPUT:
-            print(f"AUTO KIT  {resolved[-1].describe()}")
+            emit("normal", "KIT", f"AUTO KIT  {resolved[-1].describe()}")
     ACTIVE_KITS[key] = resolved
     return resolved
 
@@ -268,7 +269,7 @@ def kit_overlay(kit, label: str, mapping: dict) -> Path | None:
             temporary.write_text(text, encoding="utf-8")
             os.replace(temporary, path)
     except OSError as error:
-        print(f"WARN  kit {kit.name}: cannot write its default metadata to {path} ({error.strerror or error}); left out", file=sys.stderr)
+        emit("warning", None, f"WARN  kit {kit.name}: cannot write its default metadata to {path} ({error.strerror or error}); left out", file=sys.stderr)
         return None
     return path
 

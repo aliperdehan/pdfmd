@@ -20,6 +20,7 @@ import zlib
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 # --- The hybrid PDF (v3.25.10) -----------------------------------------------------------------------------
 # LibreOffice's "hybrid PDF" (Export as PDF > Embed OpenDocument file): the PDF carries the document it was made from
@@ -103,12 +104,12 @@ def hybrid_after_success(path: Path, pdf_path: Path, metadata_files: list[Path],
     if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
         return
     if core.pypdf is None:
-        print("WARN  hybrid: pypdf is not installed (pip install pypdf); nothing was attached", file=sys.stderr)
+        emit("warning", None, "WARN  hybrid: pypdf is not installed (pip install pypdf); nothing was attached", file=sys.stderr)
         return
     try:
         found = odf_source_for(path, metadata_files, variables, no_auto, verbose)
         if found is None:
-            print(f"WARN  hybrid: could not make an OpenDocument copy of {core.display_path(path)}"
+            emit("warning", None, f"WARN  hybrid: could not make an OpenDocument copy of {core.display_path(path)}"
                   + ("" if path.suffix.lower() not in core.OFFICE_INPUT_EXTENSIONS else " (LibreOffice was not found)")
                   + "; the PDF itself was built", file=sys.stderr)
             return
@@ -119,7 +120,7 @@ def hybrid_after_success(path: Path, pdf_path: Path, metadata_files: list[Path],
         else:
             core.vprint(verbose, f"HYBRID    {core.display_path(pdf_path)}: already carries its OpenDocument source")
     except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
-        print(f"WARN  hybrid: could not attach the OpenDocument copy to {core.display_path(pdf_path)} ({error}); "
+        emit("warning", None, f"WARN  hybrid: could not attach the OpenDocument copy to {core.display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
 
 

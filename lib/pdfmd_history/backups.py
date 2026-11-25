@@ -38,6 +38,7 @@ except ImportError:                                # pragma: no cover -- incompl
 
 from pdfmd_base import core
 from pdfmd_base import timed
+from pdfmd_log import emit
 
 
 def entry_line(entry) -> str:
@@ -240,7 +241,7 @@ def restore_version(document: Path, version, metadata_files: list[Path], note: b
     history = core.history_module()
     text = version_text(version)
     if text is None:
-        print(f"ERROR  {core.display_path(document)}: cannot read {version.label}", file=sys.stderr)
+        emit("error", None, f"ERROR  {core.display_path(document)}: cannot read {version.label}", file=sys.stderr)
         return 1
     current = document.read_text(encoding="utf-8-sig")
     options = core.resolve_stamp_options(document, metadata_files, {})
@@ -267,7 +268,7 @@ def restore_version(document: Path, version, metadata_files: list[Path], note: b
         return 0
     saved = core.backup_before_edit(document, metadata_files)
     if saved is None:
-        print(f"ERROR  {core.display_path(document)}: not restored, since the file as it is could not be backed up.",
+        emit("error", None, f"ERROR  {core.display_path(document)}: not restored, since the file as it is could not be backed up.",
               file=sys.stderr)
         return 1
     core.atomic_write_text(document, result)
@@ -302,7 +303,7 @@ def history_view_command(args) -> int:
     """--history / --history-diff REF / --history-restore REF."""
     history = core.history_module()
     if history is None:
-        print("ERROR  --history needs the pdfmd_history package (a full install of pdfmd-cli).", file=sys.stderr)
+        emit("error", None, "ERROR  --history needs the pdfmd_history package (a full install of pdfmd-cli).", file=sys.stderr)
         return 1
     documents = history_documents(args)
     reference = args.history_diff or args.history_restore
@@ -330,10 +331,10 @@ def history_view_command(args) -> int:
     try:
         version = history.versions.resolve(reference, all_versions, version_differs)
     except history.versions.Ambiguous as error:
-        print(f"ERROR  {reference!r} matches several versions: {error}", file=sys.stderr)
+        emit("error", None, f"ERROR  {reference!r} matches several versions: {error}", file=sys.stderr)
         return 1
     if version is None or version.kind not in ("backup", "git") or version.document is None:
-        print(f"ERROR  no version of {', '.join(core.display_path(item) for item in documents)} matches {reference!r}"
+        emit("error", None, f"ERROR  no version of {', '.join(core.display_path(item) for item in documents)} matches {reference!r}"
               + (" (a recorded entry has no copy of the file to go back to)" if version is not None else "")
               + ". `pdfmd --history FILE` lists them.", file=sys.stderr)
         return 1
@@ -346,7 +347,7 @@ def history_act(version, action: str, args) -> int:
     if action == "diff":
         text = version_text(version)
         if text is None:
-            print(f"ERROR  cannot read {version.label}", file=sys.stderr)
+            emit("error", None, f"ERROR  cannot read {version.label}", file=sys.stderr)
             return 1
         current = document.read_text(encoding="utf-8-sig")
         diff = history.versions.unified(current, text, version.label, document.name, sys.stdout.isatty())
@@ -400,7 +401,7 @@ def init_backups_command(args) -> int:
               "stamp": {"enabled": True, "store": "file"}}
     if args.global_:
         if yaml is None or core.config_path() is None:
-            print("ERROR  the config file is switched off or PyYAML is missing.", file=sys.stderr)
+            emit("error", None, "ERROR  the config file is switched off or PyYAML is missing.", file=sys.stderr)
             return 1
         from pdfmd_config import read_config
 
@@ -460,7 +461,7 @@ def init_backups_command(args) -> int:
                 lines[at + 1:at + 1] = [f"  # {note_text}", *block]
             saved = core.backup_before_edit(target) if target.is_file() else None
             if saved is None:
-                print(f"ERROR  {core.display_path(target)}: not changed, since its backup could not be made.", file=sys.stderr)
+                emit("error", None, f"ERROR  {core.display_path(target)}: not changed, since its backup could not be made.", file=sys.stderr)
                 status = 1
                 continue
             new_body = "\n".join(lines)
@@ -489,13 +490,13 @@ def history_command(args) -> int:
     """--history-to-file / --history-to-notes / --merge-history. Returns the exit status."""
     history = core.history_module()
     if history is None:
-        print("ERROR  the history commands need the pdfmd_history package (a full install of pdfmd-cli).", file=sys.stderr)
+        emit("error", None, "ERROR  the history commands need the pdfmd_history package (a full install of pdfmd-cli).", file=sys.stderr)
         return 1
     if args.merge_history:
         sources = [Path(item) for item in args.merge_history]
         missing = [str(item) for item in sources if not item.is_file()]
         if missing:
-            print(f"ERROR  not a file: {', '.join(missing)}", file=sys.stderr)
+            emit("error", None, f"ERROR  not a file: {', '.join(missing)}", file=sys.stderr)
             return 1
         lists, other = [], []
         for source in sources:
@@ -516,7 +517,7 @@ def history_command(args) -> int:
         try:
             document = core.find_markdown(target)
         except FileNotFoundError as error:
-            print(f"ERROR  {error}", file=sys.stderr)
+            emit("error", None, f"ERROR  {error}", file=sys.stderr)
             return 1
         text = document.read_text(encoding="utf-8-sig")
         metadata = core.find_metadata(document.parent.resolve(), args.metadata_file, document_stem=document.stem,
@@ -537,7 +538,7 @@ def history_command(args) -> int:
             if args.dry_run:
                 continue
             if core.backup_before_edit(document) is None:
-                print(f"ERROR  {core.display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
+                emit("error", None, f"ERROR  {core.display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
                 status = 1
                 continue
             history.write_file(path, merged, document.name, other)       # the file first: nothing is lost if this stops
@@ -556,7 +557,7 @@ def history_command(args) -> int:
             if args.dry_run:
                 continue
             if core.backup_before_edit(document) is None:
-                print(f"ERROR  {core.display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
+                emit("error", None, f"ERROR  {core.display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
                 status = 1
                 continue
             core.atomic_write_text(document, entries_to_notes(text, compiled))
@@ -738,7 +739,7 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
     if not options["enabled"]:
         return
     if options["keep"] == 0:
-        core.vprint(verbose, f"AUTO BACKUP  {core.display_path(md_path)}: keep is 0; no copy made")
+        emit("verbose", "BACKUP", f"AUTO BACKUP  {core.display_path(md_path)}: keep is 0; no copy made", shown=verbose)
         return
     template = backup_template(options["format"])
     backup_dir = backup_directory(md_path, options)
@@ -747,8 +748,8 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
         core.backup_notice(backup_dir, options)
         every, prunable = backup_snapshots(backup_dir, md_path, template)
         if every and backup_unchanged(every[-1], md_path):
-            core.vprint(verbose, f"AUTO BACKUP  {core.display_path(md_path)}: unchanged since "
-                  f"{core.display_path(every[-1])}; skipped")
+            emit("verbose", "BACKUP", f"AUTO BACKUP  {core.display_path(md_path)}: unchanged since "
+                  f"{core.display_path(every[-1])}; skipped", shown=verbose)
             return
         target = core.backup_target(backup_dir, template, md_path)
         shutil.copy2(md_path, target)
@@ -760,9 +761,9 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
         if options["keep"] > 0 and len(prunable) > options["keep"]:
             for old in prunable[:-options["keep"]]:
                 old.unlink()
-                core.vprint(verbose, f"AUTO BACKUP  pruned {core.display_path(old)} (keep: {options['keep']})")
+                emit("verbose", "BACKUP", f"AUTO BACKUP  pruned {core.display_path(old)} (keep: {options['keep']})", shown=verbose)
     except OSError as error:
-        print(f"WARN  {core.display_path(md_path)}: backup failed: {error}", file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(md_path)}: backup failed: {error}", file=sys.stderr)
 
 
 def backup_pdf_pattern(pdf: Path) -> re.Pattern:
@@ -790,7 +791,7 @@ def backup_pdf_after_success(md_path: Path, pdf: Path, metadata_files: list[Path
         pattern = backup_pdf_pattern(pdf)
         kept = sorted((path for path in backup_dir.iterdir() if path.is_file() and pattern.match(path.name)), key=core.backup_sort_key)
         if kept and filecmp.cmp(kept[-1], pdf, shallow=False):
-            core.vprint(verbose, f"AUTO BACKUP  {core.display_path(pdf)}: the same PDF as {core.display_path(kept[-1])}; skipped")
+            emit("verbose", "BACKUP", f"AUTO BACKUP  {core.display_path(pdf)}: the same PDF as {core.display_path(kept[-1])}; skipped", shown=verbose)
             return None
         stamp = (when or datetime.now()).strftime("%Y%m%d-%H%M%S")
         target, counter = backup_dir / f"{pdf.stem}_{stamp}.pdf", 2
@@ -803,10 +804,10 @@ def backup_pdf_after_success(md_path: Path, pdf: Path, metadata_files: list[Path
         if keep > 0 and len(kept) > keep:
             for old in kept[:-keep]:
                 old.unlink()
-                core.vprint(verbose, f"AUTO BACKUP  pruned {core.display_path(old)} (pdfs: {keep})")
+                emit("verbose", "BACKUP", f"AUTO BACKUP  pruned {core.display_path(old)} (pdfs: {keep})", shown=verbose)
         return target
     except OSError as error:
-        print(f"WARN  {core.display_path(pdf)}: PDF backup failed: {error}", file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(pdf)}: PDF backup failed: {error}", file=sys.stderr)
         return None
 
 

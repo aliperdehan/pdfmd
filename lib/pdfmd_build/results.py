@@ -16,6 +16,7 @@ from pdfmd_base import core
 from pdfmd_base import timed
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 from pdfmd_reader.controls import diagnostic_scope, repair_controls
 
 
@@ -156,7 +157,7 @@ def check_asset_budget(sources: list[Path], md_path: Path, metadata_files: list[
             except OSError:
                 continue
             if size > limit * 1048576:
-                print(f"WARN  {core.display_path(md_path)}: {core.display_path(image)} is {size_text(size)}, over the "
+                emit("warning", None, f"WARN  {core.display_path(md_path)}: {core.display_path(image)} is {size_text(size)}, over the "
                       f"{limit:g} MB asset budget (--max-asset-mb, pdfmd-options.max-asset-mb)", file=sys.stderr)
 
 
@@ -270,7 +271,7 @@ def check_nonmath_dollars(sources: list[Path], cli_from: str | None, metadata_fi
             continue
         reader = cli_from if fixed_reader else core.resolve_from_format(source, cli_from, metadata_files)[0]   # --no-auto reader: no pick of pdfmd's
         for line, written, instead in nonmath_dollars(source, reader):
-            print(f"WARN  {core.display_path(source)}:{line}: `{written}` is not math (Pandoc needs the closing $ not "
+            emit("warning", None, f"WARN  {core.display_path(source)}:{line}: `{written}` is not math (Pandoc needs the closing $ not "
                   f"followed by a digit); write {instead}", file=sys.stderr)
 
 
@@ -296,7 +297,7 @@ def check_output_budget(output: Path | None, sources: list[Path], md_path: Path,
     biggest = sorted(images.items(), key=lambda item: -item[1])[:3]
     behind = ("; the largest images: " + ", ".join(f"{core.display_path(path)} {size_text(value)}" for path, value in biggest)) \
         if biggest and biggest[0][1] > 1048576 else ""
-    print(f"WARN  {core.display_path(md_path)}: {core.display_path(output)} is {size_text(size)}, over the {limit:g} MB output budget "
+    emit("warning", None, f"WARN  {core.display_path(md_path)}: {core.display_path(output)} is {size_text(size)}, over the {limit:g} MB output budget "
           f"(--max-output-mb, pdfmd-options.max-output-mb){behind}"
           + (core.load_package("pdfmd_shrink").budget_hint(md_path, metadata_files) if output.suffix.lower() == ".pdf" else ""), file=sys.stderr)
 

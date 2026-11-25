@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 FOLDER_SETTINGS = ".pdfmd/config.yaml"
@@ -45,7 +46,7 @@ def ranking_for_document(mapping: dict, where: str) -> dict:
     """What a document's own `ranking` may say: its classes and ladder. The rest is the folder's to set (a WARN)."""
     ignored = sorted(str(key) for key in mapping if key not in RANKING_DOCUMENT_KEYS)
     if ignored:
-        print(f"WARN  ranking: {where}: {', '.join(ignored)} can be set by a folder or the config, not by a document; ignored",
+        emit("warning", None, f"WARN  ranking: {where}: {', '.join(ignored)} can be set by a folder or the config, not by a document; ignored",
               file=sys.stderr)
     return {key: value for key, value in mapping.items() if key in RANKING_DOCUMENT_KEYS}
 
@@ -199,7 +200,7 @@ def which_command(names: list[str], args) -> bool:
     if core.priority_enabled(folder) or newest:
         sources = core.source_markdown(files)
         if len(sources) != len(files):
-            print(f"NOTE  not candidates (pdfmd's own output): {', '.join(core.display_path(file) for file in files if file not in sources)}")
+            emit("note", None, f"NOTE  not candidates (pdfmd's own output): {', '.join(core.display_path(file) for file in files if file not in sources)}")
             files = sources
     candidates = priority_candidates(files)
     if not core.priority_enabled(folder) and not newest:
@@ -207,7 +208,7 @@ def which_command(names: list[str], args) -> bool:
         return True
     choice = choose(candidates, ranking, by=["newest"] if newest else None, show=core.display_path, include_excluded=include_never)
     for line in [f"WARN  ranking: {text}" for text in ranking.warnings] + choice.warnings:
-        print(line, file=sys.stderr)
+        emit("warning", None, line, file=sys.stderr)
     if choice.winner is not None:
         print(f"WHICH  bare pdfmd{' --newest' if newest else ''} in {core.display_path(folder)} builds {core.display_path(choice.winner)}")
     else:

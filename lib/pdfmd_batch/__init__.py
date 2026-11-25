@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+from pdfmd_log import emit
 
 
 # The author wants this source-likeness ranking revised later (master queue 3fi D33).
@@ -77,11 +78,11 @@ def selection_note(core, paths, files, skipped, outputs, collisions=()):
         if len(paths) == 2 and any(path.suffix.lower() == ".pdf" and
                                   any(file.parent == path.resolve().parent for file in files) for path in skipped):
             note += "; to name the output, use -o NAME.pdf"
-        print(note)
+        emit("note", None, note)
     if outputs:
-        print("NOTE  skipped built outputs: " + ", ".join(core.display_path(path) for path in outputs))
+        emit("note", None, "NOTE  skipped built outputs: " + ", ".join(core.display_path(path) for path in outputs))
     for file, chosen in collisions:
-        print(f"NOTE  skipped (same output as {core.display_path(chosen)}): {core.display_path(file)}")
+        emit("note", None, f"NOTE  skipped (same output as {core.display_path(chosen)}): {core.display_path(file)}")
 
 
 def prepare_inputs(core, args) -> None:
@@ -205,7 +206,7 @@ def run(core, *,
         announce_preambles(preambles)
         return preambles
     if args.open and args.bopen is None:
-        print("WARN  --open is ignored in batch mode (-b); it would open every converted file "
+        emit("warning", None, "WARN  --open is ignored in batch mode (-b); it would open every converted file "
               "(--bopen SPEC opens the ones you say)", file=sys.stderr)
     def file_build(file):
         request = file_presentation(file)

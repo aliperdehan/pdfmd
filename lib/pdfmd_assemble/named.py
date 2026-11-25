@@ -2,6 +2,7 @@
 import sys
 
 from pdfmd_base import core
+from pdfmd_log import emit
 from pdfmd_config import global_option_layers
 
 
@@ -69,7 +70,7 @@ def files(document, metadata_files, kind):
         if not path.is_file():
             if kind == 'lua-filter' and owner == document and core.is_assembled_document(document):
                 # An assembled --lua-mode ref document retains its existing best-effort behaviour.
-                print(f"WARN  {core.display_path(document)}: the Lua filter it names, {name!r}, was not found "
+                emit("warning", None, f"WARN  {core.display_path(document)}: the Lua filter it names, {name!r}, was not found "
                       f"at {path}; building without it", file=sys.stderr)
                 continue
             raise SystemExit(f"{owner}: pdfmd-options.{kind} names {name!r}, which doesn't exist at {path}")

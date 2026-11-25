@@ -31,6 +31,7 @@ from tempfile import mkdtemp
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 
 
 def quarto_input(args) -> bool:
@@ -96,14 +97,14 @@ def install_ocr_tools() -> None:
         return
     manager = core.system_package_manager()
     if not manager:
-        print(f"NOTE  {' and '.join(missing)} not found; scanned pages need them: {core.tesseract_install_hint()}")
+        emit("note", None, f"NOTE  {' and '.join(missing)} not found; scanned pages need them: {core.tesseract_install_hint()}")
         return
     command = core.ocr_install_command(manager, tuple(missing))
     base = core.OCR_PACKAGE_MANAGERS[manager][0]
     if command[-len(base):] == base:  # nothing this manager can install (Poppler under winget)
-        print(f"NOTE  {' and '.join(missing)} not found; scanned pages need them: {core.tesseract_install_hint()}")
+        emit("note", None, f"NOTE  {' and '.join(missing)} not found; scanned pages need them: {core.tesseract_install_hint()}")
         return
-    print(f"NOTE  {' and '.join(missing)} not found; scanned pages need them (pdfmd does not bundle them).")
+    emit("note", None, f"NOTE  {' and '.join(missing)} not found; scanned pages need them (pdfmd does not bundle them).")
     print(f"      {shlex.join(command)}")
     if os.environ.get("PDFMD_NO_PROMPT") or not sys.stdin.isatty() or not sys.stdout.isatty():
         print("      (run it yourself; pdfmd asks only on an interactive terminal)")
@@ -243,11 +244,11 @@ def route_pdf_input(args, extra: list[str]) -> int | None:
         if has_source and not read_pages:
             restorable.append(pdf)
         elif has_source:
-            print(f"NOTE  {pdf.name} carries its own source; `pdfmd --restore {pdf.name}` writes it back "
+            emit("note", None, f"NOTE  {pdf.name} carries its own source; `pdfmd --restore {pdf.name}` writes it back "
                   "(reading its pages, as asked)", file=sys.stderr)
     status = 0
     for pdf in restorable:
-        print(f"NOTE  {pdf.name} carries its own source; restoring it (--extract reads the pages instead)",
+        emit("note", None, f"NOTE  {pdf.name} carries its own source; restoring it (--extract reads the pages instead)",
               file=sys.stderr)
         folder = None if out is None else (out if len(pdfs) == 1 else out / pdf.stem)
         status = max(status, core.restore_from_pdf(pdf, folder.resolve() if folder else None))
@@ -354,7 +355,7 @@ def route_text_input(args, extra: list[str]) -> int | None:
         produced.append(target)
     if only_markdown:
         return 0
-    print("NOTE  the Markdown is kept beside the text file: " + ", ".join(path.name for path in produced), file=sys.stderr)
+    emit("note", None, "NOTE  the Markdown is kept beside the text file: " + ", ".join(path.name for path in produced), file=sys.stderr)
     args.path = produced
     return None
 

@@ -17,6 +17,7 @@ from pathlib import Path
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 
 
 # The tools pdfmd runs that Windows installers leave off PATH: tool -> (the `options:` key of the config that names it,
@@ -89,7 +90,7 @@ def locate_tool(name: str) -> tuple[str | None, str]:
             return str(found), "key"
         if f"{key}:{named}" not in core.TOOL_WARNED:
             core.TOOL_WARNED.add(f"{key}:{named}")
-            print(f"WARN  config: options.{key} ({named}) holds no {programs[0]}; looking on PATH and in the usual folders",
+            emit("warning", None, f"WARN  config: options.{key} ({named}) holds no {programs[0]}; looking on PATH and in the usual folders",
                   file=sys.stderr)
     for program in programs:
         found = core.which(program)
@@ -386,7 +387,7 @@ def run_probe(command: list, **options) -> "subprocess.CompletedProcess | None":
     except subprocess.TimeoutExpired:
         if core.VERBOSE_OUTPUT:
             asked = " ".join(Path(str(command[0])).name if index == 0 else str(word) for index, word in enumerate(command[:3]))
-            print(f"AUTO PROBE  {asked}: no answer in {core.PROBE_TIMEOUT} s; counted as not available")
+            emit("normal", "PROBE", f"AUTO PROBE  {asked}: no answer in {core.PROBE_TIMEOUT} s; counted as not available")
         return None
     except OSError:
         return None

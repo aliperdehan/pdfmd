@@ -38,6 +38,7 @@ from textwrap import dedent
 
 from pdfmd_base import core
 from pdfmd_base import timed
+from pdfmd_log import emit
 
 
 def is_latex_preamble(path: Path) -> bool:
@@ -422,7 +423,7 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
             bib_result = core.load_package("pdfmd_tex.repair").retry_biber(
                 bib_cmd, bib_env, lambda fresh: run(bib_cmd, output_dir, env=fresh)) or bib_result
         if bib_result.returncode != 0:
-            print(f"WARN  {tex_path}: {bib_tool} reported errors; continuing"
+            emit("warning", None, f"WARN  {tex_path}: {bib_tool} reported errors; continuing"
                   + (f" ({bib_result.stderr.strip().splitlines()[-1]})" if bib_result.stderr.strip() else ""),
                   file=sys.stderr)
         result = run(cmd, work_dir, env=engine_env)
@@ -436,8 +437,8 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
         if result.returncode != 0:
             return failure(result)
     # every run of the engine: `passes` starts at the run after bibtex/biber, so the one before it is added (v3.33.47)
-    core.vprint(verbose, f"AUTO TEXDIRECT  {tex_path}: {engine}, {passes + (1 if bib_tool else 0)} pass(es)"
-          + (f" + {bib_tool}" if bib_tool else ""))
+    emit("verbose", "TEXDIRECT", f"AUTO TEXDIRECT  {tex_path}: {engine}, {passes + (1 if bib_tool else 0)} pass(es)"
+          + (f" + {bib_tool}" if bib_tool else ""), shown=verbose)
     from pdfmd_filters.lua import figure_fit_module
     diagnostics = figure_fit_module().diagnostics
     diagnostics(result.stdout + "\n" + result.stderr + "\n" + log_text(), tex_path)
@@ -570,8 +571,8 @@ def render_plot_requests(requests: dict[str, tuple[str, str, str]], plot_dir: Pa
         else:
             for suffix in (".dim", ".pdf", ".deps"):
                 (plot_dir / f"{key}{suffix}").unlink(missing_ok=True)
-            core.vprint(verbose, f"AUTO CACHE  plot {key[:8]} failed to render: "
-                  + (tex_log_failure_reason(result.stdout) or result.stdout[-300:].strip()))
+            emit("verbose", "CACHE", f"AUTO CACHE  plot {key[:8]} failed to render: "
+                  + (tex_log_failure_reason(result.stdout) or result.stdout[-300:].strip()), shown=verbose)
         for leftover in plot_dir.glob(f"r-{key}.*"):
             leftover.unlink(missing_ok=True)
         return ok
@@ -645,7 +646,7 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                     for leftover in output_dir.glob(f"{tex_path.stem}.*"):
                         if leftover.name.endswith(AUX_CLEAN_SUFFIXES):
                             leftover.unlink(missing_ok=True)
-                    core.vprint(verbose, f"AUTO CACHE  {tex_path.stem}: first attempt failed; retrying with a clean aux")
+                    emit("verbose", "CACHE", f"AUTO CACHE  {tex_path.stem}: first attempt failed; retrying with a clean aux", shown=verbose)
                     ok, reason = run_tex_engine(engine, prepared, output_dir, verbose, cwd=prepared_cwd, env=env)
             if ok:
                 produced = output_dir / f"{tex_path.stem}.pdf"
@@ -658,7 +659,7 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                     shutil.copy2(produced, output)
                 where = ("in place (--keep-aux)" if keep_aux else
                          f"in the cache {output_dir}" if aux_dir else "in a scratch directory, then discarded")
-                core.vprint(verbose, f"AUTO TEXDIRECT  {tex_path}: compiled with {engine} {where}")
+                emit("verbose", "TEXDIRECT", f"AUTO TEXDIRECT  {tex_path}: compiled with {engine} {where}", shown=verbose)
                 core.record_engine(engine, failed_engines)
                 return True, ""
             last_reason = reason

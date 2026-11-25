@@ -9,6 +9,7 @@ from pathlib import Path
 
 from pdfmd_base import core
 from pdfmd_base import spelling
+from pdfmd_log import emit
 
 
 try:
@@ -32,7 +33,7 @@ def markup_value(value) -> list[str]:
         return list(MARKUP_KINDS)
     unknown = [word for word in words if word not in MARKUP_KINDS and word not in ("false", "no", "off", "none")]
     if unknown:
-        print(f"WARN  markup: {', '.join(unknown)} {'is' if len(unknown) == 1 else 'are'} not a kind of universal markup "
+        emit("warning", None, f"WARN  markup: {', '.join(unknown)} {'is' if len(unknown) == 1 else 'are'} not a kind of universal markup "
               f"({', '.join(MARKUP_KINDS)}, or all)", file=sys.stderr)
     return [kind for kind in MARKUP_KINDS if kind in words]
 
@@ -66,7 +67,7 @@ def unclosed_comment_mode(md_path: Path, metadata_files=()) -> str:
         return name
     if name and name not in _FLAVOUR_TOLD:
         _FLAVOUR_TOLD.add(name)
-        print(f"NOTE  unclosed-comment: {name} is not one of {', '.join(UNCLOSED_WORDS)}; using {default}", file=sys.stderr)
+        emit("note", None, f"NOTE  unclosed-comment: {name} is not one of {', '.join(UNCLOSED_WORDS)}; using {default}", file=sys.stderr)
     return default
 
 
@@ -126,7 +127,7 @@ def hidden_comments(text: str, md_path: Path, metadata_files=(), show: bool | No
     try:
         from pdfmd_obsidian import hide_comments
     except ImportError:
-        print("WARN  the pdfmd_obsidian package is missing; %%comments%% are left as they are", file=sys.stderr)
+        emit("warning", None, "WARN  the pdfmd_obsidian package is missing; %%comments%% are left as they are", file=sys.stderr)
         return text
     mode = unclosed_comment_mode(md_path, metadata_files)
     result = hide_comments(text, show_comments_on(md_path, list(metadata_files)) if show is None else show, mode)
@@ -138,7 +139,7 @@ def hidden_comments(text: str, md_path: Path, metadata_files=(), show: bool | No
             what = (f"the rest of the note ({rest} line{'s' if rest != 1 else ''}) is hidden, as Obsidian hides it; "
                     "pdfmd-options: unclosed-comment: keep leaves it as text" if mode == "hide"
                     else "it is kept as text; pdfmd-options: unclosed-comment: hide hides the rest, as Obsidian does")
-            print(f"WARN  {core.display_path(md_path)}, line {line}: a `%%` with no closing `%%`: {what}", file=sys.stderr)
+            emit("warning", None, f"WARN  {core.display_path(md_path)}, line {line}: a `%%` with no closing `%%`: {what}", file=sys.stderr)
     return result.text
 
 

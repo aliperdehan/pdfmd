@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 def css_scope(md_path: Path, metadata_files: list[Path]) -> str:
     """``html`` (a style sheet is for the writers that read CSS: the default) or ``all``: the command line, else
@@ -41,7 +42,7 @@ def css_sources(md_path: Path, metadata_files: list[Path], no_auto: list[str] | 
             if path.is_file():
                 found.append(path)
             else:
-                print(f"WARN  {origin}: the style sheet {name} was not found beside {core.display_path(md_path)}", file=sys.stderr)
+                emit("warning", None, f"WARN  {origin}: the style sheet {name} was not found beside {core.display_path(md_path)}", file=sys.stderr)
         return found
 
     beside: list[Path] = []

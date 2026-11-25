@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 CSV_CUTS = ("ends", "head")
@@ -117,7 +118,7 @@ def spreadsheet_args(files: list[Path]) -> list[str]:
                                                  core.resolve_soffice(), core.run_soffice).as_posix()      # Pandoc reads metadata as Markdown: a backslash would go
             except (OSError, sheets.SheetError) as error:
                 said = "no such file" if isinstance(error, FileNotFoundError) else error
-                print(f"WARN  {core.display_path(Path(source))}: {name}: {said}", file=sys.stderr)
+                emit("warning", None, f"WARN  {core.display_path(Path(source))}: {name}: {said}", file=sys.stderr)
     if not mapping:
         return []
     digest = hashlib.sha1(json.dumps(mapping, sort_keys=True).encode("utf-8")).hexdigest()[:16]
@@ -164,15 +165,15 @@ def tables_command(args) -> int:
     try:
         import pdfmd_tables as tables
     except ImportError:
-        print("ERROR  --extract-tables needs the pdfmd_tables package (a full install of pdfmd-cli).", file=sys.stderr)
+        emit("error", None, "ERROR  --extract-tables needs the pdfmd_tables package (a full install of pdfmd-cli).", file=sys.stderr)
         return 1
     if args.extract_inline_csv and not args.expand_tables:
         args.extract_tables = True
     if args.extract_tables and args.expand_tables:
-        print("ERROR  --extract-tables and --expand-tables are opposites; pick one.", file=sys.stderr)
+        emit("error", None, "ERROR  --extract-tables and --expand-tables are opposites; pick one.", file=sys.stderr)
         return 1
     if args.fix_tables is not None and (args.path or args.extract_tables or args.expand_tables):
-        print("ERROR  --fix-tables takes one file and is a separate command from --extract-tables and --expand-tables.", file=sys.stderr)
+        emit("error", None, "ERROR  --fix-tables takes one file and is a separate command from --extract-tables and --expand-tables.", file=sys.stderr)
         return 1
     pandoc = core.which("pandoc") if args.fix_tables is None else None
     names = [name for name in re.split(r"[,\s]+", args.table_names or "") if name] or None
@@ -182,7 +183,7 @@ def tables_command(args) -> int:
         for piece in re.split(r"[,\s]+", args.table_numbers.strip()):
             span = re.fullmatch(r"(\d+)(?:-(\d+))?", piece)
             if not span or int(span.group(1)) < 1:
-                print(f"ERROR  --table-numbers: {piece!r} is not a table number (1, 3 or 2-4)", file=sys.stderr)
+                emit("error", None, f"ERROR  --table-numbers: {piece!r} is not a table number (1, 3 or 2-4)", file=sys.stderr)
                 return 1
             only_tables.update(range(int(span.group(1)), int(span.group(2) or span.group(1)) + 1))
     csv_filter = None
@@ -196,14 +197,14 @@ def tables_command(args) -> int:
     if args.fix_tables is not None:
         document = args.fix_tables.resolve()
         if not document.is_file() or document.suffix.lower() not in core.MARKDOWN_LIKE_SUFFIXES:
-            print(f"ERROR  --fix-tables needs a Markdown file: {core.display_path(document)}", file=sys.stderr)
+            emit("error", None, f"ERROR  --fix-tables needs a Markdown file: {core.display_path(document)}", file=sys.stderr)
             return 1
         documents.append(document)
     for target in (() if args.fix_tables is not None else (args.path or [Path.cwd()])):
         try:
             document = core.find_markdown(target)
         except FileNotFoundError as error:
-            print(f"ERROR  {error}", file=sys.stderr)
+            emit("error", None, f"ERROR  {error}", file=sys.stderr)
             return 1
         with contextlib.redirect_stderr(io.StringIO()):
             plan = core.plan_scaffold(document, [], args.no_auto, args.metadata_file)
@@ -215,7 +216,7 @@ def tables_command(args) -> int:
     if names and len(documents) > 1:       # a part given by name: the report's own file has no tables to name
         holding = [item for item in documents if tables.find_tables(item.read_text(encoding="utf-8"))]
         if len(holding) != 1:
-            print("ERROR  --table-names names the tables of one document; this is a document in parts "
+            emit("error", None, "ERROR  --table-names names the tables of one document; this is a document in parts "
                   f"with tables in {len(holding)} of its files (give the one part: pdfmd parts/NAME.md ...).",
                   file=sys.stderr)
             return 1
@@ -271,17 +272,18 @@ def tables_command(args) -> int:
                         except OSError:
                             pass
                 if problems:
-                    print(f"ERROR  {core.display_path(document)}: Pandoc would read different tables after the change "
+                    emit("error", None, f"ERROR  {core.display_path(document)}: Pandoc would read different tables after the change "
                           f"({'; '.join(problems)}). Nothing was written.", file=sys.stderr)
                     status = 1
                     continue
         except tables.TablesError as error:
-            print(f"ERROR  {core.display_path(document)}: {error}", file=sys.stderr)
+            emit("error", None, f"ERROR  {core.display_path(document)}: {error}", file=sys.stderr)
             status = 1
             continue
         print(f"{core.display_path(document)}:")
         for line in result.report:
-            print(f"  {line}", file=sys.stderr if line.startswith("WARN  ") else sys.stdout)
+            warning = line.startswith("WARN  ")
+            emit("warning" if warning else "note", None, f"  {line}", file=sys.stderr if warning else sys.stdout)
         if not result.changed:
             continue
         if args.dry_run:
@@ -293,7 +295,7 @@ def tables_command(args) -> int:
         backup = core.backup_before_edit(document)
         if backup is None:
             status = 1
-            print(f"ERROR  {core.display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
+            emit("error", None, f"ERROR  {core.display_path(document)}: not changed, since its backup could not be made.", file=sys.stderr)
             continue
         for name, data in result.files.items():
             target = base / name

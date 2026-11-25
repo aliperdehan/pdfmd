@@ -22,6 +22,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 def latin_candidates(value: str) -> list[str]:
@@ -302,7 +303,7 @@ def document_priority(path: Path):
     options = options if isinstance(options, dict) else {}
     if "priority" in options:
         if "priority" in data and str(data["priority"]) != str(options["priority"]):
-            print(f"WARN  {core.display_path(path)}: priority is set twice ({data['priority']!r} and pdfmd-options "
+            emit("warning", None, f"WARN  {core.display_path(path)}: priority is set twice ({data['priority']!r} and pdfmd-options "
                   f"{options['priority']!r}); using the one in pdfmd-options", file=sys.stderr)
         return options["priority"], "pdfmd-options priority"
     if "priority" in data:

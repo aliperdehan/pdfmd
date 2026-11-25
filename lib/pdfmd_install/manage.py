@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 def translit_report() -> bool:
@@ -38,12 +39,12 @@ def uninstall_kit(name: str) -> bool:
     from pdfmd_kits import install as kit_installer
     target = core.kits_install_directory()
     if target is None:
-        print("ERROR  PDFMD_CONFIG switches off the user config: there is no config folder", file=sys.stderr)
+        emit("error", None, "ERROR  PDFMD_CONFIG switches off the user config: there is no config folder", file=sys.stderr)
         return False
     try:
         folder = kit_installer.uninstall(name, target)
     except kit_installer.InstallError as error:
-        print(f"ERROR  {error}", file=sys.stderr)
+        emit("error", None, f"ERROR  {error}", file=sys.stderr)
         return False
     print(f"REMOVED  {core.display_path(folder)}")
     return True

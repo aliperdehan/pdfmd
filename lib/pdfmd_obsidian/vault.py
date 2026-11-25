@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 _VAULT_ROOTS: dict[Path, Path | None] = {}
 NEWLINE_WORDS = ("hard", "soft")
@@ -49,7 +50,7 @@ def single_newline_mode(md_path: Path, metadata_files=()) -> str:
         return name
     if f"newline:{name}" not in core._FLAVOUR_TOLD:
         core._FLAVOUR_TOLD.add(f"newline:{name}")
-        print(f"NOTE  single-newline: {name} is not one of {', '.join(NEWLINE_WORDS)}; using {default}", file=sys.stderr)
+        emit("note", None, f"NOTE  single-newline: {name} is not one of {', '.join(NEWLINE_WORDS)}; using {default}", file=sys.stderr)
     return default
 
 
@@ -93,7 +94,7 @@ def embed_settings(md_path: Path, metadata_files=()) -> dict:
             return word
         if f"{name}:{word}" not in core._FLAVOUR_TOLD:
             core._FLAVOUR_TOLD.add(f"{name}:{word}")
-            print(f"NOTE  {name}: {word} is not one of {', '.join(words)}; using {default}", file=sys.stderr)
+            emit("note", None, f"NOTE  {name}: {word} is not one of {', '.join(words)}; using {default}", file=sys.stderr)
         return default
     ratio = core.first_pdfmd_option(md_path, list(metadata_files), "embed-px-to-pt")
     try:
@@ -103,7 +104,7 @@ def embed_settings(md_path: Path, metadata_files=()) -> dict:
     except (TypeError, ValueError):
         if f"ratio:{ratio}" not in core._FLAVOUR_TOLD:
             core._FLAVOUR_TOLD.add(f"ratio:{ratio}")
-            print(f"NOTE  embed-px-to-pt: {ratio!r} is not a positive number; using 0.75", file=sys.stderr)
+            emit("note", None, f"NOTE  embed-px-to-pt: {ratio!r} is not a positive number; using 0.75", file=sys.stderr)
         px_to_pt = 0.75
     return {"px_to_pt": px_to_pt, "fit": pick("embed-fit", EMBED_FIT_WORDS, "text-width"),
             "search": pick("embed-search", EMBED_SEARCH_WORDS, "vault")}
@@ -153,7 +154,7 @@ def find_embedded_image(name: str, md_path: Path, search: str = "vault") -> Path
     candidates.sort(key=distance)
     if len(candidates) > 1 and f"embed:{md_path}:{name}" not in core._FLAVOUR_TOLD:
         core._FLAVOUR_TOLD.add(f"embed:{md_path}:{name}")
-        print(f"NOTE  {core.display_path(md_path)}: {len(candidates)} pictures are named {name}; using {core.display_path(candidates[0])}",
+        emit("note", None, f"NOTE  {core.display_path(md_path)}: {len(candidates)} pictures are named {name}; using {core.display_path(candidates[0])}",
               file=sys.stderr)
     return candidates[0]
 
@@ -181,7 +182,7 @@ def embed_source(text: str, md_path: Path, metadata_files=()) -> str:
         told = f"missing:{md_path}:{name}"
         if told not in core._FLAVOUR_TOLD:
             core._FLAVOUR_TOLD.add(told)
-            print(f"WARN  {core.display_path(md_path)}: ![[{name}]]: no picture of that name was found "
+            emit("warning", None, f"WARN  {core.display_path(md_path)}: ![[{name}]]: no picture of that name was found "
                   f"(embed-search: {settings['search']}); it is left as [missing image: {name}]", file=sys.stderr)
     return result.text
 

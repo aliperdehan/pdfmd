@@ -24,6 +24,7 @@ from pathlib import Path
 from tempfile import mkdtemp
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 # Two builds that fill the same cache entry at once (v3.33.x): each writes the whole file to its own `.part` beside the
@@ -160,7 +161,7 @@ def check_location(md_path: Path, metadata_files: list[Path], cli: bool | None) 
     settings = core.cache_settings(md_path, metadata_files, cli)
     if any(settings.values()):
         return                                                  # used: cache_location stops the build there
-    print(f"WARN  {md_path}: {found[1]} {found[0]!r} is not one of {', '.join(core.CACHE_LOCATIONS)}; "
+    emit("warning", None, f"WARN  {md_path}: {found[1]} {found[0]!r} is not one of {', '.join(core.CACHE_LOCATIONS)}; "
           "the cache is off, so nothing uses it", file=sys.stderr)
 
 

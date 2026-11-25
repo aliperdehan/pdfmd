@@ -20,6 +20,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 MDPDF_KEYS = {"-o": "--out", "--output": "--out", "-h": "--header", "--header": "--header",
@@ -136,7 +137,7 @@ def mdpdf_translate(argv: list[str]) -> list[str]:
         if key in npm:
             ignored.append(f"{key} {npm[key]}")
     if ignored:
-        print(f"NOTE  mdpdf: pdfmd has no use for {', '.join(ignored)}; left out", file=sys.stderr)
+        emit("note", None, f"NOTE  mdpdf: pdfmd has no use for {', '.join(ignored)}; left out", file=sys.stderr)
     if documents > 1 and "--report" not in out and "-r" not in out:
         out.append("--report")                      # several inputs make one PDF, as in mdpdf
     return out
@@ -201,7 +202,7 @@ def md2pdf_translate(argv: list[str]) -> list[str]:
         else:
             out.append(token)
     if ignored:
-        print(f"NOTE  md2pdf: pdfmd has no use for {', '.join(ignored)}; left out", file=sys.stderr)
+        emit("note", None, f"NOTE  md2pdf: pdfmd has no use for {', '.join(ignored)}; left out", file=sys.stderr)
     if css and not engine and "html" not in out:
         out = ["-e", "html", *out]
     return out

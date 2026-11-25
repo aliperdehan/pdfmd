@@ -28,6 +28,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 CLEAR_WORDS = ("builds", "documents", "stale", "all")
 BUILDS = "builds"
@@ -232,7 +233,7 @@ def remove(path: Path, roots: list[Path]) -> int | None:
         else:
             shutil.rmtree(path)
     except OSError as error:
-        print(f"WARN  {shown(path)} could not be removed whole: {error}", file=sys.stderr)
+        emit("warning", None, f"WARN  {shown(path)} could not be removed whole: {error}", file=sys.stderr)
         return None
     print(f"CLEARED  {shown(path)}  {size_text(size)}")
     return size

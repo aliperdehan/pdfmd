@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Iterator
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 OFFICE_REFERENCE_EXTENSIONS = {"docx": ("docx", "dotx"), "odt": ("odt", "ott"), "pptx": ("pptx", "potx")}
@@ -345,12 +346,12 @@ def office_reference_document(md_path: Path, metadata_files: list[Path], variabl
             try:
                 spec.media[str(zip_path)] = Path(str(file)).read_bytes()
             except OSError as error:
-                print(f"WARN  {md_path}: office.media {file}: {error}", file=sys.stderr)
+                emit("warning", None, f"WARN  {md_path}: office.media {file}: {error}", file=sys.stderr)
     try:
         base = reference.read_bytes() if reference else module.default_reference(target)
         data = module.patch_reference(target, base, spec, house)
     except (OSError, ValueError, zipfile.BadZipFile) as error:
-        print(f"WARN  {md_path}: could not prepare the {target} reference document ({error}); "
+        emit("warning", None, f"WARN  {md_path}: could not prepare the {target} reference document ({error}); "
               "Pandoc's default is used", file=sys.stderr)
         yield []
         return

@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 MODES = ("auto", "on", "missing", "off")
 # YAML reads a bare on/off/yes/no as a boolean
@@ -108,7 +109,7 @@ def resolve_mode(md_path: Path, metadata_files: list[Path]) -> tuple[str, str]:
         return "auto", "default"
     word = mode_word(value)
     if word is None:
-        print(f"WARN  {core.display_path(md_path)}: pdfmd-options.engine-fallback {value!r} is not one of "
+        emit("warning", None, f"WARN  {core.display_path(md_path)}: pdfmd-options.engine-fallback {value!r} is not one of "
               f"{', '.join(MODES)}; using auto", file=sys.stderr)
         return "auto", "default"
     return word, "pdfmd-options"
@@ -238,7 +239,7 @@ def plan_build(md_path: Path, metadata_files: list[Path], engines: list[str], ou
                 order = mirrored(engines, engine)
                 mode = "missing"
                 if order is None:
-                    print(f"NOTE  {core.display_path(md_path)}: engine-fallback auto: {name} was made by {engine} ({how}), which "
+                    emit("note", None, f"NOTE  {core.display_path(md_path)}: engine-fallback auto: {name} was made by {engine} ({how}), which "
                           f"cannot run here (not installed); starting with {engines[0] if engines else 'nothing'}",
                           file=sys.stderr)
                     why = f"{name} was made by {engine} ({how}), which is not installed; the usual chain"
@@ -291,7 +292,7 @@ def engine_failed(label: str, engine: str, result, remaining: list[str], debug: 
     if plan.mode == "missing" and kind == "engine":
         core.report_engine_failure(label, engine, result, remaining, debug)
         if remaining:
-            print(f"NOTE  {label}: engine-fallback {plan.asked}: {engine} counts as unusable here ({why}), not as an error in "
+            emit("note", None, f"NOTE  {label}: engine-fallback {plan.asked}: {engine} counts as unusable here ({why}), not as an error in "
                   f"the document, so {remaining[0]} is tried", file=sys.stderr)
         return False
     kept = (f"the existing {plan.output.name} is left as it was" if plan.output.is_file() else "nothing is written")

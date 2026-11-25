@@ -34,6 +34,7 @@ from typing import Iterator
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 
 
 DEFAULT_FONT = "DejaVu Serif"
@@ -102,7 +103,7 @@ def default_monofont() -> str:
     for family in (core.DEFAULT_MONOFONT, *MONOFONT_STAND_INS):
         if not font_missing(family):
             if family != core.DEFAULT_MONOFONT:
-                print(f"WARN  font: {core.DEFAULT_MONOFONT} is not installed; using {family} for code "
+                emit("warning", None, f"WARN  font: {core.DEFAULT_MONOFONT} is not installed; using {family} for code "
                       "(install it, or set monofont:, to change this)", file=sys.stderr)
             return family
     return core.DEFAULT_MONOFONT
@@ -120,7 +121,7 @@ def fallback_font() -> str:
     for family in (DEFAULT_FONT, *SERIF_STAND_INS):
         if not font_missing(family):
             if family != DEFAULT_FONT:
-                print(f"WARN  font: {DEFAULT_FONT} is not installed; using {family} for "
+                emit("warning", None, f"WARN  font: {DEFAULT_FONT} is not installed; using {family} for "
                       "missing-glyph fallback", file=sys.stderr)
             return family
     return core.PREFERRED_FONT
@@ -132,7 +133,7 @@ def preferred_font() -> str:
     if font_missing(core.PREFERRED_FONT):
         replacement = fallback_font()
         if replacement != core.PREFERRED_FONT:
-            print(f"WARN  font: {core.PREFERRED_FONT} is not installed; using {replacement} instead "
+            emit("warning", None, f"WARN  font: {core.PREFERRED_FONT} is not installed; using {replacement} instead "
                   "(install it, or set mainfont:/-f, to change this)", file=sys.stderr)
             return replacement
     return core.PREFERRED_FONT
@@ -372,7 +373,7 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
         usable = EMOJI_FAMILIES if engine != "weasyprint" else EMOJI_FAMILIES[1:4]
         emoji_font = next((family for family in usable if index.has(family)), None)
         if engine in ("typst", "weasyprint") and emoji_font is None:
-            print(f"WARN  {md_paths[0]}: the document has emoji and no colour emoji font {engine} can use is "
+            emit("warning", None, f"WARN  {md_paths[0]}: the document has emoji and no colour emoji font {engine} can use is "
                   "installed (" + ("-e typst, with pdfmd --install emoji" if engine == "weasyprint"
                                    else "pdfmd --install emoji") + ")", file=sys.stderr)
         elif engine in core.LATEX_ENGINES or engine is None:
@@ -413,7 +414,7 @@ def script_fallback(md_paths: list[Path], metadata_files: list[Path], variables:
             hint = (f"pdfmd --install fonts:{','.join(wanted)}" if wanted else "pdfmd --install fonts")
             emoji_hint = (f"; {engine} needs extractable emoji pictures; try typst or md2pdf"
                           if engine in ("xelatex", "tectonic") and (plan.emoji | code_emoji) & undrawn.keys() else "")
-            print(f"WARN  {md_paths[0]}: no installed font draws {describe_code_points(undrawn)} "
+            emit("warning", None, f"WARN  {md_paths[0]}: no installed font draws {describe_code_points(undrawn)} "
                   f"({hint}, or name a font that does; pdfmd-options: {{missing: box}} marks them{emoji_hint})",
                   file=sys.stderr)
     if not plan:

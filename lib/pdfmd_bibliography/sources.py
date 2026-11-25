@@ -16,6 +16,7 @@ from pathlib import Path
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 
 
 def values(value):
@@ -209,7 +210,7 @@ def merge_sources(sources, metadata_files, arguments, no_auto=None):
         message = f"WARN  bibliography key {key}: {origins[0]} wins; ignored in {', '.join(origins[1:])}"
         if message not in seen:
             seen.add(message)
-            print(message, file=sys.stderr)
+            emit("warning", None, message, file=sys.stderr)
     if not declared:
         return {}
     method = core.first_pdfmd_option(sources[0], metadata_files, "citation-engine")

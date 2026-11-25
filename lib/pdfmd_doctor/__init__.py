@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 def tool_note(name: str) -> str:
@@ -173,7 +174,7 @@ def doctor_report(deep: bool = False, *, as_json: bool = False) -> bool:
             status = "info" if ok is None else "ok" if ok else "fail" if required else "warn"
             checks.append({"id": check_id, "status": status, "message": text})
         else:
-            print(f"{'OK  ' if ok else 'MISS' if ok is False else 'NOTE'}  {text}")
+            emit("result", None, f"{'OK  ' if ok else 'MISS' if ok is False else 'NOTE'}  {text}")
         if ok is False and fix:
             problems.append((why or text, fix))
 

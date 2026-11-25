@@ -9,6 +9,7 @@ import unicodedata
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 from pdfmd_lookup import LOOKUP_FIELD_WORDS
 
 
@@ -113,13 +114,13 @@ def skip_never(files: list[Path], include_never: bool = False, *, announce: bool
         try:
             ranking = core.bare_ranking(folder_files)
         except Exception as error:
-            print(f"WARN  ranking: {error}; every document of {core.display_path(folder_files[0].parent)} is kept", file=sys.stderr)
+            emit("warning", None, f"WARN  ranking: {error}; every document of {core.display_path(folder_files[0].parent)} is kept", file=sys.stderr)
             continue
         for file, (value, _) in values.items():
             if value is not MISSING and ranking.read(value).kind == "excluded":
                 dropped.append(file)
     if dropped and announce:
-        print(f"NOTE  left out (priority: never): {', '.join(core.display_path(file) for file in dropped)}  (--all builds them too)")
+        emit("note", None, f"NOTE  left out (priority: never): {', '.join(core.display_path(file) for file in dropped)}  (--all builds them too)")
     return [file for file in files if file not in dropped]
 
 
@@ -135,11 +136,11 @@ def choose_markdown(files: list[Path], newest: bool = False, include_never: bool
         raise SystemExit(f"ranking: {error}")
     choice = choose(candidates, ranking, by=["newest"] if newest else None, show=core.display_path, include_excluded=include_never)
     for line in [f"WARN  ranking: {text}" for text in ranking.warnings] + choice.warnings:
-        print(line, file=sys.stderr)
+        emit("warning", None, line, file=sys.stderr)
     if choice.error or choice.winner is None:
         raise SystemExit(choice.error or "No Markdown file could be chosen.")
     beaten = choice.beaten(core.display_path)
-    print(f"AUTO MD    {core.display_path(choice.winner)}" + (f"  (over {beaten})" if beaten else ""))
+    emit("normal", "MD", f"AUTO MD    {core.display_path(choice.winner)}" + (f"  (over {beaten})" if beaten else ""))
     return choice.winner
 
 
@@ -192,8 +193,8 @@ def announce_lookup(query: str, shown: str, tier: tuple, field: str, text: str,
         # Naming a heading without its exact case or spaces is the normal way to
         # ask for one; only a file name found that way is worth a line.
         if subject == "file name":
-            print(f"AUTO MD    {shown}  ('{query}' = its {what}, ignoring case, spaces and punctuation)")
+            emit("normal", "MD", f"AUTO MD    {shown}  ('{query}' = its {what}, ignoring case, spaces and punctuation)")
         return
-    print(f"WARN  '{query}' is not a {subject}; using {shown} ({wording}: {what}). "
+    emit("warning", None, f"WARN  '{query}' is not a {subject}; using {shown} ({wording}: {what}). "
           "Name it exactly, or pass --no-auto lookup, to stop pdfmd guessing.", file=sys.stderr)
 

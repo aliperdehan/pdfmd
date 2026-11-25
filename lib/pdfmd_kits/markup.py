@@ -19,14 +19,15 @@ from pathlib import Path
 
 from pdfmd_base import core
 from pdfmd_base import spelling
+from pdfmd_log import emit
 
 _TOLD: set[tuple[str, str]] = set()          # (what, where) already said: the list is worked out more than once a build
 
 
-def _say_once(what: str, where: str, line: str, stream=None) -> None:
+def _say_once(what: str, where: str, level: str, line: str, stream=None) -> None:
     if (what, where) not in _TOLD:
         _TOLD.add((what, where))
-        print(line, file=stream or sys.stdout)
+        emit(level, "KIT" if level == "verbose" else None, line, file=stream)
 
 
 def markup_set_above_kit(md_path: Path, metadata_files: list[Path]) -> bool:
@@ -53,11 +54,12 @@ def kit_markup_off(md_path: Path, metadata_files: list[Path], kinds: list[str]) 
                 if word not in words:
                     words.append(word)
             else:
-                _say_once(word, str(item.kit.path), f"WARN  {item.kit.path}: `markup-off: {word}` is not a kind of universal markup "
+                _say_once(word, str(item.kit.path), "warning",
+                          f"WARN  {item.kit.path}: `markup-off: {word}` is not a kind of universal markup "
                           f"({', '.join(core.MARKUP_KINDS)}); ignored", sys.stderr)
     off = [kind for kind in kinds if kind in words]
     if not off or markup_set_above_kit(md_path, metadata_files):
         return kinds
     if core.VERBOSE_OUTPUT:
-        _say_once("verbose", str(md_path), f"AUTO KIT  switches off markup {', '.join(off)} (markup-off in the kit)")
+        _say_once("verbose", str(md_path), "verbose", f"AUTO KIT  switches off markup {', '.join(off)} (markup-off in the kit)")
     return [kind for kind in kinds if kind not in words]

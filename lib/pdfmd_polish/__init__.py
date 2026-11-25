@@ -28,6 +28,7 @@ if TYPE_CHECKING:     # only the annotations name it; the code reads core.pypdf
 
 from pdfmd_base import core
 from pdfmd_base import timed
+from pdfmd_log import emit
 
 
 HF_FIELDS = ("page", "pages", "header", "heading", "date", "title")
@@ -267,7 +268,7 @@ def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> No
                               "title": document_title}
                     page.merge_page(hf_overlay(page, values, header_template, footer_template))
                 if skipped_rotation:
-                    print("WARN  header/footer: rotated pages were left without them", file=sys.stderr)
+                    emit("warning", None, "WARN  header/footer: rotated pages were left without them", file=sys.stderr)
                 done.append("header/footer")
             if options.get("attach_links"):
                 folder = sources[0].resolve().parent if sources else pdf_path.resolve().parent
@@ -282,7 +283,7 @@ def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> No
                             kept.append(reference)
                             continue
                         if target.stat().st_size > LINKED_FILE_LIMIT:
-                            print(f"WARN  not attached (over 25 MB): {core.display_path(target)}", file=sys.stderr)
+                            emit("warning", None, f"WARN  not attached (over 25 MB): {core.display_path(target)}", file=sys.stderr)
                             kept.append(reference)
                             continue
                         if target not in added:
@@ -320,9 +321,9 @@ def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> No
         if done:
             print(f"PDF   {core.display_path(pdf_path)}: " + ", ".join(done))
     except ValueError as error:
-        print(f"ERROR {error}", file=sys.stderr)
+        emit("error", None, f"ERROR {error}", file=sys.stderr)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is already fine
-        print(f"WARN  could not finish the PDF ({type(error).__name__}: {error}); it is left as built",
+        emit("warning", None, f"WARN  could not finish the PDF ({type(error).__name__}: {error}); it is left as built",
               file=sys.stderr)
     finally:
         pypdf_logger.setLevel(previous_level)

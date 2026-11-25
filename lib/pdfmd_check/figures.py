@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 from pdfmd_check.lint import Analysis, Findings, Problem, Source
 from pdfmd_filters.lua import figure_fit_module
 
@@ -97,7 +98,7 @@ def figure_problems(sources: list[Source], document: Path, metadata: list[Path],
     if args.presentation or not any(FIGURE_SYNTAX.search(analysis.masked) for analysis in analyses):
         return []
     if not core.which("pandoc"):
-        print("NOTE  --check: figure heights are not checked without Pandoc", file=sys.stderr)
+        emit("note", None, "NOTE  --check: figure heights are not checked without Pandoc", file=sys.stderr)
         return []
     try:
         engines = core.resolve_engines(document, args.engine, core.select_engines(args.engine, False),
@@ -106,7 +107,7 @@ def figure_problems(sources: list[Source], document: Path, metadata: list[Path],
         engines = []
     supported = (core.LATEX_ENGINES - {"context"}) | {"typst"}
     if not engines or engines[0] not in supported:
-        print("NOTE  --check: figure heights require a LaTeX or Typst build", file=sys.stderr)
+        emit("note", None, "NOTE  --check: figure heights require a LaTeX or Typst build", file=sys.stderr)
         return []
     engines = [engine for engine in engines if engine in supported]
     with tempfile.TemporaryDirectory(prefix="pdfmd-figure-check-") as scratch:
@@ -121,6 +122,6 @@ def figure_problems(sources: list[Source], document: Path, metadata: list[Path],
             subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, env=env)
             records = json.loads(report.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            print("NOTE  --check: figure heights could not be measured in a temporary build", file=sys.stderr)
+            emit("note", None, "NOTE  --check: figure heights could not be measured in a temporary build", file=sys.stderr)
             return []
     return locate(analyses, records, document)

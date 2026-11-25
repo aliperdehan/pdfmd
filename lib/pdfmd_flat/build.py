@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 _PANDOC_EXTENSIONS: dict[str, frozenset[str]] = {}
 
@@ -143,7 +144,7 @@ def ascii_finish(output: Path, scratch: Path, missing: str, md_path: Path) -> st
                 f"({shown}); nothing was written. --ascii-missing question|escape|drop writes the file anyway; "
                 "`pdfmd --install translit` adds the scripts it can spell")
     written = {"question": "?", "escape": "a \\u escape", "drop": "nothing"}[missing]
-    print(f"WARN  ascii: {core.display_path(md_path)}: {count} character{'s' if count != 1 else ''} with no ASCII form "
+    emit("warning", None, f"WARN  ascii: {core.display_path(md_path)}: {count} character{'s' if count != 1 else ''} with no ASCII form "
           f"({shown}) {'was' if count == 1 else 'were'} written as {written}; `pdfmd --install translit` adds the "
           "scripts it can spell, --ascii-missing escape|drop|fail changes this", file=sys.stderr)
     return None

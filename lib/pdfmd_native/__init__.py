@@ -50,6 +50,7 @@ from pathlib import Path
 from tempfile import mkdtemp
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 def csv_cut_advice(rows_cut: bool, cols_cut: bool) -> str:
@@ -78,7 +79,7 @@ def native_note(engine: str, message: str, source: Path | None = None) -> None:
         if line in NATIVE_NOTED:
             return
         NATIVE_NOTED.add(line)
-    print(line, file=sys.stderr)
+    emit("warning", None, line, file=sys.stderr)
 
 
 # The notes printed so far while convert_native prepares the text once per renderer (v3.33.46): a `.csv` table cut short is
@@ -582,7 +583,7 @@ def warn_nameless_authors(md_path: Path, metadata_files: list[Path]) -> None:
     except (OSError, ValueError):
         return
     for place in nameless_authors(authors):
-        print(f"WARN  {md_path}: author entry {place} has no name: left out", file=sys.stderr)
+        emit("warning", None, f"WARN  {md_path}: author entry {place} has no name: left out", file=sys.stderr)
 
 
 def author_names(value) -> list[str]:
@@ -1255,7 +1256,7 @@ def native_paper_note(metadata: dict, source: Path | None, engine: str) -> None:
     if unknown and (str(source), unknown) not in NATIVE_PAPER_NOTED:
         NATIVE_PAPER_NOTED.add((str(source), unknown))
         where = f"{core.display_path(source)}: " if source is not None else ""
-        print(f"NOTE  native ({engine}): {where}paper '{unknown}' is not a size the built-in renderers know "
+        emit("note", None, f"NOTE  native ({engine}): {where}paper '{unknown}' is not a size the built-in renderers know "
               f"({', '.join(sorted(core.NATIVE_PAPER_POINTS))}); A4 is used", file=sys.stderr)
 
 
@@ -1316,7 +1317,7 @@ def set_pdf_info(pdf_path: Path, metadata: dict, verbose: bool, creator: str = "
         writer.add_metadata({**(dict(reader.metadata) if reader.metadata else {}), **info})
         core.atomic_write_pdf(writer, pdf_path)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is already fine
-        core.vprint(verbose, f"WARN  native: could not write the PDF title/author ({error})", file=sys.stderr)
+        emit("warning", None, f"WARN  native: could not write the PDF title/author ({error})", file=sys.stderr, shown=verbose)
 
 
 @contextmanager
@@ -1386,7 +1387,7 @@ def render_native(engine: str, md_path: Path, source: NativeSource, output: Path
         config = md2pdf.Config(input_file=str(md_path), output_file=str(output), page_size=paper.upper(),
                                orientation="landscape" if landscape else "portrait")
     except Exception:  # a paper ReportLab has no name for (executive, folio): md2pdf's own default
-        print(f"NOTE  native (md2pdf): {core.display_path(md_path)}: md2pdf has no paper '{paper}'; its own default is used",
+        emit("note", None, f"NOTE  native (md2pdf): {core.display_path(md_path)}: md2pdf has no paper '{paper}'; its own default is used",
               file=sys.stderr)
         config = md2pdf.Config(input_file=str(md_path), output_file=str(output),
                                orientation="landscape" if landscape else "portrait")

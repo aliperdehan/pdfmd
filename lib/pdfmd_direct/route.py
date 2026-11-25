@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 DIRECT_SUFFIXES = {".typ": "typst", ".typst": "typst", ".html": "html", ".htm": "html", ".xhtml": "html"}
@@ -43,7 +44,7 @@ def direct_route(path: Path, target_format: str, from_format: str | None, no_aut
             return None
         if not core.engine_executable("typst"):
             if announce:
-                print(f"WARN  {core.display_path(path)}: Typst is not installed, so this goes through Pandoc's Typst "
+                emit("warning", None, f"WARN  {core.display_path(path)}: Typst is not installed, so this goes through Pandoc's Typst "
                       "reader, which loses what Pandoc's model cannot hold (`pdfmd --install typst`)", file=sys.stderr)
             return None
         return kind
@@ -52,7 +53,7 @@ def direct_route(path: Path, target_format: str, from_format: str | None, no_aut
     text = core.read_text_best_effort(path)
     if not direct.html_attempts(text, engine_request, core.which, core.resolve_soffice):
         if announce:
-            print(f"WARN  {core.display_path(path)}: no HTML engine or browser found for a direct build "
+            emit("warning", None, f"WARN  {core.display_path(path)}: no HTML engine or browser found for a direct build "
                   "(WeasyPrint, Chrome, Edge...); going through Pandoc", file=sys.stderr)
         return None
     return kind
@@ -82,7 +83,7 @@ def convert_direct(kind: str, source: Path, output: Path, engine_request: str | 
         # beside the original, so what it refers to by a relative path is found; removed afterwards
         copy = source.with_name(f".{source.stem}.pdfmd-defaults{source.suffix}")
         copy.write_text(prelude + text if kind == "typst" else changed, encoding="utf-8")
-        core.vprint(verbose, f"AUTO APPLYDEFAULTS  {core.display_path(source)}: " + ", ".join(sorted(given)))
+        emit("verbose", "APPLYDEFAULTS", f"AUTO APPLYDEFAULTS  {core.display_path(source)}: " + ", ".join(sorted(given)), shown=verbose)
     try:
         return _convert_direct(kind, source, copy or source, output, engine_request, verbose, debug, direct,
                                prelude.count("\n"), text)
@@ -104,19 +105,19 @@ def _convert_direct(kind: str, source: Path, built: Path, output: Path, engine_r
         if ok:
             core.record_engine("typst")
         if ok:
-            core.vprint(verbose, f"AUTO TYPSTDIRECT  {core.display_path(source)}: compiled with Typst directly (no Pandoc)")
+            emit("verbose", "TYPSTDIRECT", f"AUTO TYPSTDIRECT  {core.display_path(source)}: compiled with Typst directly (no Pandoc)", shown=verbose)
         else:
-            print(f"WARN  {core.display_path(source)}: typst failed", file=sys.stderr)
+            emit("warning", None, f"WARN  {core.display_path(source)}: typst failed", file=sys.stderr)
         return source, ok, reason
     order = direct.html_attempts(text, engine_request, core.which, core.resolve_soffice)
     browser = any(name in dict(order) for name in direct.BROWSER_NAMES)
     advice = (" (a browser would: -e chrome, edge or chromium)" if browser
               else "; no browser was found (Chrome, Chromium, Edge, Brave)")
     if order and order[0][0] == "weasyprint" and direct.has_scripts(text):
-        print(f"WARN  {core.display_path(source)}: the page has scripts and WeasyPrint does not run them, so what they draw "
+        emit("warning", None, f"WARN  {core.display_path(source)}: the page has scripts and WeasyPrint does not run them, so what they draw "
               "is missing" + advice, file=sys.stderr)
     if order and order[0][0] == "weasyprint" and direct.has_mathml(text):
-        print(f"WARN  {core.display_path(source)}: the page has MathML and WeasyPrint does not draw it, so its formulas "
+        emit("warning", None, f"WARN  {core.display_path(source)}: the page has MathML and WeasyPrint does not draw it, so its formulas "
               "print as flat text" + advice, file=sys.stderr)
 
     def failed(name: str, reason: str, remaining: list[str]) -> None:
@@ -128,7 +129,7 @@ def _convert_direct(kind: str, source: Path, built: Path, output: Path, engine_r
     if ok and used:
         core.record_engine(str(used))
     if ok:
-        core.vprint(verbose, f"AUTO HTMLDIRECT  {core.display_path(source)}: {used} (no Pandoc)")
+        emit("verbose", "HTMLDIRECT", f"AUTO HTMLDIRECT  {core.display_path(source)}: {used} (no Pandoc)", shown=verbose)
     return source, ok, reason
 
 
@@ -157,7 +158,7 @@ def convert_qmd(source: Path, output: Path, target_format: str,
             "which is why a plain Pandoc conversion silently drops figures and computed output."
         )
     if variables or pandoc_options:
-        print(f"WARN  {source}: -V and passthrough Pandoc options don't apply to Quarto "
+        emit("warning", None, f"WARN  {source}: -V and passthrough Pandoc options don't apply to Quarto "
               "rendering and were ignored; use Quarto's own -P/-M flags instead", file=sys.stderr)
     output.parent.mkdir(parents=True, exist_ok=True)
     # Quarto's own -o has historically wanted a bare filename in the source's

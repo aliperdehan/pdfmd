@@ -36,6 +36,7 @@ except ImportError:                                # pragma: no cover -- incompl
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 
 
 def office_package_folders(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None
@@ -154,7 +155,7 @@ def office_properties(arguments, md_path: Path, data: dict) -> None:
             try:
                 remove(Path(output))
             except (OSError, zipfile.BadZipFile, ExpatError) as error:
-                print(f"WARN  could not remove page numbers from {Path(output).name} ({error})", file=sys.stderr)
+                emit("warning", None, f"WARN  could not remove page numbers from {Path(output).name} ({error})", file=sys.stderr)
         options = core.office_options(md_path, context["metadata_files"], context["no_auto"])
         replacements = options.get("replace")
         if isinstance(replacements, dict) and any("$" in str(value) for value in replacements.values()):
@@ -163,7 +164,7 @@ def office_properties(arguments, md_path: Path, data: dict) -> None:
             try:
                 finish_replacements(Path(output), replacements, metadata)
             except (OSError, ValueError, zipfile.BadZipFile) as error:
-                print(f"WARN  could not replace the template text of {Path(output).name} ({error})", file=sys.stderr)
+                emit("warning", None, f"WARN  could not replace the template text of {Path(output).name} ({error})", file=sys.stderr)
     kept = data.get("properties") if isinstance(data.get("properties"), dict) else {}
     title = kept.get("title") if isinstance(kept.get("title"), str) else None
     authors = [name for name in kept.get("author") or [] if isinstance(name, str)] if isinstance(
@@ -175,7 +176,7 @@ def office_properties(arguments, md_path: Path, data: dict) -> None:
     try:
         module.finish_properties(Path(output), title, authors, folders)
     except (OSError, zipfile.BadZipFile, UnicodeDecodeError) as error:
-        print(f"WARN  {md_path}: could not finish the properties of {Path(output).name} ({error})", file=sys.stderr)
+        emit("warning", None, f"WARN  {md_path}: could not finish the properties of {Path(output).name} ({error})", file=sys.stderr)
 
 
 def office_finish(arguments, md_path: Path, verbose: bool) -> None:
@@ -204,7 +205,7 @@ def office_finish(arguments, md_path: Path, verbose: bool) -> None:
             kinds[item["kind"]] = kinds.get(item["kind"], 0) + 1
         target = (getattr(arguments, "context", None) or {}).get("target", "docx")
         name = {"docx": "Word", "odt": "OpenDocument", "typst": "Typst", "html": "HTML"}.get(target, target)
-        print(f"WARN  {md_path}: LaTeX the {name} output could not express: "
+        emit("warning", None, f"WARN  {md_path}: LaTeX the {name} output could not express: "
               + ", ".join(f"{count} {kind}" for kind, count in sorted(kinds.items())), file=sys.stderr)
         for item in left[:20]:
             core.vprint(verbose, f"      {item['kind']}: {' '.join(item['tex'].split())[:110]}", file=sys.stderr)
@@ -229,18 +230,18 @@ def run_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Path,
             try:
                 module.finish_odt(path)
             except (OSError, zipfile.BadZipFile, KeyError) as error:
-                print(f"WARN  could not finish the styles of {path.name} ({error})", file=sys.stderr)
+                emit("warning", None, f"WARN  could not finish the styles of {path.name} ({error})", file=sys.stderr)
     if result.returncode == 0 and module is not None and target is not None and target.suffix.lower() == ".docx":
         path = target if target.is_absolute() else pandoc_cwd / target
         if path.is_file():
             try:
                 module.centre_tables(path)
             except (OSError, zipfile.BadZipFile, KeyError) as error:
-                print(f"WARN  could not centre the tables of {path.name} ({error})", file=sys.stderr)
+                emit("warning", None, f"WARN  could not centre the tables of {path.name} ({error})", file=sys.stderr)
             try:
                 module.finish_markup(path)
             except (OSError, zipfile.BadZipFile, KeyError) as error:
-                print(f"WARN  could not finish the markup of {path.name} ({error})", file=sys.stderr)
+                emit("warning", None, f"WARN  could not finish the markup of {path.name} ({error})", file=sys.stderr)
     return result
 
 
@@ -300,13 +301,13 @@ def build_office_pandoc(cmd: list[str], output: Path, arguments, pandoc_cwd: Pat
     for item in items:
         if item["id"] in failures:
             excerpt = " ".join(item["tex"].split())[:90]
-            print(f"WARN  {context['md_path']}: could not draw a LaTeX {item['kind']} ({failures[item['id']]}): {excerpt}",
+            emit("warning", None, f"WARN  {context['md_path']}: could not draw a LaTeX {item['kind']} ({failures[item['id']]}): {excerpt}",
                   file=sys.stderr)
     if result.returncode == 0 and target == "docx" and output.is_file():
         try:
             done = module.finish_docx(output)
         except (OSError, zipfile.BadZipFile, KeyError) as error:
-            print(f"WARN  {context['md_path']}: could not finish the pictures in {output.name} ({error})", file=sys.stderr)
+            emit("warning", None, f"WARN  {context['md_path']}: could not finish the pictures in {output.name} ({error})", file=sys.stderr)
             done = 0
         if done:
             core.vprint(verbose, f"OFFICE  {context['md_path']}: {done} LaTeX picture(s) drawn by LaTeX and embedded (SVG with PNG fallback)")
@@ -409,7 +410,7 @@ def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verb
     failures: dict[str, str] = {}
     root = core.cache_root() / "office"
     if not module.fragments.tools_available():
-        print("WARN  LaTeX the Word output cannot express is left out: drawing it needs pdftocairo "
+        emit("warning", None, "WARN  LaTeX the Word output cannot express is left out: drawing it needs pdftocairo "
               "(Poppler: `pdfmd --install batchocr` explains how to get it)", file=sys.stderr)
         return root / "none", {item["id"]: "pdftocairo is missing" for item in items}
     engines = [engine for engine in core.installed_engines() if engine in core.LATEX_ENGINES
@@ -420,7 +421,7 @@ def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verb
     store = root / "assets"
     if latex_items:
         if not engines:
-            print("WARN  LaTeX the Word output cannot express is left out: there is no LaTeX engine "
+            emit("warning", None, "WARN  LaTeX the Word output cannot express is left out: there is no LaTeX engine "
                   "(lualatex, xelatex or pdflatex)", file=sys.stderr)
             failures.update({item["id"]: "no LaTeX engine" for item in latex_items})
             latex_items = []
@@ -432,7 +433,7 @@ def office_render_fragments(items: list[dict], arguments, pandoc_cwd: Path, verb
             text = tex_file.read_text(encoding="utf-8") if tex_file.is_file() else ""
             preamble = module.fragments.preamble_of(text) or ""
             if done.returncode != 0 or not preamble:
-                print("WARN  LaTeX the Word output cannot express is left out: the document's LaTeX preamble "
+                emit("warning", None, "WARN  LaTeX the Word output cannot express is left out: the document's LaTeX preamble "
                       "could not be made", file=sys.stderr)
                 failures.update({item["id"]: "no preamble" for item in latex_items})
                 latex_items = []
@@ -540,5 +541,5 @@ def build_reference_numbers(md_path, metadata_files, variables, no_auto, note, s
     done = core.timed("PDF for reference numbers")(subprocess.run)(
         command, capture_output=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
     if done.returncode != 0:
-        print(f"WARN  {md_path}: the PDF build for reference numbers failed; numbers are counted "
+        emit("warning", None, f"WARN  {md_path}: the PDF build for reference numbers failed; numbers are counted "
               "instead (build the PDF to see why)", file=sys.stderr)

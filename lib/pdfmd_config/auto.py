@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 # Auto-discovered yaml/tex/lua files may live directly beside the document
@@ -126,7 +127,7 @@ def folder_auto_safe(options: dict, where: str) -> dict:
                 and auto_expand(str(kind)) & CODE_KINDS):
             if f"{where}:{kind}" not in core.FOLDER_WARNED:
                 core.FOLDER_WARNED.add(f"{where}:{kind}")
-                print(f"WARN  {where}: auto: {kind}: on cannot be set by a folder (it finds code); ignored", file=sys.stderr)
+                emit("warning", None, f"WARN  {where}: auto: {kind}: on cannot be set by a folder (it finds code); ignored", file=sys.stderr)
             continue
         kept[kind] = value
     return {**options, "auto": kept}
@@ -244,5 +245,5 @@ def kit_no_auto_kinds(md_path: Path, metadata_files: list[Path] | None, no_auto:
             if kind not in kinds:
                 kinds.append(kind)
     if kinds and core.VERBOSE_OUTPUT:
-        print(f"AUTO KIT  switches off {', '.join(kinds)} (no-auto in the kit)")
+        emit("normal", "KIT", f"AUTO KIT  switches off {', '.join(kinds)} (no-auto in the kit)")
     return kinds

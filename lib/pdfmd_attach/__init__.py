@@ -59,6 +59,7 @@ if TYPE_CHECKING:     # only the annotations name it; the code reads core.pypdf
 
 from pdfmd_base import core
 from pdfmd_base import timed
+from pdfmd_log import emit
 
 
 def folder_options_in_force(md_path: Path) -> dict:
@@ -872,7 +873,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
         limit_mb = core.option_flag_number(core.first_pdfmd_option(md_path, metadata_files, "bundle-max-mb")) or core.BUNDLE_MAX_MB
         carried, kit_record, kit_notes = core.kit_carried_files(kits_here, base, float(limit_mb) * 1024 * 1024)
         for line in kit_notes:
-            print(line, file=sys.stderr)
+            emit("warning" if line.startswith("WARN") else "note", None, line, file=sys.stderr)
         for name, path in carried.items():
             if name not in extras and not exclude(path):
                 extras[name] = path.read_bytes()
@@ -913,7 +914,7 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
                       or core.BUNDLE_MAX_MB) * 1024 * 1024
         total = sum(item.stat().st_size for item in found) + sum(dep["path"].stat().st_size for dep in from_tree)
         if total > limit:
-            print(f"WARN  bundle: {len(found) + len(from_tree)} files, {total / 1048576:.0f} MB, is over the "
+            emit("warning", None, f"WARN  bundle: {len(found) + len(from_tree)} files, {total / 1048576:.0f} MB, is over the "
                   f"{limit / 1048576:.0f} MB limit (pdfmd-options.bundle-max-mb); only the source was attached",
                   file=sys.stderr)
         else:
@@ -1028,7 +1029,7 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
     if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
         return
     if core.pypdf is None:
-        print("WARN  attach-source: pypdf is not installed (pip install pypdf); nothing was attached",
+        emit("warning", None, "WARN  attach-source: pypdf is not installed (pip install pypdf); nothing was attached",
               file=sys.stderr)
         return
     base = Path(os.path.abspath(base or md_path.parent))
@@ -1037,7 +1038,7 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
                                                            report, base, named_reader, pandoc_options)
         write_pdf_attachments(pdf_path, attachments)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
-        print(f"WARN  attach-source: could not attach the source to {core.display_path(pdf_path)} ({error}); "
+        emit("warning", None, f"WARN  attach-source: could not attach the source to {core.display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)
         return
     core.deferred("pdfmd_filters.hidden", "attachment_warning")([md_path, *parts], metadata_files,
@@ -1052,7 +1053,7 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
             records = "excerpt records travel inside bundled PDFs"
         else:
             records = "no excerpt records travel inside the PDF"
-        print(f"NOTE  {'source bundle' if bundled else 'attached source'}: {note}. {records}")
+        emit("note", None, f"NOTE  {'source bundle' if bundled else 'attached source'}: {note}. {records}")
     kept = manifest.get("extras") or []
     print(f"ATTACHED  {core.display_path(pdf_path)}: source of {core.display_path(md_path)}"
           + (f" and {len(parts)} more" if report and parts else "")
@@ -1063,13 +1064,13 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
     stored = {item["path"] for item in kept}
     unstored = [image["path"] for image in manifest["images"] if image["path"] not in stored]
     if unstored:
-        core.vprint(verbose, f"NOTE  images the text points at are recorded, not stored (the PDF holds them; "
-              f"`--bundle referenced` stores the files): {', '.join(unstored)}")
+        emit("note", None, f"NOTE  images the text points at are recorded, not stored (the PDF holds them; "
+              f"`--bundle referenced` stores the files): {', '.join(unstored)}", shown=verbose)
     if manifest.get("outside"):
-        print(f"NOTE  not stored, outside the document's folder: {', '.join(manifest['outside'])}")
+        emit("note", None, f"NOTE  not stored, outside the document's folder: {', '.join(manifest['outside'])}")
     for line in core.requirement_lines(manifest):
         if line.startswith("NEEDS") and "not stored" in line:
-            print("NOTE  " + line[10:])
+            emit("note", None, "NOTE  " + line[10:])
         else:
             core.vprint(verbose, line)
 
@@ -1090,7 +1091,7 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
     try:
         import pdfmd_flat.keep as keep
     except ImportError:
-        print("WARN  keep-source: needs the pdfmd_flat package (install pdfmd-cli); the source was not kept",
+        emit("warning", None, "WARN  keep-source: needs the pdfmd_flat package (install pdfmd-cli); the source was not kept",
               file=sys.stderr)
         return
     if not output.is_file():
@@ -1103,7 +1104,7 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
         label = md_path.name
         if ascii_only:
             if mode == "readable":
-                print("NOTE  keep-source: an ASCII file keeps its source packed (the readable form would be Unicode)",
+                emit("note", None, "NOTE  keep-source: an ASCII file keeps its source packed (the readable form would be Unicode)",
                       file=sys.stderr)
                 mode = "packed"
             import pdfmd_flat.asciify as asciify
@@ -1111,7 +1112,7 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
         trailer = keep.pack(entries, body, mode, label, core.PDFMD_VERSION)
         core.atomic_write_bytes(output, keep.append(body, trailer).encode("utf-8"))
     except Exception as error:  # noqa: BLE001 -- the Markdown itself is fine; say so and carry on
-        print(f"WARN  keep-source: could not keep the source in {core.display_path(output)} ({error}); "
+        emit("warning", None, f"WARN  keep-source: could not keep the source in {core.display_path(output)} ({error}); "
               "the Markdown itself was written", file=sys.stderr)
         return
     kept = manifest.get("extras") or []
@@ -1121,6 +1122,6 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
           + (f", plus {len(kept)} file{'s' if len(kept) != 1 else ''}" if kept else "")
           + f"; {mode}, {len(trailer) / 1024:.0f} KB); `pdfmd --restore {output.name}` writes it back")
     if len(trailer.encode("utf-8")) > keep.WARN_BYTES:
-        print(f"WARN  keep-source: the kept source is {len(trailer) / 1048576:.1f} MB; GitHub and some editors stop "
+        emit("warning", None, f"WARN  keep-source: the kept source is {len(trailer) / 1048576:.1f} MB; GitHub and some editors stop "
               "showing a Markdown file this large (--no-keep-source, or --attach-source on a PDF, keeps it out)",
               file=sys.stderr)

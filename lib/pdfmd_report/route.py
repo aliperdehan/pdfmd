@@ -13,6 +13,7 @@ lines that say which files went in.
 from __future__ import annotations
 
 from pathlib import Path
+from pdfmd_log import emit
 
 BUILDS = ("route", "patch")
 DEFAULT_BUILD = "route"
@@ -58,7 +59,7 @@ def build(core, *, args, files: list[Path], excluded: list[Path], metadata, meta
         preambles = core.document_preambles(files[0], pandoc_options, no_auto, metadata_files)
         core.announce_preambles(preambles)
     for note in notes:
-        print(f"NOTE  {note}")
+        emit("note", None, f"NOTE  {note}")
     given = None if metadata is core.AUTO_METADATA_DISABLED else metadata
     core.REPORT_BUILD.clear()
     core.REPORT_BUILD.update(chapters=chapters, files=list(files), base=core.report_common_folder(files))
@@ -75,8 +76,8 @@ def build(core, *, args, files: list[Path], excluded: list[Path], metadata, meta
     ok = bool(built[1])
     for file in files:
         if not core.has_chapter_field(file):
-            print(f"[WARNING] unnumbered Markdown included: {core.display_path(file)}")
-        print(f"OK    {core.display_path(file)}")
+            emit("warning", None, f"[WARNING] unnumbered Markdown included: {core.display_path(file)}")
+        emit("result", None, f"OK    {core.display_path(file)}")
     for file in excluded:
         print(f"SKIP  {core.display_path(file)}")
     if metadata is not core.AUTO_METADATA_DISABLED:
@@ -87,7 +88,7 @@ def build(core, *, args, files: list[Path], excluded: list[Path], metadata, meta
                 print(f"YAML  {core.display_path(metadata_file)}")
     if not args.verbose:
         core.AUTO_LOG.flush()
-    print(f"{'OK  ' if ok else 'FAIL'}  REPORT  {core.display_path(output)}" + core.time_label(built) + core.engine_label(built))
+    emit("result" if ok else "error", None, f"{'OK  ' if ok else 'FAIL'}  REPORT  {core.display_path(output)}" + core.time_label(built) + core.engine_label(built))
     if args.verbose:
         for line in core.time_breakdown(built):
             print(line)

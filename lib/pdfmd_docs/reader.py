@@ -18,6 +18,7 @@ from pathlib import Path
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 
 DOCUMENTS = {
     "readme": ("README.md", "README.md", "the manual: every feature, with examples"),
@@ -195,7 +196,7 @@ def doc_command(words: list[str], print_only: bool, path_only: bool) -> int:
         return 0
     page = render_document(path, f"pdfmd {core.PDFMD_VERSION}: {first}")
     if page is None:
-        print("NOTE  no Pandoc to make a web page with: showing the Markdown", file=sys.stderr)
+        emit("note", None, "NOTE  no Pandoc to make a web page with: showing the Markdown", file=sys.stderr)
         sys.stdout.write(text)
         return 0
     if sys.platform.startswith("linux") and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):

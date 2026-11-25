@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 INPUT = r"input|InputIfFileExists"
@@ -94,7 +95,7 @@ class IncludedPaths:
                 pair = local, main
                 if pair not in self.warned:
                     self.warned.add(pair)
-                    print(f"WARN  TeX input path: {core.under_home(local)} and {core.under_home(main)} both exist; "
+                    emit("warning", None, f"WARN  TeX input path: {core.under_home(local)} and {core.under_home(main)} both exist; "
                           f"using {core.under_home(local)}", file=sys.stderr)
         return next(iter(found.values()), None)
 

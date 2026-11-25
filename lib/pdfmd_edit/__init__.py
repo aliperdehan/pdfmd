@@ -16,6 +16,7 @@ import tempfile
 import threading
 from pathlib import Path
 from typing import Callable
+from pdfmd_log import emit
 
 HELP = """\
   Ctrl-S  save                    Ctrl-W  find        F3      find next
@@ -78,7 +79,7 @@ def run(path: Path, build: Callable[[Path], BuildResult] | None = None,
     try:
         original = path.read_text(encoding="utf-8-sig") if path.exists() else ""
     except (OSError, UnicodeDecodeError) as error:
-        print(f"ERROR  cannot read {path}: {error}")
+        emit("error", None, f"ERROR  cannot read {path}: {error}")
         return 1
 
     lexer = None

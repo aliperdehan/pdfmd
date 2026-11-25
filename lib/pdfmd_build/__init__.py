@@ -35,6 +35,7 @@ from pdfmd_base import core
 from pdfmd_base import noted, timed
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 from pdfmd_cite.aliases import apply as apply_citation_aliases
 from pdfmd_engines.memory import scoped
 
@@ -276,7 +277,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
             return md_path, ok, reason[-3000:]
         # No LaTeX engine got it through (or none is installed): Pandoc can still read the file and any engine can
         # draw what it reads -- less faithful than the source, so said out loud, and the LaTeX message stays above.
-        print(f"WARN  {core.display_path(md_path)}: direct compilation failed ({reason.strip().splitlines()[-1][:160] if reason.strip() else 'no reason given'}); "
+        emit("warning", None, f"WARN  {core.display_path(md_path)}: direct compilation failed ({reason.strip().splitlines()[-1][:160] if reason.strip() else 'no reason given'}); "
               "trying it through Pandoc, which rewrites the LaTeX and may change its look", file=sys.stderr)
 
     if md_path.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS:
@@ -739,7 +740,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                              f"{citation_engine!r}. Valid: {', '.join(sorted(core.CITATION_ENGINES))}")
         if citation_engine in ("natbib", "biblatex") and any_citations:
             if not any(engine in core.LATEX_ENGINES for engine in engines):
-                print(f"WARN  {md_path}: pdfmd-options.citation-engine: {citation_engine} needs a "
+                emit("warning", None, f"WARN  {md_path}: pdfmd-options.citation-engine: {citation_engine} needs a "
                       "LaTeX-family engine, but none is available in this fallback chain; "
                       "using --citeproc instead.", file=sys.stderr)
             else:
@@ -786,8 +787,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 result = subprocess.CompletedProcess(args=["soffice"], returncode=0 if ok else 1,
                                                      stdout="", stderr="" if ok else reason)
                 if ok:
-                    core.vprint(verbose, f"AUTO SOFFICE  {md_path}: rendered via Pandoc -> .docx -> soffice "
-                          "(last-resort fallback)")
+                    emit("verbose", "SOFFICE", f"AUTO SOFFICE  {md_path}: rendered via Pandoc -> .docx -> soffice "
+                          "(last-resort fallback)", shown=verbose)
                     core.record_engine(engine, failed_engines)
                     break
                 failed_families.add(family)
@@ -1012,14 +1013,14 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 result = run(first_font, fallback=False)
                 if result.returncode != 0 and "pdfmdf" in result.stdout + result.stderr:
                     # a font pdfmd picked for another script would not load: build without them
-                    print(f"WARN  {md_path}: the fonts pdfmd chose for other scripts failed under {engine}; "
+                    emit("warning", None, f"WARN  {md_path}: the fonts pdfmd chose for other scripts failed under {engine}; "
                           "building without them (--verbose shows which)", file=sys.stderr)
                     result = run(first_font, fallback=False, plain=True)
                 combined_output = figure_fit.without_diagnostics(result.stdout + "\n" + result.stderr)
                 if (mainfont_auto and not explicit_font and result.returncode == 0
                         and core.missing_glyph_warning(combined_output)):
                     retry_font = font or core.fallback_font()
-                    print(core.retry_font_note(md_path, first_font or PREFERRED_FONT, retry_font,
+                    emit("warning", None, core.retry_font_note(md_path, first_font or PREFERRED_FONT, retry_font,
                                           core.missing_glyph_codes(combined_output)), file=sys.stderr)
                     result = run(retry_font)
             if result.returncode == 0:
@@ -1229,7 +1230,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
     export_scratch = None
     if export_target is not None:
         if (partial or source_override is not None) and selection is None and core.CALC_SEED is None:
-            print(f"NOTE  calc: {core.display_path(export_target)} is not written for a part built alone with no names from the parts "
+            emit("note", None, f"NOTE  calc: {core.display_path(export_target)} is not written for a part built alone with no names from the parts "
                   "above it (seed-calc is off, or nothing stands above it)", file=sys.stderr)
             export_target = None
         else:
@@ -1275,7 +1276,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
         try:
             written = core.write_calc_export(dump_text, export_target)
         except OSError as error:
-            print(f"WARN  calc: could not write {core.display_path(export_target)} ({error})", file=sys.stderr)
+            emit("warning", None, f"WARN  calc: could not write {core.display_path(export_target)} ({error})", file=sys.stderr)
         else:
             if written:
                 print(f"CALC  {written} name{'s' if written != 1 else ''} written to {core.display_path(export_target)}")
@@ -1285,7 +1286,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
             taken.append(f"{calc_names} names taken from {calc_from}")
         if calc_below_names:
             taken.append(f"{calc_below_names} " + ("from" if taken else "names taken from") + f" {calc_below_from} (defined below)")
-        print(f"NOTE  calc: {', '.join(taken)} (evaluated, not typeset)")
+        emit("note", None, f"NOTE  calc: {', '.join(taken)} (evaluated, not typeset)")
     if result[1] and target_format != core.ASSEMBLED_FORMAT:
         metadata_files = (metadata_file if isinstance(metadata_file, list)
                           else ([metadata_file] if metadata_file else []))

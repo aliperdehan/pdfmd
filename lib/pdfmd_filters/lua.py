@@ -11,6 +11,7 @@ from tempfile import NamedTemporaryFile
 from typing import Iterator
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 def package_lua_names(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None = None) -> list[str]:
@@ -133,10 +134,10 @@ def check_lua_filters(md_path: Path, filters: list[Path], strict: bool) -> list[
         advice = ("A Lua filter can run any command: read it, or mark a folder you work in with "
                   "`pdfmd --trust-lua FOLDER` to stop this note")
         if strict:
-            print(f"WARN  {core.display_path(md_path)}: the Lua filter {path.name} {what} and was not run (--strict). {advice}",
+            emit("warning", None, f"WARN  {core.display_path(md_path)}: the Lua filter {path.name} {what} and was not run (--strict). {advice}",
                   file=sys.stderr)
             continue
-        print(f"NOTE  {core.display_path(md_path)}: the Lua filter {path.name} {what}; it runs. {advice}")
+        emit("note", None, f"NOTE  {core.display_path(md_path)}: the Lua filter {path.name} {what}; it runs. {advice}")
         keep.append(path)
         fresh.append((digest, key))
     remember_lua(fresh)
@@ -164,12 +165,12 @@ def trust_lua(paths: list[Path]) -> bool:
                 lua_folders_path().parent.mkdir(parents=True, exist_ok=True)
                 with lua_folders_path().open("a", encoding="utf-8") as handle:
                     handle.write(f"{path}\n")
-            print(f"OK    Lua filters under {core.display_path(path)} run without a note")
+            emit("result", None, f"OK    Lua filters under {core.display_path(path)} run without a note")
         elif path.is_file() and lua_digest(path):
             remember_lua([(lua_digest(path), str(path))])
-            print(f"OK    {core.display_path(path)} is trusted as it is now (an edit is noted again; trust its folder to stop that)")
+            emit("result", None, f"OK    {core.display_path(path)} is trusted as it is now (an edit is noted again; trust its folder to stop that)")
         else:
-            print(f"FAIL  {core.display_path(path)}: no such file or folder", file=sys.stderr)
+            emit("error", None, f"FAIL  {core.display_path(path)}: no such file or folder", file=sys.stderr)
             complete = False
     return complete
 
@@ -186,7 +187,7 @@ def pdfmd_lua_missing(name: str = "") -> None:
     PDFMD_LUA_WARNED.add(key)
     what = (f"pdfmd_lua/{name}.lua is missing from the pdfmd_lua package" if name
             else "the pdfmd_lua package is not installed beside pdfmd.py")
-    print(f"WARN  lua: {what}, so pdfmd's own Lua filters do nothing in this run (tables sized by content, CSV tables, "
+    emit("warning", None, f"WARN  lua: {what}, so pdfmd's own Lua filters do nothing in this run (tables sized by content, CSV tables, "
           "calculations, indents, page breaks, markup ...). Install pdfmd-cli (`pipx install pdfmd-cli`) or keep the pdfmd_* "
           "folders of the repository beside pdfmd.py", file=sys.stderr)
 

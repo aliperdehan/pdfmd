@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 def ansi_width_argument(value: str) -> int:
     if not value.isdigit() or int(value) < 20:
@@ -89,8 +90,8 @@ def ansi_finish(json_file: Path, output: Path, md_path: Path, verbose: bool = Fa
         return f"{core.display_path(md_path)}: --to ansi could not draw what Pandoc made ({type(error).__name__}: {error})"
     core.write_text_lf(output, text)
     if skipped:
-        core.vprint(verbose, f"NOTE  ansi: {core.display_path(md_path)}: {skipped} raw piece{'s' if skipped != 1 else ''} (LaTeX, Word XML) "
-              "no terminal can show left out", file=sys.stderr)
+        emit("note", None, f"NOTE  ansi: {core.display_path(md_path)}: {skipped} raw piece{'s' if skipped != 1 else ''} (LaTeX, Word XML) "
+              "no terminal can show left out", file=sys.stderr, shown=verbose)
     return None
 
 
@@ -107,7 +108,7 @@ def ansi_without_pandoc(md_path: Path, output: Path, metadata_files=()) -> "tupl
         text, _ = ansi_document_text(from_markdown(source))
     except (OSError, ImportError, ValueError) as error:
         return False, f"{core.display_path(md_path)}: --to ansi could not read it without Pandoc ({type(error).__name__}: {error})"
-    print(f"NOTE  ansi: no Pandoc: {core.display_path(md_path)} was read by the built-in parser (no filters, citations "
+    emit("note", None, f"NOTE  ansi: no Pandoc: {core.display_path(md_path)} was read by the built-in parser (no filters, citations "
           "or footnotes)", file=sys.stderr)
     core.write_text_lf(output, text)
     return True, ""

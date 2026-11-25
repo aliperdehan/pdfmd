@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 # -- The cache route (pdfmd-options: {cache: {aux: true}}) -------------------
@@ -38,7 +39,7 @@ NOTED_PLACES: set[str] = set()
 def note_place_once(key: str, message: str) -> None:
     if key not in NOTED_PLACES:
         NOTED_PLACES.add(key)
-        print(f"NOTE  {message}", file=sys.stderr)
+        emit("note", None, f"NOTE  {message}", file=sys.stderr)
 
 
 def tex_user_tree_writable() -> bool:

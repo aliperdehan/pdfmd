@@ -11,6 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from pdfmd_base import core
+from pdfmd_log import emit
 from pdfmd_crop import DEFAULT_PAD, CropError, crop_pdf
 
 
@@ -57,7 +58,7 @@ def prepare(document: Path, output: Path, metadata: list[Path], target: str, ver
                 return str(error)
             empty = [str(number) for number, box in enumerate(cropped.boxes, page or 1) if box is None]
             if empty:
-                print(f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is", file=sys.stderr)
+                emit("note", None, f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is", file=sys.stderr)
             core.vprint(verbose, f"CROP  {core.display_path(output)}: cut to the ink")
             return ""
 

@@ -11,6 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 PLOT_CACHE_FORMAT = "2"
@@ -175,7 +176,7 @@ def validate_plot_entries(plot_dir: Path, verbose: bool, roots: list[Path] | Non
             for suffix in (".deps", ".dim", ".pdf"):
                 (plot_dir / f"{key}{suffix}").unlink(missing_ok=True)
             dropped += 1
-            core.vprint(verbose, f"AUTO CACHE  plot {key[:8]}: an input changed; dropped")
+            emit("verbose", "CACHE", f"AUTO CACHE  plot {key[:8]}: an input changed; dropped", shown=verbose)
         elif moved:
             try:
                 deps_file.write_text(json.dumps({**deps, "__roots__": current}), encoding="utf-8")

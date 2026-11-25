@@ -8,6 +8,7 @@ import shutil
 import sys
 
 from pdfmd_base import core
+from pdfmd_log import emit
 from .discovery import context, discover, bibliography
 from .markers import canonical, locations, prefix_setting
 from .pages import printed_page
@@ -435,7 +436,7 @@ def command(arguments):
     elif args.action == "check":
         for item in answer:
             place = f"{item['file']}:{item['line']}" if item["line"] else item["file"]
-            print(f"{place}: {item['severity']}: {item['message']}  [{item['code']}]")
+            emit(item['severity'], item['code'], f"{place}: {item['severity']}: {item['message']}  [{item['code']}]")
         if not answer:
             print("CHECK  excerpts: no problems")
     else:

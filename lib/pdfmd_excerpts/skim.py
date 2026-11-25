@@ -9,6 +9,7 @@ import sys
 from xml.parsers.expat import ExpatError
 
 from .import_pdf import Annotation, AREA, MARKUP, box, quad_boxes
+from pdfmd_log import emit
 
 STEM = "net_sourceforge_skim-app"
 # Foundation serialises NSRect and NSPoint as strings of decimal coordinates.
@@ -117,7 +118,7 @@ def skim_annotations(file, page_count):
         except READ_ERRORS:
             unreadable = True
     if unreadable:
-        print("WARN  excerpts: cannot read the Skim notes archive", file=sys.stderr)
+        emit("warning", None, "WARN  excerpts: cannot read the Skim notes archive", file=sys.stderr)
     for suffix in ("#S", ""):
         try:
             data = get_attribute(file, STEM + "_text_notes" + suffix)

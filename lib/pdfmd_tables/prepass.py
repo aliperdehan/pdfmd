@@ -6,6 +6,7 @@ import re
 from math import gcd
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 from .scan import (CSV_OPEN_RE, DIV_CLOSE_RE, GRID_EDGE_RE, PIPE_SEPARATOR_RE, _caption, _grid_end, caption_parts,
                    parse_attributes, split_row)
@@ -262,13 +263,13 @@ def table_source(text: str, label: str, *, colons: str | None = "ignore", reader
     if reader_family(reader) not in MARKDOWN_READERS or "|" not in text:
         return text
     for line, reason in unparsed_tables(text, reader):
-        print(f"WARN  table-unparsed: {label}, line {line}: {reason}")
+        emit("warning", "table-unparsed", f"WARN  table-unparsed: {label}, line {line}: {reason}")
     fixed, changes = normalise_separators(text)
     for line in changes:
-        print(f"WARN  table-separator: {label}, line {line}: normalised the pipe-table separator")
+        emit("warning", "table-separator", f"WARN  table-separator: {label}, line {line}: normalised the pipe-table separator")
     fixed, notices = repair_pipe_tables(fixed, repair)
     for line, reason in notices:
-        print(f"WARN  table-repair: {label}, line {line}: {reason}")
+        emit("warning", "table-repair", f"WARN  table-repair: {label}, line {line}: {reason}")
     if colons is not None and ":" in fixed:
         fixed, _ = normalise_separators(fixed, colons=colons)
     return fixed

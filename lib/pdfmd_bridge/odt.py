@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 def engine(md_path: Path, metadata_files: list[Path]) -> str:
@@ -58,7 +59,7 @@ def convert(build, md_path: Path, *args, **kwargs):
     if route == "auto":
         chosen = reference(md_path, metadata, output, given["pandoc_options"], no_auto)
         if chosen and chosen.suffix.lower() in (".odt", ".ott"):
-            print(f"NOTE  odt: reference document {core.display_path(chosen)} selects Pandoc's OpenDocument writer",
+            emit("note", None, f"NOTE  odt: reference document {core.display_path(chosen)} selects Pandoc's OpenDocument writer",
                   file=sys.stderr)
             route = "pandoc"
     if route == "pandoc":
@@ -83,6 +84,6 @@ def convert(build, md_path: Path, *args, **kwargs):
     core.BUILD["output"] = output
     if route == "soffice":
         raise SystemExit(f"odt: {reason}; install LibreOffice to use odt.engine: soffice")
-    print(f"WARN  odt: {reason}; using Pandoc's OpenDocument writer, which loses raw Word blocks such as a cover or form "
+    emit("warning", None, f"WARN  odt: {reason}; using Pandoc's OpenDocument writer, which loses raw Word blocks such as a cover or form "
           "and the Word route's extras; install LibreOffice to keep them", file=sys.stderr)
     return build(**given)

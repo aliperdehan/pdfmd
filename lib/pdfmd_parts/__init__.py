@@ -35,6 +35,7 @@ from pdfmd_flavours.markup import comment_source
 from pdfmd_reader.controls import repair_controls
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 
 
 HEADING_FIELD_WORDS = {"alias": "{#id}", "stem": "heading text"}
@@ -304,7 +305,7 @@ def warn_shared_parts_folder(scaffold: Path, directory: Path, setting: str, incl
         if probed is not None and probed[1] == "auto":
             others.append(file)
     for file in others:
-        print(f"WARN  {core.display_path(scaffold)}: {core.display_path(file)} beside it is not merged into this "
+        emit("warning", None, f"WARN  {core.display_path(scaffold)}: {core.display_path(file)} beside it is not merged into this "
               f"build, but built on its own it would take {core.display_path(directory)} too (`parts: auto`); "
               "put `pdfmd-options: {parts: false}` in it if it is not a report", file=sys.stderr)
 
@@ -347,7 +348,7 @@ def _probe_scaffold(
     except (Exception, SystemExit) as error:
         if core.VERBOSE_OUTPUT:
             reason = " ".join(str(error).split()) or type(error).__name__
-            print(f"NOTE  skipped scaffold candidate {core.display_path(candidate)}: {reason}")
+            emit("note", None, f"NOTE  skipped scaffold candidate {core.display_path(candidate)}: {reason}")
         return None
     print(output.getvalue(), end="")
     print(errors.getvalue(), end="", file=sys.stderr)
@@ -888,12 +889,12 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
     print(f"SPLIT  {core.display_path(source)} -> {core.display_path(scaffold)} + {len(written)} parts in "
           f"{core.display_path(parts_dir)}")
     if original.returncode == 0 and original.stdout == split.stdout:
-        print("OK     the parts read back as the identical document (Pandoc AST compared)")
+        emit("result", None, "OK     the parts read back as the identical document (Pandoc AST compared)")
         if not core.parts_setting(scaffold, core.scaffold_metadata_files(scaffold, None)):
-            print("NOTE   parts mode is off for this document: add `pdfmd-options: {parts: auto}` "
+            emit("note", None, "NOTE   parts mode is off for this document: add `pdfmd-options: {parts: auto}` "
                   "to its metadata.yaml (or the scaffold's front matter) to build from the parts")
         return 0
-    print("FAIL   the parts do NOT read back as the original; do not use this split", file=sys.stderr)
+    emit("error", None, "FAIL   the parts do NOT read back as the original; do not use this split", file=sys.stderr)
     return 1
 
 

@@ -16,6 +16,7 @@ from typing import Iterator
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 from .controls import repair_controls
 
 
@@ -180,7 +181,7 @@ def crossref_filter_args(sources: Path | list[Path], pandoc_options: list[str],
     if not any(contains_crossref(file, metadata_files) for file in files):
         return []
     if core.which("pandoc-crossref") is None:
-        print(f"WARN  {label}: uses pandoc-crossref syntax (@fig:/@eq:/@tbl:/@sec:/@lst: or a "
+        emit("warning", None, f"WARN  {label}: uses pandoc-crossref syntax (@fig:/@eq:/@tbl:/@sec:/@lst: or a "
               "{#fig:...}-style attribute) but pandoc-crossref isn't installed; the reference/"
               "numbering will not resolve. Install it (e.g. `brew install pandoc-crossref`), "
               "or rewrite without crossref syntax to silence this.", file=sys.stderr)
@@ -189,7 +190,7 @@ def crossref_filter_args(sources: Path | list[Path], pandoc_options: list[str],
     built, running = crossref_built_for(executable), core.pandoc_version()
     if built and running != (0,) and built[:2] != running[:2]:
         # pandoc-crossref "is not supported" through another Pandoc: it runs, and leaves ?? where the numbers go
-        print(f"WARN  {label}: uses pandoc-crossref syntax, but the installed pandoc-crossref was built for Pandoc "
+        emit("warning", None, f"WARN  {label}: uses pandoc-crossref syntax, but the installed pandoc-crossref was built for Pandoc "
               f"{'.'.join(map(str, built))} and this is Pandoc {'.'.join(map(str, running))}; it would put ?? "
               "where the numbers go, so it was not run. Install the pandoc-crossref release made for this Pandoc "
               "(github.com/lierdakil/pandoc-crossref/releases), or a Pandoc to match.", file=sys.stderr)

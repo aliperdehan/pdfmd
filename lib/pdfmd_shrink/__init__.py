@@ -41,6 +41,7 @@ from typing import NamedTuple
 
 from pdfmd_base import core
 from pdfmd_base import atomic_file, timed
+from pdfmd_log import emit
 
 ENV = "PDFMD_SHRINK"
 MODES = ("true", "fast", "false")
@@ -100,7 +101,7 @@ def resolve_mode(md_path: Path, metadata_files: list[Path]) -> str:
     if chosen is None:
         if value is not None and "mode" not in _SAID:
             _SAID.add("mode")
-            print(f"NOTE  shrink: `{value}` is not true, fast or false; using true", file=sys.stderr)
+            emit("note", None, f"NOTE  shrink: `{value}` is not true, fast or false; using true", file=sys.stderr)
         return "true"
     return chosen
 

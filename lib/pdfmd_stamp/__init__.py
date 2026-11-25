@@ -13,6 +13,7 @@ from typing import Iterator
 
 from pdfmd_base import core
 from pdfmd_base import timed
+from pdfmd_log import emit
 
 
 STAMP_MODES = frozenset({"replace", "history"})
@@ -200,9 +201,9 @@ def stamp_summary(options: dict, texts: list[str], verbose: bool) -> str:
         if version:
             parts.append(f"{name} {version}")
         else:
-            core.vprint(verbose, f"WARN  --stamp: {name} is loaded but its version could not be "
+            emit("warning", None, f"WARN  --stamp: {name} is loaded but its version could not be "
                    "determined (kpsewhich missing, package not installed, or no "
-                   "\\ProvidesPackage line)", file=sys.stderr)
+                   "\\ProvidesPackage line)", file=sys.stderr, shown=verbose)
     parts.append(f"pdfmd v{core.PDFMD_VERSION}")
     return ", ".join(parts)
 
@@ -344,8 +345,8 @@ def apply_stamp(md_path: Path, new_line: str, mode: str, verbose: bool) -> None:
     updated, warning = update_build_notes(text, new_line, mode)
     core.atomic_write_text(md_path, updated)
     if warning:
-        print(f"WARN  {md_path}: {warning}", file=sys.stderr)
-    core.vprint(verbose, f"AUTO STAMP  {md_path}: {new_line}")
+        emit("warning", None, f"WARN  {md_path}: {warning}", file=sys.stderr)
+    emit("verbose", "STAMP", f"AUTO STAMP  {md_path}: {new_line}", shown=verbose)
 
 
 def partial_names(info: dict, md_path: Path, output: Path) -> list[tuple[str, str]]:
@@ -400,9 +401,9 @@ def record_partial_history(md_path: Path, metadata_files: list[Path], preamble_f
     try:
         history.add_entry(path, entry, md_path.name)
     except OSError as error:
-        print(f"WARN  {core.display_path(md_path)}: cannot write {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(md_path)}: cannot write {core.display_path(path)} ({error.strerror or error})", file=sys.stderr)
         return
-    core.vprint(verbose, f"AUTO HISTORY  {core.display_path(path)}: {entry.when} partial ({shown})")
+    emit("verbose", "HISTORY", f"AUTO HISTORY  {core.display_path(path)}: {entry.when} partial ({shown})", shown=verbose)
 
 
 @timed(lambda args, kwargs: None if args[1] else "stamp and history")    # `skip`: the cache route's .tex, no step
@@ -528,9 +529,9 @@ def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], 
     if not options.get("pdf_metadata"):
         return
     if core.pypdf is None:
-        core.vprint(verbose, "WARN  --stamp: pdf_metadata is on but pypdf is not installed "
+        emit("warning", None, "WARN  --stamp: pdf_metadata is on but pypdf is not installed "
               "(pip install pypdf) -- skipping the PDF Info-dictionary stamp",
-              file=sys.stderr)
+              file=sys.stderr, shown=verbose)
         return
     if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
         return
@@ -574,7 +575,7 @@ def stamp_pdf_metadata_posthoc(pdf_path: Path, options: dict, texts: list[str], 
         finally:
             pypdf_logger.setLevel(previous_level)
     except Exception as error:  # noqa: BLE001 -- best-effort, like package_version()
-        print(f"WARN  --stamp: could not write the PDF Info-dictionary stamp "
+        emit("warning", None, f"WARN  --stamp: could not write the PDF Info-dictionary stamp "
               f"into {pdf_path} ({error}) -- the compile itself still succeeded",
               file=sys.stderr)
 

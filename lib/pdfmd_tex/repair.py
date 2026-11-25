@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Iterator
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 MODES = ("auto", "off")
 # YAML reads a bare off/no as a boolean; on/yes are accepted too and mean auto
@@ -97,7 +98,7 @@ def resolve_mode(md_path: Path, metadata_files: list[Path]) -> str:
         return "auto"
     word = mode_word(value)
     if word is None:
-        print(f"WARN  {core.display_path(md_path)}: pdfmd-options.tex-repair {value!r} is not one of {', '.join(MODES)}; "
+        emit("warning", None, f"WARN  {core.display_path(md_path)}: pdfmd-options.tex-repair {value!r} is not one of {', '.join(MODES)}; "
               "using auto", file=sys.stderr)
         return "auto"
     return word
@@ -309,7 +310,7 @@ def say(key: str, text: str) -> None:
     line = f"NOTE  {STATE['label']}: tex-repair: {text}"
     if key not in NOTED:
         NOTED.add(key)
-        print(line, file=sys.stderr)
+        emit("note", None, line, file=sys.stderr)
     lines = core.BUILD.setdefault("repaired", [])
     if line not in lines:
         lines.append(line)
@@ -382,6 +383,6 @@ def plan(md_path: Path, metadata_files: list[Path], engines: list[str], reorder:
                 + " (this run only; `tex-repair: off` changes nothing)")
         if standins and not ulem and "soul-plain" not in NOTED:
             NOTED.add("soul-plain")
-            print(f"WARN  {STATE['label']}: tex-repair: soul.sty and ulem.sty are not installed, so struck-out text is printed "
+            emit("warning", None, f"WARN  {STATE['label']}: tex-repair: soul.sty and ulem.sty are not installed, so struck-out text is printed "
                   "without its line (install soul: tlmgr install soul)", file=sys.stderr)
     return chain

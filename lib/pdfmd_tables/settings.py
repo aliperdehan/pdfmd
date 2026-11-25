@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Iterator
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 # Auto-applied on every LaTeX-family render (see table_width_filter() below).
@@ -414,7 +415,7 @@ def cell_tags_text(text: str, md_path: Path, metadata_files: list[Path], label: 
         return text
     result = normalise(text, cell_tag_kinds(md_path, list(metadata_files)))
     for note in result.notes:
-        print(f"WARN  cell-tags: {label}, line {note.line}: {note.message}")
+        emit("warning", None, f"WARN  cell-tags: {label}, line {note.line}: {note.message}")
     return result.text
 
 
@@ -475,7 +476,7 @@ def cellalign_args(sources: Path | list[Path], metadata_files: list[Path]) -> li
         label = core.display_path(files[0])
         if label not in core.TABLAY_NOTED:
             core.TABLAY_NOTED.add(label)
-            print(f"NOTE  cell-tags: {label}: a table has a vertical alignment, a width or a height, which LaTeX draws with its "
+            emit("note", None, f"NOTE  cell-tags: {label}: a table has a vertical alignment, a width or a height, which LaTeX draws with its "
                   "`tabularray` package; it was not found (kpsewhich), so LaTeX ignores these except percentage widths. HTML is unaffected.")
     return arguments
 
@@ -582,15 +583,15 @@ def repair_ascii_text(text: str, mode: str, label: str) -> str:
         if repair.kind == "extras":          # a pipe table that was fine: only the `#+` lines around it were dealt with
             if mode != "note":
                 for problem in repair.problems:
-                    print(f"WARN  table-ascii: {label}, line {repair.line}: {problem}")
+                    emit("warning", "table-ascii", f"WARN  table-ascii: {label}, line {repair.line}: {problem}")
             continue
         shape = f"{repair.columns} columns, {repair.rows} row{'s' if repair.rows != 1 else ''}"
         if mode == "note":
-            print(f"NOTE  table-ascii: {label}, line {repair.line}: {repair.what} ({shape}) that Pandoc does not read as a "
+            emit("note", "table-ascii", f"NOTE  table-ascii: {label}, line {repair.line}: {repair.what} ({shape}) that Pandoc does not read as a "
                   "table; pdfmd-options: table-ascii: repair rewrites it as a pipe table, off ends this note")
             continue
-        print(f"WARN  table-ascii: {label}, line {repair.line}: {repair.what} was read as a pipe table ({shape}); "
+        emit("warning", "table-ascii", f"WARN  table-ascii: {label}, line {repair.line}: {repair.what} was read as a pipe table ({shape}); "
               "pdfmd-options: table-ascii: off keeps it as written")
         for problem in repair.problems:
-            print(f"WARN  table-ascii: {label}, line {repair.line}: {problem}")
+            emit("warning", "table-ascii", f"WARN  table-ascii: {label}, line {repair.line}: {problem}")
     return text if mode == "note" else fixed

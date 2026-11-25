@@ -18,6 +18,7 @@ except ImportError:
     yaml = None
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 def strip_embedded_preamble(text: str) -> str:
@@ -348,14 +349,14 @@ def embedded_lua_filters(md_path: Path, allowed: bool, trust_all: bool) -> Itera
         for index, block in enumerate(blocks, 1):
             label = Path(block["name"]).name or "filter.lua"
             if not (trust_all or block["sha256"] in known):
-                print(f"WARN  {core.display_path(md_path)}: the embedded Lua filter '{label}' was not run: "
+                emit("warning", None, f"WARN  {core.display_path(md_path)}: the embedded Lua filter '{label}' was not run: "
                       "it was not written by this pdfmd (or was edited since), and a Lua filter can "
                       "run any command. Read it, then use --trust-embedded to run it", file=sys.stderr)
                 continue
             target = folder / f"{index:02d}-{label}"
             core.write_text_lf(target, block["source"])
             paths.append(target)
-            print(f"AUTO LUA  {core.display_path(md_path)}: embedded filter {label}")
+            emit("normal", "LUA", f"AUTO LUA  {core.display_path(md_path)}: embedded filter {label}")
         yield paths
     finally:
         shutil.rmtree(folder, ignore_errors=True)

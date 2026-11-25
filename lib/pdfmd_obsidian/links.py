@@ -14,6 +14,7 @@ from urllib.parse import quote
 
 from pdfmd_base import core
 from pdfmd_base import pandoc_run
+from pdfmd_log import emit
 from pdfmd_obsidian.properties import syntax_matches, write_syntax
 from pdfmd_obsidian.wikilinks import wikilinks_as_text
 
@@ -190,7 +191,7 @@ class Links:
             if not note:
                 if not ambiguous and name.casefold() not in self.told:
                     self.told.add(name.casefold())
-                    print(f"WARN  {core.display_path(path)}: wikilink note not found: {name}", file=sys.stderr)
+                    emit("warning", None, f"WARN  {core.display_path(path)}: wikilink note not found: {name}", file=sys.stderr)
                 return None
         else:
             note = path

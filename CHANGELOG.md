@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.34.63 — 2026-11-26
+
+Pre-edit state: commit `73f77bd`. Build and command diagnostics wrote directly to the console from their
+call sites. Route warnings, notes, errors, automatic discoveries and results through `pdfmd_log.emit`,
+keeping each message's wording, stream and existing verbosity. An AST test checks for direct diagnostic
+prints. Compared stdout, stderr and status on six synthetic cases with Pandoc 3.13, including strict mode
+and a two-worker batch.
+
 ## v3.34.62a — 2026-11-26
 
 Pre-edit state: commit `18b6d11`. [tables] `test_word_floor_cap_uses_measured_points_per_character` tests the floor cap alone, so it now switches the column ceiling (on by default since 3.34.56) off with `column-ceil-margin=0`; it expected 0.16 and got 0.32 with the ceiling on. No shipped code changed.

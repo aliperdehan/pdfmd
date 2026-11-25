@@ -24,6 +24,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 VSCODE_TASKS = """{
@@ -92,7 +93,7 @@ def init_vscode_command(args) -> int:
     """`pdfmd --init-vscode`: a .vscode/tasks.json with pdfmd tasks, in the current folder; never overwrites one."""
     target = Path.cwd() / ".vscode" / "tasks.json"
     if target.exists():
-        print(f"NOTE  {core.display_path(target)} exists; nothing was written. The tasks to add:\n{VSCODE_TASKS}")
+        emit("note", None, f"NOTE  {core.display_path(target)} exists; nothing was written. The tasks to add:\n{VSCODE_TASKS}")
         return 1
     target.parent.mkdir(parents=True, exist_ok=True)
     core.atomic_write_text(target, VSCODE_TASKS)
@@ -146,16 +147,16 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
     document and its metadata files record; the command-line ones are the ones you give now. A document is edited as the one
     file its source is (v3.28.40: the metadata, preamble, text files, bibliography and style inside it); a -r book as its chapters."""
     if core.pypdf is None:
-        print("ERROR  --edit on a PDF needs pypdf (pip install pypdf).", file=sys.stderr)
+        emit("error", None, "ERROR  --edit on a PDF needs pypdf (pip install pypdf).", file=sys.stderr)
         return 1
     pdf = pdf.resolve()
     try:
         attachments = core.read_pdf_attachments(pdf)
     except Exception as error:  # noqa: BLE001
-        print(f"ERROR  {core.display_path(pdf)}: not readable as a PDF ({error})", file=sys.stderr)
+        emit("error", None, f"ERROR  {core.display_path(pdf)}: not readable as a PDF ({error})", file=sys.stderr)
         return 1
     if core.ATTACH_MANIFEST not in attachments:
-        print(f"ERROR  {core.display_path(pdf)} carries no pdfmd source, so there is nothing to edit "
+        emit("error", None, f"ERROR  {core.display_path(pdf)} carries no pdfmd source, so there is nothing to edit "
               "(pdfmd --check-source says which PDFs do; build with --attach-source)", file=sys.stderr)
         return 1
     external = editor_command(args)
@@ -163,10 +164,10 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
         try:
             import pdfmd_edit
         except ImportError:
-            print("ERROR  --edit needs the pdfmd_edit package (a full install of pdfmd-cli).", file=sys.stderr)
+            emit("error", None, "ERROR  --edit needs the pdfmd_edit package (a full install of pdfmd-cli).", file=sys.stderr)
             return 1
         if not pdfmd_edit.available():
-            print("ERROR  --edit needs prompt_toolkit (pdfmd --install tui), or name an editor: --editor \"code --wait\"",
+            emit("error", None, "ERROR  --edit needs prompt_toolkit (pdfmd --install tui), or name an editor: --editor \"code --wait\"",
                   file=sys.stderr)
             return 1
     work = Path(tempfile.mkdtemp(prefix="pdfmd-edit-"))
@@ -183,7 +184,7 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
                                                                          .decode("utf-8"))
                        if block["type"] == "lua-filter" and block["sha256"] not in core.trusted_hashes()]
             if unknown and "--trust-embedded" not in passed:
-                print(f"NOTE  the source embeds the Lua filter {', '.join(unknown)}, which this machine's pdfmd has not "
+                emit("note", None, f"NOTE  the source embeds the Lua filter {', '.join(unknown)}, which this machine's pdfmd has not "
                       "written: a build skips it unless you add --trust-embedded (read it first)")
         chapters: list[Path] = []
         with core.restore_chain(manifest):
@@ -196,7 +197,7 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
                 if where is not None and (folder / where).is_file():
                     chapters.append(folder / where)
             if not chapters:
-                print("ERROR  the restored folder has none of the report's chapters.", file=sys.stderr)
+                emit("error", None, "ERROR  the restored folder has none of the report's chapters.", file=sys.stderr)
                 return 1
             document = chapters[0]
             made = work / pdf.name
@@ -205,7 +206,7 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
             if not document.is_file():
                 found = sorted(folder.rglob("*.md"))
                 if not found:
-                    print("ERROR  the restored folder has no Markdown file to edit.", file=sys.stderr)
+                    emit("error", None, "ERROR  the restored folder has no Markdown file to edit.", file=sys.stderr)
                     return 1
                 document = found[0]
             made = document.with_suffix(".pdf")
@@ -231,7 +232,7 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
         if external is None:
             import pdfmd_edit
             if len(chapters) > 1:
-                print(f"NOTE  a report of {len(chapters)} chapters: the built-in editor opens the first, "
+                emit("note", None, f"NOTE  a report of {len(chapters)} chapters: the built-in editor opens the first, "
                       f"{chapters[0].name}; --editor CMD opens them all ({', '.join(item.name for item in chapters[1:])})")
             pdfmd_edit.run(document, build=build, opener=core.open_file)
         else:
@@ -257,18 +258,18 @@ def edit_pdf_command(args, pdf: Path, passed: list[str]) -> int:
         if state["built"] != digest():
             ok, said, _ = build(document)                         # edited after the last build
             if not ok:
-                print(f"ERROR  the last version does not build; {core.display_path(pdf)} is as it was.\n{said[-800:]}",
+                emit("error", None, f"ERROR  the last version does not build; {core.display_path(pdf)} is as it was.\n{said[-800:]}",
                       file=sys.stderr)
                 return 1
         elif not state["ok"]:
-            print(f"ERROR  the last build failed; {core.display_path(pdf)} is as it was.", file=sys.stderr)
+            emit("error", None, f"ERROR  the last build failed; {core.display_path(pdf)} is as it was.", file=sys.stderr)
             return 1
         lost = source_lost(attachments, made)
         if lost is not None and not lost.startswith("lost:"):
-            print(f"ERROR  {lost}; {core.display_path(pdf)} is as it was.", file=sys.stderr)
+            emit("error", None, f"ERROR  {lost}; {core.display_path(pdf)} is as it was.", file=sys.stderr)
             return 1
         if lost:
-            print(f"WARN  the rebuilt PDF no longer carries {lost[5:].strip()} (nothing in the text points at "
+            emit("warning", None, f"WARN  the rebuilt PDF no longer carries {lost[5:].strip()} (nothing in the text points at "
                   f"{'it' if ',' not in lost else 'them'} now?)", file=sys.stderr)
         if sys.stdin.isatty() and sys.stdout.isatty() and not os.environ.get("PDFMD_NO_PROMPT"):
             try:
@@ -351,13 +352,13 @@ def edit_command(args) -> int:
     try:
         import pdfmd_edit
     except ImportError:
-        print("ERROR  --edit needs the pdfmd_edit package (a full install of pdfmd-cli).", file=sys.stderr)
+        emit("error", None, "ERROR  --edit needs the pdfmd_edit package (a full install of pdfmd-cli).", file=sys.stderr)
         return 1
     if external is None and not pdfmd_edit.available():
-        print("ERROR  --edit needs prompt_toolkit: run `pdfmd --install tui`.", file=sys.stderr)
+        emit("error", None, "ERROR  --edit needs prompt_toolkit: run `pdfmd --install tui`.", file=sys.stderr)
         return 1
     if len(args.path or []) > 1:
-        print("ERROR  --edit opens one file.", file=sys.stderr)
+        emit("error", None, "ERROR  --edit opens one file.", file=sys.stderr)
         return 1
     target = (args.path or [Path.cwd()])[0]
     try:
@@ -366,7 +367,7 @@ def edit_command(args) -> int:
         if target.suffix.lower() in (".md", ".markdown") and not target.is_dir():
             document = target.resolve()                 # a new file, made when it is first saved
         else:
-            print(f"ERROR  {error}", file=sys.stderr)
+            emit("error", None, f"ERROR  {error}", file=sys.stderr)
             return 1
 
     def build(path: Path):

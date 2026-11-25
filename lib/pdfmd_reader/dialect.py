@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 from pdfmd_obsidian.comments import _PROTECTED, _pairs
 from pdfmd_tables.scan import _pipe_end
 
@@ -105,12 +106,12 @@ def prepare(text: str, path: Path, metadata_files, relax: bool = False) -> str:
     front, body = text[:start], text[start:]
     if toml:
         if not deep(path, metadata_files):
-            print(f"WARN  {core.display_path(path)}: TOML front matter is read as text; set dialect-detect: deep to use it",
+            emit("warning", None, f"WARN  {core.display_path(path)}: TOML front matter is read as text; set dialect-detect: deep to use it",
                   file=sys.stderr)
             return text
         metadata = toml[1]
         if metadata is None:
-            print(f"NOTE  {core.display_path(path)}: TOML front matter needs Python 3.11; the block was dropped",
+            emit("note", None, f"NOTE  {core.display_path(path)}: TOML front matter needs Python 3.11; the block was dropped",
                   file=sys.stderr)
             front = ""
         else:

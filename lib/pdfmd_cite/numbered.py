@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 KEY = "numbered-references"
 CHECK = "numbered-references-off"
@@ -337,7 +338,7 @@ def prepare(sources, metadata, arguments=(), reader=None, *, native_text=None):
         texts = [native_text]
     plan, issue = inspect(sources, texts, metadata, arguments, reader, native=native_text is not None)
     if issue and issue != CHECK:
-        print(f"WARN  {core.display_path(sources[0])}: {issue}", file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(sources[0])}: {issue}", file=sys.stderr)
     return plan
 
 

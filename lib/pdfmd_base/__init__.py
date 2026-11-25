@@ -212,13 +212,12 @@ def record_note(text: str) -> None:
 
 
 def vprint(shown: bool, *args, **kwargs) -> None:
-    """print() for a line that only --verbose shows: on the console when ``shown``, and always in the record of the build
-    (the first step of `emit`: the sites that print under --verbose go through here, the chatter ladder turns it into
-    emit(level, id, text))."""
-    if shown:
-        print(*args, **kwargs)
-    else:
-        record_note(str(kwargs.get("sep", " ")).join(str(item) for item in args))
+    """Send a verbose line to the console or to the build record."""
+    from pdfmd_log import emit
+
+    separator = kwargs.pop("sep", " ")
+    text = ((" " if separator is None else separator) if shown else str(separator)).join(map(str, args))
+    emit("verbose", None, text, shown=shown, **kwargs)
 
 
 def noted(label, engine: bool = False):

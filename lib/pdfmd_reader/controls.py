@@ -10,6 +10,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 # Match a complete CSI sequence first, so its parameters never leak into the output.
 _CONTROLS = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|[\x00-\x08\x0b\x0c\x0e-\x1f]")
@@ -62,5 +63,5 @@ def repair_controls(text: str, path: Path | None = None) -> str:
             if actions["replaced"]:
                 edits.append("replaced " + ", ".join(actions["replaced"]) + " with newlines")
             details.append(f"line {number}: " + ", ".join(edits))
-        print(f"WARN  {core.display_path(path)}: source control characters: " + "; ".join(details), file=sys.stderr)
+        emit("warning", None, f"WARN  {core.display_path(path)}: source control characters: " + "; ".join(details), file=sys.stderr)
     return repaired

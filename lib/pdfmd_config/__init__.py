@@ -8,6 +8,7 @@ import re
 import sys
 from pdfmd_base import core
 from pdfmd_base import spelling
+from pdfmd_log import emit
 
 
 def frontmatter_no_auto(md_path: Path) -> list[str] | None:
@@ -139,7 +140,7 @@ def config_path() -> Path | None:
 
 
 def note_config_off() -> None:
-    print("NOTE  The user config file is switched off by PDFMD_CONFIG.", file=sys.stderr)
+    emit("note", None, "NOTE  The user config file is switched off by PDFMD_CONFIG.", file=sys.stderr)
 
 
 def install_config_path() -> Path:
@@ -153,16 +154,16 @@ def read_config(path: Path | None) -> dict:
     try:
         data = core.yaml.safe_load(path.read_text(encoding="utf-8-sig"))
     except (OSError, UnicodeDecodeError, core.yaml.YAMLError) as error:
-        print(f"WARN  config {path}: cannot be read ({error}); ignoring it", file=sys.stderr)
+        emit("warning", None, f"WARN  config {path}: cannot be read ({error}); ignoring it", file=sys.stderr)
         return {}
     if data is None:
         return {}
     if not isinstance(data, dict):
-        print(f"WARN  config {path}: expected a mapping of settings; ignoring it", file=sys.stderr)
+        emit("warning", None, f"WARN  config {path}: expected a mapping of settings; ignoring it", file=sys.stderr)
         return {}
     unknown = sorted(str(key) for key in set(data) - set(CONFIG_KEYS))
     if unknown:
-        print(f"WARN  config {path}: unknown setting{'s' if len(unknown) > 1 else ''} "
+        emit("warning", None, f"WARN  config {path}: unknown setting{'s' if len(unknown) > 1 else ''} "
               f"{', '.join(unknown)} (known: {', '.join(CONFIG_KEYS)}); `options:` holds pdfmd-options",
               file=sys.stderr)
     return data
@@ -218,7 +219,7 @@ def folder_options_safe(path: str, options: dict) -> dict:
         if isinstance(options.get(outer), dict) and inner in options[outer]:
             if f"{path}:{outer}.{inner}" not in FOLDER_WARNED:
                 FOLDER_WARNED.add(f"{path}:{outer}.{inner}")
-                print(f"WARN  {path}: {outer}.{inner} names code and cannot be set by a folder; ignored", file=sys.stderr)
+                emit("warning", None, f"WARN  {path}: {outer}.{inner} names code and cannot be set by a folder; ignored", file=sys.stderr)
             options = {**options, outer: {key: value for key, value in options[outer].items() if key != inner}}
     return options
 
@@ -416,16 +417,16 @@ def folder_file_data(path: Path):
         if hasattr(os, "getuid") and path.stat().st_uid not in (os.getuid(), 0):
             if str(path) not in FOLDER_WARNED:
                 FOLDER_WARNED.add(str(path))
-                print(f"WARN  {path}: belongs to another user; not read", file=sys.stderr)
+                emit("warning", None, f"WARN  {path}: belongs to another user; not read", file=sys.stderr)
             return None
         data = core.yaml.safe_load(path.read_text(encoding="utf-8-sig"))
     except (OSError, UnicodeDecodeError, core.yaml.YAMLError) as error:
-        print(f"WARN  {path}: cannot be read ({error}); ignoring it", file=sys.stderr)
+        emit("warning", None, f"WARN  {path}: cannot be read ({error}); ignoring it", file=sys.stderr)
         return None
     if data is None:
         return {}
     if not isinstance(data, dict):
-        print(f"WARN  {path}: expected a mapping of settings; ignoring it", file=sys.stderr)
+        emit("warning", None, f"WARN  {path}: expected a mapping of settings; ignoring it", file=sys.stderr)
         return None
     return data
 
@@ -451,7 +452,7 @@ def folder_walk(folder: str) -> tuple[tuple[Path, dict | None, Path | None], ...
             machine = sorted(str(key) for key in data if key in MACHINE_KEYS)
             if machine and str(directory / "config.yaml") not in FOLDER_WARNED:
                 FOLDER_WARNED.add(str(directory / "config.yaml"))
-                print(f"WARN  {directory / 'config.yaml'}: {', '.join(machine)} {'is' if len(machine) == 1 else 'are'} for this "
+                emit("warning", None, f"WARN  {directory / 'config.yaml'}: {', '.join(machine)} {'is' if len(machine) == 1 else 'are'} for this "
                       "machine and cannot be set by a folder; ignored", file=sys.stderr)
         found.append((directory, data, metadata))
         if data is not None and str(data.get("inherit", True)).strip().casefold() in ("false", "no", "off", "0"):

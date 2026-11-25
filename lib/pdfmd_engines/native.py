@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 NATIVE_ENGINES = ("calibre", "md2pdf", "inkmd")
@@ -50,7 +51,7 @@ def warn_old_pandoc() -> None:
     path = core.config_root() / f"notice-pandoc-{shown}"
     if os.environ.get("PDFMD_NO_PROMPT") or path.exists():
         return
-    print(f"WARN  Pandoc {shown} is older than {'.'.join(map(str, PANDOC_MIN))}, the oldest pdfmd is tested with; "
+    emit("warning", None, f"WARN  Pandoc {shown} is older than {'.'.join(map(str, PANDOC_MIN))}, the oldest pdfmd is tested with; "
           "it may work, and a newer one (`pdfmd --install pandoc`) is the first thing to try if something looks wrong. "
           "This is said once.", file=sys.stderr)
     try:
@@ -160,7 +161,7 @@ def native_run_note(engines: list[str]) -> None:
     reason = "Pandoc was not found" if not core.which("pandoc") else "no PDF engine was found"
     what = ("Calibre's Markdown reader (no math, none of Pandoc's syntax)" if engines and engines[0] == "calibre"
             else "the built-in renderer")
-    print(f"NOTE  {reason}: building with {what} ({' / '.join(engines)}). "
+    emit("note", None, f"NOTE  {reason}: building with {what} ({' / '.join(engines)}). "
           "The output is plain -- no LaTeX, preambles, filters or citation processing. "
           "Pandoc plus Typst or TeX gives the full result: `pdfmd --install full`, or "
           "`pdfmd --check-dependencies`.")

@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 TEX_PROBE_DOCUMENT = "\\documentclass{article}\\usepackage{fontspec}\\begin{document}x\\end{document}\n"
@@ -108,19 +109,19 @@ def report_engine_failure(label: str, engine: str, result: subprocess.CompletedP
     reason = core.engine_failure_reason(result.stderr)
     hint = f" ({reason})" if reason else ""
     if stopped:                     # engine-fallback stops the chain here (lib/pdfmd_chain)
-        print(f"WARN  {label}: {engine} failed{hint}; {stopped}", file=sys.stderr)
+        emit("warning", None, f"WARN  {label}: {engine} failed{hint}; {stopped}", file=sys.stderr)
         where = latex_error_location(label, result.stderr)
         if where and (label, where) not in SHOWN_LOCATIONS:
             SHOWN_LOCATIONS.add((label, where))
             print(f"      {where}", file=sys.stderr)
     elif remaining:
-        print(f"WARN  {label}: {engine} failed{hint}; trying {remaining[0]}...", file=sys.stderr)
+        emit("warning", None, f"WARN  {label}: {engine} failed{hint}; trying {remaining[0]}...", file=sys.stderr)
         where = latex_error_location(label, result.stderr)
         if where and (label, where) not in SHOWN_LOCATIONS:       # the next LaTeX engine fails in the same place: once
             SHOWN_LOCATIONS.add((label, where))
             print(f"      {where}", file=sys.stderr)
     else:
-        print(f"WARN  {label}: {engine} failed{hint}; no more engines to try. "
+        emit("warning", None, f"WARN  {label}: {engine} failed{hint}; no more engines to try. "
               f"Rerun with --engine {engine} --verbose (or --debug) for the full log.",
               file=sys.stderr)
         where = latex_error_location(label, result.stderr)

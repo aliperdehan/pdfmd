@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit
 
 
 # Engines are tried in this order only when the user did not request one.
@@ -242,7 +243,7 @@ def engine_chain(requested: str, presentation: bool, label: str) -> list[str]:
     if not chain:
         raise SystemExit(f"{label} names {requested}, and none of it can run:\n  " + "\n  ".join(missing))
     for line in missing:
-        print(f"NOTE  {label}: {line}; the next in the list is tried", file=sys.stderr)
+        emit("note", None, f"NOTE  {label}: {line}; the next in the list is tried", file=sys.stderr)
     return chain
 
 
@@ -288,35 +289,35 @@ def resolve_engines(md_path: Path, cli_engine: str | None, engines: list[str],
 def dependency_report() -> bool:
     """Print executable availability and return whether conversion can run."""
     pandoc = core.which("pandoc")
-    print(f"{'OK  ' if pandoc else 'MISS'}  pandoc" + (f"  ({pandoc})" if pandoc else ""))
+    emit("result", None, f"{'OK  ' if pandoc else 'MISS'}  pandoc" + (f"  ({pandoc})" if pandoc else ""))
     for number, engine in enumerate(PDF_ENGINES, start=1):
         path = core.engine_executable(engine)
-        print(f"{'OK  ' if path else 'MISS'}  {number}. {engine}" + (f"  ({path})" if path else ""))
+        emit("result", None, f"{'OK  ' if path else 'MISS'}  {number}. {engine}" + (f"  ({path})" if path else ""))
     for engine in EXPLICIT_ENGINES:
         path = core.engine_executable(engine)
-        print(f"{'OK  ' if path else 'MISS'}  {engine} (only when named: -e {engine})" + (f"  ({path})" if path else ""))
+        emit("result", None, f"{'OK  ' if path else 'MISS'}  {engine} (only when named: -e {engine})" + (f"  ({path})" if path else ""))
     quarto = core.which("quarto")
-    print(f"{'OK  ' if quarto else 'MISS'}  quarto (only needed for .qmd files)"
+    emit("result", None, f"{'OK  ' if quarto else 'MISS'}  quarto (only needed for .qmd files)"
          + (f"  ({quarto})" if quarto else ""))
     if core.which("weasyprint"):
         jax = core.mathjax_runtime()
-        print(f"{'OK  ' if jax else 'MISS'}  MathJax (math in WeasyPrint's PDFs"
+        emit("result", None, f"{'OK  ' if jax else 'MISS'}  MathJax (math in WeasyPrint's PDFs"
               + (f": {jax[1].name}, fonts {', '.join(core.mathjax_fonts(jax[1]))}, node {jax[0]})" if jax
                  else "; pdfmd --install math:mathjax)"))
         runtime = core.katex_runtime()
-        print(f"{'OK  ' if runtime else 'MISS'}  KaTeX (math in WeasyPrint's PDFs"
+        emit("result", None, f"{'OK  ' if runtime else 'MISS'}  KaTeX (math in WeasyPrint's PDFs"
               + (f": {runtime[1].name}, node {runtime[0]})" if runtime else "; pdfmd --install math:katex)"))
     print("Native renderers (no Pandoc needed; plainer output, Markdown only):")
-    print(f"{'OK  ' if core.inkmd_vendored() else 'MISS'}  inkmd  (built in; no math, footnotes become endnotes)")
+    emit("result", None, f"{'OK  ' if core.inkmd_vendored() else 'MISS'}  inkmd  (built in; no math, footnotes become endnotes)")
     if sys.version_info < (3, 11):
         print("MISS  md2pdf  (needs Python 3.11 or newer)")
     else:
-        print(f"{'OK  ' if core.md2pdf_available() else 'MISS'}  md2pdf  (footnotes, bookmarks, math"
+        emit("result", None, f"{'OK  ' if core.md2pdf_available() else 'MISS'}  md2pdf  (footnotes, bookmarks, math"
               + ("" if core.md2pdf_available() else "; pdfmd --install math") + ")")
-    print(f"{'OK  ' if core.matplotlib_available() else 'MISS'}  matplotlib  (offline math in md2pdf"
+    emit("result", None, f"{'OK  ' if core.matplotlib_available() else 'MISS'}  matplotlib  (offline math in md2pdf"
           + ("" if core.matplotlib_available() else "; pdfmd --install math") + ")")
     font = core.inkmd_emoji_font()
-    print(f"{'OK  ' if font else 'MISS'}  colour emoji font for inkmd"
+    emit("result", None, f"{'OK  ' if font else 'MISS'}  colour emoji font for inkmd"
           + (f"  ({font})" if font else "  (pdfmd --install emoji)"))
     print("Smaller PDFs (lossless, the first one installed shrinks every PDF; see --shrink):")
     for row in core.load_package("pdfmd_shrink").check_rows():
@@ -325,11 +326,11 @@ def dependency_report() -> bool:
     BATCHOCR_MIN = core.BATCHOCR_MIN
     reader = core.find_batchocr()
     reader_version = core.batchocr_version(reader) if reader else None
-    print(f"{'OK  ' if reader_version and reader_version >= BATCHOCR_MIN else 'MISS'}  batchocr"
+    emit("result", None, f"{'OK  ' if reader_version and reader_version >= BATCHOCR_MIN else 'MISS'}  batchocr"
           + (f"  ({'.'.join(map(str, reader_version))})" if reader_version else "  (pdfmd --install batchocr)"))
     for tool in ("tesseract", "pdftotext", "pdftoppm"):
         path = core.which(tool)
-        print(f"{'OK  ' if path else 'MISS'}  {tool}" + (f"  ({path})" if path else f"  ({core.tesseract_install_hint()})"))
+        emit("result", None, f"{'OK  ' if path else 'MISS'}  {tool}" + (f"  ({path})" if path else f"  ({core.tesseract_install_hint()})"))
     pandoc_route = bool(pandoc and core.installed_engines())
     managed = core.managed_tool_directories()
     if managed:
