@@ -111,7 +111,7 @@ class Modes(unittest.TestCase):
         self.assertGreater(cols[1], cols[2])                           # the others keep their order
 
     def test_a_chosen_table_that_already_fits_is_left_exactly_as_written(self):
-        [cols] = widths(f"| A | B |\n|----------|-----------|\n| {LONG} | several words that fit |\n")
+        [cols] = widths(f"| A | B |\n|----------|-----------|\n| {LONG} | several ordinary words that fit |\n")
         self.assertAlmostEqual(cols[0], 10 / 21, places=9)
         self.assertAlmostEqual(cols[1], 11 / 21, places=9)
 
@@ -217,6 +217,60 @@ class Ceiling(unittest.TestCase):
             with self.subTest(attrs=attrs):
                 self.assertEqual(widths(self.TEXT + f"\n: Caption {{{attrs}}}\n"),
                                  widths(self.TEXT, "-M", "pdfmd-column-widths=keep"))
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class WidthCache(unittest.TestCase):
+    def test_reuses_balancing_only_for_the_same_table_and_settings(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source, output = root / "doc.md", root / "out.tex"
+            cache = root / "cache"
+            env = {**os.environ, "XDG_CACHE_HOME": str(cache), "LOCALAPPDATA": str(cache)}
+            command = [sys.executable, str(ROOT / "scripts" / "pdfmd"), "--from", "markdown", "--to", "latex",
+                       "--no-stamp", "-o", str(output), str(source)]
+            body = f"| A | B |\n|---|---|\n| short | {LONG} |\n"
+
+            def build(text, *options):
+                source.write_text(text, encoding="utf-8")
+                done = subprocess.run([*command, *options], cwd=root, capture_output=True, encoding="utf-8", env=env)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                files = {path: path.stat().st_mtime_ns for path in cache.rglob("column-widths/*.widths")}
+                shares = re.findall(r"\\real\{([0-9.]+)\}", output.read_text(encoding="utf-8"))
+                self.assertEqual(len(shares), 2)
+                return files, shares
+
+            entries, shares = build(body)
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(build(body), (entries, shares))
+            [entry] = entries
+            entry.write_text("bad entry", encoding="utf-8")
+            repaired, same = build(body)
+            self.assertEqual(set(repaired), set(entries))
+            self.assertEqual(same, shares)
+            self.assertNotEqual(entry.read_text(encoding="utf-8"), "bad entry")
+            for text, args in ((body.replace("short", "longer"), []), (body, ["-V", "papersize:a5"]),
+                               (body, ["-V", "geometry:margin=2in"]), (body, ["-V", "mainfont=Latin Modern Roman"]),
+                               ("---\npdfmd-options: {column-outlier: 0}\n---\n\n" + body, [])):
+                with self.subTest(args=args, text=text[:24]):
+                    current, _ = build(text, *args)
+                    self.assertEqual(len(set(current) - set(entries)), 1)
+                    entries = current
+
+    def test_changes_in_measured_cells_are_part_of_the_key(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            measured = root / "measured.json"
+            text = f"| A | B |\n|---|---|\n| short | {LONG} |\n"
+            options = ("-M", "pdfmd-column-estimate=measure", "-M", f"pdfmd-column-measurements={measured}",
+                       "-M", f"pdfmd-width-cache-dir={root}", "-M", "pdfmd-width-cache-layout=sample")
+            for first in (30, 45):
+                data = {"tables": {"1": {"line": 100, "sep": 2, "cells": [
+                    [{"width": 5, "word": 5}, {"width": 5, "word": 5}],
+                    [{"width": first, "word": 8}, {"width": 120, "word": 11}]]}}}
+                measured.write_text(json.dumps(data), encoding="utf-8")
+                self.assertEqual(widths(text, *options), widths(text, *options))
+            self.assertEqual(len(list(root.glob("*.widths"))), 2)
 
 
 SITES = ("| Site | pH of mucus | Clearance of mucus |\n|---|---|---|\n"

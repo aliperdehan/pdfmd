@@ -55,7 +55,6 @@ wait for an answer before any code.
 - [ ] Row legibility for long-cell tables: `table-style` (rules, zebra, spacing)
 - [ ] Width modes beyond auto/keep/force: combinations, more per-table spellings (per-column widths are in the attribute line, 3.32.33) [3dl]
 - [ ] Measured column widths beyond LaTeX and Typst (`column-estimate: measure`, 3.33.332-333): Word/ODT through LibreOffice, then measure as the default (4.0 at the earliest) and the raw-TeX kludge (`column-count-raw-tex`) retired [3dl 3ge]
-- [ ] Cache the balanced widths per table by content hash [3dl]
 
 ## Kits, carried inside 3.31 (no minor of its own); a report without a `metadata/` folder; started [3du]
 

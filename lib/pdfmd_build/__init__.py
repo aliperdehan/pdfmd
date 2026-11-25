@@ -642,7 +642,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                 if is_tex_target and tablewidth_auto:
-                    cmd += core.width_filter_args(width_filter)
+                    cmd += core.width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd)
                 cmd += core.cellalign_args([md_path, *parts_inputs], metadata_files)
                 if target_format in core.OFFICE_REFERENCE_EXTENSIONS:
                     cmd += core.image_filter_args(no_auto, [md_path, *parts_inputs], metadata_files, format="png")
@@ -924,11 +924,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if fonts_filter is not None:
                         cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
                     if tablewidth_auto and engine in core.LATEX_ENGINES:
-                        cmd += core.width_filter_args(width_filter)
+                        cmd += core.width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd)
                     if tablewidth_auto and engine == "typst":
                         from pdfmd_tables.measure import requested
                         if requested([md_path, *parts_inputs], metadata_files):
-                            cmd += core.width_filter_args(width_filter)
+                            cmd += core.width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd)
                     cmd += core.cellalign_args([md_path, *parts_inputs], metadata_files)
                     if engine in core.LATEX_ENGINES:
                         cmd += core.tblr_header_args([md_path, *parts_inputs], metadata_files)

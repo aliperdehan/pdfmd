@@ -98,7 +98,7 @@ TABLE_WIDTH_LUA_FILTER = "table_width"   # pdfmd_lua/table_width.lua
 CSV_TABLE_LUA_FILTER = "csv_table"   # pdfmd_lua/csv_table.lua
 
 
-def width_filter_args(width_filter: Path) -> list[str]:
+def width_filter_args(width_filter: Path, *, command: list[str] | None = None, cwd: Path | None = None) -> list[str]:
     """``--lua-filter`` for the table-width filter, with the global column settings of the config or `--setup` handed
     to it (`column-widths`, `column-estimate`, `column-word-floor`, `column-word-ceil`, `column-ceil-margin`,
     `column-count-raw-tex`, and the numbers `column-outlier`,
@@ -132,7 +132,45 @@ def width_filter_args(width_filter: Path) -> list[str]:
             number = float(number) if "." in number else int(number)
         if isinstance(number, (int, float)) and not isinstance(number, bool) and number >= 0:
             args += ["-M", f"pdfmd-{key}={number}"]
+    if command is not None:
+        args += width_cache_args(width_filter, command, cwd or Path.cwd())
     return args
+
+
+_WIDTH_LAYOUT_ARGS = ("-V", "--variable", "--pdf-engine", "--pdf-engine-opt", "-H", "--include-in-header", "--template")
+_WIDTH_LAYOUT_FILES = ("-H", "--include-in-header", "--template")
+
+
+def width_cache_args(width_filter: Path, command: list[str], cwd: Path) -> list[str]:
+    """Supply the layout inputs outside the Pandoc metadata, including preamble contents."""
+    root = core.cache_root() / "column-widths"
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256(width_filter.read_bytes())
+    except OSError:
+        return []
+    for index, arg in enumerate(command):
+        name, equal, value = arg.partition("=")
+        if name in _WIDTH_LAYOUT_ARGS:
+            if not equal and index + 1 == len(command):
+                continue
+            value = value if equal else command[index + 1]
+        elif arg.startswith("-V") and len(arg) > 2:
+            name, value = "-V", arg[2:]
+        elif arg.startswith("-H") and len(arg) > 2:
+            name, value = "-H", arg[2:]
+        else:
+            continue
+        digest.update(name.encode("utf-8") + b"\0")
+        if name in _WIDTH_LAYOUT_FILES:
+            try:
+                digest.update(hashlib.sha256((cwd / value).read_bytes()).digest())
+            except OSError:
+                digest.update(value.encode("utf-8"))
+        else:
+            digest.update(value.encode("utf-8"))
+        digest.update(b"\0")
+    return ["-M", f"pdfmd-width-cache-dir={root}", "-M", f"pdfmd-width-cache-layout={digest.hexdigest()}"]
 
 
 @contextmanager

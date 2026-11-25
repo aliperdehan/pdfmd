@@ -298,6 +298,68 @@ local function report(kind)
   end
 end
 
+local cache_dir, cache_layout
+
+local function cache_path(tbl, options)
+  if not cache_dir then return nil end
+  local fields = {cache_layout, tostring(PANDOC_VERSION), FORMAT, pandoc.write(pandoc.Pandoc({tbl}), "json")}
+  local settings = {}
+  for key, value in pairs(options) do settings[#settings + 1] = key .. "=" .. tostring(value) end
+  table.sort(settings)
+  fields[#fields + 1] = table.concat(settings, "\0")
+  local data = options.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]
+  if data then
+    fields[#fields + 1] = string.format("%.17g %.17g %.17g", data.line, data.sep, data.inset or 0)
+    for _, row in ipairs(data.cells) do
+      fields[#fields + 1] = tostring(#row)
+      for _, cell in ipairs(row) do
+        fields[#fields + 1] = string.format("%.17g %.17g", cell.width, cell.word)
+      end
+    end
+  end
+  return pandoc.path.join({cache_dir, pandoc.utils.sha1(table.concat(fields, "\n")) .. ".widths"})
+end
+
+local function parse_widths(text, count)
+  local kind, values = text:match("^([wc]*)\n([%d%.%+%-%seE]+)$")
+  if not kind or (kind ~= "" and kind ~= "w" and kind ~= "c" and kind ~= "wc") then return nil end
+  local widths = {}
+  for value in values:gmatch("%S+") do
+    local width = tonumber(value)
+    if not width or width <= 0 or width > 1 then return nil end
+    widths[#widths + 1] = width
+  end
+  if #widths == count then return widths, kind end
+  return nil
+end
+
+local function cached_widths(path, count)
+  if not path then return nil end
+  local handle = io.open(path, "r")
+  if not handle then return nil end
+  local text = handle:read("*a")
+  handle:close()
+  if not text then return nil end
+  local widths, kind = parse_widths(text, count)
+  if not widths then os.remove(path) end
+  return widths, kind
+end
+
+local function save_widths(path, tbl, kind)
+  if not path then return end
+  local values = {}
+  for c, spec in ipairs(tbl.colspecs) do values[c] = string.format("%.17g", spec[2]) end
+  -- A failed or concurrent write can leave only a complete entry. The temporary file is on the same volume.
+  pcall(pandoc.system.with_temporary_directory, cache_dir, "widths-", function(folder)
+    local temporary = pandoc.path.join({folder, "widths"})
+    local handle = io.open(temporary, "w")
+    if not handle then return end
+    local written = handle:write(kind .. "\n" .. table.concat(values, " ") .. "\n")
+    local closed = handle:close()
+    if written and closed then os.rename(temporary, path) end
+  end)
+end
+
 -- Widths the author chose are kept, except for one thing nobody chooses: a column too narrow for its own longest
 -- word, which LaTeX then breaks in the middle ("Sus-tained"). Such a column is raised to that word (a word longer
 -- than `column-word-floor-limit` characters, a URL say, is not worth the room) and the other columns give up the space in
@@ -374,8 +436,7 @@ local function adjust_chosen(tbl, o)
     if data and data.inset then width = (widths[c] + data.inset) / data.line end
     tbl.colspecs[c] = {spec[1], width}
   end
-  report((widened and "w" or "") .. (narrowed and "c" or ""))
-  return tbl
+  return tbl, (widened and "w" or "") .. (narrowed and "c" or "")
 end
 
 -- The settings, set from the metadata before the walk (see Pandoc below); a table's own attributes
@@ -480,10 +541,22 @@ local function rebalance(tbl)
     without_dash_widths(tbl)
   end
   if o.mode == "keep" then return nil end
+  local path = cache_path(tbl, o)
+  local cached, kind = cached_widths(path, ncols)
+  if cached then
+    for c, spec in ipairs(tbl.colspecs) do tbl.colspecs[c] = {spec[1], cached[c]} end
+    if typst then tbl.attributes["data-pdfmd-measured"] = "true" end
+    report(kind)
+    return tbl
+  end
   local chosen = not has_default(tbl.colspecs) and not equal_widths(tbl.colspecs) and o.mode ~= "force"
   if chosen then
-    local adjusted = adjust_chosen(tbl, o)
-    if typst and adjusted then adjusted.attributes["data-pdfmd-measured"] = "true" end
+    local adjusted, mark = adjust_chosen(tbl, o)
+    if adjusted then
+      if typst then adjusted.attributes["data-pdfmd-measured"] = "true" end
+      save_widths(path, adjusted, mark)
+      report(mark)
+    end
     return adjusted
   end
   if ncols == 1 and not has_default(tbl.colspecs) then
@@ -514,6 +587,7 @@ local function rebalance(tbl)
     tbl.colspecs[i] = {spec[1], width}
   end
   if typst then tbl.attributes["data-pdfmd-measured"] = "true" end
+  save_widths(path, tbl, "")
   report()
   return tbl
 end
@@ -530,6 +604,19 @@ local function setting(meta, name)
 end
 
 function Pandoc(doc)
+  local directory, layout = doc.meta["pdfmd-width-cache-dir"], doc.meta["pdfmd-width-cache-layout"]
+  if directory and layout then
+    cache_dir = pandoc.utils.stringify(directory)
+    local metadata = {}
+    for _, key in ipairs({"paper", "papersize", "geometry", "margin", "margin-left", "margin-right", "margin-top",
+                          "margin-bottom", "mainfont", "mainfontoptions", "monofont", "monofontoptions", "mathfont",
+                          "mathfontoptions", "sansfont", "sansfontoptions", "fontfamily", "fontfamilyoptions", "fontsize",
+                          "documentclass", "classoption", "header-includes", "include-before"}) do
+      metadata[key] = doc.meta[key]
+    end
+    cache_layout = pandoc.utils.stringify(layout) .. pandoc.write(pandoc.Pandoc({}, metadata), "json")
+  end
+  doc.meta["pdfmd-width-cache-dir"], doc.meta["pdfmd-width-cache-layout"] = nil, nil
   local estimate = setting(doc.meta, "column-estimate")
   if estimate then estimate = estimate:match("^%s*(.-)%s*$") end
   if estimate == "count" or estimate == "measure" then GLOBAL.estimate = estimate end

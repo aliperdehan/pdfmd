@@ -1938,6 +1938,8 @@ the latter caps a chosen column's word floor at its limit times that column's me
 checks; engine measurements include raw TeX regardless. `column-widths: keep`, fixed CSV widths and
 `--no-auto tablewidth` still take precedence.
 Measurements are cached in pdfmd's cache by generated source, engine executable identity and engine options.
+Balanced widths are cached per table in `column-widths` under pdfmd's cache folder. Changing the table,
+width settings or layout (paper, margins, font or preamble) makes a fresh entry.
 `--verbose` reports whether widths were measured or cached, the line width and per-column padding/gaps in points.
 Unchanged tables cost one extra Pandoc pass but no extra engine run. Exports (`--to latex`, `--to typst`, Word,
 ODT, HTML, EPUB and other formats) run no measuring engine and keep count with one NOTE when measure was requested.

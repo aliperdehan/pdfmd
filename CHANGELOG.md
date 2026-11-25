@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.62 — 2026-11-25
+
+Pre-edit state: commit `9cbc24d`. [tables] Rebalancing took over 5% of a build in the table benchmarks, including a Typst PDF with measured
+cells. Cache the table’s balanced widths by its content, settings, layout and measurements. Tests cover reuse,
+invalidation on content, settings and layout changes, and recovery from a malformed record.
+
 ## v3.34.61 — 2026-11-25
 
 Pre-edit state: commit `a4480f6`. [tables] The table pre-pass was available only during builds. --fix-tables now saves its source repairs through
