@@ -20,7 +20,9 @@ class Chatter(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.folder = Path(temp.name)
-        self.config = self.folder / "config.yaml"
+        # A metadata.yaml beside the config is global metadata.
+        self.config = self.folder / "config" / "config.yaml"
+        self.config.parent.mkdir()
         self.settings()
         self.write("a.md")
         metadata = self.folder / "metadata.yaml"

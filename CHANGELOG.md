@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.67b — 2026-11-26
+
+Pre-edit state: commit `f1f65e1`. The chatter fixture put `metadata.yaml` beside the global config, so a canonical temp path classified it as global metadata and printed `DEFAULTS` where the console test expected `FOUND`. Move the config into its own directory. The console-level test fails before and passes after with a canonical `TMPDIR`.
+
 ## v3.34.67a — 2026-11-26
 
 Pre-edit state: commit `0ce2b58`. [tables] `test_fix_tables_previews_backs_up_and_preserves_line_endings` read the child's output as UTF-8 while a Windows console child writes cp1252 (the dry-run diff names an en dash), so CI on Windows 3.9, 3.10 and 3.13 got `stdout` None. The child now runs with `PYTHONUTF8=1`. No shipped code changed.
