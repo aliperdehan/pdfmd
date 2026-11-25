@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.61 — 2026-11-25
+
+Pre-edit state: commit `a4480f6`. [tables] The table pre-pass was available only during builds. --fix-tables now saves its source repairs through
+the extraction command’s backup and dry-run machinery. The generated VS Code tasks include the command. Tests cover
+a diff, a byte-identical backup, CRLF preservation, repeated use and the generated task.
+
 ## v3.34.60 — 2026-11-25
 
 Pre-edit state: commit `57e8c1f`. [tables] Ragged pipe rows could silently lose cells. Add header and widest repair modes, with notices for pads,

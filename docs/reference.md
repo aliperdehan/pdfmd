@@ -1895,6 +1895,10 @@ a grid table under GFM. A single pipe line without a separator is left alone.
 Both repair modes make outer pipes consistent, insert a `---` separator after the first of two or more
 equal-length pipe rows if needed, and add an empty header before a separator-first table. Repairs warn with
 the original line number. Set the default with `--setup` or override it for a run with `--table-repair MODE`.
+`pdfmd --fix-tables FILE` saves these separator and row repairs to the named file with a backup. Add `--dry-run`
+to see the diff. Use `--table-repair header` or `--table-repair widest` to save row repairs. Alignment colons
+and dash counts in the saved source continue to express the original proportions for the reader.
+`--init-vscode` includes a **pdfmd: fix tables** task for the active file.
 
 Pipe-table column widths (v3.25.0): a `---|---` separator says nothing about the columns, so a table whose
 lines run long is laid out by pdfmd_lua/table_width.lua -- the widths that give the fewest lines within the text

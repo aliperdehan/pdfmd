@@ -99,7 +99,7 @@ FLAGS: dict[str, str | Omitted] = {
     "raw_for": Omitted("document", "per output family: pdfmd-options.raw as a mapping"),
     "gfm_scripts": "options.gfm.scripts", "gfm_math": "options.gfm.math", "ascii_missing": "options.ascii.missing",
     "ascii_stdio": Omitted("internal", "pdfmd's own ASCII filter calls it"),
-    "init_vscode": CMD, "extract_tables": CMD, "extract_inline_csv": CMD, "expand_tables": CMD,
+    "init_vscode": CMD, "extract_tables": CMD, "extract_inline_csv": CMD, "expand_tables": CMD, "fix_tables": CMD,
     "csv": "options.csv.enabled", "csv_rows": "options.csv.rows", "csv_cols": "options.csv.cols", "csv_note": "options.csv.note", "table_keep": "options.table-keep", "table_repair": "options.table-repair",
     "rewrite": "options.rewrite",
     "view": CMD, "pager": "options.pager", "color": Omitted("run", "auto is right: on for a file and --view, off in a pipe"),

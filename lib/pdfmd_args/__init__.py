@@ -743,23 +743,20 @@ def build_parser() -> argparse.ArgumentParser:
                         help="with --to gfm: math as `$..$` / `$$..$$` (default; GitHub, VS Code and Obsidian read it) "
                              "or as ```math fences (GitHub's older form). Also `pdfmd-options: {gfm: {math: ...}}`")
     parser.add_argument("--init-vscode", action="store_true",
-                        help="write .vscode/tasks.json here with pdfmd tasks (build, build and open, watch, extract "
-                             "tables) for VS Code; never overwrites one")
+                        help="write .vscode/tasks.json with pdfmd build, watch, check and table tasks; never overwrites it")
     parser.add_argument("--extract-tables", action="store_true",
-                        help="rewrite FILE so that each of its tables (pipe, simple, multiline or grid) is a `.csv` block "
-                             "reading tables/<name>.csv (--tables-inline: the data inside the document instead), the "
-                             "caption and alignment kept as block attributes, after checking that Pandoc reads the same "
-                             "tables back. Names come from the captions, else table1, table2... (--table-names a,b,c "
-                             "gives them; the count must match). The old file is backed up first; --dry-run only shows")
+                        help="save pipe, simple, multiline and grid tables as `.csv` blocks with captions and alignment. "
+                             "Backs up FILE and verifies the result with Pandoc. Use --tables-inline for inline data and "
+                             "--table-names to override names derived from captions or numbered table names")
     parser.add_argument("--extract-inline-csv", action="store_true",
                         help="with --extract-tables (implied): also move the data of `.csv` blocks that hold it inside "
                              "the document into tables/<name>.csv files. Off by default. A table, or a block, with "
                              "`<!-- pdfmd: ignore -->` on the line above it (or under its caption) is left as it is")
     parser.add_argument("--expand-tables", action="store_true",
-                        help="the reverse of --extract-tables: every `.csv` block of FILE becomes an ordinary pipe table "
-                             "(all its rows), its caption= the line under it. The CSV files are left where they are")
+                        help="turn each `.csv` block into a pipe table with all its rows and caption. Keep its CSV file")
     parser.add_argument("--table-repair", choices=("pandoc", "header", "widest"), metavar="MODE",
                         help="pipe rows: pandoc (default), header (pad or cut), widest (pad, keep every cell)")
+    parser.add_argument("--fix-tables", type=Path, metavar="FILE", help="save normalised pipe tables with a backup")
     parser.add_argument("--csv", action=argparse.BooleanOptionalAction, default=None,
                         help="build a table from a `::: {.csv}` div (on by default); --no-csv leaves the div as written, "
                              "a plain div with its text. Also `pdfmd-options: {csv: off}` (or `csv: {enabled: false}`), "
@@ -863,7 +860,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tables-inline", action="store_true",
                         help="with --extract-tables: write each table's data inside its `.csv` block, no files")
     parser.add_argument("--dry-run", action="store_true",
-                        help="with --extract-tables, --expand-tables, --history-to-file, --history-to-notes or "
+                        help="with --fix-tables, --extract-tables, --expand-tables, --history-to-file, --history-to-notes or "
                              "--history-restore: show what would change and write nothing")
     parser.add_argument("--line-numbers", nargs="?", const="1", metavar="STEP",
                         help="number the lines of every code block (LaTeX builds); STEP numbers every STEP-th line. "

@@ -917,7 +917,7 @@ others). `--editor CMD` also works on a Markdown file
 
 ### In VS Code
 
-`pdfmd --init-vscode` writes a `.vscode/tasks.json` here (build, build and open, watch, check, extract tables; Terminal > Run
+`pdfmd --init-vscode` writes a `.vscode/tasks.json` here (build, build and open, watch, check, extract tables, fix tables; Terminal > Run
 Build Task). The [`vscode/`](https://github.com/aliperdehan/pdfmd/tree/main/vscode) folder of the repository is a small
 extension over the same command line: build (`Cmd/Ctrl+Alt+B`), build and open, build as Word/HTML/Typst/slides, extract
 tables (all, or chosen ones), file history, compare and restore, restore the source a PDF carries (right-click it). Every

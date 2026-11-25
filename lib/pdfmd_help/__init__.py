@@ -32,7 +32,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--slim", "--trust-embedded", "--hybrid", "--check-source")),
     "tables": ("tables as CSV files, and back", (
         "--extract-tables", "--extract-inline-csv", "--expand-tables", "--csv", "--no-csv", "--csv-rows", "--csv-cols", "--csv-note", "--table-keep", "--table-numbers", "--table-names",
-        "--tables-dir", "--tables-inline", "--table-repair", "--dry-run")),
+        "--tables-dir", "--tables-inline", "--table-repair", "--fix-tables", "--dry-run")),
     "history": ("build notes, backups, versions of a document", (
         "--stamp", "--no-stamp", "--stamp-mode", "--stamp-store", "--stamp-packages", "--stamp-scope",
         "--stamp-partial", "--no-stamp-partial", "--stamp-output", "--no-stamp-output", "--stamp-pdf-metadata", "--no-stamp-pdf-metadata", "--backup",

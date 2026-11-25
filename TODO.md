@@ -51,7 +51,6 @@ wait for an answer before any code.
 - [ ] Cell tags: a table rebuilt as `longtblr` is raw LaTeX to later filters (`table-keep`, `labtabular`, Beamer untested); the native tier and grid tables read no tags [3fa]
 - [ ] Chatter ladder: `--chatter`, `-q`, `--mute ID`, `--log`, `--summary`; one `emit`; per document and in `--setup`
 - [ ] Revise the thin features of this line (table pre-pass kinds, line breaks, table captions, `<c>` cells, Org extras) against unusual input users will try, while the documentation programme writes them up [3el, 3dg]
-- [ ] Table pre-pass: `--fix-tables`
 - [ ] Character budget from paper, margins and font size, not 95
 - [ ] Row legibility for long-cell tables: `table-style` (rules, zebra, spacing)
 - [ ] Width modes beyond auto/keep/force: combinations, more per-table spellings (per-column widths are in the attribute line, 3.32.33) [3dl]

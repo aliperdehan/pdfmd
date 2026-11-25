@@ -68,6 +68,30 @@ class Source(unittest.TestCase):
             self.assertEqual(ignored.returncode, 0, ignored.stderr)
             self.assertNotIn("[table-unparsed]", ignored.stdout)
 
+    def test_fix_tables_previews_backs_up_and_preserves_line_endings(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source = root / "doc.md"
+            original = "A | B\r\n|:––:+--|\r\n| C | D | E |\r\n".encode("utf-8")
+            source.write_bytes(original)
+            command = [sys.executable, str(ROOT / "scripts" / "pdfmd"), "--fix-tables", "doc.md",
+                       "--table-repair", "widest"]
+            dry = subprocess.run([*command, "--dry-run"], cwd=root, capture_output=True, encoding="utf-8")
+            self.assertEqual(dry.returncode, 0, dry.stdout + dry.stderr)
+            self.assertIn("--- before", dry.stdout)
+            self.assertIn("+|:----:|--|---|", dry.stdout)
+            self.assertEqual(source.read_bytes(), original)
+            self.assertEqual(list(root.iterdir()), [source])
+            written = subprocess.run(command, cwd=root, capture_output=True, encoding="utf-8")
+            self.assertEqual(written.returncode, 0, written.stdout + written.stderr)
+            self.assertIn("BACKUP", written.stdout)
+            self.assertEqual(source.read_bytes(), b"| A | B |  |\r\n|:----:|--|---|\r\n| C | D | E |\r\n")
+            backups = list((root / ".backups").iterdir())
+            self.assertEqual([path.read_bytes() for path in backups], [original])
+            again = subprocess.run(command, cwd=root, capture_output=True, encoding="utf-8")
+            self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+            self.assertNotIn("WROTE", again.stdout)
+
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Writers(unittest.TestCase):

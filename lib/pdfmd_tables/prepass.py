@@ -257,7 +257,7 @@ def repair_pipe_tables(text: str, mode: str) -> tuple[str, list[tuple[int, str]]
     return "\n".join(fixed), sorted(notices, key=lambda notice: notice[0])
 
 
-def table_source(text: str, label: str, *, colons: str = "ignore", reader: str | None = None,
+def table_source(text: str, label: str, *, colons: str | None = "ignore", reader: str | None = None,
                  repair: str = "pandoc") -> str:
     if reader_family(reader) not in MARKDOWN_READERS or "|" not in text:
         return text
@@ -269,6 +269,6 @@ def table_source(text: str, label: str, *, colons: str = "ignore", reader: str |
     fixed, notices = repair_pipe_tables(fixed, repair)
     for line, reason in notices:
         print(f"WARN  table-repair: {label}, line {line}: {reason}")
-    if ":" in fixed:
+    if colons is not None and ":" in fixed:
         fixed, _ = normalise_separators(fixed, colons=colons)
     return fixed

@@ -123,6 +123,8 @@ class VsCode(unittest.TestCase):
             data = json.loads(re.sub(r"^\s*//.*\n", "", target.read_text(encoding="utf-8"), flags=re.M))
             labels = [task["label"] for task in data["tasks"]]
             self.assertIn("pdfmd: build", labels)
+            fix = next(task for task in data["tasks"] if task["label"] == "pdfmd: fix tables")
+            self.assertEqual(fix["args"], ["--fix-tables", "${file}"])
             matcher = next(task for task in data["tasks"] if task["label"] == "pdfmd: check")["problemMatcher"]["pattern"]
             found = re.match(matcher["regexp"], "doc.md:7: error: image not found: a.png  [image-missing]")
             self.assertEqual(found.groups(), ("doc.md", "7", "error", "image not found: a.png  [image-missing]"))

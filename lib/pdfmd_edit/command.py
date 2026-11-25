@@ -75,6 +75,13 @@ VSCODE_TASKS = """{
       "command": "pdfmd",
       "args": ["--extract-tables", "${file}"],
       "problemMatcher": []
+    },
+    {
+      "label": "pdfmd: fix tables",
+      "type": "shell",
+      "command": "pdfmd",
+      "args": ["--fix-tables", "${file}"],
+      "problemMatcher": []
     }
   ]
 }
@@ -89,7 +96,7 @@ def init_vscode_command(args) -> int:
         return 1
     target.parent.mkdir(parents=True, exist_ok=True)
     core.atomic_write_text(target, VSCODE_TASKS)
-    print(f"WROTE  {core.display_path(target)}: tasks pdfmd: build, build and open, watch, extract tables "
+    print(f"WROTE  {core.display_path(target)}: tasks pdfmd: build, build and open, watch, extract tables, fix tables "
           "(Terminal > Run Build Task). For commands, history and more, install the extension from the repository's vscode/ folder.")
     return 0
 

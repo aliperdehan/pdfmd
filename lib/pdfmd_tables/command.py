@@ -160,7 +160,7 @@ def csv_table_filter_args(sources: Path | list[Path], no_auto: list[str] | None,
 
 
 def tables_command(args) -> int:
-    """Rewrite documents so their tables are `.csv` blocks (or the other way round). Returns the exit status."""
+    """Rewrite tables as `.csv` blocks, expand them, or save normalised pipe tables."""
     try:
         import pdfmd_tables as tables
     except ImportError:
@@ -171,7 +171,10 @@ def tables_command(args) -> int:
     if args.extract_tables and args.expand_tables:
         print("ERROR  --extract-tables and --expand-tables are opposites; pick one.", file=sys.stderr)
         return 1
-    pandoc = core.which("pandoc")
+    if args.fix_tables is not None and (args.path or args.extract_tables or args.expand_tables):
+        print("ERROR  --fix-tables takes one file and is a separate command from --extract-tables and --expand-tables.", file=sys.stderr)
+        return 1
+    pandoc = core.which("pandoc") if args.fix_tables is None else None
     names = [name for name in re.split(r"[,\s]+", args.table_names or "") if name] or None
     only_tables: set[int] | None = None
     if args.table_numbers:
@@ -190,7 +193,13 @@ def tables_command(args) -> int:
         pass
     documents: list[Path] = []
     scaffolds: dict[Path, Path] = {}        # a part -> the report it belongs to: its paths are relative to the report's folder
-    for target in (args.path or [Path.cwd()]):
+    if args.fix_tables is not None:
+        document = args.fix_tables.resolve()
+        if not document.is_file() or document.suffix.lower() not in core.MARKDOWN_LIKE_SUFFIXES:
+            print(f"ERROR  --fix-tables needs a Markdown file: {core.display_path(document)}", file=sys.stderr)
+            return 1
+        documents.append(document)
+    for target in (() if args.fix_tables is not None else (args.path or [Path.cwd()])):
         try:
             document = core.find_markdown(target)
         except FileNotFoundError as error:
@@ -215,7 +224,11 @@ def tables_command(args) -> int:
         names_for = documents[0] if documents else None
     status = 0
     for document in documents:
-        text = document.read_text(encoding="utf-8")
+        if args.fix_tables is not None:
+            with document.open(encoding="utf-8", newline="") as source:
+                text = source.read()
+        else:
+            text = document.read_text(encoding="utf-8")
         owner = scaffolds.get(document, document)       # the report a part is built into: its folder and reader
         base = owner.parent
         found = core.find_metadata(base.resolve(), args.metadata_file, document_stem=owner.stem, document=owner)
@@ -224,7 +237,14 @@ def tables_command(args) -> int:
             else (core.resolve_from_format(owner, args.from_format, linked)[0] or "markdown")
         prefix = re.sub(r"^[\d._ -]+", "", document.stem) + "-" if document != owner else ""
         try:
-            if args.extract_tables:
+            if args.fix_tables is not None:
+                from .prepass import table_repair, table_source
+
+                body = text.removeprefix("\ufeff")
+                fixed = table_source(body, core.display_path(document), reader=reader, colons=None,
+                                     repair=table_repair(document, linked))
+                result = tables.Extracted(text[:len(text) - len(body)] + fixed, changed=int(body != fixed))
+            elif args.extract_tables:
                 result = tables.extract(text, base, pandoc=pandoc, names=names if document == names_for else None, directory=args.tables_dir,
                                         inline=args.tables_inline, reader=reader,
                                         pandoc_version=core.pandoc_version() if pandoc else None,
@@ -279,7 +299,7 @@ def tables_command(args) -> int:
             target = base / name
             target.parent.mkdir(parents=True, exist_ok=True)
             core.atomic_write_text(target, data)
-        core.atomic_write_text(document, result.text)
+        core.atomic_write_text(document, result.text, newline="" if args.fix_tables is not None else None)
         print(f"  BACKUP  {core.display_path(backup)}")
         print(f"  WROTE   {core.display_path(document)}" + (f" and {len(result.files)} CSV file"
               f"{'' if len(result.files) == 1 else 's'}" if result.files else ""))

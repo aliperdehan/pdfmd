@@ -366,7 +366,7 @@ def run_main() -> None:
         raise SystemExit(core.check_command(args, pandoc_options))
     if args.check_dependencies:
         raise SystemExit(0 if core.dependency_report() else 1)
-    if args.extract_tables or args.expand_tables or args.extract_inline_csv:
+    if args.extract_tables or args.expand_tables or args.extract_inline_csv or args.fix_tables is not None:
         raise SystemExit(core.tables_command(args))
     if args.failed and not args.last_build:
         raise SystemExit("--failed goes with --last-build: pdfmd --last-build --failed FILE")
