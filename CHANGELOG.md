@@ -23,6 +23,8 @@ same commit as the change.
 
 Pre-edit state: commit `152320a`. The author offers pdfmd under MIT or Apache-2.0 [D127]. The original MIT text moves to LICENSE-MIT and the canonical Apache text is copied byte for byte to LICENSE-APACHE. The source distribution, Python metadata, zipapp, Homebrew and Scoop carry the licence choice. Vendored licences remain in their own files. The packaging regression checks the expression, files, checksum and manifests.
 
+Fix before release: the distribution's licence expression is `(MIT OR Apache-2.0) AND MIT AND Apache-2.0`: pdfmd's own code under either licence, plus the vendored MIT code (inkmd, PyYAML) and the Apache-2.0-only mhchem port, which `MIT OR Apache-2.0` alone left out.
+
 ## v3.34.47a — 2026-11-25
 
 Pre-edit state: commit `e23886e`. The short and source help for `--restore` now say that it may normalise front matter. Restore keeps the original formatting when the stored front matter still matches. The help regression exercises both views.

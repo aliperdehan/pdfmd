@@ -121,7 +121,7 @@ class PyprojectTests(unittest.TestCase):
             self.assertTrue((ROOT / "lib" / "pdfmd_inkmd" / name).is_file(), name)
 
     def test_pdfmd_is_dual_licensed_in_the_distribution_metadata(self):
-        self.assertEqual(self.project["license"], "MIT OR Apache-2.0")
+        self.assertEqual(self.project["license"], "(MIT OR Apache-2.0) AND MIT AND Apache-2.0")
         licences = set(self.project["license-files"])
         self.assertTrue({"LICENSE-MIT", "LICENSE-APACHE", "lib/pdfmd_yaml/LICENSE", "lib/pdfmd_mhchem/LICENSE"} <= licences)
         self.assertTrue((ROOT / "LICENSE-MIT").read_text(encoding="utf-8").startswith("MIT License\n"))
@@ -129,7 +129,7 @@ class PyprojectTests(unittest.TestCase):
         self.assertEqual(hashlib.md5(apache, usedforsecurity=False).hexdigest(), "3b83ef96387f14655fc854ddc3c6bd57")
         self.assertIn('license any_of: ["MIT", "Apache-2.0"]', (ROOT / "Formula/pdfmd.rb").read_text(encoding="utf-8"))
         scoop = json.loads((ROOT / "bucket/pdfmd.json").read_text(encoding="utf-8"))
-        self.assertEqual(scoop["license"], self.project["license"])
+        self.assertEqual(scoop["license"], "MIT OR Apache-2.0")  # the app's own licence; vendored parts are in pyproject
 
     def test_the_zipapp_and_the_wheel_ship_the_same_packages(self):
         # build_zipapp.py's list once lacked pdfmd_edit, pdfmd_help and pdfmd_raw (found in v3.28.26)
