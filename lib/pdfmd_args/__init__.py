@@ -722,7 +722,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "of the note is the comment) or keep (the default elsewhere: it stays text); both warn; also pdfmd-options.unclosed-comment "
                              "and pdfmd --setup")
     parser.add_argument("--no-markup", action="store_true",
-                        help="no universal markup for this run, whatever pdfmd-options.markup says")
+                        help="no universal markup for this run, including in the built-in renderer, "
+                             "whatever pdfmd-options.markup says")
     parser.add_argument("--gfm-scripts", choices=("unicode", "html", "drop", "ascii"), default=None, metavar="MODE",
                         help="with --to gfm (flat Markdown) or --to txt: how subscripts and superscripts are written -- unicode "
                              "(H2O -> H\u2082O; `_(..)`/`^(..)` for what has no Unicode form; the default), html "

@@ -240,9 +240,9 @@ code \[p. 14]
         text = " ".join(done.stdout.split())
         self.assertIn("Claim [1, p. 2]. Next [1, p. 5].", text)
 
-    def test_native_keeps_markers_and_notes_once(self):
+    def test_native_keeps_markers_and_warns_once(self):
         _, log = self.build("[@alpha]. Follow [p. 5] and [p. 6].", "auto", to="pdf", extra=("-e", "inkmd"))
-        self.assertEqual(log.count("pagecite: native tier leaves page markers unchanged"), 1)
+        self.assertEqual(log.count("markup dropped: pagecite (1)"), 1)
 
 
 class Settings(unittest.TestCase):

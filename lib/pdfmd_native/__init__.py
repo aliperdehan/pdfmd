@@ -528,12 +528,15 @@ def mathtext_form(expression: str) -> str | None:
 class NativeSource:
     """A document, normalised for a native renderer."""
 
-    def __init__(self, text: str, metadata: dict, has_footnotes: bool, math: int, emoji: bool):
+    def __init__(self, text: str, metadata: dict, has_footnotes: bool, math: int, emoji: bool,
+                 centre_marker: str = "", dropped_markup: dict[str, int] | None = None):
         self.text = text
         self.metadata = metadata
         self.has_footnotes = has_footnotes
         self.math = math
         self.emoji = emoji
+        self.centre_marker = centre_marker
+        self.dropped_markup = dropped_markup or {}
 
 
 def mapped_author(value) -> bool:
@@ -944,6 +947,23 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
         body = core.deferred("pdfmd_filters.hidden", transform)(body)
 
     counts: dict[str, int] = {}
+    centre_marker = ""
+    dropped_markup: dict[str, int] = {}
+    if source_path is not None:
+        kinds = set(core.markup_kinds(source_path, metadata_files))
+        if kinds:
+            from .markup import lower
+            centre_marker = "pdfmd-native-centre"
+            while centre_marker in body:
+                centre_marker += "-"
+            pagecite = "[" in body and core.deferred("pdfmd_excerpts.pagecite", "native_uses")(
+                source_path, metadata_files, body)
+            body, dropped_markup = lower(body, kinds, engine, centre_marker, pagecite)
+            if f"{centre_marker}:start" not in body:
+                centre_marker = ""
+    else:
+        kinds = set()
+    engine = "inkmd" if engine == "calibre" else engine
 
     def count(kind: str, amount: int = 1) -> None:
         counts[kind] = counts.get(kind, 0) + amount
@@ -993,8 +1013,17 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
         if not in_comment and PAGE_BREAK_COMMENT_RE.match(line):
             items.append((PAGE_BREAK_MARKUP[engine], False))
             continue
+        if centre_marker and line in (f"{centre_marker}:start", f"{centre_marker}:end"):
+            items.append((line, True))
+            continue
         before_comments = line
         line, in_comment = strip_html_comments(line, in_comment)
+        if line != before_comments and kinds:
+            for comment in re.findall(r"<!--(.*?)-->", before_comments):
+                word = comment.strip().casefold()
+                kind = word if word in ("toc", "appendix") else "comments"
+                if word and kind in kinds:
+                    dropped_markup[kind] = dropped_markup.get(kind, 0) + 1
         if line != before_comments and not line.strip():
             continue
         if math_environment is not None:
@@ -1152,7 +1181,8 @@ def normalise_gfm(text: str, engine: str, metadata_files: list[Path] = (), base_
     first = next((line.strip() for line in [*block.splitlines(), *lines] if line.strip()), "#")
     guard = "&nbsp;\n\n" if engine == "md2pdf" and not first.startswith("#") else ""
     result = front_text + guard + block + "\n".join(lines).strip("\n") + notes_text
-    return NativeSource(result.rstrip("\n") + "\n", metadata, has_footnotes, math, emoji), counts
+    return NativeSource(result.rstrip("\n") + "\n", metadata, has_footnotes, math, emoji,
+                        centre_marker, dropped_markup), counts
 
 
 def title_block(metadata: dict, body_lines: list[str]) -> str:
@@ -1341,7 +1371,11 @@ def render_native(engine: str, md_path: Path, source: NativeSource, output: Path
         options.update(core.INKMD_CLI)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            data = ink.compile(source.text, **options)
+            if source.centre_marker:
+                from .centred import compile_centred
+                data = compile_centred(ink, source.text, source.centre_marker, **options)
+            else:
+                data = ink.compile(source.text, **options)
         core.atomic_write_bytes(output, data)
         set_pdf_info(output, source.metadata, verbose, creator="inkmd")
         return [str(item.message) for item in caught]
@@ -1479,8 +1513,6 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
             text = callouts_and_tasks(text, native=True)
     text = core.deferred("pdfmd_excerpts.detach", "text_for")(
         md_path, metadata_files, text, core.effective_no_auto(md_path, core.NO_AUTO_CLI), from_format)
-    if "[" in text:
-        core.deferred("pdfmd_excerpts.pagecite", "native_note")(md_path, metadata_files, text)
     attempts: list[str] = []
     prepared: dict[str, tuple[NativeSource, dict[str, int]]] = {}
     global NATIVE_NOTED
@@ -1488,7 +1520,7 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
     try:
         for engine in engines:
             # Calibre's Markdown reader is told what inkmd is: no math, endnotes, no Pandoc syntax (v3.29.1)
-            prepared[engine] = normalise_gfm(text, "inkmd" if engine == "calibre" else engine, metadata_files,
+            prepared[engine] = normalise_gfm(text, engine, metadata_files,
                                              md_path.resolve().parent, md_path)
     finally:
         NATIVE_NOTED = None
@@ -1512,6 +1544,8 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
         print(f"NATIVE  {core.display_path(md_path)} via {engine}")
         report_messages(engine, messages, md_path)
         describe_native_changes(engine, md_path, source, counts)
+        if source.dropped_markup:
+            core.deferred("pdfmd_engines.native", "report_native_markup")(engine, md_path, source.dropped_markup)
         return True, ""
     return False, "native renderers failed:\n  " + "\n  ".join(attempts)
 

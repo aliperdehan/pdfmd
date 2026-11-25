@@ -97,7 +97,8 @@ lets `[p. 5]` after a citation refer to that paragraph’s last source. Modes ar
 `drop`; `bare`/`full` mean `page`/`style`. `pagecite-terms` defaults to `[p., pp.]`;
 set it under `pdfmd-options` or in `--setup` (as for `pagecite`). It needs the
 `pagecite` markup kind; `--no-auto pagecite` disables it. Escaped markers, code
-and links stay literal; the native tier leaves markers with one NOTE.
+and links stay literal. The native tier leaves markers as written and lists
+`pagecite` in its markup warning.
 
 `pdfmd --excerpts ACTION` manages local source records: `list`, `show ID`,
 `add`, `edit ID`, `remove ID`, `sources`, `where ID`, `export`, `detach`, `check`,

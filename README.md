@@ -2829,6 +2829,10 @@ sentence is text.
 is formatted in the file, a style of that name in your own reference document keeps its own look). OpenDocument and PowerPoint keep
 the text as it is and say so once. `markup: [callouts, toc, centre]` or `true` for all; `--markup centre` for one run.
 
+The built-in inkmd renderer also centres blocks, highlights text and draws
+underlines. Its markup warning lists the other universal styling it dropped,
+and the text is kept. These interpretations respect `--no-markup`.
+
 **Highlighted text** (v3.29, `markup: highlight`). `==marked text==` (across several words, with emphasis inside, over a line
 break) is highlighted: LaTeX with `soul`'s `\hl` in a pale yellow (LuaLaTeX: `lua-ul`'s `\highLight`, with the `luacolor` it needs, when both are
 installed; plain text when `soul` is not installed either), Typst with
@@ -3045,7 +3049,8 @@ page range becomes an en dash. Each paragraph or plain block (list item, table
 cell) has its own source, and a footnote has its own scope. Cross-references and
 comments between a citation and a marker do not change the source. A multi-source
 citation uses its last source with a WARN; no earlier citation gives a WARN and
-leaves the marker. The native tier leaves markers unchanged with one NOTE.
+leaves the marker. The native tier leaves markers as written and includes
+`pagecite` in its markup warning.
 
 The `pagecite` markup kind is available in the pdfmd and obsidian flavours;
 a named Pandoc reader needs `markup: [pagecite]` too. `--no-auto pagecite`,

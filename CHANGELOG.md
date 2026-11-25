@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.34.35 — 2026-11-25
+
+Pre-edit state: commit `68f810b`. The native renderer stripped fenced block
+markers indiscriminately and printed highlight delimiters as prose. The inkmd
+route centres blocks and draws highlights and underlines through its existing
+layout and PDF primitives. Unsupported universal styling keeps its text and
+contributes to one warning and to the native renderer's lost-feature report.
+The markup switch still leaves the source syntax to the Markdown reader.
+
+The no-Pandoc CLI regression failed before the change and now checks the PDF's
+positions and drawing operations, literal code, retained prose and the combined
+warning. Page markers and the switch-off case are covered. The vendored renderer
+and its golden files are unchanged. `pdfmd.py` changes only its version.
+
 ## v3.34.34a — 2026-11-25
 
 Pre-edit state: commit `f8e4374`.

@@ -187,6 +187,16 @@ def native_prompt_state() -> Path:
     return path
 
 
+def report_native_markup(engine: str, source: Path, losses: dict[str, int]) -> None:
+    from pdfmd_flavours.markup import MARKUP_KINDS
+    from pdfmd_native import native_lose, native_note
+
+    for kind, count in losses.items():
+        native_lose(kind, count)
+    items = ", ".join(f"{kind} ({losses[kind]})" for kind in (*MARKUP_KINDS, "comments") if kind in losses)
+    native_note(engine, "markup dropped: " + items, source)
+
+
 def offer_native_upgrade() -> None:
     """After an automatic native build that lost something, offer the upgrades.
 

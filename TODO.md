@@ -32,7 +32,7 @@ wait for an answer before any code.
 - [ ] Citation key aliases, resolved before citeproc [3bo]
 - [ ] Mixed-format parts: docx, tex, odt, html parts inside a `parts: auto` build [3cl]
 - [ ] Settings layers: a per-install layer that wins over the user config, `--json` for `--show-config` and `--doctor` [3bh]
-- [ ] Word `keep`; markup (centre, highlight, landscape) in OpenDocument; markup in the native tier [3bh, 3ay]
+- [ ] Word `keep`; markup (centre, highlight, landscape) in OpenDocument [3bh, 3ay]
 - [ ] CSS: headings in Word and Typst; MathJax for the non-STIX fonts (tall brackets) [3am, 3ao]
 - [ ] Hiding, properly: definitions inside a `hide` block keep working (TeX macros and other uses, as calc lines do), Quarto's `.hidden` macros handled, and possibly `hide` and `hidden` unified again [D98]
 - [ ] Calculator: `.qmd` spellings and the `all` mode, native tier, constants file included from the body, check mode, significant-figure tracking [3bw, 3cu]

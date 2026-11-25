@@ -430,6 +430,46 @@ class PdfmdWithoutPandocTests(unittest.TestCase):
                               env=environment, capture_output=True, text=True)
 
     @unittest.skipIf(pypdf is None, "needs pypdf")
+    def test_universal_markup_without_pandoc(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "doc.md").write_text(
+                "Left margin\n\n::: {.centre}\n\nCentred text\n\n:::\n\n"
+                "A ==highlight== and <INS>underline</INS>.\n\n"
+                "::: keep\nRetained text.\n:::\n\n::: landscape\nAnother paragraph.\n:::\n\n"
+                "`==literal==`\n", encoding="utf-8")
+            result = self.run_pdfmd("doc.md", "-e", "inkmd", cwd=root)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            messages = [line for line in result.stderr.splitlines() if "markup dropped:" in line]
+            self.assertEqual(len(messages), 1, result.stderr)
+            self.assertIn("keep (1), landscape (1)", messages[0])
+
+            page = pypdf.PdfReader(root / "doc.pdf").pages[0]
+            extracted = page.extract_text()
+            for expected in ("A highlight and underline.", "Retained text.", "Another paragraph.", "==literal=="):
+                self.assertIn(expected, extracted)
+            positions = {}
+            page.extract_text(visitor_text=lambda text, cm, tm, font, size: positions.update({text.strip(): tm[4]}))
+            self.assertGreater(positions["Centred text"], positions["Left margin"] + 100)
+            content = page.get_contents().get_data()
+            self.assertIn(b"1 0.95 0.6 rg", content)  # inkmd's highlight fill
+            self.assertIn(b" re f", content)         # the underline and the highlight are painted rectangles
+            self.assertGreaterEqual(content.count(b" re f"), 2)
+
+    def test_universal_markup_can_be_switched_off_in_the_native_tier(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "doc.md").write_text(
+                "::: centre\n\n==literal== and <ins>plain</ins>.\n\n:::\n\n[TOC]\n", encoding="utf-8")
+            result = self.run_pdfmd("doc.md", "-e", "inkmd", "--no-markup", cwd=root)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertNotIn("markup dropped:", result.stderr)
+            if pypdf is not None:
+                page = pypdf.PdfReader(root / "doc.pdf").pages[0]
+                self.assertIn("==literal== and plain.", page.extract_text())
+                self.assertIn("[TOC]", page.extract_text())
+
+    @unittest.skipIf(pypdf is None, "needs pypdf")
     def test_single_line_environment_does_not_truncate_pdf(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

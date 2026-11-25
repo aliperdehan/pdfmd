@@ -354,6 +354,10 @@ Markdown: Pandoc-only syntax is converted or stripped with one WARN per
 kind, title/author/date become a title block and the PDF's own metadata,
 other front-matter keys are listed as unused. Not available there: filters,
 preambles, citations, slides, parts/report mode, non-Markdown input.
+The built-in inkmd renderer applies universal markup for centring, highlighting
+and underlining. It keeps the text when it drops other universal styling and
+lists the affected kinds in one warning. `--no-markup` switches off these
+interpretations.
 See normalise_gfm() in lib/pdfmd_native and the native renderer in lib/pdfmd_engines/native.py.
 
 `--install core` (also `core:typst`, `full`) installs Pandoc and Typst: 35 MB and 15 MB download,
@@ -1292,7 +1296,8 @@ page range becomes an en dash. Each paragraph or plain block (list item, table
 cell) has its own source, and a footnote has its own scope. Cross-references and
 comments between a citation and a marker do not change the source. A multi-source
 citation uses its last source with a WARN; no earlier citation gives a WARN and
-leaves the marker. The native tier leaves markers unchanged with one NOTE.
+leaves the marker. The native tier leaves markers as written and includes
+`pagecite` in its markup warning.
 
 The `pagecite` markup kind is available in the pdfmd and obsidian flavours;
 a named Pandoc reader needs `markup: [pagecite]` too. `--no-auto pagecite`,

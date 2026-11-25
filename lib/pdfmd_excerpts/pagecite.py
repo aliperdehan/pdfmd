@@ -216,12 +216,12 @@ def filter_args(sources: Path | list[Path], metadata: list[Path], options: list[
     return ["-M", f"pdfmd-pagecite-config={path.as_posix()}", "--lua-filter", str(shipped)]
 
 
-def native_note(document: Path, metadata: list[Path], text: str) -> None:
+def native_uses(document: Path, metadata: list[Path], text: str) -> bool:
     if not enabled(document, metadata, core.effective_no_auto(document, core.NO_AUTO_CLI)):
-        return
+        return False
     from pdfmd_check.lint import mask_code
     from pdfmd_obsidian.comments import _PROTECTED
-    text = mask_code(core.split_front_matter(text)[1])[0]
+    text = mask_code(text)[0]
     text = re.sub(_PROTECTED, lambda match: " " * len(match[0]), text, flags=re.S | re.M)
     # Blank link labels (including nested brackets) and escaped brackets before looking for markers.
     chars, stack, position = list(text), [], 0
@@ -240,5 +240,4 @@ def native_note(document: Path, metadata: list[Path], text: str) -> None:
                 chars[start:position + 1] = " " * (position + 1 - start)
         position += 1
     text = "".join(chars)
-    if has_markers(text, settings(document, metadata)[1]):
-        print("NOTE  pagecite: native tier leaves page markers unchanged", file=sys.stderr)
+    return has_markers(text, settings(document, metadata)[1])
