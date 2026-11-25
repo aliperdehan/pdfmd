@@ -84,8 +84,42 @@ class Lists(unittest.TestCase):
         text = (self.dir / "all.assembled.md").read_text(encoding="utf-8")
         self.assertIn("# a.md", text)
         self.assertNotIn("# hidden.md", text)
-        done = self.run_pdfmd("-r", "a.md", "hidden.md", "-o", "named.assembled.md")
+        done = self.run_pdfmd("-r", ".", "hidden.md", "-o", "named.assembled.md")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("left out (priority: never)", done.stdout)
         self.assertIn("# hidden.md", (self.dir / "named.assembled.md").read_text(encoding="utf-8"))
+
+    def test_merge_skips_never_parts_with_the_same_note_as_a_report(self):
+        scaffold = self.doc("report.md")
+        scaffold.write_text("---\npdfmd-options: {parts: auto}\n---\nReport lead.\n", encoding="utf-8")
+        parts = self.dir / "parts"
+        self.doc("kept.md", folder=parts)
+        hidden = self.doc("hidden.md", "never", folder=parts)
+        report = self.run_pdfmd("-r", "parts", "-o", "joined.assembled.md")
+        merged = self.run_pdfmd("--merge", "report.md", "-o", "merged.assembled.md", stop=False)
+        for result in (report, merged):
+            self.assertEqual(result.returncode, 0, result.stderr)
+        note = next(line for line in report.stdout.splitlines() if "left out (priority: never)" in line)
+        self.assertIn(note, merged.stdout.splitlines())
+        self.assertIn("# kept.md", (self.dir / "merged.assembled.md").read_text(encoding="utf-8"))
+        self.assertNotIn("# hidden.md", (self.dir / "merged.assembled.md").read_text(encoding="utf-8"))
+        for args in (("report.md", "--all"), (str(hidden),), ("report.md#hidden",)):
+            with self.subTest(args=args):
+                result = self.run_pdfmd("--merge", *args, "-o", "included.assembled.md", stop=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("left out (priority: never)", result.stdout)
+                self.assertIn("# hidden.md", (self.dir / "included.assembled.md").read_text(encoding="utf-8"))
+
+    def test_adjacent_file_warning_says_what_was_not_merged_and_why(self):
+        scaffold = self.doc("report.md")
+        scaffold.write_text("---\npdfmd-options: {parts: auto}\n---\nReport lead.\n", encoding="utf-8")
+        self.doc("kept.md", folder=self.dir / "parts")
+        self.doc("notes.md")
+        self.doc("excluded.md", "never")
+        result = self.run_pdfmd("--merge", "report.md", stop=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr, r"notes\.md.*not merged.*parts.*order")
+        self.assertRegex(result.stderr, r"excluded\.md.*not merged.*priority: never")
 
     def test_the_viewer_lists_without_never(self):
         self.setup_three()

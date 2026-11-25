@@ -289,26 +289,18 @@ class ScaffoldPlan:
         return f"{self.scaffold.stem}.{'+'.join(labels)}"
 
 
-def warn_shared_parts_folder(scaffold: Path, directory: Path, setting: str) -> None:
-    """With `parts: auto`, EVERY Markdown file beside a parts/ folder counts as
-    its scaffold. That is right for the usual folder (one report.md), and
-    surprising when a notes.md or draft sits there too: say so once, rather
-    than silently building the same parts into both.
-    """
+def warn_shared_parts_folder(scaffold: Path, directory: Path, setting: str, include_never: bool = False) -> None:
+    """Explain why Markdown files beside an automatic parts folder are outside the build."""
     if setting != "auto":
         return
-    others = []
-    for item in sorted(scaffold.parent.glob("*.md")):
-        if item == scaffold or item.name.startswith("."):
-            continue
-        probed = _probe_scaffold(item, directory, None)
-        if probed is not None and probed[1] == "auto":
-            others.append(item.name)
-    if others:
-        print(f"WARN  {core.display_path(scaffold)}: {core.display_path(directory)} also sits beside "
-              f"{', '.join(others)}, which `parts: auto` builds from it too; put "
-              "`pdfmd-options: {parts: false}` in the files that are not the report",
-              file=sys.stderr)
+    siblings = [file for file in core.source_markdown(sorted(scaffold.parent.glob("*.md")))
+                if file != scaffold and not file.name.startswith(".")]
+    kept = set(core.skip_never(siblings, include_never, announce=False))
+    for file in siblings:
+        reason = ("it is outside the `parts` folder and absent from the parts order"
+                  if file in kept else "it has `priority: never`")
+        print(f"WARN  {core.display_path(scaffold)}: {core.display_path(file)} is not merged from "
+              f"{core.display_path(directory)} because {reason}.", file=sys.stderr)
 
 
 def _probe_scaffold(
@@ -357,7 +349,8 @@ def _probe_scaffold(
 
 
 def plan_scaffold(source: Path, sections: list[str], cli_no_auto: list[str] | None,
-                  requested_metadata: list[str] | None) -> ScaffoldPlan | None:
+                  requested_metadata: list[str] | None, *, merge: bool = False,
+                  include_never: bool = False) -> ScaffoldPlan | None:
     """Decide whether ``source`` is a scaffold, or a part of one, and what to
     build; None means an ordinary document. ``source`` may be the scaffold
     itself, or any file inside its parts folder -- found by walking up to a
@@ -375,7 +368,9 @@ def plan_scaffold(source: Path, sections: list[str], cli_no_auto: list[str] | No
         if not parts:
             raise SystemExit(f"{core.display_path(directory)} has no Markdown parts")
         selected, cuts = select_parts_and_sections(parts, directory, sections, mfiles) if sections else (None, {})
-        warn_shared_parts_folder(source, directory, setting)
+        if merge and selected is None:
+            parts = core.skip_never(parts, include_never)
+        warn_shared_parts_folder(source, directory, setting, include_never)
         return ScaffoldPlan(source, directory, parts, selected, mfiles, cuts)
     for ancestor in list(source.parents)[:4]:
         root = ancestor.parent
@@ -385,7 +380,7 @@ def plan_scaffold(source: Path, sections: list[str], cli_no_auto: list[str] | No
             probed = _probe_scaffold(candidate, ancestor, requested_metadata)
             if probed is not None:
                 candidate_meta, candidate_setting, candidate_dir, parts = probed
-                warn_shared_parts_folder(candidate, candidate_dir, candidate_setting)
+                warn_shared_parts_folder(candidate, candidate_dir, candidate_setting, include_never)
                 more, cuts = select_parts_and_sections(parts, candidate_dir, sections, candidate_meta) if sections else ([], {})
                 chosen = {source, *more}
                 selected = sorted(chosen, key=lambda part: parts.index(part) if part in parts else len(parts))

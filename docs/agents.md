@@ -21,6 +21,7 @@ pdfmd --doctor                      # tools, shared SVG image/diagram converter 
 pdfmd --doctor --deep               # also builds a small page with every engine: "installed" is not "works"
 pdfmd --doctor --json               # versioned checks and tool discovery
 pdfmd --show-config --json          # configured values and origins
+pdfmd --merge report.md             # assemble discovered parts, skipping priority: never unless named or --all
 pdfmd report.md --check             # what would go wrong, without building (links, images, labels, citations ...)
 pdfmd report.md --verbose           # the exact Pandoc command and every automatic decision, with its reason
 pdfmd report.md --stop-at tex       # stop at the .tex Pandoc made, to read what LaTeX will see

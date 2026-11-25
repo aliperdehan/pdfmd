@@ -416,7 +416,7 @@ beside the config file), in `pdfmd-options: {ranking: ...}` of a document, a met
 file, the folder settings or the config; the nearest to the documents wins.
 `--newest` builds the newest file of the folder; `--all` counts the `never`
 documents too. A `priority: never` (v3.32.11) leaves a document out of what a
-folder gives -b, -r and --view as well; a named document is always built.
+folder gives -b, -r, --merge and --view as well; a named document is always built.
 `pdfmd --which` (v3.32.12) says what a bare `pdfmd` would build and why, with the
 rules and the files they came from, and builds nothing; `--which NAME` says which
 file a name finds.

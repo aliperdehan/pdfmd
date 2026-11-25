@@ -93,9 +93,9 @@ def lookup_entries(directory: Path, recursive: bool) -> list[tuple[Path, list[tu
 _LOOKUP_ANNOUNCED: set[tuple[str, str]] = set()
 
 
-def skip_never(files: list[Path], include_never: bool = False) -> list[Path]:
+def skip_never(files: list[Path], include_never: bool = False, *, announce: bool = True) -> list[Path]:
     """``files`` without the documents that say `priority: never` (or another word of a class with `exclude`), which are named in
-    one NOTE: what `-b`, `-r` and the viewer list from a folder. ``include_never`` (`--all`) keeps them, and so does
+    one NOTE: what `-b`, `-r`, `--merge` and the viewer list from a folder. ``include_never`` (`--all`) keeps them, and so does
     `--no-auto priority`. A document named on the command line is never dropped: the callers pass only what a folder gave them."""
     if include_never:
         return files
@@ -118,7 +118,7 @@ def skip_never(files: list[Path], include_never: bool = False) -> list[Path]:
         for file, (value, _) in values.items():
             if value is not MISSING and ranking.read(value).kind == "excluded":
                 dropped.append(file)
-    if dropped:
+    if dropped and announce:
         print(f"NOTE  left out (priority: never): {', '.join(core.display_path(file) for file in dropped)}  (--all builds them too)")
     return [file for file in files if file not in dropped]
 

@@ -606,14 +606,10 @@ def report_sources(paths: list[Path], exclusions: list[str], exclude_unnumbered:
     # .resolve() for the same reason as find_markdown(): a relative directory
     # plus a file in a subdirectory would otherwise make Pandoc's cwd and its
     # source-file arguments both relative, and doubling up into a bad path.
-    files = []
-    for path in paths:
-        if path.is_dir():
-            files.extend(core.skip_never([file.resolve() for file in
-                                     (path.rglob("*.md") if recursive else path.glob("*.md"))], include_never))
-        elif path.is_file() and path.suffix.lower() == ".md":
-            files.append(path.resolve())
-    all_files = sorted(set(files))
+    explicit = {path.resolve() for path in paths if path.is_file() and path.suffix.lower() == ".md"}
+    discovered = {file.resolve() for path in paths if path.is_dir()
+                  for file in (path.rglob("*.md") if recursive else path.glob("*.md"))}
+    all_files = sorted(explicit.union(core.skip_never(sorted(discovered - explicit), include_never)))
     excluded = [file for file in all_files if chapter_value(file) is None and has_chapter_field(file)]
     excluded += [file for file in all_files if excluded_by_cli(file, exclusions) and file not in excluded]
     if exclude_unnumbered:

@@ -282,7 +282,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="one standalone Markdown file that builds alone, anywhere: the parts joined and everything "
                              "pdfmd finds beside the document (metadata, preamble, Lua filters, bibliography, data files "
                              "and pictures) embedded, NAME.assembled.md (or -o). Shorthand for --assemble-only "
-                             "--embed-metadata all; --unpack gives the files back"),
+                             "--embed-metadata all; --unpack gives the files back. Folder parts marked priority: never "
+                             "are skipped unless named or --all is given"),
     parser.add_argument("--embed-metadata", nargs="*", default=None, metavar="KIND",
                         help="with --stop-at markdown: fold what pdfmd discovers beside the document "
                              "into the assembled file, so it builds the same without them. KIND is "
@@ -1048,7 +1049,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "see --all). The setting `ranking: {by: [priority, newest]}` (the default) uses the time "
                              "only for documents of equal priority")
     parser.add_argument("--all", "--include-never", dest="include_never", action="store_true",
-                        help="count the documents marked `priority: never` too: -b, -r and the viewer include them, and a "
+                        help="count the documents marked `priority: never` too: -b, -r, --merge and the viewer include them, and a "
                              "bare `pdfmd` ranks them as if they had no priority")
     parser.add_argument("--no-citeproc", action="store_true",
                         help="don't add --citeproc automatically when the document uses @citation "

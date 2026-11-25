@@ -738,7 +738,8 @@ def run_main() -> None:
     section_plan = None
     single_document = single_input and not presentation
     if single_document:
-        scaffold_plan = core.plan_scaffold(plan_source, section_requests, args.no_auto, args.metadata_file)
+        scaffold_plan = core.plan_scaffold(plan_source, section_requests, args.no_auto, args.metadata_file,
+                                          merge=args.merge, include_never=args.include_never)
     if scaffold_plan is None and (section_requests or args.list_parts):
         if not single_document:
             raise SystemExit("--section, --list-parts and 'name#section' take one document, "

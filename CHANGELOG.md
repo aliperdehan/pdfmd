@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.50 — 2026-11-25
+
+Pre-edit state: commit `46e47b4`. A scaffold's `--merge` joined every discovered part, bypassing the priority exclusion used for folder reports [D137]. It uses the same exclusion and note as `-r`, with named parts and `--all` still included. The adjacent-file warning now names the file that stays out and the reason [N123]. Regressions cover discovery, explicit parts, `--all` and adjacent files with and without front matter.
+
 ## v3.34.49 — 2026-11-25
 
 Pre-edit state: commit `a3b50ef`. `--show-config` and `--doctor` produced reports that scripts had to parse as prose. Their `--json` reports now carry a schema version, configuration origins or structured checks and tool discovery, respectively [3bh, D124]. Regressions cover all five configuration layers, an excluded user file, a missing tool and stdout that parses as one object.
