@@ -1683,6 +1683,8 @@ thematic breaks, code, maths and raw blocks.
 intentional, for example when each part has its own Results section.
 `section-empty` warns when the next heading is at the same or a higher level and there is no body between them.
 It also warns about a part that contains only its heading, including the last part in a scaffold.
+`citation-unused` lists uncited keys in one note when the document declares a readable bibliography, including inline
+`references:`. It takes citations from all parts and honours entries explicitly included by `nocite`.
 
 For a part's local file references, `--check` looks in the part's folder, then
 the scaffold's folder, then the accessory folders.

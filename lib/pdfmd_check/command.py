@@ -31,64 +31,47 @@ def bibliography_names(value) -> list[str]:
     return [str(item) for item in (value if isinstance(value, list) else [value]) if item and not isinstance(item, (dict, bool))]
 
 
-def bibliography_file_keys(path: Path) -> set[str] | None:
-    """The citation keys a bibliography file holds, lower-cased; None for a kind pdfmd does not read."""
-    suffix = path.suffix.lower()
-    try:
-        text = path.read_text(encoding="utf-8-sig")
-    except (OSError, UnicodeDecodeError):
-        return None
-    if suffix in (".bib", ".bibtex", ".biblatex"):
-        return {item["key"].lower() for item in core.parse_bibliography(text)[0] if item["key"]}
-    if suffix == ".json":
-        try:
-            data = json.loads(text)
-        except ValueError:
-            return None
-        data = data.get("items", data) if isinstance(data, dict) else data
-        return {str(item["id"]).lower() for item in data if isinstance(item, dict) and "id" in item} \
-            if isinstance(data, list) else None
-    if suffix in (".yaml", ".yml") and core.yaml is not None:
-        try:
-            data = core.yaml.safe_load(text)
-        except core.yaml.YAMLError:
-            return None
-        data = data.get("references", []) if isinstance(data, dict) else data
-        return {str(item["id"]).lower() for item in data if isinstance(item, dict) and "id" in item} \
-            if isinstance(data, list) else None
-    return None
-
-
-def check_bibliography(document: Path, metadata_files: list[Path], variables: list[str]):
-    """(the Bibliography the document names, [(file name, label of where it was named)] for the ones not there)."""
+def check_bibliography(document: Path, metadata_files: list[Path], variables: list[str], pandoc_options: list[str]):
+    """(Declared bibliography and its keys, names of missing bibliography files)."""
     import pdfmd_check as check
+    from pdfmd_args import metadata_command_layers
+    from pdfmd_bibliography.sources import layers, locate, read_entries, resource_folders, values
+    from pdfmd_check.lint import CITE_RE
+
     metadata = core.effective_metadata(document, metadata_files, variables)
-    names = bibliography_names(metadata.get("bibliography"))
-    references = metadata.get("references")
-    keys: set[str] = set()
+    cli_metadata = metadata_command_layers(pandoc_options)[0][0]
+    ordered = [metadata, *(mapping for _, mapping in layers([document], metadata_files, pandoc_options))]
+    names = list(dict.fromkeys(name for layer in ordered for key in ("bibliography", "bibliography+")
+                               for name in bibliography_names(layer.get(key))))
+    references = [item for layer in ordered for key in ("references", "references+")
+                  for item in values(layer.get(key))]
+    keys = {str(item["id"]) for item in references if isinstance(item, dict) and "id" in item}
     complete = True
-    if isinstance(references, list):
-        keys.update(str(item["id"]).lower() for item in references if isinstance(item, dict) and "id" in item)
-    folders = [*core.accessory_directories(document.parent, document.stem), Path.cwd()]
     missing: list[str] = []
+    folders = [*resource_folders([document], metadata_files), *core.accessory_directories(document.parent, document.stem), Path.cwd()]
     for name in names:
-        found = next((folder / name for folder in folders if (folder / name).is_file()), None)
-        if found is None and Path(name).is_absolute() and Path(name).is_file():
-            found = Path(name)
-        if found is None:
+        found = locate(name, folders)
+        if not found.is_file():
             missing.append(name)
             continue
-        file_keys = bibliography_file_keys(found)
-        if file_keys is None:
+        parsed = read_entries(found)
+        if parsed is None:
             complete = False                       # a kind of file pdfmd cannot list: report no key as missing
         else:
-            keys.update(file_keys)
-    declared = bool(names) or isinstance(references, list) or bool(metadata.get("csl-json"))
+            keys.update(key for key, _ in parsed[0])
+    declared = bool(names or any(isinstance(layer.get(key), list) for layer in ordered for key in ("references", "references+"))
+                    or metadata.get("csl-json"))
     if not declared and (not metadata and not metadata_files                      # a fragment: its metadata is elsewhere
                          or core.find_lua_filters(document, metadata_files)           # a filter may do the citing
                          or core.first_pdfmd_option(document, metadata_files, "citation-engine") is not None):
         return None, missing
-    return check.Bibliography(declared, frozenset(keys), complete and not missing), missing
+    nocite = " ".join(str(value) for value in values(cli_metadata.get("nocite", metadata.get("nocite"))))
+    exempt = {(found[1] or found[2]).strip().casefold() for found in CITE_RE.finditer(nocite)}
+    full = cli_metadata.get("full-bibliography", metadata.get("full-bibliography"))
+    if re.search(r"(?<![\w@\\])@\*", nocite) or full is True or full == "true":
+        exempt.add("*")
+    return check.Bibliography(declared, frozenset(key.casefold() for key in keys), complete and not missing,
+                              frozenset(keys), frozenset(exempt)), missing
 
 
 def calc_check_records(files: list[Path], metadata_files: list[Path]) -> "tuple[list, list] | None":
@@ -197,7 +180,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
             print(f"{core.display_path(document)}: {error}", file=sys.stderr)
             status = 1
             continue
-        bibliography, missing = check_bibliography(document, metadata_files, args.variable or [])
+        bibliography, missing = check_bibliography(document, metadata_files, args.variable or [], pandoc_options)
         inputs = []
         for path in files:
             try:

@@ -38,6 +38,7 @@ CODES: dict[str, tuple[str, str]] = {
     "ref-missing": ("warning", "a \\ref{x} with no \\label{x} or {#x} in the document"),
     "cite-missing": ("error", "a @key the bibliography does not hold"),
     "cite-no-bibliography": ("warning", "citations in a document that names no bibliography"),
+    "citation-unused": ("note", "declared bibliography keys the document never cites"),
     "numbered-references-off": ("warning", "a matching numbered source list with conversion switched off"),
     "bibliography-missing": ("error", "a bibliography file that is not there"),
     "footnote-missing": ("warning", "a [^note] with no [^note]: definition"),
@@ -90,6 +91,8 @@ class Bibliography:
     declared: bool = False                          # a bibliography:, references: or csl-json source is set
     keys: frozenset = frozenset()                   # lower-cased
     complete: bool = True                           # False when a file could not be read: then no key is reported missing
+    original_keys: frozenset[str] = frozenset()       # retain the spelling for an unused key's message
+    nocite: frozenset[str] = frozenset()              # explicitly included keys, or '*' for the whole bibliography
 
 
 # --- Reading the text ------------------------------------------------------------------------------------------
@@ -743,6 +746,7 @@ def citations(analyses: list[Analysis], findings: Findings, bibliography: Biblio
     if bibliography is None:
         return
     uses: dict[str, list[tuple[Analysis, int]]] = {}
+    nocite_all = "*" in bibliography.nocite
     for analysis in analyses:
         for found in CITE_RE.finditer(analysis.cited):
             key = (found.group(1) or found.group(2)).strip()
@@ -754,18 +758,25 @@ def citations(analyses: list[Analysis], findings: Findings, bibliography: Biblio
         if bibliography.declared:
             for found in LATEX_CITE_RE.finditer(analysis.masked):
                 for key in (item.strip() for item in found.group(1).split(",")):
-                    if key and key != "*":
+                    if key == "*" and found.group().startswith("\\nocite"):
+                        nocite_all = True
+                    elif key and key != "*":
                         uses.setdefault(key, []).append((analysis, analysis.line(found.start())))
-    if not uses:
-        return
     if not bibliography.declared:
-        analysis, line = next(iter(uses.values()))[0]
-        names = ", ".join(f"@{key}" for key in list(uses)[:4]) + (", ..." if len(uses) > 4 else "")
-        findings.add(analysis, line, "cite-no-bibliography",
-                     f"{len(uses)} citation(s) ({names}) but no bibliography: or references: is set")
+        if uses:
+            analysis, line = next(iter(uses.values()))[0]
+            names = ", ".join(f"@{key}" for key in list(uses)[:4]) + (", ..." if len(uses) > 4 else "")
+            findings.add(analysis, line, "cite-no-bibliography",
+                         f"{len(uses)} citation(s) ({names}) but no bibliography: or references: is set")
         return
     if not bibliography.complete:
         return
+    if analyses and not nocite_all:
+        included = {key.casefold() for key in uses} | bibliography.nocite
+        unused = sorted((key for key in bibliography.original_keys or bibliography.keys if key.casefold() not in included),
+                        key=lambda key: (key.casefold(), key))
+        if unused:
+            findings.add(analyses[0], 0, "citation-unused", "bibliography keys never cited: " + ", ".join(f"@{key}" for key in unused))
     for key, places in uses.items():
         if key.casefold() in bibliography.keys:
             continue

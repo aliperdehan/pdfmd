@@ -807,6 +807,7 @@ pdfmd report --check --check-ignore heading-jump,link-missing
 | `anchor-missing` | `[x](#methods)` with no heading or `{#id}` of that name (the ids Pandoc and GitHub make from a heading count) |
 | `id-duplicate`, `crossref-missing`, `ref-missing` | the same `{#id}` twice; a `@fig:x`, `@tbl:x`, `@eq:x`, `@sec:x`, `@lst:x` or `\ref{x}` nothing defines |
 | `cite-missing`, `cite-no-bibliography`, `bibliography-missing` | a `@key` the `.bib`, CSL JSON or `references:` lacks (with a "did you mean"), citations with no bibliography set, a bibliography file that is missing |
+| `citation-unused` | a note listing uncited keys in the declared bibliography, allowing entries requested with `nocite` |
 | `excerpt-unknown`, `excerpt-key-mismatch`, `excerpt-file` | an unknown excerpt ID, a long marker that names a different source, or an unreadable or invalid record file |
 | `excerpt-bib`, `excerpt-locator-differs`, `excerpt-quote`, `excerpt-overlap`, `excerpt-remark-narrative` | problems with an excerpt's bibliography key, locator, use in prose or narrative remark marker |
 | `math-digit` | `$\geq$3`, `$\pm$10`: Pandoc reads `$...$` as math only when the closing `$` is not followed by a digit, so this is text with the dollars printed (a build says the same as a WARN, and a `\geq` left in text mode rebuilds the document in another font); write `$\geq 3$` |

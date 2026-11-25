@@ -162,6 +162,17 @@ class Reading(unittest.TestCase):
         self.assertEqual(codes("# A\n\n[@x]\n", None), [])
         self.assertEqual(codes("# A\n\n---\nnocite: |\n  @*\n---\n", Bibliography(True, frozenset(), True)), [])
 
+    def test_unused_citations_are_listed_once_in_order(self):
+        bibliography = Bibliography(True, frozenset({"used", "unused-a", "unused-z"}))
+        sources = [Source("book.md", None, "# Book\n\n`@unused-a`\n"),
+                   Source("parts/one.md", None, "## Part\n\n[@used]\n")]
+        found = lint(sources, bibliography)
+        self.assertEqual([(p.file, p.line, p.code, p.severity) for p in found],
+                         [("book.md", 0, "citation-unused", "note")])
+        self.assertIn("@unused-a, @unused-z", found[0].message)
+        self.assertEqual(lint(sources, Bibliography(True, bibliography.keys, complete=False)), [])
+        self.assertEqual(codes("\\nocite{*}\n", bibliography), [])
+
     def test_files_that_must_exist(self):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)
@@ -282,6 +293,17 @@ class CommandLine(unittest.TestCase):
         self.assertIn("@b2 is not in", self.run_pdfmd("json.md", "--check").stdout)
         self.write("inline.md", "---\ntitle: T\nreferences:\n- id: k1\n  title: x\n---\n\n# A\n\n[@k1; @k2]\n")
         self.assertIn("@k2 is not in", self.run_pdfmd("inline.md", "--check").stdout)
+
+    def test_unused_bibliography_keys_include_declared_layers_and_respect_nocite(self):
+        self.write("cli.bib", "@article{Cli, title={One}}\n@misc{Unused-Z, title={Two}}\n")
+        self.write("meta.yaml", "references: [{id: Unused-A, title: Three}, {id: Include, title: Four}]\n")
+        self.write("doc.md", "---\nreferences: [{id: Inline, title: Five}]\nnocite: '@Include'\n---\n\n[@Cli; @Inline]\n")
+        command = ("doc.md", "--check", "--strict", "-y", "meta.yaml", "--bibliography", "cli.bib")
+        done = self.run_pdfmd(*command)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("doc.md: note: bibliography keys never cited: @Unused-A, @Unused-Z  [citation-unused]", done.stdout)
+        self.assertIn("no problems", self.run_pdfmd(*command, "-M", "nocite=@*").stdout)
+        self.assertIn("no problems", self.run_pdfmd(*command, "--check-ignore", "citation-unused").stdout)
 
     def test_missing_bibliography_file_and_unknown_kinds(self):
         self.write("doc.md", "---\ntitle: T\nbibliography: nothere.bib\n---\n\n# A\n\n[@a]\n")
