@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.34a — 2026-11-25
+
+Pre-edit state: commit `f8e4374`.
+
+CLAUDE.md, "Delegating and reviewing": the review of a delegated batch is tiered (the author's decision of 2026-11-25). A
+script runs the mechanical gate, now also listing the files a commit adds outside tests/ and whether each commit adds or
+changes a test; the orchestrator reads every report and the gate's summary, and reads the diff of each commit that touches
+settings precedence, security or a parser, adds a non-test file, keeps a constant, skips an item, makes a design choice or
+fails the gate, plus one sampled commit per batch. The review is still never handed to another agent. Docs only.
+
 ## v3.34.34 — 2026-11-24
 
 Pre-edit state: commit `25b298e`. **A batch prints one FOUND line again.** Since 3.34.31 a batch looks up every
