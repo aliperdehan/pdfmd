@@ -11,15 +11,13 @@ wait for an answer before any code.
 ## The queue, paused after the 3.33.191 release (2026-11-12): resume in this order
 
 - [ ] 5b. After wave 5: excerpts (source tracking: `[@key#N]` markers, `excerpts.json`, pagecite), pdfmd first, then Colophon's Source pane; spec approved [3fq 3fr 3fs D79 D80 Q74]
-- [ ] Deeper Markdown dialect detection, opt-in `dialect-detect: deep` (front matter over a GFM-style body; TOML front matter, with a default WARN), with the Obsidian flavour (5c) [3gf D106]
 - [ ] 5c. Then the Obsidian flavour and its community plugins (the sections below), before Colophon: plugin support may be wanted before committing fully to it [3ee 3er D85]
 - [ ] 6. Colophon by hand (`--smoke-web`, Cmd-Q with an unsaved tab, `gui.yml` on main), the review's list below in its order, then the GUI decisions and build [D59 D60 D81]
 - [ ] Colophon on Windows: finish the trial shell of PR #38 on a Windows machine with a stronger model; fix the trailers of its last two commits (Beam 1.0) before landing [D119]
-- [ ] 7. nulabreport last: the full smoke test; a biochem report as `.docx` beside its PDF [D59]
 
 ## Decide first
 
-- [ ] **decide** Text shorthands such as `+/-` -> ±, beside the `--`/`---` dashes: which set, the default, never inside code; postponed while the author weighs the list [D44]
+- [ ] **decide** the list: text shorthands such as `+/-` -> ±, beside the `--`/`---` dashes; opt-in, never inside code or maths [D44 N144]
 - [ ] **later** PlantUML as a diagram language next to mermaid, d2 and dot: not now (author, 2026-11-02: no second Java for it); pick up if asked [3en]
 - [ ] Build record: LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
 
@@ -27,7 +25,6 @@ wait for an answer before any code.
 
 - [ ] Multi-path builds (3.33.140): replace the guesses (non-inputs, earlier outputs, same-output clashes) with a record of what pdfmd wrote, with the build record [3fi D33 3dn D84]
 - [ ] Images and display math in `--view` through the kitty graphics protocol, after the queue: first a spike of Unicode placeholders in Ghostty (they survive the pager), else no pager when images are drawn [3dm D84]
-- [ ] Logo: a README header (a `<picture>` with absolute raw URLs, light and dark wordmark) and the social preview uploaded in the repository settings, before the next push [3ew]
 - [ ] `\md{...}`: nulabreport's macros taking `\md{}`; native tier; text-level pre-passes (table-ascii, includes, embed blocks) inside the macro, unchecked [3dc]
 - [ ] Mixed-format parts: docx, tex, odt, html parts inside a `parts: auto` build [3cl]
 - [ ] Word `keep`; markup (centre, highlight, landscape) in OpenDocument [3bh, 3ay]
@@ -53,22 +50,18 @@ wait for an answer before any code.
 - [ ] Widths outside LaTeX: Typst, HTML, Word, ODT get Pandoc's equal thirds; give "no opinion" tables back to the engine; absolute widths (`3cm`) of the attribute line are drawn in LaTeX only (HTML has percentages) [3fa]
 - [ ] Cell tags: vertical alignment and heights in Typst, Word and ODT; an exact row height (tabularray's `ht` is a minimum); `j` (justify) [3fa]
 - [ ] Cell tags: a table rebuilt as `longtblr` is raw LaTeX to later filters (`table-keep`, `labtabular`, Beamer untested); the native tier and grid tables read no tags [3fa]
-- [ ] nulabreport: its table writer ignores `row_span` (a covered cell is missing, the row shifts) and forces a spanned cell to centre; emit `\multirow` (loaded) and keep the cell's alignment, in all three writers, plus a smoke-test case (nulabreport repository) [3fa]
 - [ ] Chatter ladder: `--chatter`, `-q`, `--mute ID`, `--log`, `--summary`; one `emit`; per document and in `--setup`
 - [ ] Revise the thin features of this line (table pre-pass kinds, line breaks, table captions, `<c>` cells, Org extras) against unusual input users will try, while the documentation programme writes them up [3el, 3dg]
 - [ ] Table pre-pass: dash look-alikes, `+` and `=` separators, `table-colons`, `table-repair` modes, "not a table" warning, `--fix-tables`
 - [ ] Character budget from paper, margins and font size, not 95
 - [ ] Row legibility for long-cell tables: `table-style` (rules, zebra, spacing)
-- [ ] Reader: Pandoc's Markdown for a plain file that uses grid or simple tables
 - [ ] Width modes beyond auto/keep/force: combinations, more per-table spellings (per-column widths are in the attribute line, 3.32.33) [3dl]
 - [ ] Measured column widths beyond LaTeX and Typst (`column-estimate: measure`, 3.33.332-333): Word/ODT through LibreOffice, then measure as the default (4.0 at the earliest) and the raw-TeX kludge (`column-count-raw-tex`) retired [3dl 3ge]
 - [ ] Cache the balanced widths per table by content hash [3dl]
 
 ## Kits, carried inside 3.31 (no minor of its own); a report without a `metadata/` folder; started [3du]
 
-- [ ] nulabreport side (its maintenance is done): its `.kit`, course codes as mode aliases, starters without `metadata/` (which stays supported), a course-level `.pdfmd/` in `220/` and `LR9-10`, the manual updated; real builds of copies of 220/LR6 and LR9-10; smoke test
 - [ ] Kits, later: `settings:` and a kit `options:` list; a Pandoc-template kit after the 3dk spike; a first-use trust prompt for fetched kits; `requires:` for a clear missing-package error; Typst, HTML, Word parts (kits 0.2); `--kit new|check|pack` [3du, 3dg, 3et]
-- [ ] nulabreport at three levels (bare `.sty`, a pandoc defaults file plus the Lua filter mapping the front-matter keys, a pdfmd kit); no custom `.latex`; spike first (does `-H` replace a filter's `header-includes`?), then bare-pandoc and bare-`.sty` lanes in its smoke test [3dw, 3dk, 3du]
 
 ## Pictures and crop, carried inside 3.31 [3dv]
 
@@ -95,10 +88,10 @@ wait for an answer before any code.
 ## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]
 
 - [ ] The rest of Obsidian's syntax: note embeds (`![[note#Heading]]`, `#^block`), links between notes, tags, block ids, properties, foldable and custom callouts, extra task statuses [3ee]
-- [ ] Every part of a flavour adjustable: presets are tables a user overrides piece by piece or defines their own ("frankenstein") [3ex]
+- [ ] Every part of a flavour adjustable: presets are tables a user overrides piece by piece or defines their own ("frankenstein") ; per-feature overrides first, own presets second [3ex N144]
 - [ ] Other flavours as `flavour` values, one at a time after Obsidian: MyST, MkDocs/pymdown, CriticMarkup, Logseq/Roam, Quarto extras, MultiMarkdown, Djot [3eo]
 - [ ] Spans `.caps`, `.wavy`, `.dotted`... in every writer, then the shorthand (`++x++`, `!!x!!`, `??x??`) as opt-in `markup` kinds; CriticMarkup and abbreviations later [3eq]
-- [ ] Control characters in a source (U+0000-U+001F but tab and newlines), in the copy Pandoc reads: vertical tab and form feed become a newline, an ANSI colour sequence goes whole, the rest is dropped; one WARN naming the line and what was done (`--strict`: an error), so the first engine succeeds; the Typst route's inline-math warnings are a bug of their own [3es D85]
+- [ ] Typst route: inline-maths WARNs on a source that the LaTeX engines build (seen with the control-character note) [3es D85]
 - [ ] Community plugins: a vault report from `.obsidian/community-plugins.json`, adapters for plain-text plugin formats, rendering through Obsidian for the rest (never headless: the CLI needs the running app); unknown stays as code with one note; the other tiers settled when built [3er D85]
 
 ## Other tools' command lines
@@ -108,21 +101,18 @@ what pdfmd lacks. Plain `pdfmd` keeps its own meanings (`-p` is slides, `-s`, `-
 batchocr's, so what is listed for it lands in batchocr. Never delegate to a copy of another tool. The quick ones first; the rest
 is low priority. [3di]
 
-- [ ] batchocr (PDF to Markdown): `--pages 1,3,5-8` (PyPI `pdfmd`'s `-p`), standard input `-` and URL inputs (Rust `pdfmd`), `--extract-images DIR` as a spelling of `--export-images`, a folder as input (npm `pdfmd -i DIR -o DIR`)
-- [ ] `--security basic|default|strict` as one switch over the HTML, remote-file and script switches (markdown-convert); with a wkhtmltopdf / untrusted-input warning in the docs and `--doctor` [3di, 3en]
+- [ ] `--security`: one common policy that every renderer enforces (HTML, remote files, scripts, raw TeX), default today's behaviour; a wkhtmltopdf / untrusted-input warning in the docs and `--doctor` [D126 3di 3en]
 - [ ] Take over, each checked first: Jinja context from the front matter for `.md.j2` (jmaupetit), `.page-break` and a custom page-break marker (`md-to-pdf`, mdPDFinator `-n`), `--document-title` and `--body-class` for the HTML route, emoji shortcodes (`:thumbsup:`), theme files and `--dump-theme` (Go `mdpdf`), `[TOC]` and `!!!` admonitions (markdown-convert)
 
 ## Before 4.0
 
 - [ ] Coloured links on by default in LaTeX and Typst, with the other default flips; the `colorlinks` setup row is the opt-in until then [3fl D84]
-- [ ] `pdfmd.py`'s name at 4.0: a `pdfmd_cli` package (`core.py`, `__main__.py`) with `pdfmd.py` kept as a shim, looked at again then [Q67 D85]
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]
-- [ ] Windows test session on a second machine: fork + pull requests, the Mac session merges and bumps the version [3dp]
 - [ ] Tool paths per document and on the command line: the `tesseract-path`, `soffice-path` ... keys also as `pdfmd-options` and flags, so one document can pin another version of a tool [3dt]
 - [ ] Windows guide (16 sections): the Windows session adds it to the repo as a docs file; wire it into `pdfmd --doc` with the documentation programme [3dg, 3dp]
 - [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo (GitHub Pages, indexable) and bundled for `pdfmd --doc`; a layered README tested by a beginner on a clean machine; agent surfaces (task table, `--help` as JSON, `llms.txt` hosted); an audit of ambiguous names (one meaning per word, a test for collisions and aliases); feature pages carry the version added, fixed and last tested [3dg]
-- [ ] The `pdfmd_cli` namespace for 4.0 and one event log; the split itself is [3fi] [3bh]
-- [ ] Lean install: a core distribution plus extras (`pdfmd-cli` stays the full default); optional packages survive their absence with one message; a CI leg for the core only [3dx]
+- [ ] One event log for every route; the split itself is done [3fi] [3bh]
+- [ ] Lean install: extras that survive their absence with one message and a CI leg for the core only; a separate core distribution (`pdfmd-cli` staying the full default) only if that leg shows a real saving [3dx N144]
 - [ ] `--install full|core|cortex` also fetch the default fonts (`fonts:core`: STIX Two, JetBrains Mono, Noto Serif, symbols; about 8 MB), sizes table updated [3ei]
 - [ ] Docs: a table of every install kind (pip or download, size, `--uninstall`, `--check-dependencies`), decided together with the lean install [3ei, 3dg, 3dx]
 - [ ] The pre-4.0 pass (code review, edge cases, documentation) reads pdfmd as an agent would, not only as a human: exit codes, output size, non-TTY, name guessing, untrusted documents; then tested with the author's local models on real tasks [3ff, 3dg]
@@ -134,7 +124,7 @@ is low priority. [3di]
 - [ ] The editor takes its own autosave (and a file that is only touched) for another program's change: a false "changed by another program" sheet while typing; compare the disk with what the document last read or wrote; a self-test that types across an autosave [3fu B1, 3fw H4]
 - [ ] `--smoke-prefs` hangs on its own "Invalid setting" alert since 0.3.20; the self-tests' output line-buffered; `gui.yml` has never run [3fu B12]
 - [ ] Silent file damage: a UTF-8 BOM dropped at the first save; a save through a symlink to a file fails; a CRLF pair split by the caret (a lone CR written); two spaces becoming ". ", after a look in a window [3fw H1 H2 H3 L2]
-- [ ] The installed app is 0.3.0, the source 0.3.24: install after every gui batch, or the About box says when the app is older than the checkout [3fu B2]
+- [ ] The installed app can be older than the checkout (0.3.0 vs 0.3.24): the About box says so [3fu B2 N144]
 - [ ] Typing parity with CotEditor: a line-height setting (1.3, the same for every line), wrapped lines indented, tab width and spaces for Tab, Return keeps the indent, Shift Left/Right, Go to Line, font size keys; then the status bar (selection counts, words, graphemes); a TextKit 2 spike first [3fu B, 3fw D]
 - [ ] Find and Replace with regular expressions (Find All, Replace All) [3fu B]
 - [ ] A Help menu (its search field finds every command), a View menu per window kind, the missing Mac staples [3fu C]
@@ -154,7 +144,7 @@ is low priority. [3di]
 - [ ] pdfmd-gui window shell, open: native wrapper vs an optional chromium window (`--install chromium`, a `--setup` row to toggle); no Node needed [3do]
 - [ ] Colophon web UI and JSON core, slice 1 built (3.32.36); left: builds with job events, checks and formats, settings schema and values, history, `/api/raw`, search; Tauri postponed [3do]
 - [ ] Colophon: a Format popup in the Save As panel, so the export is noticed (an Export panel stays proposed) [3do]
-- [ ] Colophon: one History panel, two lanes (git for edits: log, diff, restore; `.hst` and the build record for builds); a setting that offers `git init`, also into a NEW folder, never silently; a proper diff view; and the cure for `.backups/` bloat: git for the text, the newest N PDFs loose and older ones in one solid archive per document (never in the text repository) [3do]
+- [ ] Colophon: one History panel, two lanes (git for edits: log, diff, restore; `.hst` and the build record for builds); a setting that offers `git init`, also into a NEW folder, never silently; a proper diff view; and the cure for `.backups/` bloat: git for the text, the newest N PDFs loose and older ones in one solid archive per document (never in the text repository) ; read-only git and build lanes first [3do N144]
 - [ ] Colophon: the live view reads CommonMark, a build reads Pandoc's Markdown, so citations, `: caption` lines and `\cref` show as typed; route (a) a line-preserving text pre-pass (caption to bold, citeproc text per cluster), route (b) a second reader aligned by block; postponed [3do]
 - [ ] Colophon and pdfmd: language runners (R, Python): a settings table extension to command and mode (one-shot `Rscript`/`python3`, or a file sent to a live session), after the terminal window; plugins only if the table is not enough [3do]
 - [ ] Colophon: one JSON syntax table for the page and the native editor; raw TeX/HTML and fenced languages inside Markdown, `calc` and `hst` syntaxes, kits, BibTeX, TeX, CSV [3do]
@@ -167,7 +157,6 @@ is low priority. [3di]
 - [ ] A `.calc` file kind: `::: {.calc file=NAME.calc}` imports it as it is and it works with the document like any calc block; a syntax map in Colophon, carried by `--merge` and `--check` [3ez]
 - [ ] More input kinds in Colophon: HTML documents with a render, and Pandoc's plain-text readers (rst, org, textile ...) by extension, `--from` or a YAML key [3do]
 - [ ] The `pdfmd` flavour as the accept-everything one: it turns on the usually-off togglers of the Obsidian, Pandoc and GFM flavours, plus rst constructs (and other plain-text markups, if useful) as one more toggler (flag, `pdfmd-options` key, `--setup`; off elsewhere, on in `pdfmd`); audit first [3fh, 3ex]
-- [ ] Colophon syntax colours for citeproc citations (`@key`, `[@a, p. 3; ...]` with locators), `\cref`/`\ref` and similar; same JSON syntax table as the page [3fh, 3do]
 - [ ] Colophon: a syntax chooser button like CotEditor's, reading CotEditor's syntax files and the JSON table [3fh, 3do]
 - [ ] Colophon: two full-screen plain-text windows side by side; check what happens when the left one minimises (CotEditor has a bug there) [3fh]
 - [ ] Colophon plain-text mode: the status bar stays white while the window is dark [3fh]
@@ -178,8 +167,4 @@ is low priority. [3di]
 
 ## In other repositories
 
-- [ ] nulabreport, irspec: check that every approved review fix landed, collision handling included [D48]
 - [ ] inkmd: a quote right after a list is read as a paragraph; fix upstream, re-vendor [3ci]
-- [ ] nulabreport: grid tables cannot be kept whole (`labtabular`) [3cf]
-- [ ] kits: the apa7 kit sets `bibliography-indent: 0.5in` (`pdfmd-options` in its metadata) [D60]
-- [ ] nulabreport: `smiles: true` inside its `cache: {aux, plots}` in the three metadata files, +0.0.1, once the chemfig cache exists (approved) [3ec]
