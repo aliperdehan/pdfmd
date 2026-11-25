@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.57 — 2026-11-25
+
+Pre-edit state: commit `d593218`. [tables] Autocorrect and copied separators could prevent a pipe table from being read or erase its chosen proportions.
+Normalise separator glyphs and alignment spacing before the reader, preserving dash counts and reporting the source
+line. The separator matrix compares LaTeX and HTML proportions under Markdown and GFM, with literal and grid cases.
+
 ## v3.34.56 — 2026-11-25
 
 Pre-edit state: commit `a2a51ab`. [tables] A chosen pipe-table column could keep most of the line even when its cells were short.

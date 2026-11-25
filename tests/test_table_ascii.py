@@ -296,15 +296,19 @@ class Build(unittest.TestCase):
                                  ("lazy", "+-+\n1 | 2\n+-+\n3 | 4\n+-+\n", "ASCII")):
             done, tex = self.build(body=body)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            self.assertIn("WARN  table-ascii: d.md, line", done.stdout, name)
-            self.assertIn(kind, done.stdout, name)
+            if kind == "psql":
+                self.assertIn("WARN  table-separator: d.md, line 6", done.stdout, name)
+            else:
+                self.assertIn("WARN  table-ascii: d.md, line", done.stdout, name)
+                self.assertIn(kind, done.stdout, name)
             self.assertEqual(len(self.columns(tex)), 2, name)
 
     def test_org_tables_build_as_tables_under_gfm_and_markdown(self):
         for body in ("| Name | Qty |\n|------+-----|\n| a    |   1 |\n", "| Name | Qty |\n| a | 1 |\n| b | 2 |\n"):
             done, tex = self.build(body=body)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            self.assertIn("WARN  table-ascii: d.md, line", done.stdout)
+            code = "table-separator" if "+" in body else "table-ascii"
+            self.assertIn(f"WARN  {code}: d.md, line", done.stdout)
             self.assertEqual(len(self.columns(tex)), 2, body)
 
     def test_an_org_caption_is_the_tables_caption_even_in_a_file_with_no_front_matter(self):

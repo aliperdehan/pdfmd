@@ -342,6 +342,9 @@ def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
     lines = text.split(newline)
     if not LOOKS_LIKE_ONE.search(text):
         return text, []
+    from .prepass import visible_lines
+
+    visible = visible_lines(text)
     out: list[str] = []
     repairs: list[Repair] = []
     changed = False                       # a caption or a `#+` line was taken from a table that needed no repair
@@ -388,6 +391,10 @@ def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
             continue
         if COMMENT_OPEN in bare and COMMENT_CLOSE not in bare.split(COMMENT_OPEN, 1)[1]:
             in_comment = True
+            out.append(line)
+            index += 1
+            continue
+        if not visible[index].strip() and bare.strip():
             out.append(line)
             index += 1
             continue

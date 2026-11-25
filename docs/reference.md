@@ -1881,6 +1881,11 @@ document that needs the DejaVu glyph fallback (name `mainfont:`), and
 natbib/biblatex still can't express a table caption's citation through
 a Lua filter that rebuilds captions (nulabreport.lua does).
 
+On the line directly below a pipe-table header, pdfmd normalises separator spellings in memory and warns with
+the source line number. En dashes become two hyphens and em dashes three. Minus signs, figure dashes, Unicode
+hyphens and non-breaking hyphens become single hyphens. `=` becomes `-`, `+` becomes `|` and `: - :` becomes
+`:-:`. Grid tables, code, comments, YAML, raw blocks, maths and `.csv` div data are left alone.
+
 Pipe-table column widths (v3.25.0): a `---|---` separator says nothing about the columns, so a table whose
 lines run long is laid out by pdfmd_lua/table_width.lua -- the widths that give the fewest lines within the text
 width, each column at least as wide as its longest word -- and a table that fits is left at its natural width.

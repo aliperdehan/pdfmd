@@ -385,6 +385,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     from pdfmd_cite import numbered
     from pdfmd_filters import document_filter_scope
     from pdfmd_obsidian.links import linked_inputs
+    from pdfmd_tables.prepass import table_source
 
     references = numbered.prepare([md_path, *parts_inputs], metadata_files, pandoc_options, from_format)
     numbered_citations = references is not None and not references.separate
@@ -405,7 +406,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             if part_markers and parts_root else None,
                             selection if isinstance(selection, (set, frozenset)) else None,
                             numbered.part_transform(references, transform_part),
-                            metadata_files=metadata_files) as scaffold_files, \
+                            metadata_files=metadata_files,
+                            prepare_part=lambda text, part: table_source(text, core.display_path(part))) as scaffold_files, \
             linked_inputs([title_source, *scaffold_files[1:]], [md_path, *parts_inputs], effective_from, metadata_files,
                           "pdf" if link_output else target_format, link_output or output,
                           not core.auto_disabled(no_auto, "title")) as (linked, effective_from):

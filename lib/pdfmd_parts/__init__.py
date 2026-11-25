@@ -426,7 +426,7 @@ def scaffold_inputs(files: list[Path], active: bool,
                     markers: dict[Path, str] | None = None,
                     select: "set[Path] | None" = None,
                     transform: "Callable[[str, Path], str] | None" = None,
-                    metadata_files=(), *, pandoc_source: bool = True) -> Iterator[list[Path]]:
+                    metadata_files=(), *, pandoc_source: bool = True, prepare_part=None) -> Iterator[list[Path]]:
     """Yield the files to hand Pandoc: the scaffold as is, each part with its
     front matter removed (a hidden temp copy beside it, deleted afterwards;
     a part with nothing to remove is passed through untouched). ``markers``
@@ -444,6 +444,8 @@ def scaffold_inputs(files: list[Path], active: bool,
         for part in files[1:]:
             text = part.read_text(encoding="utf-8-sig")
             repaired = repair_controls(text, part) if pandoc_source else text
+            if prepare_part is not None:
+                repaired = prepare_part(repaired, part)
             cleaned = core.strip_part_front_matter(comment_source(repaired, part, metadata_files))
             if transform is not None:
                 cleaned = transform(cleaned, part)     # a rewrite of the part's text (ASCII tables), before it is cut or wrapped

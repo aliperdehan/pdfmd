@@ -203,7 +203,8 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
                                "measure uses the selected LaTeX or Typst PDF engine and caches cell and unbreakable word widths. "
                                "Exports keep count; --verbose reports measured/cached widths. "
                                "column-word-ceil: on (default) | off. column-ceil-margin: 25% (default), a percentage "
-                               "or fraction; 0 or off disables the ceiling. --setup offers these settings.")
+                               "or fraction; 0 or off disables the ceiling. --setup offers these settings. "
+                               "Pipe separators accept dash look-alikes, =, + and spaces beside alignment colons.")
     try:
         text = parser.format_help()
         if topic == "output":
