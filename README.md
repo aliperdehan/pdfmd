@@ -3824,7 +3824,7 @@ names no package and no course, the file is the data.
 kit-format: 1                  # required; a larger number stops with "needs a newer pdfmd"
 name: nulabreport              # defaults to the folder's name
 version: 1.30.0                # optional: left out, the version the package's `\ProvidesPackage` line announces
-package: nulabreport           # the LaTeX package the kit ships (NAME.sty beside the file)
+package: nulabreport           # the LaTeX package the kit ships
 default-mode: genchem          # the mode used when none is asked for
 modes:                         # one named variant of the kit
   qca:
@@ -3865,11 +3865,31 @@ key with a warning. `pdfmd --kits NAME` shows it, `--verbose` says what it took 
 `NAME.kit` file's name or the `name:` it declares. The places, in order: a `kits/` folder beside the document and above it; the
 `kits:` of the config file (a folder that is a kit or one that holds kits; `- {path: ~/kits/x, aliases: {qca: [analytical]}}`
 adds mode names without editing the kit; the *Folders of kits* row of `--setup`); a `kits/` folder beside the config file;
-then the folder of `NAME.sty` that `kpsewhich` finds, whose answer is remembered in `kits.json` of the cache folder (checked by
-the `.kit`'s size and time; a miss is never remembered). Two different kits of one name in one place stop the search and name
-both; between places the order decides. `--no-auto kit` takes the searching off (the config's `kits:` and a path stay),
+then the TeX tree. Two different kits of one name in a project or config location stop the search and name both.
+Between locations the order decides. `--no-auto kit` takes the searching off (the config's `kits:` and a path stay),
 `--no-auto kpsewhich` the TeX tree only. `pdfmd --kits` lists the kits, `pdfmd --kits NAME-OR-PATH` shows one in full and
 checks it. Searching is not selecting: a document that only says `\usepackage{nulabreport}` is not switched to the kit.
+
+**A kit in the TeX tree.** For the `NAME.sty` found by `kpsewhich`, pdfmd checks the folder that contains it, then
+`pdfmd/`, then `.pdfmd/`. The first folder with a kit wins. Within that folder, pdfmd takes `.kit` if present,
+otherwise the first `*.kit` in filename order. Paths in the kit such as `lua:` and `defaults:` are relative to the
+kit file's own folder. The cache remembers successful lookups in `kits.json`. A hit checks the remembered kit's
+size and modification time and rechecks the three folders. `pdfmd --kits NAME` shows the kit's file and warns if
+another kit was found in a later folder.
+
+**Package sidecars.** If you ship a separate sidecar, pdfmd checks the following paths in order. Each is relative to
+the folder containing `NAME.sty`.
+
+1. `NAME-pdfmd.yaml`
+2. `pdfmd/NAME-pdfmd.yaml`
+3. `pdfmd/pdfmd.yaml`
+4. `.pdfmd/NAME-pdfmd.yaml`
+5. `.pdfmd/pdfmd.yaml`
+
+You can fold the sidecar into the kit by putting `latex-keys:`, `picture-cache:`, `draft-skip:`, `office:` and
+`lua:` at the top level of the kit and naming the package with `package:`. For package helper lookup, the first
+sidecar file takes precedence over the kit's blocks. `pdfmd --kits NAME` shows where the helper came from and
+reports if it ignored the kit's helper blocks in favour of a sidecar.
 
 **Choosing a kit.** `pdfmd-options: {kit: nulabreport:qca}` in a document, a metadata file, a folder's `.pdfmd/` files, a preset or
 the config's `options:`, or `--kit nulabreport:qca` for one run. The same choice can be written `nulabreport`, `nulabreport[qca]`

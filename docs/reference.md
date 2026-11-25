@@ -2211,6 +2211,16 @@ fetches the kits of any repository (v3.32.7; nothing in it is run), `--kits` lis
 margin, font or table-width defaults with `no-auto:` (v3.32.8), and a kind of universal markup with `markup-off:`
 (v3.33.68). The README's Kits section is the full description.
 
+For a package found by `kpsewhich`, pdfmd checks beside its `.sty`, then in `pdfmd/`, then in `.pdfmd/`.
+The first folder with a kit wins. Within it, pdfmd uses `.kit` if present, otherwise the first `*.kit` in filename order.
+Paths such as `lua:` and `defaults:` are relative to the folder containing the kit file.
+
+For package helpers, pdfmd checks sidecars in order, starting with `<package>-pdfmd.yaml` beside the `.sty`, then
+`pdfmd/<package>-pdfmd.yaml`, `pdfmd/pdfmd.yaml`, `.pdfmd/<package>-pdfmd.yaml`, then `.pdfmd/pdfmd.yaml`.
+A package can fold `latex-keys`, `picture-cache`, `draft-skip`, `office` and `lua` into its kit by naming the package
+with `package:`. A standalone sidecar takes precedence for package helper lookup. `pdfmd --kits PACKAGE` shows the
+chosen kit and helper source, warns about kits shadowed in other folders and reports when a sidecar supersedes the kit's helper blocks.
+
 Raw HTML `<img src=... width=...>` stays opt-in for LaTeX, Typst and Word: these writers drop it by default,
 with one WARN per build. Use `--raw` or `pdfmd-options: {raw: {tex: [html], typst: [html], office: [html]}}`
 to carry it through Pandoc's HTML reader (local and remote sources, with or without width).

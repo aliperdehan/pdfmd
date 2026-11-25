@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.53a — 2026-11-25
+
+Pre-edit state: commit `c89197b`. [kits] Document the TeX package kit and sidecar search order, kit-relative paths, folded helpers and the locations reported by `--kits` [D134].
+
 ## v3.34.53 — 2026-11-25
 
 Pre-edit state: commit `e6d3ab3`. [kits] Package helper lookup missed sidecars under `.pdfmd/` and read folded blocks only from a `.kit` beside the style file. It now checks both sidecar names in the hidden folder after the existing locations, then reads folded blocks from the winning package kit [D134]. `--kits NAME` shows the helper source and identifies blocks ignored in favour of a sidecar. Regressions cover the full sidecar order, both kit names in all three locations with and without folded blocks, and helper discovery during a build.
