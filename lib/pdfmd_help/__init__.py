@@ -204,7 +204,8 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
                                "Exports keep count; --verbose reports measured/cached widths. "
                                "column-word-ceil: on (default) | off. column-ceil-margin: 25% (default), a percentage "
                                "or fraction; 0 or off disables the ceiling. --setup offers these settings. "
-                               "Pipe separators accept dash look-alikes, =, + and spaces beside alignment colons.")
+                               "Pipe separators accept dash look-alikes, =, + and spaces beside alignment colons. "
+                               "table-colons: ignore (default) | count controls whether colons contribute to widths.")
     try:
         text = parser.format_help()
         if topic == "output":

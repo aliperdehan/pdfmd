@@ -1890,7 +1890,10 @@ Pipe-table column widths (v3.25.0): a `---|---` separator says nothing about the
 lines run long is laid out by pdfmd_lua/table_width.lua -- the widths that give the fewest lines within the text
 width, each column at least as wide as its longest word -- and a table that fits is left at its natural width.
 Unequal dashes (`--|-----`) are a choice and kept, but only under Pandoc's own Markdown reader (front matter, or a
-linked metadata file): the `gfm` reader of a plain file gives the dashes no width. Pandoc counts colons as dashes.
+linked metadata file): the `gfm` reader of a plain file gives the dashes no width. By default, `table-colons: ignore`
+in `pdfmd-options` makes the dash counts alone decide whether the columns are equal and what their proportions are.
+`table-colons: count` uses Pandoc's dash-plus-colon counts. Both modes preserve alignment. Set the mode with `--setup`
+or override it on one table with `{table-colons=count}` after its caption.
 v3.31.0: a chosen column too narrow for its longest word (a word of up to 16 characters) is widened to it and the
 other columns give up the room (`column-word-floor: off` for a table where breaking a word is meant).
 With `column-word-ceil: on` (the default), a chosen column wider than its longest cell plus `column-ceil-margin`

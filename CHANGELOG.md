@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.58 — 2026-11-25
+
+Pre-edit state: commit `772847a`. [tables] Pandoc counted alignment colons as additional dashes, which could turn equal columns into chosen widths
+or change their widths. The Markdown pre-pass now encodes dash-only proportions by default, retaining alignment.
+Tests cover equal and unequal dashes, both settings, caption overrides and the LaTeX and HTML fractions.
+
 ## v3.34.57 — 2026-11-25
 
 Pre-edit state: commit `d593218`. [tables] Autocorrect and copied separators could prevent a pipe table from being read or erase its chosen proportions.

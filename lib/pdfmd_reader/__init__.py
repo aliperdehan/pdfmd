@@ -527,9 +527,9 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
         text, shifted = override
         text = repair_controls(text)
     if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
-        from pdfmd_tables.prepass import table_source
+        from pdfmd_tables.prepass import table_colons, table_source
 
-        text = table_source(text, core.display_path(md_path))
+        text = table_source(text, core.display_path(md_path), colons=table_colons(md_path, metadata_files))
         text = dialect.prepare(text, md_path, metadata_files, relax)
         if transform is not None:
             text = transform(text, md_path)

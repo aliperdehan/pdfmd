@@ -531,6 +531,9 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("options.column-ceil-margin", "Extra width an airy column can keep as a share of the line",
              "Default 25%. Use a percentage or a fraction from 0 to 1; 0 or off disables the ceiling. "
              "One table: {column-ceil-margin=40%}.", "Tables", "config"),
+        choice("options.table-colons", "Count alignment colons towards pipe-table widths",
+               (("ignore", "only dashes determine proportions"), ("count", "dashes and colons both count")), "ignore",
+               "Alignment is retained in either mode. One table: {table-colons=count} after its caption.", "Tables"),
         text("options.column-outlier", "A cell this many times longer than the next wraps instead of widening its column",
              "Default 2; 0 switches it off. One table: {column-outlier=3} after its caption (Pandoc 3.8.2 or newer).",
              "Tables", "config", "number"),

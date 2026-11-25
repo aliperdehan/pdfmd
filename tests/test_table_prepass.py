@@ -95,3 +95,25 @@ class Writers(unittest.TestCase):
                     widths = self.proportions(output, writer)
                     self.assertEqual(len(widths), len(spellings))
                     self.assertEqual(widths, self.proportions(expected, writer))
+
+    def test_alignment_colons_do_not_change_chosen_widths_unless_counted(self):
+        body = (f"| A | B |\n|:---:|---|\n| {PROSE} | {PROSE} |\n\n"
+                f"| A | B |\n|:----:|------|\n| {PROSE} | {PROSE} |\n")
+        for writer in ("latex", "html"):
+            for mode, shares in (("ignore", [(50, 50), (40, 60)]), ("count", [(62, 37), (50, 50)])):
+                with self.subTest(writer=writer, mode=mode):
+                    options = f"column-widths: keep, table-colons: {mode}" if mode == "count" else "column-widths: keep"
+                    _, output = self.build(f"---\npdfmd-options: {{{options}}}\n---\n\n{body}", "markdown", writer)
+                    widths = self.proportions(output, writer)
+                    if writer == "latex":
+                        expected = [["0.5000", "0.5000"], ["0.4000", "0.6000"]] if mode == "ignore" else [
+                            ["0.6250", "0.3750"], ["0.5000", "0.5000"]]
+                    else:
+                        expected = [[str(value) for value in columns] for columns in shares]
+                    self.assertEqual(widths, expected)
+
+    def test_caption_overrides_table_colons(self):
+        first = f"| A | B |\n|:---:|---|\n| {PROSE} | {PROSE} |\n"
+        second = first + "\n: Caption {table-colons=count}\n"
+        _, output = self.build(first + "\n" + second, "markdown", "html")
+        self.assertEqual(self.proportions(output, "html"), [["50", "50"], ["62", "37"]])
