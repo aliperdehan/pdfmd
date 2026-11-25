@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use pdfmd in your work, please cite it using this metadata."
+type: software
+title: pdfmd
+abstract: "Convert Markdown and other Pandoc-readable formats to PDF and other output formats."
+authors:
+  - given-names: Ali
+    family-names: Perdekhan
+repository-code: https://github.com/aliperdehan/pdfmd.git
+license: [MIT, Apache-2.0]

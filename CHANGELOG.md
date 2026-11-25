@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.48a — 2026-11-25
+
+Pre-edit state: commit `b87a7cf`. Add GitHub citation metadata for the software [D136]. The packaging test reads it with the bundled YAML parser and checks the copyright holder against LICENSE-MIT and the alternative licences against the project's SPDX expression.
+
 ## v3.34.48 — 2026-11-25
 
 Pre-edit state: commit `8fabc4c`. `PDFMD_CONFIG` treated `off` and `none` as filenames. Both now switch off the user config regardless of case or surrounding spaces [D139]. `--show-config`, `--doctor` and verbose runs name the switch. Regressions cover those reports, both words, whitespace, and the default, explicit and per-install files.

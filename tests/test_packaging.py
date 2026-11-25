@@ -131,6 +131,22 @@ class PyprojectTests(unittest.TestCase):
         scoop = json.loads((ROOT / "bucket/pdfmd.json").read_text(encoding="utf-8"))
         self.assertEqual(scoop["license"], "MIT OR Apache-2.0")  # the app's own licence; vendored parts are in pyproject
 
+    def test_citation_names_the_copyright_holder_and_the_software_licences(self):
+        from pdfmd_yaml import safe_load
+
+        citation = safe_load((ROOT / "CITATION.cff").read_text(encoding="utf-8"))
+        licence = (ROOT / "LICENSE-MIT").read_text(encoding="utf-8")
+        holder = re.search(r"^Copyright \(c\) \d+ (.+)$", licence, re.M).group(1)
+        given, family = holder.rsplit(" ", 1)
+        self.assertEqual(citation["authors"], [{"given-names": given, "family-names": family}])
+        self.assertEqual(citation["license"], re.search(r"\(([^)]+)\)", self.project["license"]).group(1).split(" OR "))
+        self.assertEqual(citation["cff-version"], "1.2.0")
+        self.assertEqual(citation["type"], "software")
+        self.assertEqual(citation["title"], "pdfmd")
+        self.assertRegex(citation["repository-code"], r"^https://github\.com/[^/]+/pdfmd(?:\.git)?$")
+        self.assertNotIn("version", citation)
+        self.assertNotIn("date-released", citation)
+
     def test_the_zipapp_and_the_wheel_ship_the_same_packages(self):
         # build_zipapp.py's list once lacked pdfmd_edit, pdfmd_help and pdfmd_raw (found in v3.28.26)
         import importlib.util
