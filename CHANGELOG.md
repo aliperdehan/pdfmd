@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.67c — 2026-11-26
+
+Pre-edit state: commit `bb6894e`. The chatter tests that mute table warnings still failed under `--strict` when a default font was missing. Disable automatic font selection and Unicode font fallback for the fixture's LaTeX output, and check that `off` still reports the strict table failure on stderr. The three strict-mute tests fail before and pass after with a scratch home missing a default font.
+
 ## v3.34.67b — 2026-11-26
 
 Pre-edit state: commit `f1f65e1`. The chatter fixture put `metadata.yaml` beside the global config, so a canonical temp path classified it as global metadata and printed `DEFAULTS` where the console test expected `FOUND`. Move the config into its own directory. The console-level test fails before and passes after with a canonical `TMPDIR`.

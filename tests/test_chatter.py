@@ -35,8 +35,11 @@ class Chatter(unittest.TestCase):
         (self.folder / name).write_text(f"{options}# Sample\n\n{body}", encoding="utf-8")
 
     def run_pdfmd(self, *args):
+        # Strict tests count table warnings independently of the machine's fonts.
+        command = [sys.executable, str(ROOT / "scripts" / "pdfmd"), "--rewrite", "--to", "latex",
+                   "--no-build-time", "--path-style", "relative", *args, "--no-auto", "font", "unicode"]
         return subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "pdfmd"), "--rewrite", "--to", "latex", "--no-build-time", "--path-style", "relative", *args],
+            command,
             cwd=self.folder, env={**os.environ, "PDFMD_CONFIG": str(self.config), "PDFMD_NO_PROMPT": "1"},
             capture_output=True, encoding="utf-8", timeout=90)
 
@@ -59,6 +62,7 @@ class Chatter(unittest.TestCase):
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
         self.assertEqual(done.stdout, "")
         self.assertIn("--strict: the build printed", done.stderr)
+        self.assertIn("WARN  table-repair:", done.stderr)
 
     def test_metadata_can_set_the_level(self):
         (self.folder / "metadata.yaml").write_text("pdfmd-options: {chatter: result}\n", encoding="utf-8")
