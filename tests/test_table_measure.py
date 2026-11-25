@@ -231,7 +231,8 @@ class MeasuredAlgorithm(unittest.TestCase):
         text = "| aa | bb |\n|-|---------|\n| aaaaaaaa | bbbbbbbb |\n"
         data = {"line": 120, "sep": 10, "cells": [[{"width": 8, "word": 8}, {"width": 4, "word": 4}],
                 [{"width": 32, "word": 32}, {"width": 16, "word": 16}]]}
-        result = self.apply(text, data, "--columns=10", "-M", "pdfmd-column-word-floor-limit=4")
+        result = self.apply(text, data, "--columns=10", "-M", "pdfmd-column-word-floor-limit=4",
+                              "-M", "pdfmd-column-ceil-margin=0")  # the floor alone: no ceiling (3.34.56)
         self.assertAlmostEqual(result[0], 0.16)
 
     def test_typst_count_override_and_failed_measurement_preserve_the_writer(self):

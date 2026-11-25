@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.62a — 2026-11-26
+
+Pre-edit state: commit `18b6d11`. [tables] `test_word_floor_cap_uses_measured_points_per_character` tests the floor cap alone, so it now switches the column ceiling (on by default since 3.34.56) off with `column-ceil-margin=0`; it expected 0.16 and got 0.32 with the ceiling on. No shipped code changed.
+
 ## v3.34.62 — 2026-11-25
 
 Pre-edit state: commit `9cbc24d`. [tables] Rebalancing took over 5% of a build in the table benchmarks, including a Typst PDF with measured
