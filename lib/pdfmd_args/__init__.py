@@ -446,7 +446,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--restore", type=Path, default=None, metavar="FILE",
                         help="write back the folder layout the source a PDF carries (--attach-source), or a Markdown "
                              "file keeps (--keep-source), records (name.md, metadata/, parts/, ...) into "
-                             "FILE's NAME.restored/ folder (or -o DIR); never overwrites. With --list, only show "
+                             "FILE's NAME.restored/ folder (or -o DIR). It may normalise front matter and never overwrites. With --list, only show "
                              "what it carries")
     parser.add_argument("--list", dest="list_only", action="store_true",
                         help="with --restore: show what the PDF carries, write nothing")

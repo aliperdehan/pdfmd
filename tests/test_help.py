@@ -80,6 +80,11 @@ class TieredHelp(unittest.TestCase):
             for code in CODES:
                 self.assertTrue(any(line.startswith(f"  {code} (") for line in lines), code)
 
+    def test_restore_help_mentions_front_matter_normalisation(self):
+        for args in (("--help",), ("--help", "source")):
+            with self.subTest(args=args):
+                self.assertIn("may normalise front matter", " ".join(run(*args).stdout.split()))
+
     def test_numbered_references_has_a_help_topic(self):
         for topic in ("output", "all"):
             text = run("--help", topic).stdout

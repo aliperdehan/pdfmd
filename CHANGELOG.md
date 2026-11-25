@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.47a — 2026-11-25
+
+Pre-edit state: commit `e23886e`. The short and source help for `--restore` now say that it may normalise front matter. Restore keeps the original formatting when the stored front matter still matches. The help regression exercises both views.
+
 ## v3.34.47 — 2026-11-25
 
 Pre-edit state: commit `cbdc92e`. The citation check reported missing entries and left uncited keys silent. `citation-unused` lists those keys in one note using the declared bibliography layers, preserving their spelling and honouring nocite. Regressions cover parts, inline and command-line bibliographies, unreadable sources and the wildcard.
