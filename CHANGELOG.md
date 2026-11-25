@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.47b — 2026-11-25
+
+Pre-edit state: commit `152320a`. The author offers pdfmd under MIT or Apache-2.0 [D127]. The original MIT text moves to LICENSE-MIT and the canonical Apache text is copied byte for byte to LICENSE-APACHE. The source distribution, Python metadata, zipapp, Homebrew and Scoop carry the licence choice. Vendored licences remain in their own files. The packaging regression checks the expression, files, checksum and manifests.
+
 ## v3.34.47a — 2026-11-25
 
 Pre-edit state: commit `e23886e`. The short and source help for `--restore` now say that it may normalise front matter. Restore keeps the original formatting when the stored front matter still matches. The help regression exercises both views.

@@ -87,6 +87,9 @@ def main() -> int:
         bundle.writestr("__main__.py", LAUNCHER)
         bundle.write(ROOT / "pdfmd.py", "pdfmd.py")
         files = 1
+        for name in ("LICENSE-MIT", "LICENSE-APACHE"):
+            bundle.write(ROOT / name, name)
+            files += 1
         for package in PACKAGES:
             files += add_tree(bundle, LIB / package, LIB)      # the packages sit at the archive root, not under lib/
         for source, name in DOCUMENTS:

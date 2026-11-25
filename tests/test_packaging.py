@@ -8,6 +8,8 @@ These read pyproject.toml itself, so that cannot go unnoticed again.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import sys
 import unittest
@@ -61,6 +63,7 @@ def _project_without_toml(text: str) -> dict:  # pragma: no cover -- 3.10 only
 
     return {
         "dependencies": key(project, "dependencies"),
+        "license": re.search(r'^license\s*=\s*"([^"]+)"', project, re.M).group(1),
         "license-files": key(project, "license-files"),
         "optional-dependencies": {name: key(extras, name) for name in re.findall(r"^(\w[\w-]*)\s*=", extras, re.M)},
         "_setuptools": {"py-modules": key(setuptools, "py-modules"), "packages": key(setuptools, "packages"),
@@ -117,6 +120,17 @@ class PyprojectTests(unittest.TestCase):
         for name in ("LICENSE", "assets/fonts/DejaVuSans.ttf", "assets/fonts/DejaVuSans-LICENSE.txt"):
             self.assertTrue((ROOT / "lib" / "pdfmd_inkmd" / name).is_file(), name)
 
+    def test_pdfmd_is_dual_licensed_in_the_distribution_metadata(self):
+        self.assertEqual(self.project["license"], "MIT OR Apache-2.0")
+        licences = set(self.project["license-files"])
+        self.assertTrue({"LICENSE-MIT", "LICENSE-APACHE", "lib/pdfmd_yaml/LICENSE", "lib/pdfmd_mhchem/LICENSE"} <= licences)
+        self.assertTrue((ROOT / "LICENSE-MIT").read_text(encoding="utf-8").startswith("MIT License\n"))
+        apache = (ROOT / "LICENSE-APACHE").read_bytes().replace(b"\r\n", b"\n")
+        self.assertEqual(hashlib.md5(apache, usedforsecurity=False).hexdigest(), "3b83ef96387f14655fc854ddc3c6bd57")
+        self.assertIn('license any_of: ["MIT", "Apache-2.0"]', (ROOT / "Formula/pdfmd.rb").read_text(encoding="utf-8"))
+        scoop = json.loads((ROOT / "bucket/pdfmd.json").read_text(encoding="utf-8"))
+        self.assertEqual(scoop["license"], self.project["license"])
+
     def test_the_zipapp_and_the_wheel_ship_the_same_packages(self):
         # build_zipapp.py's list once lacked pdfmd_edit, pdfmd_help and pdfmd_raw (found in v3.28.26)
         import importlib.util
@@ -153,7 +167,7 @@ class PyprojectTests(unittest.TestCase):
         text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         required = re.search(r'(?m)^requires = \["setuptools>=(\d+)', text)
         self.assertIsNotNone(required)
-        self.assertGreaterEqual(int(required.group(1)), 77)                    # PEP 639: license = "MIT AND Apache-2.0", license-files
+        self.assertGreaterEqual(int(required.group(1)), 77)                    # PEP 639: SPDX expressions and license-files
         self.assertRegex(text, r'(?m)^license = "[^"]+"')
 
     def test_the_changelog_starts_with_the_current_version(self):
@@ -171,6 +185,7 @@ class FallbackParserTests(unittest.TestCase):
         real = tomllib.loads(text)
         fallback = _project_without_toml(text)
         self.assertEqual(fallback["dependencies"], real["project"]["dependencies"])
+        self.assertEqual(fallback["license"], real["project"]["license"])
         self.assertEqual(fallback["license-files"], real["project"]["license-files"])
         self.assertEqual(fallback["optional-dependencies"], real["project"]["optional-dependencies"])
         self.assertEqual(fallback["_setuptools"]["py-modules"], real["tool"]["setuptools"]["py-modules"])

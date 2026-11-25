@@ -87,7 +87,6 @@ wait for an answer before any code.
 ## Distribution inside this repository, carried inside 3.31 [3ed]
 
 - [ ] Obsidian plugin (plain JS, `manifest.json` at the root, bare-version release from publish.yml, `pdfmd --install obsidian`); VS Code extension published from publish.yml if a token exists [3ed]
-- [ ] Dual MIT / Apache-2.0 licence, as wordcraft does: licence files, pyproject licence expression, README, packaging metadata [D127]
 
 ## Making the main `pdfmd.py` main code more manageable [3fi]
 

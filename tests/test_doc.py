@@ -164,7 +164,7 @@ class Bundling(unittest.TestCase):
             version = tuple(int(part) for part in setuptools.__version__.split(".")[:2])
         except ValueError:
             version = (0, 0)
-        if version < (77, 0):               # pyproject.toml's `license = "MIT AND Apache-2.0"` (PEP 639) is read by setuptools 77 and later
+        if version < (77, 0):               # PEP 639 licence expressions require setuptools 77 or later
             self.skipTest(f"the license of pyproject.toml needs setuptools 77 or newer (this is {setuptools.__version__})")
         with tempfile.TemporaryDirectory() as folder:
             done = subprocess.run([sys.executable, "setup.py", "-q", "egg_info", "--egg-base", folder, "build_py", "--build-lib", folder], cwd=ROOT,

@@ -2,7 +2,7 @@
     "version": "3.33.333",
     "description": "Markdown to a good-looking PDF: a Pandoc wrapper with smart defaults",
     "homepage": "https://github.com/aliperdehan/pdfmd",
-    "license": "MIT",
+    "license": "MIT OR Apache-2.0",
     "url": "https://files.pythonhosted.org/packages/14/c5/db0b8a78b890018d19f9f9f4c4c4e553d3998e7723aa8c94be2c6b347b58/pdfmd_cli-3.33.333-py3-none-any.whl",
     "hash": "2e489fcc31a41153b735620536d4291c69c4d38b3c1f05ee059cc24a7c6664e6",
     "depends": [

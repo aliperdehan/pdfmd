@@ -4027,7 +4027,8 @@ read with `pdfinfo -meta`. Turn this off with `--no-stamp-pdf-metadata`.
 
 ## License
 
-[MIT](https://github.com/aliperdehan/pdfmd/blob/main/LICENSE)
+pdfmd is available under your choice of the [MIT License](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE).
+Vendored components, including inkmd and PyYAML, carry their own licence files.
 
 `lib/pdfmd_mhchem/` is a Python port of Martin Hensel's
 [mhchemParser](https://github.com/mhchem/mhchemParser) (the parser of mhchem's `\ce` and `\pu` that MathJax and KaTeX

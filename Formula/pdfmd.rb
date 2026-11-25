@@ -5,7 +5,7 @@ class Pdfmd < Formula
   homepage "https://github.com/aliperdehan/pdfmd"
   url "https://files.pythonhosted.org/packages/d2/9a/5696857b5504381a48b9b4842e0b2e5c9ff738960faedb8f19d1fc5b9f97/pdfmd_cli-3.33.333.tar.gz"
   sha256 "82e2736e06baa4ea520e533a9908a506e4569b98ef2e15e0ddf980c0726e0368"
-  license "MIT"
+  license any_of: ["MIT", "Apache-2.0"]
 
   depends_on "libyaml"
   depends_on "pandoc"

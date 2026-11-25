@@ -9,9 +9,9 @@ name = "pdfmd-cli"
 dynamic = ["version"]
 description = "One command from Markdown to a good-looking PDF: a Pandoc wrapper with smart defaults, project-file discovery and a multi-engine fallback chain"
 readme = "README.md"
-# pdfmd is MIT; lib/pdfmd_mhchem/ is a port of mhchemParser and keeps its Apache licence
-license = "MIT AND Apache-2.0"
-license-files = ["LICENSE", "lib/pdfmd_inkmd/LICENSE", "lib/pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt", "lib/pdfmd_mhchem/LICENSE", "lib/pdfmd_yaml/LICENSE"]
+# pdfmd's licence choice. Vendored components keep the licences listed alongside it.
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE", "lib/pdfmd_inkmd/LICENSE", "lib/pdfmd_inkmd/assets/fonts/DejaVuSans-LICENSE.txt", "lib/pdfmd_mhchem/LICENSE", "lib/pdfmd_yaml/LICENSE"]
 authors = [{ name = "Ali Perdekhan" }]
 requires-python = ">=3.9"
 # YAML parsing is bundled as pure Python; installed PyYAML is only an optional
