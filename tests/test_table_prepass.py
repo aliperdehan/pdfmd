@@ -74,21 +74,22 @@ class Source(unittest.TestCase):
             source = root / "doc.md"
             original = "A | B\r\n|:––:+--|\r\n| C | D | E |\r\n".encode("utf-8")
             source.write_bytes(original)
+            env = {**os.environ, "PYTHONUTF8": "1"}  # the diff names the dashes: Windows writes cp1252 otherwise
             command = [sys.executable, str(ROOT / "scripts" / "pdfmd"), "--fix-tables", "doc.md",
                        "--table-repair", "widest"]
-            dry = subprocess.run([*command, "--dry-run"], cwd=root, capture_output=True, encoding="utf-8")
+            dry = subprocess.run([*command, "--dry-run"], cwd=root, capture_output=True, encoding="utf-8", env=env)
             self.assertEqual(dry.returncode, 0, dry.stdout + dry.stderr)
             self.assertIn("--- before", dry.stdout)
             self.assertIn("+|:----:|--|---|", dry.stdout)
             self.assertEqual(source.read_bytes(), original)
             self.assertEqual(list(root.iterdir()), [source])
-            written = subprocess.run(command, cwd=root, capture_output=True, encoding="utf-8")
+            written = subprocess.run(command, cwd=root, capture_output=True, encoding="utf-8", env=env)
             self.assertEqual(written.returncode, 0, written.stdout + written.stderr)
             self.assertIn("BACKUP", written.stdout)
             self.assertEqual(source.read_bytes(), b"| A | B |  |\r\n|:----:|--|---|\r\n| C | D | E |\r\n")
             backups = list((root / ".backups").iterdir())
             self.assertEqual([path.read_bytes() for path in backups], [original])
-            again = subprocess.run(command, cwd=root, capture_output=True, encoding="utf-8")
+            again = subprocess.run(command, cwd=root, capture_output=True, encoding="utf-8", env=env)
             self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
             self.assertNotIn("WROTE", again.stdout)
 
