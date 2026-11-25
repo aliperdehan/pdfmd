@@ -106,7 +106,7 @@ class Reading(unittest.TestCase):
 
     def test_headings(self):
         self.assertEqual(codes("# A\n\n### C\n"), ["heading-jump"])
-        self.assertEqual(codes("## A\n\n### B\n\n# C\n\n## D\n"), [])
+        self.assertEqual(codes("## A\n\n### B\n\n# C\n\n## D\n"), ["section-empty"])
         self.assertEqual(codes("# A\n\n#B\n"), ["heading-space"])
         self.assertEqual(codes("# A\n\n##\n"), ["heading-empty"])
         self.assertEqual(codes("A\n=\n\nB\n-\n\n#### D\n"), ["heading-jump"])         # setext headings count
@@ -114,7 +114,7 @@ class Reading(unittest.TestCase):
     def test_ids_and_anchors(self):
         text = "# Intro {#a}\n\n## Intro\n\n## Intro\n\n[x](#a) [y](#intro) [z](#intro-1) [w](#intro-2) [v](#missing)\n"
         found = lint([Source("d.md", None, text)])
-        self.assertEqual([problem.code for problem in found], ["heading-repeated", "anchor-missing"])
+        self.assertEqual([problem.code for problem in found], ["heading-repeated", "section-empty", "anchor-missing"])
         self.assertIn("missing", found[-1].message)
         self.assertEqual(codes("# A {#x}\n\n## B {#x .c}\n"), ["id-duplicate"])
         self.assertEqual(codes("# A\n\n`{#x}` and {#1} and \\textbf{#1}.\n\n{#1}\n"), ["attr-stray"])
@@ -127,6 +127,19 @@ class Reading(unittest.TestCase):
         self.assertEqual([(p.file, p.line, p.severity) for p in found], [("doc.md", 3, "note")])
         self.assertIn("'Results' appears 3 times at level 2", found[0].message)
         self.assertIn("#results-1, #results-2, #results-3", found[0].message)
+
+    def test_sections_with_only_a_heading(self):
+        text = ("# Report\n\n## Empty\n\n<!-- draft -->\n\n## With code\n\n```text\nexample\n```\n\n"
+                "A Setext heading\n----------------\n\n# Next\n\n## Child\n\n$$x$$\n\n# End\n")
+        found = [p for p in lint([Source("doc.md", None, text)]) if p.code == "section-empty"]
+        self.assertEqual([(p.line, p.severity) for p in found], [(3, "warning"), (13, "warning")])
+
+    def test_a_heading_only_part_counts_even_at_the_end(self):
+        sources = [Source("book.md", None, "---\ntitle: Book\n---\n\nLead.\n"),
+                   Source("parts/content.md", None, "# With text\n\nText.\n"),
+                   Source("parts/empty.md", None, "---\ntitle: Part\n---\n\n# Heading only\n\n<!-- draft -->\n")]
+        found = [p for p in lint(sources) if p.code == "section-empty"]
+        self.assertEqual([(p.file, p.line) for p in found], [("parts/empty.md", 5)])
 
     def test_crossref_and_latex_refs(self):
         text = "# A\n\n![cap](a.png){#fig:one}\n\nSee @fig:one, @fig:two and \\ref{eq:e}.\n\n\\begin{equation}\\label{eq:e}\\end{equation}\n"

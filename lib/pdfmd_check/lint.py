@@ -46,6 +46,7 @@ CODES: dict[str, tuple[str, str]] = {
     "heading-space": ("warning", "#Heading without a space after the # (it is a paragraph)"),
     "heading-empty": ("warning", "a heading with no text"),
     "heading-repeated": ("note", "the same heading text at one level, with its ids (repeats can be intentional, e.g. Results in each part)"),
+    "section-empty": ("warning", "a heading immediately followed by one at the same or a higher level, or a heading-only part"),
     "asset-large": ("warning", "an image or data file bigger than the size budget (--max-asset-mb)"),
     "calc-undefined": ("error", "a calculator span, `::: calc` line or {ans} that uses a name nothing defines"),
     "calc-redefined": ("note", "a calculator name defined more than once (a use sees the nearest definition above it, else the first below)"),
@@ -123,6 +124,7 @@ GRAPHICS_RE = re.compile(r"\\includegraphics\*?\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}"
 CSV_FILE_RE = re.compile(r"\{[^{}\n]*\.csv\b[^{}\n]*\}")
 FILE_ATTRIBUTE_RE = re.compile(r"""\bfile\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s{}]+))""")
 HTML_TAG_RE = re.compile(r"<[A-Za-z][^>]*>")
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 HTML_ID_RE = re.compile(r"""\b(?:id|name)\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 LATEX_LABEL_RE = re.compile(r"\\label\{([^}]+)\}")
 LATEX_REF_RE = re.compile(r"\\(?:eq|auto|c|C|page|name|v|)ref\*?\{([^}]+)\}")
@@ -468,6 +470,7 @@ def document_ids(analyses: list[Analysis], findings: Findings) -> set[str]:
 class Heading:
     analysis: Analysis
     line: int
+    end_line: int
     level: int
     text: str
 
@@ -482,6 +485,7 @@ def headings(analyses: list[Analysis], findings: Findings, ids: set[str], read_h
         original = analysis.source.text.split("\n")
         for index, line in enumerate(lines):
             number = index + 1
+            end_line = number
             level, text = 0, ""
             atx = ATX_RE.match(line)
             if atx:
@@ -498,18 +502,20 @@ def headings(analyses: list[Analysis], findings: Findings, ids: set[str], read_h
                   and SETEXT_RE.match(lines[index + 1]) and not SETEXT_RE.match(line)
                   and not line.startswith(("    ", "\t", ">", "- ", "* ", "+ ", "|", ":"))):
                 level, text = (1 if lines[index + 1].lstrip().startswith("=") else 2), original[index].strip()
+                end_line += 1
             if not level:
                 continue
             if previous and level > previous + 1:
                 findings.add(analysis, number, "heading-jump",
                              f"heading level {previous} is followed by level {level} (level {previous + 1} is skipped)")
             previous = level
-            found.append(Heading(analysis, number, level, text))
+            found.append(Heading(analysis, number, end_line, level, text))
             for identifier in heading_identifiers(text):
                 count = counts.get(identifier, 0)
                 counts[identifier] = count + 1
                 ids.add(identifier if count == 0 else f"{identifier}-{count}")
     repeated_headings(found, findings, ids, read_heading_ids)
+    empty_sections(analyses, found, findings)
 
 
 def repeated_headings(headings: list[Heading], findings: Findings, ids: set[str], read_heading_ids: Callable | None) -> None:
@@ -545,6 +551,30 @@ def repeated_headings(headings: list[Heading], findings: Findings, ids: set[str]
         names = ", ".join(f"#{identifiers[index]}" if identifiers[index] else "(no id)" for index in group)
         findings.add(heading.analysis, heading.line, "heading-repeated",
                      f"{text!r} appears {len(group)} times at level {level} ({names})")
+
+
+def empty_sections(analyses: list[Analysis], headings: list[Heading], findings: Findings) -> None:
+    # Count content lines across the scaffold and parts. Code, maths and raw blocks count as body content.
+    positions: dict[Analysis, list[int]] = {}
+    total = 0
+    for analysis in analyses:
+        text = analysis.source.text
+        body = blank(text[:analysis.front_end]) + blank_matches(HTML_COMMENT_RE, text[analysis.front_end:])
+        positions[analysis] = counts = [total]
+        for line in body.split("\n"):
+            total += bool(line.strip())
+            counts.append(total)
+
+    for index, heading in enumerate(headings):
+        counts = positions[heading.analysis]
+        end = counts[heading.end_line]
+        only_heading = (heading.analysis is not analyses[0] and counts[heading.line - 1] == counts[0] and end == counts[-1])
+        if only_heading:
+            findings.add(heading.analysis, heading.line, "section-empty", "this part contains only its heading")
+        elif index + 1 < len(headings):
+            next_heading = headings[index + 1]
+            if next_heading.level <= heading.level and end == positions[next_heading.analysis][next_heading.line - 1]:
+                findings.add(heading.analysis, heading.line, "section-empty", "this section contains only its heading")
 
 
 def images_and_files(analysis: Analysis, findings: Findings, folders: list[Path], limit: int | None = None) -> None:

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.46 — 2026-11-25
+
+Pre-edit state: commit `eb0d7a5`. A heading with no intervening body before a peer or ancestor heading was silent. `--check` warns with `section-empty`, including a heading-only part at the end of a scaffold. Regressions cover Setext headings, comments, code, maths and part front matter.
+
 ## v3.34.45 — 2026-11-25
 
 Pre-edit state: commit `750222e`. Repeated heading text at one level was silent. `--check` prints a note with the count and IDs across the document, including parts. When available, Pandoc supplies the IDs using the selected reader. Regressions cover visible text, heading level, parts and both Markdown and GFM IDs.
