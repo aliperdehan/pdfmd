@@ -47,6 +47,7 @@ UNSET = {
     "options.figure-fit": "on: fit images and their captions to one page",
     "options.pagecite-terms": "p., pp.",
     "options.numbered-references": "on when the markers match a trailing source list (pdfmd and obsidian flavours)",
+    "options.citation-aliases": "none",
     "options.excerpt-prefix": "x",
     "options.excerpt-page-terms": "p., pp.",
     "options.excerpt-quote-min-words": "3 words",
@@ -314,6 +315,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.citation-engine", "Citation engine",
                (("citeproc", "Pandoc's citeproc (the default)"), ("natbib", "natbib / BibTeX"),
                 ("biblatex", "biblatex / biber")), "citeproc", "", "Citations"),
+        text("options.citation-aliases", "Citation key aliases", "A YAML mapping, e.g. {short: existing-key}.",
+             "Citations", check="citation-aliases"),
         choice("options.numbered-references", "Convert numbered source lists to citations",
                (("on", "when the markers match a trailing numbered source list"),
                 ("off", "leave the Markdown as written")), "",
@@ -947,6 +950,20 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                tuple((value, {"plain": "a numbered list", "fancy": "full screen (pdfmd --install tui)"}[value])
                      for value in setup_ui_choices), "plain", "", "Setup"),
     ]
+
+
+def parse_citation_aliases(text: str) -> dict:
+    from pdfmd_base import core
+    from pdfmd_cite.aliases import valid_mapping
+
+    message = "A YAML mapping of citation keys, e.g. {short: existing-key}, please."
+    try:
+        aliases = core.yaml.safe_load(text)
+    except core.yaml.YAMLError as error:
+        raise ValueError(message) from error
+    if not valid_mapping(aliases):
+        raise ValueError(message)
+    return aliases
 
 
 def get(config: dict, key: str):

@@ -788,6 +788,14 @@ follows the ordinary Lua trust check and `--no-auto lua`. An active
 filter enables automatic citation processing even if the source has no
 citations. `--no-citeproc` disables automatic citeproc.
 
+**Citation key aliases.** Set `pdfmd-options: {citation-aliases: {short: existing-key}}`
+to resolve `[@short]` as `[@existing-key]` before citeproc. The default
+is no aliases. A document, metadata file, folder or user config can add
+aliases, and the nearest definition of each alias wins. Use **Citation key
+aliases** in `--setup` to enter a YAML mapping. A real bibliography key
+wins over an alias of the same name. An alias whose target is missing
+leaves the citation unresolved. Both cases give a warning naming the alias.
+
 **Numbered source lists.** In the pdfmd and Obsidian flavours, numeric
 markers in prose become Pandoc citations when every marker matches a final
 numbered source list. Write `[1]`, `[[1]](https://example.org/)`, `[1][3]`,

@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.34.38 — 2026-11-25
+
+Pre-edit state: commit `f8834f8`. Short citation keys had to be changed by hand
+before Pandoc could resolve them. The `citation-aliases` mapping follows the
+normal settings layers and resolves aliases before citeproc on each writer
+route. The real bibliography key wins a clash, and a missing target leaves
+the citation unresolved. Both warn. Local bibliography discovery can find
+an alias target.
+
+- Synthetic builds check precedence, warnings, local discovery, HTML and
+  LaTeX, Typst, GFM and reStructuredText exports.
+
 ## v3.34.37 — 2026-11-25
 
 Pre-edit state: commit `9ef4f86`. Local references inside an included TeX

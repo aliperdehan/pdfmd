@@ -49,6 +49,48 @@ class Tree(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Layers(Tree):
+    def test_citation_aliases_follow_the_option_layers(self):
+        self.bib("refs.bib", "book", "Aliased Book")
+        self.bib("other.bib", "other", "Other Book")
+        self.env["PDFMD_CONFIG"] = str(self.write("user.yaml", "options: {citation-aliases: {global: book, short: other}}\n"))
+        self.write("../.pdfmd/config.yaml", "options: {citation-aliases: {project: book}}\n")
+        self.write(".pdfmd/config.yaml", "options: {citation-aliases: {folder: book}}\n")
+        self.write("d.yaml", "pdfmd-options: {citation-aliases: {meta: book, short: other}}\n")
+        self.write("d.md", "---\nbibliography: [refs.bib, other.bib]\n"
+                   "pdfmd-options: {citation-aliases: {short: book}}\n---\n"
+                   "[@global; @project; @folder; @meta; @short, p. 7]\n")
+        done = self.run_pdfmd()
+        html = self.output(done)
+        self.assertIn('data-cites="book book book book book"', html)
+        self.assertIn("Aliased Book", html)
+        self.assertNotIn("Other Book", html)
+        self.assertNotIn("Citeproc: citation", done.stderr)
+        for writer in ("latex", "typst", "gfm", "rst"):
+            with self.subTest(writer=writer):
+                self.assertIn("Aliased Book", self.output(self.run_pdfmd(target=writer), writer))
+
+    def test_citation_aliases_keep_real_keys_and_warn_about_missing_targets(self):
+        self.bib("refs.bib", "book", "Real Book")
+        self.write("d.md", "---\nbibliography: refs.bib\n"
+                   "references: [{id: inline, type: book, title: Inline Book}]\n"
+                   "pdfmd-options: {citation-aliases: {book: inline, gone: missing, short: inline}}\n"
+                   "---\n[@book; @short; @gone]\n")
+        done = self.run_pdfmd("--no-citeproc", "--citeproc")
+        html = self.output(done)
+        self.assertIn("Real Book", html)
+        self.assertIn("Inline Book", html)
+        self.assertIn('data-cites="book inline gone"', html)
+        self.assertIn("citation-aliases: 'book' is a bibliography key", done.stderr)
+        self.assertIn("citation-aliases: 'gone' targets missing key 'missing'", done.stderr)
+
+    def test_citation_alias_target_can_be_found_by_bibliography_discovery(self):
+        self.bib("sources.bib", "long-key", "Discovered Book")
+        self.write("d.md", "---\npdfmd-options: {citation-aliases: {short: long-key}}\n---\n[@short]\n")
+        done = self.run_pdfmd()
+        html = self.output(done)
+        self.assertIn('data-cites="long-key"', html)
+        self.assertIn("Discovered Book", html)
+
     def test_sources_from_every_layer_and_plus_keys_add(self):
         layers = [("../.pdfmd/metadata.yaml", "folder"), ("../metadata/metadata.yaml", "parent"),
                   ("metadata/metadata.yaml", "accessory"), ("d.yaml", "local")]

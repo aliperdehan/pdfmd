@@ -35,6 +35,7 @@ from pdfmd_base import core
 from pdfmd_base import noted, timed
 
 from pdfmd_base import pandoc_run
+from pdfmd_cite.aliases import apply as apply_citation_aliases
 from pdfmd_engines.memory import scoped
 
 from . import page_numbers
@@ -620,6 +621,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += core.html_pandoc_args(md_path, metadata_files, pandoc_options, self_contained, note)
                 cmd += office_arguments
                 cmd += pandoc_options
+                apply_citation_aliases(cmd, md_path, metadata_files)
                 cmd += core.bibliography_spacing_args(md_path, metadata_files, cmd)
                 if is_tex_target:
                     cmd += core.tex_package_args([md_path, *parts_inputs], no_auto, note)
@@ -895,6 +897,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # on the actual pandoc command line. Confirmed via
                     # --verbose CMD output before this fix.)
                     cmd += pandoc_options
+                    apply_citation_aliases(cmd, md_path, metadata_files)
                     cmd += core.bibliography_spacing_args(md_path, metadata_files, cmd)
                     if engine in core.LATEX_ENGINES:
                         cmd += core.tex_package_args([md_path, *parts_inputs], no_auto, note)

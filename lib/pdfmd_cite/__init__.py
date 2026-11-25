@@ -16,6 +16,7 @@ from tempfile import mkstemp
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
+from pdfmd_cite.aliases import apply as apply_citation_aliases
 
 
 # pdfmd-options.citation-engine: "citeproc" (the default -- a document only
@@ -389,6 +390,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if "--citeproc" in pandoc_options:
                 cmd += before_citeproc
             cmd += pandoc_options
+            apply_citation_aliases(cmd, md_path, metadata_files)
             cmd += core.paragraph_spacing_latex_args(md_path, metadata_files)
             if preamble_files:
                 for preamble_file in preamble_files:

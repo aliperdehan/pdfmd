@@ -79,6 +79,12 @@ def discover(sources, metadata_files, layers, read, no_auto):
     wanted = core.deferred("pdfmd_excerpts.resolution", "candidate_keys")(
         sources, metadata_files, wanted, known, no_auto, layers)
     missing = wanted - known
+    if missing and not core.CITEPROC_DISABLED:
+        from pdfmd_cite.aliases import KEY, valid_mapping
+
+        aliases = core.first_pdfmd_option(sources[0], metadata_files, KEY)
+        if valid_mapping(aliases):
+            missing.update(aliases[key] for key in aliases.keys() & missing if aliases[key] not in known)
     added = []
     if missing:
         for path in candidates(sources, metadata_files):

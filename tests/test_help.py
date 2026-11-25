@@ -78,6 +78,10 @@ class TieredHelp(unittest.TestCase):
             self.assertIn("pdfmd-options.numbered-references", text)
             self.assertIn("numbered-references-off", text)
 
+    def test_citation_aliases_has_a_help_topic(self):
+        for topic in ("output", "all"):
+            self.assertIn("pdfmd-options.citation-aliases", run("--help", topic).stdout)
+
     def test_pagecite_keys_have_a_help_topic(self):
         text = run("--help", "output").stdout.replace("-\n                        ", "-")
         self.assertIn("--pagecite", text)

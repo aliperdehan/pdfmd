@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import builtins
 
-from .registry import Setting, from_stored, read, shown, to_stored, write
+from .registry import Setting, from_stored, parse_citation_aliases, read, shown, to_stored, write
 
 
 def available() -> bool:
@@ -244,6 +244,12 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
                         value = int(number) if number == int(number) else number
                     except ValueError:
                         state["message"] = "A number, please."
+                        continue
+                elif setting.check == "citation-aliases":
+                    try:
+                        value = parse_citation_aliases(value)
+                    except ValueError as error:
+                        state["message"] = str(error)
                         continue
                 elif setting.check == "list":
                     value = [item.strip() for item in value.split(",") if item.strip()]

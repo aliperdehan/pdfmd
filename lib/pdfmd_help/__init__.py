@@ -154,6 +154,9 @@ PRE_CITEPROC_HELP = ("pdfmd-options.lua-filter-before-citeproc: named Lua filter
                     "Use a path or list, or append with lua-filter-before-citeproc+. Default: none.\n")
 
 
+CITATION_ALIASES_HELP = ("pdfmd-options.citation-aliases: map short keys to bibliography keys before citeproc, e.g. "
+                         "{short: existing-key}. Real keys win. Missing targets warn. Default: none.\n")
+
 NUMBERED_REFERENCES_HELP = ("pdfmd-options.numbered-references: trailing numbered source lists become Pandoc citations "
                             "when every marker matches (pdfmd and obsidian flavours). Set off to keep the Markdown. "
                             "--check reports numbered-references-off for a matching document with conversion off. "
@@ -163,7 +166,7 @@ NUMBERED_REFERENCES_HELP = ("pdfmd-options.numbered-references: trailing numbere
 def _full(parser: argparse.ArgumentParser) -> str:
     return parser.format_help() + ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
                                  "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"
-                                 + FIGURE_FIT_HELP + PRE_CITEPROC_HELP + NUMBERED_REFERENCES_HELP)
+                                 + FIGURE_FIT_HELP + PRE_CITEPROC_HELP + CITATION_ALIASES_HELP + NUMBERED_REFERENCES_HELP)
 
 
 def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
@@ -189,7 +192,7 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
         if topic == "output":
             text += ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
                      "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"
-                     + FIGURE_FIT_HELP + PRE_CITEPROC_HELP + NUMBERED_REFERENCES_HELP)
+                     + FIGURE_FIT_HELP + PRE_CITEPROC_HELP + CITATION_ALIASES_HELP + NUMBERED_REFERENCES_HELP)
         return text
     finally:
         parser.description = previous

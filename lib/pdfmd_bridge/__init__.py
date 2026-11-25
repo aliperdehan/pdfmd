@@ -36,6 +36,7 @@ from pdfmd_base import core
 from pdfmd_base import timed
 
 from pdfmd_base import pandoc_run
+from pdfmd_cite.aliases import apply as apply_citation_aliases
 
 
 @timed("soffice")
@@ -146,6 +147,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                                   labels=labels, force_filter=True) as office_arguments:
                 cmd += office_arguments
                 cmd += pandoc_options
+                apply_citation_aliases(cmd, md_path, metadata_files)
                 cmd += core.bibliography_spacing_args(md_path, metadata_files, cmd)
                 for lua_filter in lua_filters:
                     cmd += ["--lua-filter", str(lua_filter)]

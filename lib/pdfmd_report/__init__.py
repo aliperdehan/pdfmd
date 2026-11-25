@@ -14,6 +14,7 @@ from pathlib import Path
 from pdfmd_report import route, titles
 
 from pdfmd_base import pandoc_run
+from pdfmd_cite.aliases import apply as apply_citation_aliases
 from pdfmd_build import page_numbers
 from pdfmd_engines.memory import scoped
 
@@ -342,6 +343,7 @@ def run(core, *,
                 # matching comment.
                 cmd += report_office_arguments
                 cmd += pandoc_options
+                apply_citation_aliases(cmd, files[0], metadata_files)
                 cmd += core.bibliography_spacing_args(files[0], metadata_files, cmd)
                 if report_fonts_filter is not None:
                     cmd += ["--lua-filter", str(report_fonts_filter)]
@@ -498,6 +500,7 @@ def run(core, *,
                     # pandoc_options after --citeproc: see convert_one's
                     # matching comment.
                     cmd += pandoc_options
+                    apply_citation_aliases(cmd, files[0], metadata_files)
                     cmd += core.bibliography_spacing_args(files[0], metadata_files, cmd)
                     if engine in LATEX_ENGINES:
                         cmd += tex_package_args(files, report_no_auto, report_note)

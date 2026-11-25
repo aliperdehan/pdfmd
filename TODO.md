@@ -29,7 +29,6 @@ wait for an answer before any code.
 - [ ] Images and display math in `--view` through the kitty graphics protocol, after the queue: first a spike of Unicode placeholders in Ghostty (they survive the pager), else no pager when images are drawn [3dm D84]
 - [ ] Logo: a README header (a `<picture>` with absolute raw URLs, light and dark wordmark) and the social preview uploaded in the repository settings, before the next push [3ew]
 - [ ] `\md{...}`: nulabreport's macros taking `\md{}`; native tier; text-level pre-passes (table-ascii, includes, embed blocks) inside the macro, unchecked [3dc]
-- [ ] Citation key aliases, resolved before citeproc [3bo]
 - [ ] Mixed-format parts: docx, tex, odt, html parts inside a `parts: auto` build [3cl]
 - [ ] Settings layers: a per-install layer that wins over the user config, `--json` for `--show-config` and `--doctor` [3bh]
 - [ ] Word `keep`; markup (centre, highlight, landscape) in OpenDocument [3bh, 3ay]

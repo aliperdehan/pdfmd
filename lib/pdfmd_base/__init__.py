@@ -271,4 +271,8 @@ def sha1_file(path: Path) -> str | None:
 def pandoc_run(command, **kwargs):
     """Load the optional heap-cap machinery only when a Pandoc invocation is needed."""
     from pdfmd_engines.memory import run
-    return run(command, **kwargs)
+    result = run(command, **kwargs)
+    if result.stderr and any(isinstance(arg, str) and arg.startswith("pdfmd-citation-aliases=") for arg in command):
+        from pdfmd_cite.aliases import show_warnings
+        show_warnings(result)
+    return result

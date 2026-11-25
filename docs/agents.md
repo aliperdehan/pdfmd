@@ -201,6 +201,11 @@ and the setting is off.
 
 Set `pdfmd-options.lua-filter-before-citeproc` to run a trusted Lua filter before citations are resolved. The list is empty by default and follows the same layers and relative paths as `lua-filter`.
 
+Set `pdfmd-options: {citation-aliases: {short: existing-key}}` to have
+citeproc resolve `[@short]` to an existing bibliography entry. A collision
+keeps the real key, and a missing target leaves the citation unresolved.
+Both warn.
+
 1. `pdfmd --doctor` says which engines exist. A missing one is not an error of the document.
 2. `pdfmd report.md --verbose` shows the command. Run it by hand to see the engine's own message.
 3. A LaTeX error names the file and the line in the source (`FAIL ... line 12`); `--debug` keeps the log.
