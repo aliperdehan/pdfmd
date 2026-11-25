@@ -122,10 +122,17 @@ def setup_sources(module, folder: Path, stores: dict):
             for directory, data, metadata in core.folder_walk(str(folder.resolve().parent)):
                 label = f"folder {core.display_path(directory.parent)}"
                 found.append((label, {"config": data or {}, "metadata": core.metadata_file_yaml(metadata) if metadata else {}}))
-        glob = {"config": core.load_config(), "metadata": {}}
+        from pdfmd_config import global_config_layers
+
+        glob = {"config": {}, "metadata": {}}
         metadata = core.global_metadata_file()
         if metadata is not None:
             glob["metadata"] = core.metadata_file_yaml(metadata)
+        for layer, _, data in global_config_layers():
+            if layer == "per-install":
+                found.append(("per-install", {"config": data, "metadata": {}}))
+            else:
+                glob["config"] = data
         found.append(("global", glob))
         return found
 

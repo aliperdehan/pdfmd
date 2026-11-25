@@ -35,10 +35,11 @@ KIT_CACHE_FILE = "kits.json"
 
 def configured_kits() -> list[tuple[Path, dict]]:
     """(folder, {mode: [aliases]}) of each `kits:` entry of the config; a relative path is read from the config's folder."""
-    raw = core.load_config().get("kits")
+    from pdfmd_config import global_config_layers
+
+    config, raw = next(((path, data["kits"]) for _, path, data in global_config_layers() if "kits" in data), (None, None))
     if raw is None:
         return []
-    config = core.config_path()
     found: list[tuple[Path, dict]] = []
     for entry in (raw if isinstance(raw, list) else [raw]):
         aliases: dict = {}

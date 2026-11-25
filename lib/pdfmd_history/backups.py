@@ -402,7 +402,9 @@ def init_backups_command(args) -> int:
         if yaml is None or core.config_path() is None:
             print("ERROR  the config file is switched off or PyYAML is missing.", file=sys.stderr)
             return 1
-        data = core.load_config()
+        from pdfmd_config import read_config
+
+        data = read_config(core.config_path())
         options = data.setdefault("options", {}) if isinstance(data.get("options"), dict) or "options" not in data else {}
         added = [key for key in wanted if key not in options]
         for key in added:

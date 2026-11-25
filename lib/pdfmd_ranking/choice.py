@@ -53,8 +53,8 @@ def ranking_for_document(mapping: dict, where: str) -> dict:
 def ranking_layers(files: list[Path]) -> tuple[list[tuple[str, dict]], set[str]]:
     """The `ranking` mappings in force for these documents, NEAREST FIRST (the order Ranking.from_layers takes): the documents' own
     (front matter, then a metadata file named after the document; the newest document first), then, folder by folder from theirs
-    upward, `.pdfmd/ranking.yaml`, the folder's `metadata.yaml`, the folder settings' `options.ranking`; then the global
-    `ranking.yaml` and the config's `options.ranking`. A `ranking.yaml` or folder settings with `inherit: false` end the climb.
+    upward, `.pdfmd/ranking.yaml`, the folder's `metadata.yaml`, the folder settings' `options.ranking`; then the per-install
+    config, the user's `ranking.yaml` and user config. A `ranking.yaml` or folder settings with `inherit: false` ends the climb.
     Also the names of the layers that are the documents' own (ranking_clashes). Nothing here is read until bare `pdfmd` has several
     documents to choose from."""
     directory = files[0].parent.resolve()
@@ -106,14 +106,18 @@ def ranking_layers(files: list[Path]) -> tuple[list[tuple[str, dict]], set[str]]
         if ranking_inherit_off(file_mapping) or (entry is not None and ranking_inherit_off(entry[1])):
             stopped = True
             break
-    path = core.config_path()
-    if not stopped and path is not None:
-        file_mapping = read_ranking_file(path.parent / RANKING_FILE)
-        if file_mapping is not None:
-            layers.append((core.display_path(path.parent / RANKING_FILE), file_mapping))
-        mapping = ranking_of_options(core.config_options())
-        if mapping is not None:
-            layers.append((f"config {core.display_path(path)}", mapping))
+    if not stopped:
+        from pdfmd_config import global_config_layers
+
+        for layer, path, data in global_config_layers():
+            if layer == "user":
+                file_mapping = read_ranking_file(path.parent / RANKING_FILE)
+                if file_mapping is not None:
+                    layers.append((core.display_path(path.parent / RANKING_FILE), file_mapping))
+            mapping = ranking_of_options(data.get("options"))
+            if mapping is not None:
+                label = "config" if layer == "user" else "per-install config"
+                layers.append((f"{label} {core.display_path(path)}", mapping))
     return layers, own
 
 
@@ -161,6 +165,11 @@ def which_command(names: list[str], args) -> bool:
     """`pdfmd --which [NAME ...]`: say what a bare `pdfmd` would build and why, or which file each NAME finds, and build nothing.
     Every Markdown file of the folder gets a row (built, left out and why, tied), then the rules in force and where they came from."""
     from pdfmd_ranking import RankingError, choose, explain
+    from pdfmd_config import global_config_layers
+
+    for layer, path, _ in global_config_layers():
+        if layer == "per-install":
+            print(f"per-install config file: {path}")
     ok = True
     if names:
         for name in names:

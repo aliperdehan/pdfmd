@@ -3577,12 +3577,15 @@ where it is and what it sets. Its `options:` block takes the same keys as a
 document's `pdfmd-options:` and applies to every document, below anything the
 document or its metadata files say (the command line beats all of them);
 `translit:` is the romanization packs of the name lookup. `PDFMD_CONFIG=other.yaml`
-uses another file, `PDFMD_CONFIG=` (empty) none.
+uses another user file, and `PDFMD_CONFIG=` (empty) disables the user file.
+The optional per-install config at `sys.prefix/etc/pdfmd/config.yaml` uses the
+same format and takes precedence over the user config. `--show-config` and
+`--which` name the per-install file when it is present.
 
 **Settings for a folder** (v3.29): a `.pdfmd/config.yaml` in a document's folder, or in any folder above it, has the same
 `options:` for everything under it, and a `.pdfmd/metadata.yaml` the metadata (author, language, paper, fonts ...: what the global
 `metadata.yaml` of `--setup` holds). The order, strongest first: the command line, the document's `pdfmd-options`, its metadata
-files, the folder settings (the nearest folder first, then the ones above it), your global `config.yaml` and `metadata.yaml`,
+files, the folder settings (the nearest folder first, then the ones above it), the per-install config, your global `config.yaml` and `metadata.yaml`,
 pdfmd's own defaults. **`pdfmd --setup FOLDER`** (`.` for this one) writes the two files from the same numbered screen as the
 global setup: it offers the metadata rows and the options a build reads from a folder, leaves out what only the global setup
 reaches (the `o` key lists them: the page header and footer, the HTML, Markdown and text output tables, the editor ...) and

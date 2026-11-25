@@ -337,6 +337,11 @@ def doctor_report(deep: bool = False) -> bool:
                  f"{engine_name} is installed but cannot build a page")
 
     print("\nSettings and cache:")
+    from pdfmd_config import global_config_layers
+
+    for layer, path, _ in global_config_layers():
+        if layer == "per-install":
+            line(None, f"per-install config file: {path}")
     config = core.config_path()
     line(None, "config file: " + ("switched off (PDFMD_CONFIG is empty)" if config is None else
                                   f"{config} ({'present' if config.is_file() else 'none; pdfmd --init-config writes one'})"))

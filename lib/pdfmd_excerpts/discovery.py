@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 from pdfmd_base import core
+from pdfmd_config import global_option_layers
 from .record import RecordError
 
 
@@ -38,7 +39,7 @@ def discover(document, metadata, verbose=False):
     layers += [(path, core.metadata_file_yaml(path).get("pdfmd-options", {}))
                for path in core.metadata_files_by_priority(metadata)]
     layers += [(Path(path), options) for path, options in core.folder_layer_files(str(document.parent))]
-    layers += [(core.config_path(), core.config_options())]
+    layers.extend((path, options) for _, path, options in global_option_layers())
     for origin, options in layers:
         if not isinstance(options, dict) or "excerpts" not in options:
             continue

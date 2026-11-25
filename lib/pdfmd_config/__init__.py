@@ -96,7 +96,7 @@ CONFIG_KEYS = ("translit", "options", "setup-ui", "disabled", "kits")
 
 
 CONFIG_TEMPLATE = """# pdfmd's global config. Everything is optional; delete a line to get the built-in default back.
-# Precedence: command line > the document's `pdfmd-options:` > its metadata files > this file.
+# Precedence: command line > document > metadata files > folder settings > per-install config > user config.
 
 # Romanization packs for finding a document by a name typed in Latin letters
 # (greek armenian georgian hebrew arabic hangul kana han other; Cyrillic is always on).
@@ -136,10 +136,12 @@ def config_path() -> Path | None:
     return core.config_root() / CONFIG_FILENAME
 
 
-@lru_cache(maxsize=None)
-def load_config() -> dict:
-    """The config file as a dict ({} when there is none, or it cannot be read: with a WARN)."""
-    path = core.config_path()
+def install_config_path() -> Path:
+    return Path(sys.prefix) / "etc" / "pdfmd" / CONFIG_FILENAME
+
+
+def read_config(path: Path | None) -> dict:
+    """Read one config file, warning when it cannot be read."""
     if path is None or core.yaml is None or not path.is_file():
         return {}
     try:
@@ -158,6 +160,39 @@ def load_config() -> dict:
               f"{', '.join(unknown)} (known: {', '.join(CONFIG_KEYS)}); `options:` holds pdfmd-options",
               file=sys.stderr)
     return data
+
+
+@lru_cache(maxsize=None)
+def _global_config() -> tuple[list[tuple[str, Path, dict]], dict]:
+    layers = []
+    install = install_config_path()
+    user = core.config_path()
+    if install.is_file():
+        layers.append(("per-install", install, read_config(install)))
+    if user is not None and not (layers and install == user):
+        layers.append(("user", user, read_config(user)))
+    merged = {}
+    for _, _, data in reversed(layers):
+        merged = merge_options(merged, data)
+    return layers, merged
+
+
+def global_config_layers() -> list[tuple[str, Path, dict]]:
+    """The global configuration files, strongest first, with their unmixed settings."""
+    return _global_config()[0]
+
+
+def load_config() -> dict:
+    """The effective global config, with per-install settings winning over the user file."""
+    return _global_config()[1]
+
+
+load_config.cache_clear = _global_config.cache_clear
+
+
+def global_option_layers() -> list[tuple[str, Path, dict]]:
+    return [(layer, path, data["options"]) for layer, path, data in global_config_layers()
+            if isinstance(data.get("options"), dict)]
 
 
 def merge_options(base: dict, layer: dict) -> dict:
@@ -201,9 +236,9 @@ def config_options(md_path: Path | None = None) -> dict:
 def config_report(init: bool = False, document: Path | None = None, no_auto=None, metadata_request=None) -> bool:
     """--show-config / --init-config."""
     path = core.config_path()
-    if path is None:
+    if path is None and init:
         print("The config file is switched off (PDFMD_CONFIG is empty).")
-        return core.deferred("pdfmd_metadata", "metadata_sources")(document, no_auto, metadata_request) if not init else True
+        return True
     if init:
         if path.exists():
             print(f"{path} exists already; left alone.")
@@ -216,11 +251,14 @@ def config_report(init: bool = False, document: Path | None = None, no_auto=None
                 return False
             print(f"Wrote {path} (every setting is commented out; edit it).")
         return True
-    print(f"config file: {path} ({'present' if path.is_file() else 'not there: pdfmd --init-config writes one'})")
-    data = core.load_config()
-    for key in CONFIG_KEYS:
-        if key in data:
-            print(f"  {key}: {data[key]}")
+    if path is None:
+        print("The user config file is switched off (PDFMD_CONFIG is empty).")
+    for layer, file, data in global_config_layers():
+        state = 'present' if file.is_file() else 'not there: pdfmd --init-config writes one'
+        print(f"{layer} config file: {file} ({state})")
+        for key in CONFIG_KEYS:
+            if key in data:
+                print(f"  {key}: {data[key]}")
     if core.config_root().is_dir():
         print(f"state kept beside it: {core.config_root()}")
     return core.deferred("pdfmd_metadata", "metadata_sources")(document, no_auto, metadata_request)
@@ -238,7 +276,7 @@ def migrate_state(old: Path, new: Path) -> None:
 
 
 SETUP_HEADER = ("# pdfmd's global config, written by `pdfmd --setup` (edit it by hand, or run that again).\n"
-                "# Precedence: command line > the document's `pdfmd-options:` > its metadata files > this file.\n")
+                "# Precedence: command line > document > metadata files > folder settings > per-install config > user config.\n")
 
 
 def has_yaml_frontmatter(text: str) -> bool:
@@ -432,7 +470,7 @@ def is_folder_metadata(path) -> bool:
 def is_setup_layer(where: str) -> bool:
     """Whether an option source is a setup (the global config or a folder's) and not a document or its metadata: a mapping
     there without `enabled` stays off."""
-    return where == "config" or where.startswith("folder ")
+    return where in ("config", "per-install") or where.startswith("folder ")
 
 
 def folder_layers(md_path: Path) -> list[tuple[str, dict]]:
@@ -446,15 +484,19 @@ def folder_layers(md_path: Path) -> list[tuple[str, dict]]:
 
 def option_sources(md_path: Path, metadata_files: list[Path], with_config: bool = True) -> list[tuple[str, dict]]:
     """Where a pdfmd-options key is read, the first one winning: the document's own front matter, its metadata files
-    (the later first, as Pandoc takes them: metadata_files_by_priority, v3.27.22), then the config file (pdfmd --setup). Each as (where, mapping); `where` is "document", the metadata file's
-    name, or "config"."""
+    (in Pandoc priority order), folder settings, then per-install and user config. Each as (where, mapping)."""
     sources = [("document", core.frontmatter_pdfmd_options(md_path))]
     for metadata_file in core.metadata_files_by_priority(metadata_files):
         found = metadata_file_yaml(metadata_file).get("pdfmd-options")
         sources.append((metadata_file.name, found if isinstance(found, dict) else {}))
     if with_config:
         sources.extend(folder_layers(md_path))
-        sources.append(("config", core.config_options()))              # this one is the global config alone: the folders' are above it
+        global_options = global_option_layers()
+        if global_options and global_options[0][0] == "per-install":
+            sources.extend(("per-install" if layer == "per-install" else "config", options)
+                           for layer, _, options in global_options)
+        else:
+            sources.append(("config", core.config_options()))
     return sources
 
 

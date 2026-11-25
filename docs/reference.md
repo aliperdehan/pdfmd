@@ -1586,11 +1586,14 @@ case and spaces. `--split` cuts at the same headings, setext ones included.
 ## The global config file (v3.23.6)
 
 ~/.config/pdfmd/config.yaml ($XDG_CONFIG_HOME, %APPDATA%\pdfmd; PDFMD_CONFIG
-names another file, an empty value none). `options:` holds `pdfmd-options`
-defaults for every document -- the lowest source, below the document's own
-block and its metadata files, below the command line; `translit:` the
+names another user file, an empty value disables that file). The per-install
+file at `sys.prefix/etc/pdfmd/config.yaml` uses the same format and wins over
+the user file. Command-line options, document front matter, metadata files
+and folder settings keep their existing precedence above both files.
+`options:` holds `pdfmd-options` defaults and `translit:` the
 romanization packs of the lookup (below --translit and PDFMD_TRANSLIT).
---init-config writes a commented template, --show-config says what is set.
+--init-config writes a commented user template. `--show-config` shows both
+sources when present, and `--which` names the per-install file when present.
 `pdfmd --setup` edits it from a menu (v3.23.6; v3.27.0: every flag and every
 pdfmd-options key is either one of its rows or in its list of what it leaves
 out on purpose, with the reason -- `o` shows that list; pdfmd_setup/inventory.py

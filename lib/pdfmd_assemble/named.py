@@ -2,6 +2,7 @@
 import sys
 
 from pdfmd_base import core
+from pdfmd_config import global_option_layers
 
 
 def sources(document, metadata_files):
@@ -30,9 +31,8 @@ def sources(document, metadata_files):
     for path in metadata:
         if core.is_global_metadata(path):
             yield path, options(path)
-    config = core.config_path()
-    if config is not None:
-        yield config, core.config_options()
+    for _, path, options in global_option_layers():
+        yield path, options
 
 
 def names(options, kind, suffix=''):

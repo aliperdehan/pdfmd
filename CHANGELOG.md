@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.34.39 — 2026-11-25
+
+Pre-edit state: commit `abdda06`. Only the user config could provide
+installation-wide settings. Read `sys.prefix/etc/pdfmd/config.yaml` using
+the same format, with its values winning over the user file and yielding
+to the existing local layers. Keep relative paths with their owning file
+and show the per-install path in `--show-config`, `--which` and `--doctor`.
+
+- Scratch-prefix tests check nested settings, project/folder and front
+  matter precedence, report paths, and named preambles from both files.
+
 ## v3.34.38 — 2026-11-25
 
 Pre-edit state: commit `f8834f8`. Short citation keys had to be changed by hand

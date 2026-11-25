@@ -21,6 +21,10 @@ def source(document: Path, metadata, cli: bool | None) -> str | None:
             where = f"{document.name}'s front matter"
         elif where == "config":
             where = core.display_path(core.config_path())
+        elif where == "per-install":
+            from pdfmd_config import install_config_path
+
+            where = core.display_path(install_config_path())
         return f"presentation: true in {where}"
     return None
 

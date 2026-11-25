@@ -9,6 +9,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
 import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
@@ -94,6 +96,56 @@ class Loading(ConfigCase):
 
 
 class Precedence(ConfigCase):
+    def install_config(self, text):
+        prefix = self.root / "prefix"
+        path = prefix / "etc" / "pdfmd" / "config.yaml"
+        path.parent.mkdir(parents=True)
+        path.write_text(text, encoding="utf-8")
+        patch = mock.patch.object(sys, "prefix", str(prefix))
+        patch.start()
+        self.addCleanup(patch.stop)
+        return path
+
+    def test_per_install_options_win_over_user_but_yield_to_local_layers(self):
+        self.write_config("translit: [greek]\noptions: {default-output: html, cache: {aux: true}}\n")
+        self.install_config("translit: [hangul]\noptions: {default-output: gfm, cache: {location: document}}\n")
+        self.assertEqual(pdfmd.load_config()["translit"], ["hangul"])
+        self.assertEqual(pdfmd.config_options()["cache"], {"aux": True, "location": "document"})
+        self.assertEqual(pdfmd.cascaded_option(self.document(), [], "default-output"), "gfm")
+        project = self.root / ".pdfmd" / "config.yaml"
+        project.parent.mkdir()
+        project.write_text("options: {default-output: typst}\n", encoding="utf-8")
+        folder = self.root / "child" / ".pdfmd" / "config.yaml"
+        folder.parent.mkdir(parents=True)
+        doc = self.document(name="child/doc.md")
+        self.assertEqual(pdfmd.cascaded_option(doc, [], "default-output"), "typst")
+        folder.write_text("options: {default-output: docx}\n", encoding="utf-8")
+        pdfmd.folder_walk.cache_clear()
+        self.addCleanup(pdfmd.folder_walk.cache_clear)
+        self.assertEqual(pdfmd.cascaded_option(doc, [], "default-output"), "docx")
+        self.document("pdfmd-options: {default-output: odt}\n", name="child/doc.md")
+        self.assertEqual(pdfmd.cascaded_option(doc, [], "default-output"), "odt")
+
+    def test_show_config_and_which_name_the_per_install_file(self):
+        self.write_config("options: {parts: auto}\n")
+        path = self.install_config("options: {parts: off}\n")
+        doc = self.document()
+        for command in (lambda: pdfmd.config_report(), lambda: pdfmd.which_command([doc.name], SimpleNamespace())):
+            shown = io.StringIO()
+            with mock.patch.object(pdfmd, "find_markdown", return_value=doc), contextlib.redirect_stdout(shown):
+                self.assertTrue(command())
+            self.assertIn("per-install", shown.getvalue())
+            self.assertIn(str(path), shown.getvalue())
+
+    def test_relative_preamble_is_read_from_the_config_that_names_it(self):
+        self.write_config("options: {preamble: base.tex}\n")
+        base = self.config.with_name("base.tex")
+        base.touch()
+        install = self.install_config("options: {preamble+: override.tex}\n")
+        override = install.with_name("override.tex")
+        override.touch()
+        self.assertEqual(pdfmd.frontmatter_extra_preambles(self.document()), [base.resolve(), override.resolve()])
+
     def test_the_config_is_the_lowest_source(self):
         self.write_config("options:\n  parts: auto\n  default-output: html\n")
         plain = self.document()
