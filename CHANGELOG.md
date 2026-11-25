@@ -37,6 +37,8 @@ Pre-edit state: commit `a3b50ef`. `--show-config` and `--doctor` produced report
 
 Pre-edit state: commit `b87a7cf`. Add GitHub citation metadata for the software [D136]. The packaging test reads it with the bundled YAML parser and checks the copyright holder against LICENSE-MIT and the alternative licences against the project's SPDX expression.
 
+Fix before release: `repository-code` is the plain repository URL (without `.git`), and AGENTS.md's exception sentence is wrapped like the rest of the file.
+
 ## v3.34.48 — 2026-11-25
 
 Pre-edit state: commit `8fabc4c`. `PDFMD_CONFIG` treated `off` and `none` as filenames. Both now switch off the user config regardless of case or surrounding spaces [D139]. `--show-config`, `--doctor` and verbose runs name the switch. Regressions cover those reports, both words, whitespace, and the default, explicit and per-install files.

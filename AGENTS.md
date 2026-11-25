@@ -14,9 +14,9 @@ later, postponed, the author's call) are not built.
 ## The repository is public
 
 No secrets, personal names, home paths or local-only details in any committed file, commit message, issue or PR; refer
-to "the author". The exception is the author's name in LICENSE* and CITATION.cff. In commands write `~/...` (`$HOME` inside quotes, `Path.home()` in Python), never an absolute home
-path, and redact home paths in output you show. In PRs and issues, put role names and placeholders in backticks rather
-than a bare `@name`. British spelling, plain prose.
+to "the author". The one exception is the author's name in LICENSE* and CITATION.cff. In commands write `~/...` (`$HOME`
+inside quotes, `Path.home()` in Python), never an absolute home path, and redact home paths in output you show. In PRs
+and issues, put role names and placeholders in backticks rather than a bare `@name`. British spelling, plain prose.
 
 Scratch goes under `$TMPDIR` (or the session's scratch folder), never inside a checkout. Real configuration, caches,
 data, Downloads and documents are read, never written: checks and tests get scratch config/cache/data folders through

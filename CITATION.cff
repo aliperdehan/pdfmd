@@ -6,5 +6,5 @@ abstract: "Convert Markdown and other Pandoc-readable formats to PDF and other o
 authors:
   - given-names: Ali
     family-names: Perdekhan
-repository-code: https://github.com/aliperdehan/pdfmd.git
+repository-code: https://github.com/aliperdehan/pdfmd
 license: [MIT, Apache-2.0]
