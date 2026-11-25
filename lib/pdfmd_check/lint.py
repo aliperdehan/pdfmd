@@ -384,7 +384,7 @@ def suggestion(word: str, known) -> str:
 def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore: frozenset = frozenset(),
          folders: list[Path] | None = None, asset_limit: int | None = None,
          calc: "tuple[list, list] | None" = None, citation_key: Callable | None = None,
-         extra_problems=(), read_heading_ids: Callable | None = None) -> list[Problem]:
+         extra_problems=(), read_heading_ids: Callable | None = None, excerpt_keys: frozenset[str] = frozenset()) -> list[Problem]:
     """The problems of ``sources`` taken as one document (a scaffold and its parts, or a single file), in order.
     ``folders`` are searched for files after the source's own folder; ``asset_limit`` (bytes) is the size budget of an
     image or data file; ``calc`` is what the calculator's filter found (see calc_names): the uses of undefined names and
@@ -409,7 +409,7 @@ def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore
         digit_math(analysis, findings)
     cross_references(analyses, findings, ids)
     footnotes(analyses, findings)
-    citations(analyses, findings, bibliography, citation_key)
+    citations(analyses, findings, bibliography, citation_key, excerpt_keys)
     if calc:
         calc_names(analyses, findings, *calc)
     problems = [problem for problem in [*findings.problems, *extra_problems] if problem.code not in ignore]
@@ -742,7 +742,7 @@ def footnotes(analyses: list[Analysis], findings: Findings) -> None:
 
 
 def citations(analyses: list[Analysis], findings: Findings, bibliography: Bibliography | None,
-              citation_key: Callable | None = None) -> None:
+              citation_key: Callable | None, excerpt_keys: frozenset[str]) -> None:
     if bibliography is None:
         return
     uses: dict[str, list[tuple[Analysis, int]]] = {}
@@ -772,7 +772,7 @@ def citations(analyses: list[Analysis], findings: Findings, bibliography: Biblio
     if not bibliography.complete:
         return
     if analyses and not nocite_all:
-        included = {key.casefold() for key in uses} | bibliography.nocite
+        included = {key.casefold() for key in (*uses, *excerpt_keys)} | bibliography.nocite
         unused = sorted((key for key in bibliography.original_keys or bibliography.keys if key.casefold() not in included),
                         key=lambda key: (key.casefold(), key))
         if unused:

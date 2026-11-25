@@ -31,6 +31,8 @@ Pre-edit state: commit `e23886e`. The short and source help for `--restore` now 
 
 Pre-edit state: commit `cbdc92e`. The citation check reported missing entries and left uncited keys silent. `citation-unused` lists those keys in one note using the declared bibliography layers, preserving their spelling and honouring nocite. Regressions cover parts, inline and command-line bibliographies, unreadable sources and the wildcard.
 
+Fix before release: keys cited through excerpt markers (`[[ex:...]]` records whose kind is not a remark) count as cited, so `citation-unused` no longer lists them; found by the review's run of tests/test_excerpts.py.
+
 ## v3.34.46 — 2026-11-25
 
 Pre-edit state: commit `eb0d7a5`. A heading with no intervening body before a peer or ancestor heading was silent. `--check` warns with `section-empty`, including a heading-only part at the end of a scaffold. Regressions cover Setext headings, comments, code, maths and part front matter.

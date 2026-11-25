@@ -241,33 +241,38 @@ def marker_checks(path, source, document, metadata, prefix, keys, data, *, metad
 
 
 def lint_excerpts(files, document, metadata, arguments, no_auto, named_reader):
-    """Give --check its own diagnostics and suppress duplicate generic citation diagnostics."""
+    """Give --check excerpt diagnostics, a generic citation filter and the resolved cited keys."""
     if not files or not enabled(document, metadata, no_auto, named_reader):
-        return [], None
+        return [], None, frozenset()
     sources = [(path, source, False) for path, source in files] + metadata_sources(metadata)
     sources = [item for item in sources if might_cite(item[1].text)]
     if not sources:
-        return [], None
+        return [], None, frozenset()
     prefix = prefix_setting(document, metadata)
     keys = bibliography_keys([path for path, _ in files], metadata, arguments, no_auto)
     active = lambda key: key not in keys and marker(key, prefix) is not None
     if not any(active(hit[1] or hit[2]) for path, source, is_metadata in sources for hit in
                CITATION.finditer(citation_mask(source.text, path, metadata, include_metadata=True, metadata_only=is_metadata))):
-        return [], None
+        return [], None, frozenset()
     skip = lambda key: None if active(key) else key
     try:
         path = discover(document, metadata)
         data = read(path)
     except RecordError as error:
         if str(error) == "excerpts are off in this context":
-            return [], None
-        return [file_problem(document, str(error))], skip
+            return [], None, frozenset()
+        return [file_problem(document, str(error))], skip, frozenset()
     except OSError:
-        return [file_problem(document, "cannot read the record file")], skip
+        return [file_problem(document, "cannot read the record file")], skip, frozenset()
     problems = []
+    used = set()
     for path, source, is_metadata in sources:
-        problems.extend(marker_checks(path, source, document, metadata, prefix, keys, data, metadata_only=is_metadata)[0])
-    return problems, skip
+        checked, markers, _ = marker_checks(path, source, document, metadata, prefix, keys, data, metadata_only=is_metadata)
+        problems.extend(checked)
+        used.update(markers)
+    cited = frozenset(record["key"] for record in data["excerpts"]
+                      if record["id"] in used and record["kind"] != "remark")
+    return problems, skip, cited
 
 
 def metadata_sources(metadata, show=None):

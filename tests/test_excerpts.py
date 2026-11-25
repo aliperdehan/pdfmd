@@ -873,6 +873,7 @@ One two three four five six [@x:1, 98].
         self.assertIn("missing or invalid next-id  [excerpt-file]", self.build("--check", "draft.md", code=1).stdout)
 
     def test_lint_excerpt_thresholds_and_ignore(self):
+        self.write("refs.bib", "@book{glass, title={Invented Glass}}\n")
         self.command("edit", "1", "--text", "One two three four five six")
         self.write("draft.md", """---
 bibliography: refs.bib
@@ -932,6 +933,7 @@ Separate [@x:2].
         self.write("draft.md", "---\nbibliography: refs.bib\n---\n\n[@x:1] [@x:7] [@x:4].\n")
         answer = self.build("--check", "draft.md")
         self.assertNotIn("cite-missing", answer.stdout + answer.stderr)
+        self.assertIn("bibliography keys never cited: @unused  [citation-unused]", answer.stdout)
         self.write("refs.bib", "@book{glass, title={Invented Glass}}")
         answer = self.build("--check", "draft.md", code=None)
         self.assertIn("@clay is not in the bibliography", answer.stdout + answer.stderr)

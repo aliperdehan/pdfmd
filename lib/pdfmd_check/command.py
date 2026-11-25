@@ -191,7 +191,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
         folders = core.accessory_directories(document.parent, document.stem)
         limit = core.resolve_budget(document, metadata_files)[0]
         try:
-            excerpts, citation_key = core.deferred("pdfmd_excerpts.checks", "lint_excerpts")(
+            excerpts, citation_key, excerpt_keys = core.deferred("pdfmd_excerpts.checks", "lint_excerpts")(
                 inputs, document, metadata_files, pandoc_options, core.effective_no_auto(document, args.no_auto),
                 args.from_format)
         except ValueError as error:
@@ -207,7 +207,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
             excerpts.append(check.Problem(sources[0].label, 0, numbered.CHECK,
                                           "numbered source list matches but numbered-references is off"))
         problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None,
-                              citation_key=citation_key, extra_problems=excerpts,
+                              citation_key=citation_key, extra_problems=excerpts, excerpt_keys=excerpt_keys,
                               calc=calc_check_records(files, metadata_files),
                               read_heading_ids=lambda: check_heading_ids(sources, document, metadata_files, args))
         if "figure-too-tall" not in ignore:
