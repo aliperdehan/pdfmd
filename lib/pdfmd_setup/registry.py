@@ -320,7 +320,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.numbered-references", "Convert numbered source lists to citations",
                (("on", "when the markers match a trailing numbered source list"),
                 ("off", "leave the Markdown as written")), "",
-               "The pdfmd and obsidian flavours use the source's numbers and entries unless a CSL is named.", "Citations"),
+               "On by default in pdfmd and obsidian, off in pandoc, gfm and commonmark. Set on or off to override.", "Citations"),
         choice("options.pagecite", "Page markers after citations",
                (("off", "leave them as text (the default)"), ("auto", "the CSL style chooses"),
                 ("style", "a real citation with its locator"), ("page", "pages in the style’s brackets"),

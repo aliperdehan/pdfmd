@@ -107,6 +107,17 @@ class NumberedReferences(unittest.TestCase):
                 self.assertEqual('data-cites="example-org-1"' in output.read_text(encoding="utf-8"),
                                  flavour in ("pdfmd", "obsidian"))
 
+    def test_strict_flavours_respect_an_explicit_numbered_references_setting(self):
+        base = "Claim [7].\n\n7. [Named source](https://example.org/)\n"
+        for flavour in ("pandoc", "gfm", "commonmark"):
+            for setting in ("on", "off", None):
+                with self.subTest(flavour=flavour, setting=setting):
+                    head = f"---\npdfmd-options: {{numbered-references: {setting}}}\n---\n\n" if setting else ""
+                    output, _ = self.build("html", head + base, "--flavour", flavour)
+                    html = output.read_text(encoding="utf-8")
+                    self.assertEqual('data-cites="example-org-7"' in html, setting == "on")
+                    self.assertIn("Named source", html)
+
     def test_off_in_folder_metadata_or_document_and_check_code(self):
         base = "Claim [1].\n\n1. https://example.org/\n"
         config = self.folder / ".pdfmd" / "config.yaml"

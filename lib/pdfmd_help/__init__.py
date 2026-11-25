@@ -158,7 +158,8 @@ CITATION_ALIASES_HELP = ("pdfmd-options.citation-aliases: map short keys to bibl
                          "{short: existing-key}. Real keys win. Missing targets warn. Default: none.\n")
 
 NUMBERED_REFERENCES_HELP = ("pdfmd-options.numbered-references: trailing numbered source lists become Pandoc citations "
-                            "when every marker matches (pdfmd and obsidian flavours). Set off to keep the Markdown. "
+                            "when every marker matches. On by default in pdfmd and obsidian, off in pandoc, gfm and "
+                            "commonmark. Set on or off to override the flavour. "
                             "With a citeproc bibliography, web sources keep their own list and numbers. "
                             "--check reports numbered-references-off for a matching document with conversion off. "
                             "--to md writes the converted citations and references. Also in --setup.\n")

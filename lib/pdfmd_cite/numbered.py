@@ -271,8 +271,7 @@ def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reade
     document = sources[0]
     flavour, configured_reader = core.flavour_setting(document, metadata)
     named = (reader or configured_reader or "").casefold()
-    if not core.FLAVOUR_PRESETS[flavour].numbered_references or (named and not named.startswith(
-            ("markdown", "md", "gfm", "commonmark"))):
+    if named and not named.startswith(("markdown", "md", "gfm", "commonmark")):
         return None, None
     if not native:
         from pdfmd_reader.controls import repair_controls
@@ -283,7 +282,10 @@ def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reade
         terminal_line = texts[last].rstrip().rsplit("\n", 1)[-1]
         if not ROW_PREFIX.match(terminal_line) or not URL.search(terminal_line):
             return None, None
-    enabled = core.option_flag(core.first_pdfmd_option(document, metadata, KEY)) is not False
+    setting = core.option_flag(core.first_pdfmd_option(document, metadata, KEY))
+    if not core.FLAVOUR_PRESETS[flavour].numbered_references and setting is not True:
+        return None, None
+    enabled = setting is not False
     scanned = [prose(text, path, metadata) for text, path in zip(texts[:last + 1], sources)]
     stop, end, rows, complete = numbered_tail(texts[last], scanned[last])
     eligible = texts[:last] + [texts[last][:stop]]

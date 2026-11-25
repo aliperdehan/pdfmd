@@ -821,7 +821,9 @@ Set `pdfmd-options: {numbered-references: off}` in the document or use
 **Convert numbered source lists to citations** in `--setup` for a folder or
 the global config. With the setting off, `--check` reports
 `numbered-references-off` when the full shape matches. The pandoc, gfm and
-commonmark flavours leave numbered source lists alone.
+commonmark flavours leave numbered source lists alone by default. Set
+`pdfmd-options: {numbered-references: on}` to enable them in those flavours.
+When the conversion needs citation parsing, pdfmd uses Pandoc's Markdown reader.
 
 `embed: true` means all four kinds; `embed: [metadata, lua]` names kinds;
 `embed: false` none. The document's own `embed` wins over its metadata

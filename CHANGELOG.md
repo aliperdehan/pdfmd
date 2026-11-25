@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.34.42 — 2026-11-25
+
+Pre-edit state: commit `17a0192`. The strict Markdown flavours skipped numbered source detection before
+reading the explicit option. Honour numbered-references: on in pandoc,
+gfm and commonmark. Keep the existing per-flavour defaults.
+
+- Synthetic HTML builds try all three strict flavours with the key
+  absent, on and off, and check the default across all five flavours.
+
 ## v3.34.41 — 2026-11-25
 
 Pre-edit state: commit `102d95c`. A bibliography disabled the numbered-source pass, leaving some web

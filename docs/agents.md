@@ -197,6 +197,7 @@ A trailing numbered list of web sources and matching markers such as
 `[1]` or `[1, 3]` become Pandoc citations in the pdfmd and Obsidian flavours.
 Use `--to md` to export citable source with `references:` front matter. Set
 `pdfmd-options: {numbered-references: off}` to preserve the input syntax.
+`numbered-references: on` enables this in the pandoc, gfm and commonmark flavours.
 `--check` reports `numbered-references-off` when the full shape matches
 and the setting is off.
 With a citeproc bibliography, numbered web sources retain their own list,
