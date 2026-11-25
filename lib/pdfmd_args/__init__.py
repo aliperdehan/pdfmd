@@ -758,6 +758,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expand-tables", action="store_true",
                         help="the reverse of --extract-tables: every `.csv` block of FILE becomes an ordinary pipe table "
                              "(all its rows), its caption= the line under it. The CSV files are left where they are")
+    parser.add_argument("--table-repair", choices=("pandoc", "header", "widest"), metavar="MODE",
+                        help="pipe rows: pandoc (default), header (pad or cut), widest (pad, keep every cell)")
     parser.add_argument("--csv", action=argparse.BooleanOptionalAction, default=None,
                         help="build a table from a `::: {.csv}` div (on by default); --no-csv leaves the div as written, "
                              "a plain div with its text. Also `pdfmd-options: {csv: off}` (or `csv: {enabled: false}`), "

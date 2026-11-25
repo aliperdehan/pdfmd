@@ -1501,10 +1501,10 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
         raise SystemExit(f"{md_path}: the native renderers read Markdown only; this input needs Pandoc "
                          "(and a LaTeX/Typst/HTML engine, or soffice) -- see `pdfmd --check-dependencies`.")
     from pdfmd_cite import numbered
-    from pdfmd_tables.prepass import table_colons, table_source
+    from pdfmd_tables.prepass import table_colons, table_repair, table_source
 
     text = table_source(md_path.read_text(encoding="utf-8-sig"), core.display_path(md_path),
-                        colons=table_colons(md_path, metadata_files), reader="gfm")
+                        colons=table_colons(md_path, metadata_files), reader="gfm", repair=table_repair(md_path, metadata_files))
     text = numbered.native_text_for(text, md_path, metadata_files, from_format)
     text = core.obsidian_source(text, md_path, metadata_files)
     if core.flavour_of(md_path, metadata_files) == "obsidian":

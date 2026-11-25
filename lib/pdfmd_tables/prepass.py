@@ -20,6 +20,9 @@ LITERAL = re.compile(
     r"|(?i:^ *<(?P<tag>pre|script|style|textarea|xmp|iframe)\b.*?(?:</(?P=tag)\s*>|\Z))"
 )
 FRONT = re.compile(r"\A\ufeff?(?:[ \t]*\r?\n)*---[ \t]*\r?\n.*?^(?:---|\.\.\.)[ \t]*\r?$", re.M | re.S)
+REPAIR_MODES = ("pandoc", "header", "widest")
+MARKDOWN_READERS = frozenset({"markdown", "markdown_strict", "markdown_mmd", "markdown_phpextra", "gfm",
+                              "commonmark_x", "commonmark"})
 
 
 def visible_lines(text: str) -> list[str]:
@@ -102,7 +105,7 @@ def reader_family(reader: str | None) -> str:
 def unparsed_tables(text: str, reader: str | None) -> list[tuple[int, str]]:
     """Likely pipe or grid tables that the selected reader cannot read as written."""
     family = reader_family(reader)
-    if family not in ("markdown", "markdown_strict", "markdown_mmd", "markdown_phpextra", "gfm", "commonmark_x", "commonmark"):
+    if family not in MARKDOWN_READERS:
         return []
     if "|" not in text and "+" not in text:
         return []
@@ -145,6 +148,14 @@ def table_colons(path, metadata_files) -> str:
     return mode
 
 
+def table_repair(path, metadata_files) -> str:
+    value = core.TABLE_REPAIR_CLI or core.first_pdfmd_option(path, list(metadata_files), "table-repair")
+    mode = "pandoc" if value is None else str(value).strip().casefold()
+    if mode not in REPAIR_MODES:
+        raise SystemExit(f"pdfmd-options table-repair: {value!r} is not one of {', '.join(REPAIR_MODES)}")
+    return mode
+
+
 def caption_options(lines: list[str], start: int, end: int) -> dict[str, str]:
     caption, _ = _caption(lines, start, end)
     return parse_attributes(caption_parts(caption)[2])[2]
@@ -168,7 +179,7 @@ def ignore_colons(separator: str) -> str:
     return re.sub(r":?-+:?", lambda _: next(encoded), separator)
 
 
-def normalise_separators(text: str, *, colons: str = "count") -> tuple[str, list[int]]:
+def normalise_separators(text: str, *, colons: str | None = None) -> tuple[str, list[int]]:
     """Return the prepared text and the one-based lines of changed separators."""
     if not SUSPECT.search(text):
         return text, []
@@ -183,7 +194,7 @@ def normalise_separators(text: str, *, colons: str = "count") -> tuple[str, list
             continue
         if fixed != lines[index]:
             changed.append(index + 1)
-        if ":" in fixed:
+        if colons is not None and ":" in fixed:
             end = index + 1
             while end < len(lines) and pipe_row(visible[end]):
                 end += 1
@@ -193,10 +204,71 @@ def normalise_separators(text: str, *, colons: str = "count") -> tuple[str, list
     return "\n".join(lines), changed
 
 
-def table_source(text: str, label: str, *, colons: str = "ignore", reader: str | None = None) -> str:
+def render_row(line: str, cells: list[str], separator: bool) -> str:
+    indent = re.match(r"[ \t]*", line)[0]
+    ending = "\r" if line.endswith("\r") else ""
+    inner = "|".join(cells) if separator else " " + " | ".join(cells) + " "
+    return f"{indent}|{inner}|{ending}"
+
+
+def repair_pipe_tables(text: str, mode: str) -> tuple[str, list[tuple[int, str]]]:
+    """Fit pipe rows to the header or widest row. In pandoc mode leave the bytes as received."""
+    if "|" not in text:
+        return text, []
+    visible = visible_lines(text)
+    lines = text.split("\n")
+    fixed = lines.copy()
+    notices = []
+    for start, end, separator in pipe_blocks(visible, grid_lines(visible)):
+        rows = {index: split_row(lines[index]) for index in range(start, end)}
+        if mode == "pandoc":
+            if separator == start + 1 and len(rows[start]) == len(rows[separator]):
+                count = len(rows[start])
+                for index in range(separator + 1, end):
+                    found = len(rows[index])
+                    if found != count:
+                        action = "pad" if found < count else "cut"
+                        notices.append((index + 1, f"Pandoc can {action} a row with {found} cells to {count}"))
+            continue
+        if separator is None and len({len(cells) for cells in rows.values()}) != 1:
+            continue
+        if separator == start and end == start + 1:
+            continue
+        count = len(rows[start]) if mode == "header" else max(map(len, rows.values()))
+        for index, cells in rows.items():
+            is_separator = index == separator
+            found = len(cells)
+            bare = lines[index].strip()
+            if found != count:
+                action = "padded" if found < count else "cut"
+                notices.append((index + 1, f"{action} the {'separator' if is_separator else 'row'} from {found} cells to {count}"))
+            elif not bare.startswith("|") or not bare.endswith("|") or bare.endswith(r"\|"):
+                notices.append((index + 1, "normalised the row's outer pipes"))
+            else:
+                continue
+            fill = "---" if is_separator else ""
+            fixed[index] = render_row(lines[index], cells[:count] + [fill] * max(0, count - found), is_separator)
+        if separator is None:
+            fixed[start] += "\n" + render_row(lines[start], ["---"] * count, True)
+            notices.append((start + 1, "inserted a separator below the header"))
+        elif separator == start:
+            fixed[start] = render_row(lines[start], [""] * count, False) + "\n" + fixed[start]
+            notices.append((start + 1, "inserted an empty header above the separator"))
+    return "\n".join(fixed), sorted(notices, key=lambda notice: notice[0])
+
+
+def table_source(text: str, label: str, *, colons: str = "ignore", reader: str | None = None,
+                 repair: str = "pandoc") -> str:
+    if reader_family(reader) not in MARKDOWN_READERS or "|" not in text:
+        return text
     for line, reason in unparsed_tables(text, reader):
         print(f"WARN  table-unparsed: {label}, line {line}: {reason}")
-    fixed, changes = normalise_separators(text, colons=colons)
+    fixed, changes = normalise_separators(text)
     for line in changes:
         print(f"WARN  table-separator: {label}, line {line}: normalised the pipe-table separator")
+    fixed, notices = repair_pipe_tables(fixed, repair)
+    for line, reason in notices:
+        print(f"WARN  table-repair: {label}, line {line}: {reason}")
+    if ":" in fixed:
+        fixed, _ = normalise_separators(fixed, colons=colons)
     return fixed

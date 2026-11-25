@@ -143,3 +143,43 @@ class Writers(unittest.TestCase):
         self.assertIn("+ separator", lines[1])
         self.assertIn("line 10:", lines[2])
         self.assertIn("gfm does not read grid tables", lines[2])
+
+    def test_repair_modes_pad_or_cut_as_requested(self):
+        sample = "A | B\n|---|---|\n| short |\nwide | body | sentinel\n"
+        for reader in ("gfm", "markdown"):
+            with self.subTest(reader=reader):
+                headline, html = self.build(sample, reader, "html", "--table-repair", "header")
+                self.assertIn("padded", headline.stdout)
+                self.assertIn("cut", headline.stdout)
+                self.assertNotIn("sentinel", html)
+                widest, html = self.build(sample, reader, "html", "--table-repair", "widest")
+                self.assertIn("padded", widest.stdout)
+                self.assertNotIn("cut from", widest.stdout)
+                self.assertIn("sentinel", html)
+                self.assertEqual(html.count("<th"), 4)  # thead and three cells
+                _, original = self.build(sample, reader, "html")
+                _, pandoc = self.build(sample, reader, "html", "--table-repair", "pandoc")
+                self.assertEqual(original, pandoc)
+
+    def test_repair_synthesises_the_missing_row(self):
+        text = "A | B\nx | y\n\n|---|---|\n| c | d |\n"
+        result, html = self.build(text, "gfm", "html", "--table-repair", "widest")
+        self.assertEqual(html.count("<table>"), 2)
+        self.assertIn("inserted a separator", result.stdout)
+        self.assertIn("inserted an empty header", result.stdout)
+
+    def test_repair_keeps_proportions_for_all_separator_spellings(self):
+        def document(separators, repaired):
+            header = "| A | B | |" if repaired else "| A | B |"
+            return "\n".join(f"{header}\n{line}\n| {PROSE} | {PROSE} | marker |\n" for line in separators)
+
+        spellings, canonical = zip(*SPELLINGS)
+        padded = [line.rstrip("|") + "|---|" for line in canonical]
+        for reader in ("gfm", "markdown"):
+            for writer in ("latex", "html"):
+                with self.subTest(reader=reader, writer=writer):
+                    result, output = self.build(document(spellings, False), reader, writer, "--table-repair", "widest")
+                    _, expected = self.build(document(padded, True), reader, writer)
+                    self.assertEqual(output.count("marker"), len(spellings))
+                    self.assertEqual(result.stdout.count("padded the separator"), len(spellings))
+                    self.assertEqual(self.proportions(output, writer), self.proportions(expected, writer))

@@ -385,7 +385,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     from pdfmd_cite import numbered
     from pdfmd_filters import document_filter_scope
     from pdfmd_obsidian.links import linked_inputs
-    from pdfmd_tables.prepass import table_colons, table_source
+    from pdfmd_tables.prepass import table_colons, table_repair, table_source
 
     references = numbered.prepare([md_path, *parts_inputs], metadata_files, pandoc_options, from_format)
     numbered_citations = references is not None and not references.separate
@@ -394,6 +394,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         effective_from = numbered.reader_for(effective_from)
     transform_part = core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format)
     colons = table_colons(md_path, metadata_files) if parts_inputs else "ignore"
+    repair = table_repair(md_path, metadata_files) if parts_inputs else "pandoc"
     with contextlib.ExitStack() as reference_files, document_filter_scope(), core.prepared_title_source(md_path, metadata_files, disabled=core.auto_disabled(no_auto, "title") or flat_target or target_format == "ansi",
                                override=source_override, reader=effective_from, keep_wikilinks=True,
                                transform=references.rewrite if references else None) \
@@ -409,7 +410,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             numbered.part_transform(references, transform_part),
                             metadata_files=metadata_files,
                             prepare_part=lambda text, part: table_source(text, core.display_path(part), colons=colons,
-                                                                         reader=effective_from)) as scaffold_files, \
+                                                                         reader=effective_from, repair=repair)) as scaffold_files, \
             linked_inputs([title_source, *scaffold_files[1:]], [md_path, *parts_inputs], effective_from, metadata_files,
                           "pdf" if link_output else target_format, link_output or output,
                           not core.auto_disabled(no_auto, "title")) as (linked, effective_from):

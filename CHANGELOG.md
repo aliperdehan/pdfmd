@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.34.60 — 2026-11-25
+
+Pre-edit state: commit `57e8c1f`. [tables] Ragged pipe rows could silently lose cells. Add header and widest repair modes, with notices for pads,
+cuts, outer pipes and synthesised header or separator rows. The default leaves the row data Pandoc receives intact.
+Tests cover both readers, LaTeX and HTML proportions, and preservation of extra cells under widest.
+pdfmd.py gains one CLI state line so batch workers inherit the repair mode.
+
 ## v3.34.59 — 2026-11-25
 
 Pre-edit state: commit `8701d3a`. [tables] Malformed pipe tables and grid tables under GFM could turn into prose without a diagnosis. Report

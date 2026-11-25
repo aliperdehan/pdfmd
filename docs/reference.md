@@ -1889,6 +1889,13 @@ Builds and `--check` warn with `table-unparsed` when the source resembles a tabl
 written. The warning identifies problems such as a missing separator, a mismatched header and separator, or
 a grid table under GFM. A single pipe line without a separator is left alone.
 
+`table-repair: pandoc` in `pdfmd-options` keeps Pandoc's usual handling of pipe-table row lengths. Use
+`table-repair: header` to pad short rows and separators or cut long ones to the header's column count.
+`table-repair: widest` pads to the highest count in the header, separator or body and keeps every cell.
+Both repair modes make outer pipes consistent, insert a `---` separator after the first of two or more
+equal-length pipe rows if needed, and add an empty header before a separator-first table. Repairs warn with
+the original line number. Set the default with `--setup` or override it for a run with `--table-repair MODE`.
+
 Pipe-table column widths (v3.25.0): a `---|---` separator says nothing about the columns, so a table whose
 lines run long is laid out by pdfmd_lua/table_width.lua -- the widths that give the fewest lines within the text
 width, each column at least as wide as its longest word -- and a table that fits is left at its natural width.

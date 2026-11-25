@@ -287,6 +287,7 @@ def run_main() -> None:
         os.environ[core.CALC_EXPORT_ENV] = args.calc_export
     if args.table_keep is not None:
         os.environ[core.TABLE_KEEP_ENV] = str(args.table_keep)
+    core.TABLE_REPAIR_CLI = args.table_repair
     for value, variable in ((args.max_asset_mb, "PDFMD_MAX_ASSET_MB"), (args.max_output_mb, "PDFMD_MAX_OUTPUT_MB")):
         if value is not None:
             os.environ[variable] = str(value)

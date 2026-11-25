@@ -47,7 +47,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.34.59"
+PDFMD_VERSION = "3.34.60"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
@@ -531,6 +531,7 @@ TRANSLIT_CYRILLIC = True
 
 # --no-auto as given (set in main): the command line's layer of priority_enabled()
 NO_AUTO_CLI: list[str] | None = None
+TABLE_REPAIR_CLI: str | None = None
 
 # Command-line build-time display override.
 BUILD_TIME_CLI: bool | None = None
