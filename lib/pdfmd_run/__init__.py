@@ -20,7 +20,8 @@ import sys
 from pathlib import Path
 
 from pdfmd_base import core
-from pdfmd_log import emit
+from pdfmd_log import (CHATTER, chatter_scope, emit, emit_outcome, resolve_chatter, select_chatter,
+                       visible, verbose_output)
 
 
 POLISH_INFO_KEYS = {"title": "/Title", "subject": "/Subject", "author": "/Author", "keywords": "/Keywords"}
@@ -78,6 +79,7 @@ def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action],
                              f"`pdfmd --disabled {name} ...`, or switch them back on.")
 
 
+@chatter_scope()
 def run_main() -> None:
     parser, hidden = command_line_parser()
     argv, excerpts = sys.argv[1:], None
@@ -115,6 +117,9 @@ def run_main() -> None:
         for flag in [flag for flag in reader_parser._option_string_actions if len(flag) > 2 and flag[1] != "-"]:
             del reader_parser._option_string_actions[flag]     # `-cwd`: older argparse still abbreviates it
         args, pandoc_options = reader_parser.parse_known_args()
+    core.CHATTER_CLI = args.chatter or ("debug" if args.debug else "verbose" if args.verbose else None)
+    source = args.path[0] if args.path and not (args.batch or args.report) and args.path[0].is_file() else None
+    args.verbose = select_chatter(resolve_chatter(source, args.metadata_file or []))
     core.use_managed_tools()
     if not (args.path and all(path.suffix.lower() == ".pdf" for path in args.path)):
         from pdfmd_args.paths import invocation_paths
@@ -136,8 +141,6 @@ def run_main() -> None:
         args.assemble_only = True
         if args.embed_metadata is None:
             args.embed_metadata = ["all"]
-    if args.debug:
-        args.verbose = True
     if args.verbose and core.config_path() is None:
         core.load_package("pdfmd_config").note_config_off()
     args.to_many = None
@@ -602,7 +605,8 @@ def run_main() -> None:
             if args.metadata_file is None and discovered is not None and discovered is not core.AUTO_METADATA_DISABLED:
                 paths = discovered if isinstance(discovered, list) else [discovered]
                 for path in paths:
-                    core.AUTO_LOG.record_file("YAML", path, args.verbose)
+                    with chatter_scope(resolve_chatter(file, paths)):
+                        core.AUTO_LOG.record_file("YAML", path, verbose_output(args.verbose))
         value = metadata_by_dir[cache_key]
         return None if value is core.AUTO_METADATA_DISABLED else value
 
@@ -631,7 +635,8 @@ def run_main() -> None:
                 f"Multiple Markdown files found: {names}\n"
                 "Specify one file, use -b to convert all separately, or use -r to combine them."
             )
-        emit("normal", "MD", f"AUTO MD    {core.display_path(markdown_files[0])}")
+        with chatter_scope(resolve_chatter(markdown_files[0])):
+            emit("normal", "MD", f"AUTO MD    {core.display_path(markdown_files[0])}")
         return markdown_files[0]
 
     if not args.path and not args.batch and not args.report:
@@ -664,6 +669,11 @@ def run_main() -> None:
     if single_input:
         try:
             plan_source = core.find_markdown(paths[0])
+            if plan_source.suffix.lower() not in {".qmd", *core.OFFICE_INPUT_EXTENSIONS}:
+                given = metadata_for(plan_source, announce=False)
+            else:
+                given = None
+            args.verbose = select_chatter(resolve_chatter(plan_source, given if isinstance(given, list) else [given] if given else []))
             if args.presentation is None:
                 metadata = None if plan_source.suffix.lower() == ".qmd" else metadata_for(plan_source)
                 presentation_request = slides.source(plan_source, metadata, args.presentation)
@@ -970,14 +980,17 @@ def run_main() -> None:
     failures = [result for result in results if not result[1]]
     for result in results:
         source, ok, error = result
-        emit("result" if ok else "error", None, f"{'OK  ' if ok else 'FAIL'}  {core.display_path(source)}{core.built_name(result)}{core.time_label(result)}{core.engine_label(result)}")
-        if args.verbose:
-            for line in core.time_breakdown(result):
-                print(line)
-        if error:
-            print(error)
-        if getattr(result, "record_path", None) and (args.verbose or not ok):
-            print(f"{'      full record: ' if not ok else 'RECORD  '}{core.under_home(result.record_path)}")
+        with chatter_scope(getattr(result, "chatter", CHATTER.get())):
+            emit("result" if ok else "error", None,
+                 f"{'OK  ' if ok else 'FAIL'}  {core.display_path(source)}{core.built_name(result)}"
+                 f"{core.time_label(result)}{core.engine_label(result)}")
+            if verbose_output(args.verbose):
+                for line in core.time_breakdown(result):
+                    emit("verbose", None, line)
+            emit_outcome(error, ok)
+            if getattr(result, "record_path", None) and (verbose_output(args.verbose) or not ok):
+                emit("verbose" if ok else "error", None,
+                     f"{'      full record: ' if not ok else 'RECORD  '}{core.under_home(result.record_path)}")
     if args.batch and args.bopen is not None:
         built = [Path(result.output) for result in results
                  if result[1] and getattr(result, "output", None) is not None and Path(result.output).is_file()]
@@ -985,11 +998,11 @@ def run_main() -> None:
         for path in picked:
             core.open_file(path)
         if picked:
-            print(f"OPENED  {len(picked)} of {len(built)} ({args.bopen}): " + ", ".join(path.name for path in picked[:6])
+            emit("normal", None, f"OPENED  {len(picked)} of {len(built)} ({args.bopen}): " + ", ".join(path.name for path in picked[:6])
                   + (f", +{len(picked) - 6} more" if len(picked) > 6 else ""))
-    if native_auto and not failures:
+    if native_auto and not failures and visible("normal"):
         core.offer_native_upgrade()
-    if not failures:
+    if not failures and visible("normal"):
         core.maybe_hint_setup()
     if failures:
         raise SystemExit(1)

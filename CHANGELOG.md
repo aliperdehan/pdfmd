@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.34.64 — 2026-11-26
+
+Pre-edit state: commit `7bc88f7`. Builds could only select the usual messages or verbose output.
+Add six chatter levels in the command line, document options and setup. Each batch file uses its own setting
+and a hidden warning still counts under `--strict`. Debug chatter shows the engine's failure output.
+The launchpad gains one line for the command-line setting copied to workers.
+Tests cover the six levels, strict failures with chatter off, the settings hierarchy, reports and batches with one and two workers.
+
 ## v3.34.63 — 2026-11-26
 
 Pre-edit state: commit `73f77bd`. Build and command diagnostics wrote directly to the console from their

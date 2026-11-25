@@ -9,17 +9,93 @@ import shlex
 import shutil
 import subprocess
 import sys
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from pdfmd_base import core
 
 
+CHATTER_LEVELS = ("off", "result", "warnings", "normal", "verbose", "debug")
+_MINIMUM = {"result": "result", "warning": "warnings", "error": "warnings",
+            "note": "normal", "normal": "normal", "verbose": "verbose", "debug": "debug"}
+CHATTER = ContextVar("chatter", default=None)
+WARNING_LINE_RE = re.compile(r"^\s*(?:WARN\b|\[WARNING\])")
+
+
+def visible(level: str) -> bool:
+    current = CHATTER.get()
+    if current is None or (current == "off" and level == "error"):
+        return True
+    return CHATTER_LEVELS.index(current) >= CHATTER_LEVELS.index(_MINIMUM[level])
+
+
 def emit(level: str, id: str | None, text: str, *, file=None, end="\n", flush=False, shown=True) -> None:
-    """Send a diagnostic to its existing stream, or to the build record when hidden."""
-    if shown:
+    """Send a diagnostic to the console at the selected level and keep it in the build record."""
+    if shown and visible(level):
+        if level == "error" and CHATTER.get() == "off":
+            file = sys.stderr
         print(text, file=file, end=end, flush=flush)
     else:
+        if shown and level == "warning":
+            # The strict-build listener must see warnings even when the console does not.
+            remember = getattr(sys.stdout if file is None else file, "remember_warning", None)
+            if remember is not None:
+                remember(text + (end if end is not None else "\n"))
         core.record_note(text)
+
+
+def resolve_chatter(document: Path | None = None, metadata=()) -> str | None:
+    if core.CHATTER_CLI is not None:
+        return core.CHATTER_CLI
+    if document is not None and document.suffix.lower() in (".md", ".markdown", ".mdown", ".mkd", ".qmd"):
+        given = core.first_pdfmd_option(document, metadata, "chatter")
+    else:
+        given = core.config_options(document).get("chatter")
+    if given is None:
+        return None
+    # YAML 1.1 reads an unquoted 'off' as false.
+    word = "off" if given is False else str(given).strip().casefold()
+    if word in CHATTER_LEVELS:
+        return word
+    emit("warning", None, f"WARN  chatter: {given!r} is not one of {', '.join(CHATTER_LEVELS)}; using normal",
+         file=sys.stderr)
+    return "normal"
+
+
+def verbose_output(default=False) -> bool:
+    level = CHATTER.get()
+    return default if level is None else level in ("verbose", "debug")
+
+
+def select_chatter(level: str | None) -> bool:
+    CHATTER.set(level)
+    core.VERBOSE_OUTPUT = verbose_output()
+    return core.VERBOSE_OUTPUT
+
+
+@contextmanager
+def chatter_scope(level: str | None = None):
+    saved = core.VERBOSE_OUTPUT
+    token = CHATTER.set(level)
+    core.VERBOSE_OUTPUT = verbose_output(saved)
+    try:
+        yield
+    finally:
+        CHATTER.reset(token)
+        core.VERBOSE_OUTPUT = saved
+
+
+def emit_outcome(text: str, ok: bool) -> None:
+    """Show an engine's returned diagnostic text at the appropriate level."""
+    if not text:
+        return
+    if not ok or visible("normal"):
+        emit("normal" if ok else "error", None, text)
+    else:
+        for line in text.splitlines():
+            if WARNING_LINE_RE.match(line):
+                emit("warning", None, line)
 
 
 # v3.31.41 (entry 3ea): how a path is written in a message. `auto`: relative to the working folder (up to PATH_UP `..` steps above
@@ -196,6 +272,8 @@ class AutoLog:
             emit("verbose", kind, f"AUTO {kind}  {detail}")
             return
         core.record_note(f"AUTO {kind}  {detail}")           # the record has it whatever --verbose said
+        if not visible("normal"):
+            return
         if heading is None:
             found = self.classify(kind, detail)
             heading, short = found if found else (None, None)
@@ -221,6 +299,8 @@ class AutoLog:
             emit("verbose", kind, line)
             return
         core.record_note(line)
+        if not visible("normal"):
+            return
         if kind == "YAML" and core.is_global_metadata(path):
             self.items[("DEFAULTS", "global")] = (self.RANK["GLOBAL"], "global metadata" if core.preset_name(path) == "default"
                                                   else f"preset {core.preset_name(path)}")

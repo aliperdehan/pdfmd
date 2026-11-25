@@ -618,7 +618,7 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
         log_tail = ""
         family = core.ENGINE_FAMILY.get(engine, engine)
         if family in failed_families:
-            print(f"SKIP  {tex_path}: {engine} shares the {family} engine with an earlier "
+            emit("normal", None, f"SKIP  {tex_path}: {engine} shares the {family} engine with an earlier "
                   f"failure; skipping", file=sys.stderr)
             continue
         # aux_dir: a persistent directory (the cache route) -- LaTeX's own

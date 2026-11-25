@@ -14,7 +14,7 @@ from pathlib import Path
 from pdfmd_report import route, titles
 
 from pdfmd_base import pandoc_run
-from pdfmd_log import emit
+from pdfmd_log import emit, emit_outcome, resolve_chatter, select_chatter
 from pdfmd_cite.aliases import apply as apply_citation_aliases
 from pdfmd_build import page_numbers
 from pdfmd_engines.memory import scoped
@@ -113,6 +113,7 @@ def run(core, *,
         raise SystemExit(str(error))
     metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
                       (metadata if isinstance(metadata, list) else ([metadata] if metadata else [])))
+    args.verbose = select_chatter(resolve_chatter(files[0], metadata_files))
     core.deferred("pdfmd_engines.memory", "set_limit")(files[0], metadata_files)
     report_kit_kinds = kit_no_auto_kinds(files[0], metadata_files, report_no_auto)
     if report_kit_kinds:
@@ -172,9 +173,9 @@ def run(core, *,
         for file in files:
             if not has_chapter_field(file):
                 emit("warning", None, f"[WARNING] unnumbered Markdown included: {display_path(file)}")
-            emit("result", None, f"OK    {display_path(file)}")
+            emit("normal", None, f"OK    {display_path(file)}")
         for file in excluded:
-            print(f"SKIP  {display_path(file)}")
+            emit("normal", None, f"SKIP  {display_path(file)}")
         emit("result", None, f"OK    REPORT  {display_path(output)}")
         if args.open:
             open_file(output)
@@ -435,7 +436,7 @@ def run(core, *,
             for engine_index, engine in enumerate(engines):
                 family = ENGINE_FAMILY.get(engine, engine)
                 if family in failed_families:
-                    print(f"SKIP  REPORT: {engine} shares the {family} engine with an earlier "
+                    emit("normal", None, f"SKIP  REPORT: {engine} shares the {family} engine with an earlier "
                           f"failure; skipping", file=sys.stderr)
                     continue
                 with prepared_latex_inputs([*files, *pandoc_metadata_order(metadata_files)], engine in LATEX_ENGINES,
@@ -625,15 +626,15 @@ def run(core, *,
     for file in files:
         if not has_chapter_field(file):
             emit("warning", None, f"[WARNING] unnumbered Markdown included: {display_path(file)}")
-        emit("result", None, f"OK    {display_path(file)}")
+        emit("normal", None, f"OK    {display_path(file)}")
     for file in excluded:
-        print(f"SKIP  {display_path(file)}")
+        emit("normal", None, f"SKIP  {display_path(file)}")
     if metadata is not AUTO_METADATA_DISABLED:
         for metadata_file in metadata_files:
             if args.metadata_file is None:
                 AUTO_LOG.record_file("YAML", metadata_file, args.verbose)
             else:
-                print(f"YAML  {display_path(metadata_file)}")
+                emit("normal", None, f"YAML  {display_path(metadata_file)}")
     if not args.verbose:
         AUTO_LOG.flush()
     report_built = attach_time(Built((output, result.returncode == 0), BUILD["engine"], BUILD["failed"]), files[0], metadata_files)
@@ -642,11 +643,10 @@ def run(core, *,
           + time_label(report_built) + engine_label(report_built))
     if args.verbose:
         for line in time_breakdown(report_built):
-            print(line)
-    if result.stderr:
-        print(result.stderr[-3000:])
+            emit("verbose", None, line)
+    emit_outcome(result.stderr[-3000:], result.returncode == 0)
     if report_strict_failed:
-        print(strict_message(report_problems))
+        emit("error", None, strict_message(report_problems))
     if result.returncode or report_strict_failed:
         raise SystemExit(1)
     if args.open:

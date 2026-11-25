@@ -13,7 +13,7 @@ lines that say which files went in.
 from __future__ import annotations
 
 from pathlib import Path
-from pdfmd_log import emit
+from pdfmd_log import emit, emit_outcome
 
 BUILDS = ("route", "patch")
 DEFAULT_BUILD = "route"
@@ -77,25 +77,24 @@ def build(core, *, args, files: list[Path], excluded: list[Path], metadata, meta
     for file in files:
         if not core.has_chapter_field(file):
             emit("warning", None, f"[WARNING] unnumbered Markdown included: {core.display_path(file)}")
-        emit("result", None, f"OK    {core.display_path(file)}")
+        emit("normal", None, f"OK    {core.display_path(file)}")
     for file in excluded:
-        print(f"SKIP  {core.display_path(file)}")
+        emit("normal", None, f"SKIP  {core.display_path(file)}")
     if metadata is not core.AUTO_METADATA_DISABLED:
         for metadata_file in metadata_files:
             if args.metadata_file is None:
                 core.AUTO_LOG.record_file("YAML", metadata_file, args.verbose)
             else:
-                print(f"YAML  {core.display_path(metadata_file)}")
+                emit("normal", None, f"YAML  {core.display_path(metadata_file)}")
     if not args.verbose:
         core.AUTO_LOG.flush()
     emit("result" if ok else "error", None, f"{'OK  ' if ok else 'FAIL'}  REPORT  {core.display_path(output)}" + core.time_label(built) + core.engine_label(built))
     if args.verbose:
         for line in core.time_breakdown(built):
-            print(line)
-    if built[2]:
-        print(built[2])
+            emit("verbose", None, line)
+    emit_outcome(built[2], ok)
     if getattr(built, "record_path", None) and (args.verbose or not ok):
-        print(f"{'      full record: ' if not ok else 'RECORD  '}{core.under_home(built.record_path)}")
+        emit("verbose" if ok else "error", None, f"{'      full record: ' if not ok else 'RECORD  '}{core.under_home(built.record_path)}")
     if not ok:
         raise SystemExit(1)
     if args.open:

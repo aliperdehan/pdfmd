@@ -16,7 +16,7 @@ from pdfmd_base import core
 from pdfmd_base import timed
 
 from pdfmd_base import pandoc_run
-from pdfmd_log import emit
+from pdfmd_log import WARNING_LINE_RE, emit
 from pdfmd_reader.controls import diagnostic_scope, repair_controls
 
 
@@ -83,19 +83,19 @@ def built_name(result) -> str:
     return f" {ok_delimiter()} {Path(output).name if beside else core.display_path(Path(output))}"
 
 
-WARNING_LINE_RE = re.compile(r"^\s*(?:WARN\b|\[WARNING\])")
-
-
 class _WarningTee:
     """A text stream that passes everything on and remembers the lines that are warnings."""
 
     def __init__(self, stream, lines: list[str]):
         self._stream, self._lines, self._partial = stream, lines, ""
 
-    def write(self, text):
+    def remember_warning(self, text):
         self._partial += text
         *complete, self._partial = self._partial.split("\n")
         self._lines.extend(line.strip() for line in complete if WARNING_LINE_RE.match(line))
+
+    def write(self, text):
+        self.remember_warning(text)
         return self._stream.write(text)
 
     def __getattr__(self, name):

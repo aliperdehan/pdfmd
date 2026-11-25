@@ -200,7 +200,7 @@ def route_ebook_input(args) -> None:
     made = pandoc_run(command, capture_output=True, encoding="utf-8", errors="replace", cwd=scratch)
     if made.returncode != 0 or not markdown.is_file():
         raise SystemExit(f"{book.name}: Pandoc could not read it ({(made.stderr.strip().splitlines() or ['no output'])[-1]})")
-    print(f"BOOK      {book.name} read as Markdown ({markdown.stat().st_size // 1024 or 1} KB"
+    emit("normal", None, f"BOOK      {book.name} read as Markdown ({markdown.stat().st_size // 1024 or 1} KB"
           + (", with its pictures" if (scratch / "media").is_dir() else "") + ")")
     if args.out is None:
         target = (args.to.casefold() if args.to else "pdf")
@@ -287,7 +287,7 @@ def route_pdf_input(args, extra: list[str]) -> int | None:
     if args.engine and "=" in args.engine:
         call += ["--engine", args.engine]          # batchocr's FORMAT=ENGINE; pdfmd's own --engine is a PDF engine
     call += extra
-    print(f"ROUTE  {', '.join(pdf.name for pdf in rest)} -> batchocr"
+    emit("normal", None, f"ROUTE  {', '.join(pdf.name for pdf in rest)} -> batchocr"
           + (f" {'.'.join(map(str, version))}" if version else "") + f" ({fmt})", file=sys.stderr)
     code = subprocess.run(call, env=tessdata_environment(extra)).returncode
     if code == 0 and args.open and produced and produced[0].is_file():
@@ -347,7 +347,7 @@ def route_text_input(args, extra: list[str]) -> int | None:
         call = [*command, str(path), "--to", "md", "-o", str(target), "--txt-structure", structure]
         if not args.verbose:
             call.append("-q")
-        print(f"ROUTE  {path.name} -> batchocr"
+        emit("normal", None, f"ROUTE  {path.name} -> batchocr"
               + (f" {'.'.join(map(str, version))}" if version else "") + f" (txt to Markdown, {structure})", file=sys.stderr)
         code = subprocess.run(call).returncode
         if code != 0 or not target.is_file():

@@ -1719,6 +1719,12 @@ The closing line names the engine that made a PDF (v3.26.10): `OK    report.md  
 `--no-strict` overrides) turns a build that printed a WARN line, or about which Pandoc warned (a missing image or
 citation, a LaTeX undefined reference), into a failed file: the output is kept, the exit code is 1.
 
+`--chatter LEVEL` sets how much a build prints. `off` keeps errors on stderr. `result` prints only the final
+`OK  source > output` line. `warnings` also prints warnings and errors. `normal` is the default. `verbose` shows the
+same discovery and commands as `-v`, and `debug` adds engine failure diagnostics. The level leaves the exit status
+unchanged, including `--strict` failures. Set `options.chatter` in `--setup` or `pdfmd-options: {chatter: LEVEL}` in
+the document. The command line wins, then the document, its metadata, folder settings and global settings.
+
 The closing line says how long the build took (v3.31.4): `OK    report.md > report.pdf  in 3:07  (lualatex)`, also for
 a file that failed. `--verbose` adds a TIME line for every step. `build-time: on|off` (`--build-time` / `--no-build-time`)
 and `time-format: auto|clock|seconds|words|TEMPLATE` (`--time-format`; tokens {d} {h} {hh} {m} {mm} {s} {ss} {s1} {s2}

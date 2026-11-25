@@ -35,7 +35,7 @@ from pdfmd_base import core
 from pdfmd_base import noted, timed
 
 from pdfmd_base import pandoc_run
-from pdfmd_log import emit
+from pdfmd_log import chatter_scope, emit, resolve_chatter, verbose_output
 from pdfmd_cite.aliases import apply as apply_citation_aliases
 from pdfmd_engines.memory import scoped
 
@@ -768,11 +768,11 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         for engine_index, engine in enumerate(engines):
             family = core.ENGINE_FAMILY.get(engine, engine)
             if family in failed_families:
-                print(f"SKIP  {md_path}: {engine} shares the {family} engine with an earlier "
+                emit("normal", None, f"SKIP  {md_path}: {engine} shares the {family} engine with an earlier "
                       f"failure; skipping", file=sys.stderr)
                 continue
             if engine == "typst" and pdfmd_install.typst_too_old():         # an automatic chain gets here (v3.33.62)
-                print(f"SKIP  {md_path}: {pdfmd_install.typst_too_old()}", file=sys.stderr)
+                emit("normal", None, f"SKIP  {md_path}: {pdfmd_install.typst_too_old()}", file=sys.stderr)
                 continue
             if engine == "soffice":
                 # Not a real Pandoc --pdf-engine -- see convert_via_soffice_bridge's
@@ -1082,30 +1082,34 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
-    core.deferred("pdfmd_engines.memory", "set_limit")(md_path, metadata_files)
-    set_soffice_limit(md_path, metadata_files)
-    recorder = core.load_package("pdfmd_buildinfo.build").BuildRecorder.start(md_path, metadata_files)
-    try:
-        with core.warning_capture() as seen:
-            pdfmd_cache.check_location(md_path, metadata_files,
-                                       False if bound.get("target_format") in core.HTML_TARGETS else bound.get("cache_cli"))
-            pdfmd_native.warn_nameless_authors(md_path, metadata_files)
-            result = _convert_one_recorded(md_path, *args, **kwargs)
-            if result[1]:
-                core.load_package("pdfmd_shrink").shrink_output(core.BUILD["output"], md_path, metadata_files, bool(bound.get("verbose")))
-                core.check_output_budget(core.BUILD["output"], core.BUILD["sources"] or [md_path], md_path, metadata_files)
-                history_record.reader_warnings()
-        built = finish_build(result, seen, md_path, metadata_files)
-        history_record.finish_history(built[1])
-    except BaseException as error:
-        history_record.finish_history(False)
-        where = recorder.finish(None, core.failure_text(error)) if recorder else None
-        if where:
-            print(f"      full record: {core.under_home(where)}", file=sys.stderr)
-        raise
-    if recorder:
-        built.record_path = recorder.finish(built)
-    return built
+    level = resolve_chatter(md_path, metadata_files)
+    with chatter_scope(level):
+        bound["verbose"] = verbose_output(bound.get("verbose", False))
+        core.deferred("pdfmd_engines.memory", "set_limit")(md_path, metadata_files)
+        set_soffice_limit(md_path, metadata_files)
+        recorder = core.load_package("pdfmd_buildinfo.build").BuildRecorder.start(md_path, metadata_files)
+        try:
+            with core.warning_capture() as seen:
+                pdfmd_cache.check_location(md_path, metadata_files,
+                                           False if bound.get("target_format") in core.HTML_TARGETS else bound.get("cache_cli"))
+                pdfmd_native.warn_nameless_authors(md_path, metadata_files)
+                result = _convert_one_recorded(**bound)
+                if result[1]:
+                    core.load_package("pdfmd_shrink").shrink_output(core.BUILD["output"], md_path, metadata_files, bound["verbose"])
+                    core.check_output_budget(core.BUILD["output"], core.BUILD["sources"] or [md_path], md_path, metadata_files)
+                    history_record.reader_warnings()
+            built = finish_build(result, seen, md_path, metadata_files)
+            history_record.finish_history(built[1])
+        except BaseException as error:
+            history_record.finish_history(False)
+            where = recorder.finish(None, core.failure_text(error)) if recorder else None
+            if where:
+                emit("error", None, f"      full record: {core.under_home(where)}", file=sys.stderr)
+            raise
+        if recorder:
+            built.record_path = recorder.finish(built)
+        built.chatter = level
+        return built
 
 
 def make_embed_plan(md_path: Path, metadata_files: list[Path], preamble_files: list[Path] | None,
@@ -1279,7 +1283,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
             emit("warning", None, f"WARN  calc: could not write {core.display_path(export_target)} ({error})", file=sys.stderr)
         else:
             if written:
-                print(f"CALC  {written} name{'s' if written != 1 else ''} written to {core.display_path(export_target)}")
+                emit("normal", None, f"CALC  {written} name{'s' if written != 1 else ''} written to {core.display_path(export_target)}")
     if result[1] and (calc_names or calc_below_names):
         taken = []
         if calc_names:
@@ -1294,7 +1298,7 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
         for backed_up in [md_path, *(extra_inputs or [])]:
             core.backup_after_success(backed_up, metadata_files, backup, verbose, backup_format, collect=saved)
         if saved:
-            print(core.backup_summary(md_path, saved))
+            emit("normal", None, core.backup_summary(md_path, saved))
             if len(saved) > 1:
                 for target in saved:
                     core.vprint(verbose, f"  BACKUP  {core.display_path(target)}")
@@ -1462,7 +1466,7 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                 done, failed = core.render_plot_requests(requests, plot_dir, preamble_text, "lualatex",
                                                     pandoc_cwd, tex_env, roots, verbose, aliases)
                 if done or failed:
-                    print(f"PLOTS  stored {done} plot{'s' if done != 1 else ''} for the next build "
+                    emit("normal", None, f"PLOTS  stored {done} plot{'s' if done != 1 else ''} for the next build "
                           f"({time.time() - started:.0f} s)" + (f"; {failed} failed (typeset inline, "
                           "nothing lost)" if failed else ""))
         if ok:

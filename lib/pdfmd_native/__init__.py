@@ -1545,7 +1545,7 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
                 native_note(engine, f"failed ({error}); trying {order[position + 1]}", md_path)
             continue
         core.record_engine(engine, [attempt.split(":", 1)[0] for attempt in attempts])
-        print(f"NATIVE  {core.display_path(md_path)} via {engine}")
+        emit("normal", None, f"NATIVE  {core.display_path(md_path)} via {engine}")
         report_messages(engine, messages, md_path)
         describe_native_changes(engine, md_path, source, counts)
         if source.dropped_markup:

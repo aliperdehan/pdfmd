@@ -18,7 +18,7 @@ from pathlib import Path
 from pdfmd_base import core
 
 from pdfmd_base import pandoc_run
-from pdfmd_log import emit
+from pdfmd_log import chatter_scope, emit, resolve_chatter
 
 
 # --- pdfmd --check: a linter (v3.26.15) ---------------------------------------------------------------------
@@ -174,79 +174,80 @@ def check_command(args, pandoc_options: list[str]) -> int:
             status = 1
             continue
         metadata_files = core.scaffold_metadata_files(document, args.metadata_file)
-        try:
-            ignore = check.parse_ignore(args.check_ignore) | check.parse_ignore(
-                core.first_pdfmd_option(document, metadata_files, "check-ignore"))
-        except ValueError as error:
-            print(f"{core.display_path(document)}: {error}", file=sys.stderr)
-            status = 1
-            continue
-        bibliography, missing = check_bibliography(document, metadata_files, args.variable or [], pandoc_options)
-        inputs = []
-        for path in files:
+        with chatter_scope(resolve_chatter(document, metadata_files)):
             try:
-                inputs.append((path, check.Source(core.display_path(path), path.parent, path.read_text(encoding="utf-8-sig"))))
-            except (OSError, UnicodeDecodeError) as error:
-                print(f"{core.display_path(path)}: cannot read it ({error})", file=sys.stderr)
+                ignore = check.parse_ignore(args.check_ignore) | check.parse_ignore(
+                    core.first_pdfmd_option(document, metadata_files, "check-ignore"))
+            except ValueError as error:
+                print(f"{core.display_path(document)}: {error}", file=sys.stderr)
                 status = 1
-        folders = core.accessory_directories(document.parent, document.stem)
-        limit = core.resolve_budget(document, metadata_files)[0]
-        try:
-            excerpts, citation_key, excerpt_keys = core.deferred("pdfmd_excerpts.checks", "lint_excerpts")(
-                inputs, document, metadata_files, pandoc_options, core.effective_no_auto(document, args.no_auto),
-                args.from_format)
-        except ValueError as error:
-            print(f"{core.display_path(document)}: {error}", file=sys.stderr)
-            status = 1
-            continue
-        from pdfmd_cite import numbered
-        from pdfmd_tables.prepass import unparsed_tables
-
-        sources = [source for _, source in inputs]
-        if "table-unparsed" not in ignore:
-            no_auto = core.effective_no_auto(document, args.no_auto)
-            reader = args.from_format
-            if not core.auto_disabled(no_auto, "reader"):
-                reader = core.resolve_from_format(document, reader, metadata_files)[0]
-            excerpts.extend(check.Problem(source.label, line, "table-unparsed", message)
-                            for source in sources for line, message in unparsed_tables(source.text, reader))
-        _, reference_issue = numbered.inspect([path for path, _ in inputs], [source.text for source in sources],
-                                              metadata_files, pandoc_options, args.from_format)
-        if reference_issue == numbered.CHECK and numbered.CHECK not in ignore:
-            excerpts.append(check.Problem(sources[0].label, 0, numbered.CHECK,
-                                          "numbered source list matches but numbered-references is off"))
-        problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None,
-                              citation_key=citation_key, extra_problems=excerpts, excerpt_keys=excerpt_keys,
-                              calc=calc_check_records(files, metadata_files),
-                              read_heading_ids=lambda: check_heading_ids(sources, document, metadata_files, args))
-        if "figure-too-tall" not in ignore:
-            from pdfmd_check.figures import figure_problems
-            problems.extend(figure_problems(sources, document, metadata_files, args, pandoc_options))
-        for name in missing:
-            if "bibliography-missing" in ignore:
                 continue
-            line, label = 0, sources[0].label if sources else core.display_path(document)
-            for source in sources:
-                spot = next((number for number, text in enumerate(source.text.split("\n"), 1) if name in text), 0)
-                if spot:
-                    line, label = spot, source.label
-                    break
-            problems.insert(0, check.Problem(label, line, "bibliography-missing", f"bibliography file not found: {name}"))
-        errors = sum(problem.severity == "error" for problem in problems)
-        notes = sum(problem.severity == "note" for problem in problems)
-        warnings = len(problems) - errors - notes
-        for problem in problems:
-            place = f"{problem.file}:{problem.line}" if problem.line else problem.file
-            emit(problem.severity, problem.code, f"{place}: {problem.severity}: {problem.message}  [{problem.code}]")
-        name = core.display_path(document) + (f" and {len(files) - 1} part(s)" if len(files) > 1 else "")
-        if not problems:
-            print(f"CHECK  {name}: no problems")
-        else:
-            counts = ", ".join(part for part in (f"{errors} error(s)" if errors else "",
-                                                 f"{warnings} warning(s)" if warnings else "",
-                                                 f"{notes} note(s)" if notes else "") if part)
-            print(f"CHECK  {name}: {counts}")
-        strict = core.resolve_strict(document, metadata_files)
-        if errors or (warnings and strict):
-            status = 1
+            bibliography, missing = check_bibliography(document, metadata_files, args.variable or [], pandoc_options)
+            inputs = []
+            for path in files:
+                try:
+                    inputs.append((path, check.Source(core.display_path(path), path.parent, path.read_text(encoding="utf-8-sig"))))
+                except (OSError, UnicodeDecodeError) as error:
+                    print(f"{core.display_path(path)}: cannot read it ({error})", file=sys.stderr)
+                    status = 1
+            folders = core.accessory_directories(document.parent, document.stem)
+            limit = core.resolve_budget(document, metadata_files)[0]
+            try:
+                excerpts, citation_key, excerpt_keys = core.deferred("pdfmd_excerpts.checks", "lint_excerpts")(
+                    inputs, document, metadata_files, pandoc_options, core.effective_no_auto(document, args.no_auto),
+                    args.from_format)
+            except ValueError as error:
+                print(f"{core.display_path(document)}: {error}", file=sys.stderr)
+                status = 1
+                continue
+            from pdfmd_cite import numbered
+            from pdfmd_tables.prepass import unparsed_tables
+
+            sources = [source for _, source in inputs]
+            if "table-unparsed" not in ignore:
+                no_auto = core.effective_no_auto(document, args.no_auto)
+                reader = args.from_format
+                if not core.auto_disabled(no_auto, "reader"):
+                    reader = core.resolve_from_format(document, reader, metadata_files)[0]
+                excerpts.extend(check.Problem(source.label, line, "table-unparsed", message)
+                                for source in sources for line, message in unparsed_tables(source.text, reader))
+            _, reference_issue = numbered.inspect([path for path, _ in inputs], [source.text for source in sources],
+                                                  metadata_files, pandoc_options, args.from_format)
+            if reference_issue == numbered.CHECK and numbered.CHECK not in ignore:
+                excerpts.append(check.Problem(sources[0].label, 0, numbered.CHECK,
+                                              "numbered source list matches but numbered-references is off"))
+            problems = check.lint(sources, bibliography, ignore, folders, int(limit * 1048576) if limit else None,
+                                  citation_key=citation_key, extra_problems=excerpts, excerpt_keys=excerpt_keys,
+                                  calc=calc_check_records(files, metadata_files),
+                                  read_heading_ids=lambda: check_heading_ids(sources, document, metadata_files, args))
+            if "figure-too-tall" not in ignore:
+                from pdfmd_check.figures import figure_problems
+                problems.extend(figure_problems(sources, document, metadata_files, args, pandoc_options))
+            for name in missing:
+                if "bibliography-missing" in ignore:
+                    continue
+                line, label = 0, sources[0].label if sources else core.display_path(document)
+                for source in sources:
+                    spot = next((number for number, text in enumerate(source.text.split("\n"), 1) if name in text), 0)
+                    if spot:
+                        line, label = spot, source.label
+                        break
+                problems.insert(0, check.Problem(label, line, "bibliography-missing", f"bibliography file not found: {name}"))
+            errors = sum(problem.severity == "error" for problem in problems)
+            notes = sum(problem.severity == "note" for problem in problems)
+            warnings = len(problems) - errors - notes
+            for problem in problems:
+                place = f"{problem.file}:{problem.line}" if problem.line else problem.file
+                emit(problem.severity, problem.code, f"{place}: {problem.severity}: {problem.message}  [{problem.code}]")
+            name = core.display_path(document) + (f" and {len(files) - 1} part(s)" if len(files) > 1 else "")
+            if not problems:
+                emit("normal", None, f"CHECK  {name}: no problems")
+            else:
+                counts = ", ".join(part for part in (f"{errors} error(s)" if errors else "",
+                                                     f"{warnings} warning(s)" if warnings else "",
+                                                     f"{notes} note(s)" if notes else "") if part)
+                emit("normal", None, f"CHECK  {name}: {counts}")
+            strict = core.resolve_strict(document, metadata_files)
+            if errors or (warnings and strict):
+                status = 1
     return status

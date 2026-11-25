@@ -219,6 +219,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="output directory (batch) or filename (single-file/report/book); "
                              "a recognized extension (e.g. .html, .tex, .typ) also selects the "
                              "target format, same as --to")
+    from pdfmd_log import CHATTER_LEVELS
+    parser.add_argument("--chatter", type=lambda word: word.strip().casefold(), choices=CHATTER_LEVELS, metavar="LEVEL",
+                        help="build output: off, result, warnings, normal (default), verbose or debug. Also "
+                             "`pdfmd-options: {chatter: LEVEL}` and `--setup`")
     parser.add_argument("--strict", action=argparse.BooleanOptionalAction, default=None,
                         help="a build that printed a warning (an engine that failed and was replaced, a missing glyph, "
                              "repaired source control characters, a Pandoc [WARNING]...) counts as failed: "

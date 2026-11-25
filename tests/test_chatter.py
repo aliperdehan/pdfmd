@@ -1,0 +1,92 @@
+"""The console level can change what a build says while keeping its status."""
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import isolation_support  # noqa: E402,F401
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class Chatter(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.folder = Path(temp.name)
+        self.config = self.folder / "config.yaml"
+        self.settings()
+        self.write("a.md")
+        metadata = self.folder / "metadata.yaml"
+        metadata.write_text("title: Sample\n", encoding="utf-8")
+
+    def settings(self, text=""):
+        self.config.write_text(f"options:\n  soffice-timeout: 0\n{text}", encoding="utf-8")
+
+    def write(self, name, options="", body="| A | B |\n|---|---|\n| 1 | 2 | 3 |\n"):
+        (self.folder / name).write_text(f"{options}# Sample\n\n{body}", encoding="utf-8")
+
+    def run_pdfmd(self, *args):
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "pdfmd"), "--rewrite", "--to", "latex", "--no-build-time", "--path-style", "relative", *args],
+            cwd=self.folder, env={**os.environ, "PDFMD_CONFIG": str(self.config), "PDFMD_NO_PROMPT": "1"},
+            capture_output=True, encoding="utf-8", timeout=90)
+
+    def test_console_levels_and_status(self):
+        for level in ("off", "result", "warnings", "normal", "verbose", "debug"):
+            with self.subTest(level=level):
+                done = self.run_pdfmd("a.md", "--chatter", level)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertEqual("OK    a.md > a.tex" in done.stdout, level != "off")
+                self.assertEqual("WARN  table-repair:" in done.stdout, level not in ("off", "result"))
+                self.assertEqual("FOUND" in done.stdout, level == "normal")
+                self.assertEqual("AUTO YAML" in done.stdout, level in ("verbose", "debug"))
+                if level == "off":
+                    self.assertEqual(done.stdout, "")
+                if level == "result":
+                    self.assertEqual(done.stdout, "OK    a.md > a.tex\n")
+
+    def test_off_keeps_strict_failure_on_stderr(self):
+        done = self.run_pdfmd("a.md", "--strict", "--chatter=off")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(done.stdout, "")
+        self.assertIn("--strict: the build printed", done.stderr)
+
+    def test_metadata_can_set_the_level(self):
+        (self.folder / "metadata.yaml").write_text("pdfmd-options: {chatter: result}\n", encoding="utf-8")
+        self.settings("  chatter: warnings\n")
+        done = self.run_pdfmd("a.md")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(done.stdout, "OK    a.md > a.tex\n")
+
+    def test_report_result_only_shows_the_report(self):
+        self.write("b.md")
+        done = self.run_pdfmd("-r", "a.md", "b.md", "--chatter=result")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(done.stdout, "OK    REPORT  book.tex\n")
+
+    def test_precedence_and_batch_documents(self):
+        self.settings("  chatter: warnings\n")
+        self.write("a.md", "---\npdfmd-options: {chatter: off}\n---\n\n")
+        self.write("b.md")
+        self.assertEqual(self.run_pdfmd("a.md").stdout, "")
+        forced = self.run_pdfmd("a.md", "--chatter=result")
+        self.assertEqual(forced.stdout, "OK    a.md > a.tex\n")
+        for jobs in ("1", "2"):
+            with self.subTest(jobs=jobs):
+                batch = self.run_pdfmd("-b", "-j", jobs, "a.md", "b.md")
+                self.assertEqual(batch.returncode, 0, batch.stdout + batch.stderr)
+                self.assertNotIn("a.md", batch.stdout)
+                self.assertIn("WARN  table-repair: b.md", batch.stdout)
+                self.assertIn("OK    b.md > b.tex", batch.stdout)
+                self.assertNotIn("FOUND", batch.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()
