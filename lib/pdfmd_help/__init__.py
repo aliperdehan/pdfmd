@@ -199,13 +199,10 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
     previous = parser.description
     parser.description = f"{topic}: {summary}"
     if topic == "tables":
-        parser.description += (". pdfmd-options: column-estimate: count (default) | measure; "
-                               "measure uses the selected LaTeX or Typst PDF engine and caches cell and unbreakable word widths. "
-                               "Exports keep count; --verbose reports measured/cached widths. "
-                               "column-word-ceil: on (default) | off. column-ceil-margin: 25% (default), a percentage "
-                               "or fraction; 0 or off disables the ceiling. --setup offers these settings. "
-                               "Pipe separators accept dash look-alikes, =, + and spaces beside alignment colons. "
-                               "table-colons: ignore (default) | count controls whether colons contribute to widths.")
+        parser.description += (". pdfmd-options / --setup: column-estimate: count (default) | measure "
+                               "(LaTeX/Typst PDF, --verbose reports measured/cached widths). "
+                               "column-word-ceil: on | off; column-ceil-margin: 25%, fraction or percentage, 0 disables. "
+                               "table-colons: ignore | count. --check reports table-unparsed.")
     try:
         text = parser.format_help()
         if topic == "output":

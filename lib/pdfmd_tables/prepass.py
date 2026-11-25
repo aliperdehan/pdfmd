@@ -7,7 +7,7 @@ from math import gcd
 
 from pdfmd_base import core
 
-from .scan import (CSV_OPEN_RE, DIV_CLOSE_RE, GRID_EDGE_RE, PIPE_SEPARATOR_RE, _caption, caption_parts,
+from .scan import (CSV_OPEN_RE, DIV_CLOSE_RE, GRID_EDGE_RE, PIPE_SEPARATOR_RE, _caption, _grid_end, caption_parts,
                    parse_attributes, split_row)
 
 
@@ -42,6 +42,8 @@ def visible_lines(text: str) -> list[str]:
 
 
 def pipe_row(line: str) -> bool:
+    if "|" not in line:
+        return False
     bare = line.strip()
     return bool(bare and (bare.startswith("|") or (bare.endswith("|") and not bare.endswith(r"\|"))
                           or len(split_row(bare)) > 1))
@@ -49,6 +51,8 @@ def pipe_row(line: str) -> bool:
 
 def normal_separator(line: str) -> str | None:
     """The same separator with conventional dashes, dividers and alignment marks."""
+    if "|" not in line and "+" not in line:
+        return None
     line = COLON_SPACE.sub(lambda match: match[0].strip(), line.translate(DASHES))
     if "|" in line and PIPE_SEPARATOR_RE.fullmatch(line):
         return line
@@ -66,6 +70,71 @@ def grid_lines(lines: list[str]) -> set[int]:
             end += 1
         found.update(range(index, end))
     return found
+
+
+def pipe_blocks(lines: list[str], grids: set[int]):
+    """Spans that have a pipe separator or at least two consecutive pipe rows."""
+    start = 0
+    while start < len(lines):
+        if start in grids:
+            start += 1
+            continue
+        if normal_separator(lines[start]) is not None:
+            separator = start
+        elif pipe_row(lines[start]):
+            separator = start + 1 if start + 1 < len(lines) and start + 1 not in grids \
+                and normal_separator(lines[start + 1]) is not None else None
+        else:
+            start += 1
+            continue
+        end = start + 1 if separator is None else separator + 1
+        while end < len(lines) and end not in grids and pipe_row(lines[end]):
+            end += 1
+        if separator is not None or end > start + 1:
+            yield start, end, separator
+        start = end
+
+
+def reader_family(reader: str | None) -> str:
+    return re.split(r"[+-]", reader or "markdown", maxsplit=1)[0].casefold()
+
+
+def unparsed_tables(text: str, reader: str | None) -> list[tuple[int, str]]:
+    """Likely pipe or grid tables that the selected reader cannot read as written."""
+    family = reader_family(reader)
+    if family not in ("markdown", "markdown_strict", "markdown_mmd", "markdown_phpextra", "gfm", "commonmark_x", "commonmark"):
+        return []
+    if "|" not in text and "+" not in text:
+        return []
+    lines = visible_lines(text)
+    grids = grid_lines(lines)
+    reasons = []
+    for start, _, separator in pipe_blocks(lines, grids):
+        if separator is None:
+            reasons.append((start + 1, "no separator row"))
+            continue
+        if separator == start:
+            reasons.append((start + 1, "no header row"))
+            continue
+        original = lines[separator]
+        fixed = normal_separator(original)
+        header_count, separator_count = len(split_row(lines[start])), len(split_row(fixed))
+        if header_count != separator_count:
+            reason = f"header {header_count} / separator {separator_count}"
+        elif "+" in original and (family != "markdown" or original.strip().startswith("+") or ":" in original):
+            reason = "+ separator"
+        elif original.replace("+", "|") != fixed:
+            reason = "non-standard separator spelling"
+        elif reader and "-pipe_tables" in reader:
+            reason = f"{family} has pipe tables disabled"
+        else:
+            continue
+        reasons.append((separator + 1, reason))
+    if family == "gfm":
+        for index in sorted(grids):
+            if index - 1 not in grids and _grid_end(lines, index) is not None:
+                reasons.append((index + 1, "gfm does not read grid tables"))
+    return [(line, f"looks like a table but was not read as one ({reason})") for line, reason in sorted(reasons)]
 
 
 def table_colons(path, metadata_files) -> str:
@@ -124,7 +193,9 @@ def normalise_separators(text: str, *, colons: str = "count") -> tuple[str, list
     return "\n".join(lines), changed
 
 
-def table_source(text: str, label: str, *, colons: str = "ignore") -> str:
+def table_source(text: str, label: str, *, colons: str = "ignore", reader: str | None = None) -> str:
+    for line, reason in unparsed_tables(text, reader):
+        print(f"WARN  table-unparsed: {label}, line {line}: {reason}")
     fixed, changes = normalise_separators(text, colons=colons)
     for line in changes:
         print(f"WARN  table-separator: {label}, line {line}: normalised the pipe-table separator")

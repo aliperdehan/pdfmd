@@ -31,6 +31,7 @@ CODES: dict[str, tuple[str, str]] = {
     "image-missing": ("error", "an image file is not there"),
     "figure-too-tall": ("warning", "a figure and its caption are taller than the PDF page body"),
     "file-missing": ("error", "a file= of a csv div is not there"),
+    "table-unparsed": ("warning", "a pipe or grid table the selected reader cannot read as written"),
     "link-missing": ("warning", "a link to a local file that is not there"),
     "anchor-missing": ("warning", "a link to a #heading or {#id} that does not exist"),
     "id-duplicate": ("error", "the same {#id} is used twice"),

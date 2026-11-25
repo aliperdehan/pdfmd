@@ -199,8 +199,16 @@ def check_command(args, pandoc_options: list[str]) -> int:
             status = 1
             continue
         from pdfmd_cite import numbered
+        from pdfmd_tables.prepass import unparsed_tables
 
         sources = [source for _, source in inputs]
+        if "table-unparsed" not in ignore:
+            no_auto = core.effective_no_auto(document, args.no_auto)
+            reader = args.from_format
+            if not core.auto_disabled(no_auto, "reader"):
+                reader = core.resolve_from_format(document, reader, metadata_files)[0]
+            excerpts.extend(check.Problem(source.label, line, "table-unparsed", message)
+                            for source in sources for line, message in unparsed_tables(source.text, reader))
         _, reference_issue = numbered.inspect([path for path, _ in inputs], [source.text for source in sources],
                                               metadata_files, pandoc_options, args.from_format)
         if reference_issue == numbered.CHECK and numbered.CHECK not in ignore:

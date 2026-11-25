@@ -1885,6 +1885,9 @@ On the line directly below a pipe-table header, pdfmd normalises separator spell
 the source line number. En dashes become two hyphens and em dashes three. Minus signs, figure dashes, Unicode
 hyphens and non-breaking hyphens become single hyphens. `=` becomes `-`, `+` becomes `|` and `: - :` becomes
 `:-:`. Grid tables, code, comments, YAML, raw blocks, maths and `.csv` div data are left alone.
+Builds and `--check` warn with `table-unparsed` when the source resembles a table the reader cannot read as
+written. The warning identifies problems such as a missing separator, a mismatched header and separator, or
+a grid table under GFM. A single pipe line without a separator is left alone.
 
 Pipe-table column widths (v3.25.0): a `---|---` separator says nothing about the columns, so a table whose
 lines run long is laid out by pdfmd_lua/table_width.lua -- the widths that give the fewest lines within the text

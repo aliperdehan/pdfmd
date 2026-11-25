@@ -529,7 +529,7 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
     if md_path.suffix.lower() in MARKDOWN_LIKE_SUFFIXES:
         from pdfmd_tables.prepass import table_colons, table_source
 
-        text = table_source(text, core.display_path(md_path), colons=table_colons(md_path, metadata_files))
+        text = table_source(text, core.display_path(md_path), colons=table_colons(md_path, metadata_files), reader=reader)
         text = dialect.prepare(text, md_path, metadata_files, relax)
         if transform is not None:
             text = transform(text, md_path)

@@ -1504,7 +1504,7 @@ def convert_native(md_path: Path, output: Path, engines: list[str], metadata_fil
     from pdfmd_tables.prepass import table_colons, table_source
 
     text = table_source(md_path.read_text(encoding="utf-8-sig"), core.display_path(md_path),
-                        colons=table_colons(md_path, metadata_files))
+                        colons=table_colons(md_path, metadata_files), reader="gfm")
     text = numbered.native_text_for(text, md_path, metadata_files, from_format)
     text = core.obsidian_source(text, md_path, metadata_files)
     if core.flavour_of(md_path, metadata_files) == "obsidian":

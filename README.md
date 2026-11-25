@@ -817,6 +817,7 @@ pdfmd report --check --check-ignore heading-jump,link-missing
 | `heading-repeated` | a note listing the IDs of repeated heading text at the same level, across parts too |
 | `section-empty` | a heading with no body before the next heading at the same or a higher level, or a part with only a heading |
 | `fence-open`, `comment-open`, `div-open`, `div-stray`, `math-open` | a code fence, `<!--`, `:::` div or `$$` that is never closed, or a stray `:::` |
+| `table-unparsed` | a pipe or grid table the selected reader cannot read as written |
 | `attr-stray` | an attribute block alone at the start of the body or after a blank line, which prints as text |
 | `emphasis-empty` | empty emphasis markers in prose, such as `****`, `__` or `**  **` |
 | `front-matter`, `front-matter-duplicate` | YAML that does not parse (with its line) or never closes; a key set twice |

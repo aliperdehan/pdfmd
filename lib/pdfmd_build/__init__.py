@@ -408,7 +408,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                             selection if isinstance(selection, (set, frozenset)) else None,
                             numbered.part_transform(references, transform_part),
                             metadata_files=metadata_files,
-                            prepare_part=lambda text, part: table_source(text, core.display_path(part), colons=colons)) as scaffold_files, \
+                            prepare_part=lambda text, part: table_source(text, core.display_path(part), colons=colons,
+                                                                         reader=effective_from)) as scaffold_files, \
             linked_inputs([title_source, *scaffold_files[1:]], [md_path, *parts_inputs], effective_from, metadata_files,
                           "pdf" if link_output else target_format, link_output or output,
                           not core.auto_disabled(no_auto, "title")) as (linked, effective_from):

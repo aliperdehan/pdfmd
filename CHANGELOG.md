@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.59 — 2026-11-25
+
+Pre-edit state: commit `8701d3a`. [tables] Malformed pipe tables and grid tables under GFM could turn into prose without a diagnosis. Report
+the reader problem with table-unparsed in builds and --check, leaving isolated pipe lines alone. Tests cover count
+mismatches, plus separators, grid tables, missing separators and --check-ignore.
+
 ## v3.34.58 — 2026-11-25
 
 Pre-edit state: commit `772847a`. [tables] Pandoc counted alignment colons as additional dashes, which could turn equal columns into chosen widths

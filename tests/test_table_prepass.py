@@ -54,6 +54,20 @@ class Source(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(normalise_separators(text), (text, []))
 
+    def test_check_names_the_reader_problem_and_can_ignore_it(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            (root / "doc.md").write_text("| A | B | C |\n|---|---|\n| 1 | 2 | 3 |\n", encoding="utf-8")
+            command = [sys.executable, str(ROOT / "scripts" / "pdfmd"), "--check", "--from", "gfm", "doc.md"]
+            done = subprocess.run(command, cwd=root, capture_output=True, encoding="utf-8")
+            self.assertIn("doc.md:2: warning:", done.stdout)
+            self.assertIn("header 3 / separator 2", done.stdout)
+            self.assertIn("[table-unparsed]", done.stdout)
+            ignored = subprocess.run([*command, "--check-ignore", "table-unparsed"], cwd=root,
+                                     capture_output=True, encoding="utf-8")
+            self.assertEqual(ignored.returncode, 0, ignored.stderr)
+            self.assertNotIn("[table-unparsed]", ignored.stdout)
+
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Writers(unittest.TestCase):
@@ -117,3 +131,15 @@ class Writers(unittest.TestCase):
         second = first + "\n: Caption {table-colons=count}\n"
         _, output = self.build(first + "\n" + second, "markdown", "html")
         self.assertEqual(self.proportions(output, "html"), [["50", "50"], ["62", "37"]])
+
+    def test_build_warns_about_unparsed_table_shapes(self):
+        text = ("a | b\nc | d\n\ncommand | other\n\n| A | B |\n|---+---|\n| x | y |\n\n"
+                "+---+---+\n| a | b |\n+===+===+\n| x | y |\n+---+---+\n")
+        result, _ = self.build(text, "gfm", "html")
+        lines = [line for line in result.stdout.splitlines() if "WARN  table-unparsed" in line]
+        self.assertEqual(len(lines), 3, lines)
+        self.assertIn("line 1: looks like a table but was not read as one (no separator row)", lines[0])
+        self.assertIn("line 7:", lines[1])
+        self.assertIn("+ separator", lines[1])
+        self.assertIn("line 10:", lines[2])
+        self.assertIn("gfm does not read grid tables", lines[2])
