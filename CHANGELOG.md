@@ -19,6 +19,13 @@ same commit as the change.
 
 ---
 
+## v3.34.40 — 2026-11-25
+
+Pre-edit state: commit `0c3ff8b`. An empty PDFMD_CONFIG previously switched off the user file. Treat it like an
+unset variable and read the normal user location. Non-empty path overrides
+keep working. The config tests compare the empty and unset cases against the
+same synthetic user file.
+
 ## v3.34.39 — 2026-11-25
 
 Pre-edit state: commit `abdda06`. Only the user config could provide

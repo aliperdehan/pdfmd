@@ -985,7 +985,8 @@ pdfmd --show-config         # where it is and what it sets
 ```
 
 The config file's `options:` block takes the same keys as a document's `pdfmd-options:` and applies to every document, below
-what the document or its metadata files say. `PDFMD_CONFIG=other.yaml` uses another file, `PDFMD_CONFIG=` none.
+what the document or its metadata files say. `PDFMD_CONFIG=other.yaml` uses another user file.
+An empty or unset `PDFMD_CONFIG` uses the usual user file.
 
 ### 13.6 From Python
 

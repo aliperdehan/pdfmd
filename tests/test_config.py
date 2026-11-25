@@ -88,10 +88,21 @@ class Loading(ConfigCase):
             pdfmd.load_config()
         self.assertIn("fallbak", err.getvalue())
 
-    def test_an_empty_PDFMD_CONFIG_switches_the_file_off(self):
+    def test_an_empty_PDFMD_CONFIG_reads_the_default_user_file(self):
         self.write_config("options: {parts: auto}\n")
-        os.environ["PDFMD_CONFIG"] = ""
-        pdfmd.load_config.cache_clear()
+        for value in (None, ""):
+            with self.subTest(value=value):
+                if value is None:
+                    os.environ.pop("PDFMD_CONFIG", None)
+                else:
+                    os.environ["PDFMD_CONFIG"] = value
+                pdfmd.load_config.cache_clear()
+                self.assertEqual(pdfmd.config_path(), self.config)
+                self.assertEqual(pdfmd.config_options(), {"parts": "auto"})
+
+    def test_a_nonempty_whitespace_override_can_still_disable_the_user_file(self):
+        self.write_config("options: {parts: auto}\n")
+        os.environ["PDFMD_CONFIG"] = " "
         self.assertEqual(pdfmd.config_options(), {})
 
 

@@ -402,7 +402,7 @@ def presets_report(path: Path | None = None) -> bool:
     """`--presets [DOCUMENT]`: the global metadata files there are, and which one a build here would use."""
     config = core.config_path()
     if config is None:
-        print("The config file is switched off (PDFMD_CONFIG is empty): there is no global metadata.")
+        print("The config file is switched off (PDFMD_CONFIG contains only whitespace): there is no global metadata.")
         return False
     default = global_metadata_file()
     rows = [("default", default, "metadata.yaml" if default else "metadata.yaml (not there yet: pdfmd --setup writes it)")]

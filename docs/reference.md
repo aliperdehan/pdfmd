@@ -1586,7 +1586,7 @@ case and spaces. `--split` cuts at the same headings, setext ones included.
 ## The global config file (v3.23.6)
 
 ~/.config/pdfmd/config.yaml ($XDG_CONFIG_HOME, %APPDATA%\pdfmd; PDFMD_CONFIG
-names another user file, an empty value disables that file). The per-install
+names another user file, an empty value uses the usual location). The per-install
 file at `sys.prefix/etc/pdfmd/config.yaml` uses the same format and wins over
 the user file. Command-line options, document front matter, metadata files
 and folder settings keep their existing precedence above both files.

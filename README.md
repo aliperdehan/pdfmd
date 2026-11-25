@@ -3577,7 +3577,7 @@ where it is and what it sets. Its `options:` block takes the same keys as a
 document's `pdfmd-options:` and applies to every document, below anything the
 document or its metadata files say (the command line beats all of them);
 `translit:` is the romanization packs of the name lookup. `PDFMD_CONFIG=other.yaml`
-uses another user file, and `PDFMD_CONFIG=` (empty) disables the user file.
+uses another user file. An empty or unset `PDFMD_CONFIG` uses the usual user file.
 The optional per-install config at `sys.prefix/etc/pdfmd/config.yaml` uses the
 same format and takes precedence over the user config. `--show-config` and
 `--which` name the per-install file when it is present.
@@ -3719,7 +3719,7 @@ Relative bibliography and CSL paths use the existing metadata-folder resource lo
 resolve relative to the file that names them. A discovered parent metadata folder also supplies intentionally named
 preambles and document/package Lua filters under the usual rules below: an unrelated `.lua` never runs automatically,
 and the existing trust notice and `--strict` checks apply. Use `--verbose` to see every discovered YAML file and
-`pdfmd project/SR/SR.md --show-config` to list its metadata sources without building, even with `PDFMD_CONFIG=`.
+`pdfmd project/SR/SR.md --show-config` to list its metadata sources without building.
 
 **When two metadata files set the same key, the later one wins**, as in Pandoc:
 `<name>.yaml` over `metadata.yaml`, `report.yaml` over `metadata.yaml`, and the

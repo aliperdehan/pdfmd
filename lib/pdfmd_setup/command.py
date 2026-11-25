@@ -165,7 +165,7 @@ def setup_command(screen: str = "") -> bool:
     else:
         path = core.config_path()
     if path is None:
-        print("The config file is switched off (PDFMD_CONFIG is empty).")
+        print("The config file is switched off (PDFMD_CONFIG contains only whitespace).")
         return False
     if core.yaml is None:
         print("pdfmd --setup needs PyYAML (pip install pyyaml).", file=sys.stderr)

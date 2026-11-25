@@ -38,7 +38,7 @@ def uninstall_kit(name: str) -> bool:
     from pdfmd_kits import install as kit_installer
     target = core.kits_install_directory()
     if target is None:
-        print("ERROR  PDFMD_CONFIG is empty: there is no config folder", file=sys.stderr)
+        print("ERROR  PDFMD_CONFIG contains only whitespace: there is no config folder", file=sys.stderr)
         return False
     try:
         folder = kit_installer.uninstall(name, target)
