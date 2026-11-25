@@ -24,6 +24,7 @@ CODES: dict[str, tuple[str, str]] = {
     "div-open": ("warning", "a fenced div (:::) is never closed"),
     "div-stray": ("warning", "a closing ::: with no div open"),
     "attr-stray": ("warning", "a detached attribute block that Pandoc prints as text"),
+    "emphasis-empty": ("warning", "empty emphasis markers in text"),
     "math-open": ("warning", "an odd number of $$ (a display formula is never closed)"),
     "math-digit": ("warning", "a $...$ that is not math because its closing $ is followed by a digit ($\\geq$3)"),
     "image-missing": ("error", "an image file is not there"),
@@ -105,6 +106,13 @@ DEFINITION_LINE_RE = re.compile(r"(?m)^ {0,3}\[[^\]^][^\]]*\]:.*$")
 
 ATTRIBUTES_RE = re.compile(
     r"\{((?:\s*(?:#[^\s{}]+|\.[^\s{}]+|[\w:-]+=(?:\"[^\"]*\"|'[^']*'|[^\s{}]+)))+)\s*\}")
+EMPTY_EMPHASIS_RE = re.compile(r"(?<![\w\\*_])(?:(?P<marker>\*{2,3}|_{1,3})[ \t]+(?P=marker)|\*{4}|__)(?![\w*_])")
+RULE_RE = re.compile(r"[ \t]*(?:(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})")
+QUOTE_PREFIX_RE = re.compile(r"^(?:[ \t]*>[ \t]*)+")
+LIST_PREFIX_RE = re.compile(r"^[ \t]*(?:[-+*]|\d+[.)])[ \t]+")
+RAW_BLOCK_RE = re.compile(
+    r"(?ims)^ {0,3}(?:<(?P<tag>pre|script|style|textarea)\b[^>]*>.*?</(?P=tag)\s*>"
+    r"|\\begin\{(?P<env>[\w*]+)\}.*?\\end\{(?P=env)\})")
 IMAGE_RE = re.compile(
     r"!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)|<img\b[^>]*?\bsrc=[\"']([^\"']+)[\"']",
     re.IGNORECASE)
@@ -383,6 +391,7 @@ def lint(sources: list[Source], bibliography: Bibliography | None = None, ignore
         links(analysis, findings, places, ids)
         structure(analysis, findings)
         stray_attributes(analysis, findings)
+        empty_emphasis(analysis, findings)
         digit_math(analysis, findings)
     cross_references(analyses, findings, ids)
     footnotes(analyses, findings)
@@ -590,6 +599,22 @@ def stray_attributes(analysis: Analysis, findings: Findings) -> None:
         if index not in table_attributes:
             findings.add(analysis, index + 1, "attr-stray",
                          "this attribute block has nothing to attach to and prints as text")
+
+
+def empty_emphasis(analysis: Analysis, findings: Findings) -> None:
+    if not EMPTY_EMPHASIS_RE.search(analysis.cited):
+        return
+    prose = blank_matches(ATTRIBUTES_RE, analysis.cited)
+    for block in reversed(list(RAW_BLOCK_RE.finditer(analysis.plain))):
+        start, end = block.span()
+        prose = prose[:start] + blank(prose[start:end]) + prose[end:]
+    for number, (line, visible) in enumerate(zip(analysis.source.text.split("\n"), prose.split("\n")), 1):
+        content = QUOTE_PREFIX_RE.sub("", line)
+        if RULE_RE.fullmatch(content) or RULE_RE.fullmatch(LIST_PREFIX_RE.sub("", content)):
+            continue
+        for found in EMPTY_EMPHASIS_RE.finditer(line):
+            if visible[found.start():found.end()] == found.group():
+                findings.add(analysis, number, "emphasis-empty", f"empty emphasis markers {found.group()!r} print as text")
 
 
 def cross_references(analyses: list[Analysis], findings: Findings, ids: set[str]) -> None:

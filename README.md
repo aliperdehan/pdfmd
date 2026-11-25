@@ -815,6 +815,7 @@ pdfmd report --check --check-ignore heading-jump,link-missing
 | `heading-jump`, `heading-space`, `heading-empty` | `#` then `###`; `#Heading` (a paragraph); a heading with no text |
 | `fence-open`, `comment-open`, `div-open`, `div-stray`, `math-open` | a code fence, `<!--`, `:::` div or `$$` that is never closed, or a stray `:::` |
 | `attr-stray` | an attribute block alone at the start of the body or after a blank line, which prints as text |
+| `emphasis-empty` | empty emphasis markers in prose, such as `****`, `__` or `**  **` |
 | `front-matter`, `front-matter-duplicate` | YAML that does not parse (with its line) or never closes; a key set twice |
 | `calc-undefined`, `calc-redefined` | a calculator span, `::: calc` line or `{ans}` that uses a name no span, line or constants file defines (one line per statement, with its line and part, in document order); a name defined more than once: a note listing where, and which definition a use below them sees (a normal build says nothing: redefining a name on purpose is how a report reuses `V`) |
 

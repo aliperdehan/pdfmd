@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.44 — 2026-11-25
+
+Pre-edit state: commit `931dff4`. Empty emphasis delimiters printed literally without a warning. `--check` reports `emphasis-empty` in prose and skips thematic breaks, code, maths and raw blocks. The regression covers literal markers, balanced emphasis and protected text.
+
 ## v3.34.43 — 2026-11-25
 
 Pre-edit state: commit `e36c018`. Detached attribute blocks printed literally without a warning. `--check` reports `attr-stray` for a block alone at a paragraph boundary, allowing attached attributes and pdfmd pipe-table settings. Debug and full help list the check codes and severities. Regression tests cover detached blocks, attachment, protected text and help.

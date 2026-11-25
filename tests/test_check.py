@@ -59,6 +59,17 @@ class Reading(unittest.TestCase):
         self.assertIn("prints", found[-1].message)
         self.assertEqual(codes("<!-- pdfmd-check: ignore attr-stray -->\n{.class}\n"), [])
 
+    def test_empty_emphasis_only_in_visible_text(self):
+        text = ("Text **** stays.\nText __ stays.\nText **  ** stays.\n\n__\n\n"
+                "****\n\n**  **\n\n> ****\n\n"
+                "**one**  **two** and ***both***, \\****, `****`, $x_{__}$ and <!-- **** -->.\n\n"
+                "```{=latex}\n****\n```\n\n    ****\n\n"
+                "<pre>\nraw **** text\n</pre>\n\n\\begin{verbatim}\nraw **** text\n\\end{verbatim}\n\n"
+                "[link](https://example.org/****) [span]{title=\"****\"}.\n")
+        found = [p for p in lint([Source("doc.md", None, text)]) if p.code == "emphasis-empty"]
+        self.assertEqual([(p.line, p.severity) for p in found], [(1, "warning"), (2, "warning"),
+                                                               (3, "warning"), (5, "warning")])
+
     def test_indented_code_is_masked_but_list_and_paragraph_continuations_are_checked(self):
         text = "# A\n\n    @fig:code ![x](missing.png)\n\n\t@fig:other\n\nText\n    @fig:paragraph\n\n- item\n\n    @fig:list ![x](list.png)\n"
         found = lint([Source("d.md", None, text)])
