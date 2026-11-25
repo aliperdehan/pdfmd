@@ -845,7 +845,7 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
     scaffold.write_text(text[:front.end()] + (("\n" + lead + "\n") if lead else ""), encoding="utf-8")
     written: list[Path] = []
 
-    def emit(section: list[str], directory: Path, number: int, level: int) -> None:
+    def write_section(section: list[str], directory: Path, number: int, level: int) -> None:
         """One file per section; with depth left, a folder whose first file
         holds the heading and the text before its first subheading and whose
         other files are the subsections (selecting the folder selects all)."""
@@ -864,10 +864,10 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
         lead.write_text("\n".join(pieces[0]).rstrip("\n") + "\n", encoding="utf-8")
         written.append(lead)
         for index, piece in enumerate(pieces[1:], 1):
-            emit(piece, folder, index, level + 1)
+            write_section(piece, folder, index, level + 1)
 
     for number, section in enumerate(sections[1:], 1):
-        emit(section, parts_dir, number, 1)
+        write_section(section, parts_dir, number, 1)
     skip = {source.name.casefold()}
     for entry in sorted(source.parent.iterdir()):
         if (entry.name.startswith(".") or entry.name.casefold() in skip or entry.name.casefold() in PARTS_SKIP_DIRS

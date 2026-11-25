@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.67 — 2026-11-26
+
+Pre-edit state: commit `875272b`. The splitter's local writer hid the new console emitter, so `--split`
+raised a `TypeError` when reporting the Pandoc AST comparison. Rename the local writer to
+`write_section`. The existing CLI and symlink-fallback section tests failed before and passed after.
+
 ## v3.34.66 — 2026-11-26
 
 Pre-edit state: commit `610137e`. The early chatter lookup treated raw `-y` arguments as file paths and
