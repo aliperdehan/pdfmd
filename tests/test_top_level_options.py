@@ -114,7 +114,8 @@ class Options(unittest.TestCase):
         log = self.run_pdfmd("d.md", "--to", "plain", "-s", "-o", "out.txt", "--template", "template.txt", "--verbose")
         self.assertTrue((self.root / "out.txt").read_text().startswith("pandoc\n"))
         lines = [line for line in log.splitlines() if line.startswith("OPTIONS") and "top level" in line]
-        self.assertEqual(sum("kit:" in line for line in lines), 1, log)
+        self.assertEqual([line for line in lines if "kit:" in line],
+                         [f"OPTIONS  kit: x (top level of {self.root.resolve() / 'd.md'})"], log)
         self.assertTrue(any("flavour: pandoc" in line and "metadata.yaml" in line for line in lines), log)
         self.assertEqual(len(lines), len(set(lines)), log)
 

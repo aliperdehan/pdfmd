@@ -125,10 +125,8 @@ def run_main() -> None:
     core.MUTE_CLI = parse_mutes(args.mute) if args.mute is not None else None
     source = args.path[0] if args.path and not (args.batch or args.report) and args.path[0].is_file() else None
     args.verbose = select_chatter(source)
-    if args.batch or args.report or len(args.path or []) > 1:
-        summary.CURRENT.get().requested = args.summary
-    else:
-        summary.select(args.summary, source)
+    # Build routes resolve the summary setting after path formatting and metadata discovery.
+    summary.CURRENT.get().requested = args.summary
     core.use_managed_tools()
     if not (args.path and all(path.suffix.lower() == ".pdf" for path in args.path)):
         from pdfmd_args.paths import invocation_paths

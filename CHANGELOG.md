@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.73 — 2026-11-27
+
+Pre-edit state: commit `8879196`. The early summary lookup read top-level document options before path formatting was set. In verbose builds this printed the same option twice under different spellings of the source path. Resolve the summary setting during build routing, after path formatting and metadata discovery. The top-level options regression fails before and passes after with Pandoc 3.13, with one announcement using the full source path.
+
 ## v3.34.72 — 2026-11-26
 
 Pre-edit state: commit `5fb048c`. [tables] The separator pre-pass treated tables in GFM raw HTML div blocks and deeply indented list fences as prose. Mask both before diagnosis and repair, and pass the reader through the ASCII-table pass so it respects the same boundaries. The Pandoc 3.13 regressions fail before and pass after for literal content and the original warning line numbers. Tables in Markdown divs and immediately after either region still build.
