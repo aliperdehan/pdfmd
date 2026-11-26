@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -105,6 +106,86 @@ class Chatter(unittest.TestCase):
         done = self.run_pdfmd("a.md")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(done.stdout, "OK    a.md > a.tex\n")
+
+    def test_log_appends_complete_diagnostics_with_a_quiet_console(self):
+        log = self.folder / "build.log"
+        previous = "earlier entry\n"
+        log.write_text(previous, encoding="utf-8")
+        for _ in range(2):
+            done = self.run_pdfmd("a.md", "-qqq", "--log", log.name)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertEqual(done.stdout, "")
+            saved = log.read_text(encoding="utf-8")
+            self.assertTrue(saved.startswith(previous))
+            added = saved[len(previous):]
+            header = added.splitlines()[0]
+            self.assertRegex(header, r"^pdfmd \d+\.\d+\.\d+  \S+  a\.md > a\.tex$")
+            datetime.fromisoformat(header.split()[2])
+            for line in ("WARN  table-repair:", "FOUND     metadata.yaml", "DEFAULTS  margin", "AUTO:",
+                         "AUTO YAML", "OK    a.md > a.tex"):
+                self.assertIn(line, added)
+            previous = saved
+
+    def test_log_records_accepted_and_failed_diagnostics(self):
+        self.write("a.md", body="A | B\nC | D\n\n| X | Y |\n|---|---|\n| 1 | 2 | 3 |\n")
+        done = self.run_pdfmd("a.md", "-qqq", "--log", "build.log", "--mute=table-mismatch,YAML", "--strict")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        saved = (self.folder / "build.log").read_text(encoding="utf-8")
+        self.assertRegex(saved, r"WARN  table-repair:[^\n]+ \(muted\)")
+        self.assertIn("AUTO YAML  metadata.yaml (muted)", saved)
+        self.assertIn("--strict: the build printed", saved)
+
+    def test_log_requires_an_existing_parent(self):
+        target = Path("absent") / "build.log"
+        done = self.run_pdfmd("a.md", "--log", str(target), "-qqq")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("ERROR  --log:", done.stderr)
+        self.assertIn(str(target), done.stderr)
+        self.assertFalse((self.folder / target.parent).exists())
+        self.assertFalse((self.folder / "a.tex").exists())
+
+    def test_log_option_precedence_and_relative_paths(self):
+        self.settings("  log: settings.log\n")
+        folder = self.folder / "sub"
+        folder.mkdir()
+        self.write("sub/b.md", "---\npdfmd-options: {log: document.log}\n---\n\n")
+        for source, flags, expected in [("a.md", (), self.folder / "settings.log"),
+                                         ("sub/b.md", ("--log", "cli.log"), self.folder / "cli.log"),
+                                         ("sub/b.md", (), folder / "document.log")]:
+            with self.subTest(source=source, flags=flags):
+                done = self.run_pdfmd(source, *flags)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertTrue(expected.is_file(), expected)
+                expected.unlink()
+        self.assertFalse((folder / "settings.log").exists())
+        self.assertFalse((self.folder / "document.log").exists())
+
+    def test_log_two_workers_share_one_file(self):
+        self.write("b.md")
+        (self.folder / "skip.xyz").write_text("not an input", encoding="utf-8")
+        done = self.run_pdfmd("-b", "-j", "2", "a.md", "b.md", "skip.xyz", "-qqq", "--log", "build.log")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(done.stdout, "")
+        saved = (self.folder / "build.log").read_text(encoding="utf-8")
+        self.assertIn("NOTE  skipped non-input paths: skip.xyz", saved)
+        for stem in ("a", "b"):
+            self.assertRegex(saved, rf"(?m)^pdfmd [^\n]+ {stem}\.md > {stem}\.tex$")
+            self.assertRegex(saved, rf"(?m)^WARN  table-repair: {stem}\.md, line 5: Pandoc can cut a row with 3 cells to 2$")
+            self.assertEqual(saved.splitlines().count(f"OK    {stem}.md > {stem}.tex"), 1)
+        self.assertEqual(sum(line.startswith("pdfmd ") for line in saved.splitlines()), 2)
+
+    def test_log_report_has_one_header_and_the_final_output(self):
+        self.write("b.md")
+        for route in ("route", "patch"):
+            with self.subTest(route=route):
+                self.settings(f"  report-build: {route}\n")
+                done = self.run_pdfmd("-r", "a.md", "b.md", "-qqq", "--log", route + ".log")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertEqual(done.stdout, "")
+                saved = (self.folder / (route + ".log")).read_text(encoding="utf-8")
+                self.assertRegex(saved, r"^pdfmd [^\n]+ a\.md > book\.tex")
+                self.assertIn("OK    REPORT  book.tex", saved)
+                self.assertEqual(sum(line.startswith("pdfmd ") for line in saved.splitlines()), 1)
 
     def test_explicit_metadata_is_resolved_before_reading_its_settings(self):
         (self.folder / "explicit.yaml").write_text(

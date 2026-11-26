@@ -15,6 +15,7 @@ from pathlib import Path
 
 from pdfmd_base import core
 
+from . import transcript
 
 CHATTER_LEVELS = ("off", "result", "warnings", "normal", "verbose", "debug")
 _MINIMUM = {"result": "result", "warning": "warnings", "error": "warnings",
@@ -33,7 +34,9 @@ def visible(level: str) -> bool:
 
 def emit(level: str, id: str | None, text: str, *, file=None, end="\n", flush=False, shown=True) -> None:
     """Send a diagnostic to the console at the selected level and keep it in the build record."""
-    if level not in ("error", "result") and is_muted(id):
+    muted = level not in ("error", "result") and is_muted(id)
+    transcript.record(text, muted=muted)
+    if muted:
         core.record_note(text)
         return
     if shown and visible(level):
@@ -127,6 +130,8 @@ def emit_outcome(text: str, ok: bool) -> None:
         for line in text.splitlines():
             if WARNING_LINE_RE.match(line):
                 emit("warning", None, line)
+            else:
+                transcript.record(line)
 
 
 # v3.31.41 (entry 3ea): how a path is written in a message. `auto`: relative to the working folder (up to PATH_UP `..` steps above
@@ -299,11 +304,8 @@ class AutoLog:
     def record(self, kind: str, detail: str, verbose: bool, heading: str | None = None,
                short: str | None = None) -> None:
         """One decision: printed at once with ``verbose``, else kept for ``flush``."""
-        if verbose:
-            emit("verbose", kind, f"AUTO {kind}  {detail}")
-            return
-        core.record_note(f"AUTO {kind}  {detail}")           # the record has it whatever --verbose said
-        if not visible("normal") or is_muted(kind):
+        emit("verbose", kind, f"AUTO {kind}  {detail}", shown=verbose)
+        if is_muted(kind) or ((verbose or not visible("normal")) and not transcript.recording()):
             return
         if heading is None:
             found = self.classify(kind, detail)
@@ -326,11 +328,8 @@ class AutoLog:
     def record_file(self, kind: str, path: Path, verbose: bool) -> None:
         """A file pdfmd picked up (AUTO YAML / AUTO TEX): FOUND, but the global metadata is a default."""
         line = self.file_line(kind, path)
-        if verbose:
-            emit("verbose", kind, line)
-            return
-        core.record_note(line)
-        if not visible("normal") or is_muted(kind):
+        emit("verbose", kind, line, shown=verbose)
+        if is_muted(kind) or ((verbose or not visible("normal")) and not transcript.recording()):
             return
         if kind == "YAML" and core.is_global_metadata(path):
             self.items[("DEFAULTS", "global")] = (self.RANK["GLOBAL"], "global metadata" if core.preset_name(path) == "default"
@@ -381,9 +380,10 @@ class AutoLog:
                 return cut
         return prefix + parts[0] + f", +{len(parts) - 1} more (--verbose)"
 
-    def flush(self) -> None:
+    def flush(self, *, shown=True) -> None:
         """Print what was recorded since the last flush, FOUND, DEFAULTS, then the decisions without a short form."""
-        if self.quiet:
+        shown = shown and not self.quiet
+        if not shown and not transcript.recording():
             self.items.clear()
             self.other.clear()
             return
@@ -394,14 +394,20 @@ class AutoLog:
                 if heading == "FOUND" and str(core.config_options().get("found-style", "group")).strip().casefold() != "path":
                     parts = self.grouped(parts)
                 line = self.fit(heading, parts)
-                if not (self.dedupe and self.shown.get(heading) == line):
+                if shown and not (self.dedupe and self.shown.get(heading) == line):
                     emit("normal", None, line)
-                self.shown[heading] = line
+                else:
+                    transcript.record(line)
+                if shown and visible("normal"):
+                    self.shown[heading] = line
         if self.other:
             line = f"AUTO: {' '.join(self.other)}. Use --verbose to see in full"
-            if not (self.dedupe and self.shown.get("AUTO") == line):
+            if shown and not (self.dedupe and self.shown.get("AUTO") == line):
                 emit("normal", None, line)
-            self.shown["AUTO"] = line
+            else:
+                transcript.record(line)
+            if shown and visible("normal"):
+                self.shown["AUTO"] = line
         self.items.clear()
         self.other.clear()
 
@@ -473,7 +479,4 @@ def log_cmd(cmd: list, cwd: Path, verbose: bool) -> None:
     from pdfmd_engines.memory import command
     cmd = command(cmd)
     line = "CMD  " + " ".join(cmd_part(str(part)) for part in cmd) + f"  (cwd={cmd_part(str(cwd), quote=False)})"
-    if not verbose:
-        core.record_note(line)             # the record has it whatever --verbose said
-        return
-    emit("verbose", None, line, file=sys.stderr)
+    emit("verbose", None, line, shown=verbose, file=sys.stderr)

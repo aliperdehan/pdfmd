@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.70 — 2026-11-26
+
+Pre-edit state: commit `361011d`. Quiet builds could not retain their diagnostics in a requested file. Add --log and its document and setup settings, with a versioned header, muted tags and one append write per line even in a worker batch. Regression tests reproduce the previous Pandoc log or missing log and pass with Pandoc 3.13 for append, quiet and muted diagnostics, path errors, precedence, reports and parallel builds.
+
 ## v3.34.69 — 2026-11-26
 
 Pre-edit state: commit `30f8531`. The chatter levels had no short spelling. Add counted -q, with explicit --chatter taking precedence and conflicting verbosity flags rejected as usage errors. The CLI regression tests fail before and pass after with Pandoc 3.13, including a parallel batch and a hidden strict failure.

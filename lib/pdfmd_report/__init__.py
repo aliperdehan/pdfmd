@@ -14,7 +14,7 @@ from pathlib import Path
 from pdfmd_report import route, titles
 
 from pdfmd_base import pandoc_run
-from pdfmd_log import emit, emit_outcome, select_chatter
+from pdfmd_log import emit, emit_outcome, select_chatter, transcript
 from pdfmd_cite.aliases import apply as apply_citation_aliases
 from pdfmd_build import page_numbers
 from pdfmd_engines.memory import scoped
@@ -119,6 +119,8 @@ def run(core, *,
     if report_kit_kinds:
         report_no_auto = effective_no_auto(files[0], args.no_auto, report_kit_kinds)
     target_format = default_target(files[0], metadata_files)
+    output = route.output_path(core, args, target_format)
+    log_path = transcript.destination(args.log, files[0], metadata_files)
     need_engines(target_format)
     engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
     report_build = route.resolve_build(core, files[0], metadata_files)
@@ -134,8 +136,9 @@ def run(core, *,
         route.build(core, args=args, files=files, excluded=excluded, metadata=metadata, metadata_files=metadata_files,
                     target_format=target_format, engines=engines, variables=variables, pandoc_options=pandoc_options,
                     stamp_overrides=stamp_overrides, embed_request=embed_request, no_auto=report_no_auto,
-                    chapters=report_chapters, notes=title_notes)
+                    chapters=report_chapters, notes=title_notes, output=output, log_path=log_path)
         return
+    transcript.CURRENT.get().start(log_path, files[0], output)
     BUILD["engine"], BUILD["failed"], BUILD["chain"] = None, [], None
     history_record = core.load_package("pdfmd_history.record")
     history_record.begin_history()
@@ -150,7 +153,6 @@ def run(core, *,
                               report_no_auto, report_reader_reason)
     if report_reader_reason:
         report_note("READER", report_reader_reason)
-    output = route.output_path(core, args, target_format)
     if target_format == ASSEMBLED_FORMAT:
         # --stop-at markdown: the chapters, as one Markdown text, in the
         # order Pandoc would read them. Nothing else of the build runs.
@@ -635,8 +637,7 @@ def run(core, *,
                 AUTO_LOG.record_file("YAML", metadata_file, args.verbose)
             else:
                 emit("normal", None, f"YAML  {display_path(metadata_file)}")
-    if not args.verbose:
-        AUTO_LOG.flush()
+    AUTO_LOG.flush(shown=not args.verbose)
     report_built = attach_time(Built((output, result.returncode == 0), BUILD["engine"], BUILD["failed"]), files[0], metadata_files)
     report_built.stopped = core.chain_stopped()
     emit("result" if result.returncode == 0 and (not report_strict_failed) else "error", None, f"{'OK  ' if result.returncode == 0 and not report_strict_failed else 'FAIL'}  REPORT  {display_path(output)}"

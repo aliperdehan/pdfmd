@@ -13,7 +13,7 @@ lines that say which files went in.
 from __future__ import annotations
 
 from pathlib import Path
-from pdfmd_log import emit, emit_outcome
+from pdfmd_log import emit, emit_outcome, transcript
 
 BUILDS = ("route", "patch")
 DEFAULT_BUILD = "route"
@@ -52,8 +52,11 @@ def output_path(core, args, target_format: str) -> Path:
 
 def build(core, *, args, files: list[Path], excluded: list[Path], metadata, metadata_files: list[Path], target_format: str,
           engines: list[str], variables: list[str], pandoc_options: list[str], stamp_overrides: dict, embed_request,
-          no_auto: list[str] | None, chapters: dict, notes: list[str]) -> None:
-    output = output_path(core, args, target_format)
+          no_auto: list[str] | None, chapters: dict, notes: list[str], output: Path, log_path: Path | None) -> None:
+    destination = output
+    if log_path is not None:
+        destination = core.load_package("pdfmd_routing.output").protected(files[0], output, target_format, metadata_files)
+    transcript.CURRENT.get().start(log_path, files[0], destination)
     preambles: list[Path] = []
     if target_format in {"pdf", *core.TEX_STANDALONE_FORMATS}:
         preambles = core.document_preambles(files[0], pandoc_options, no_auto, metadata_files)
@@ -65,12 +68,12 @@ def build(core, *, args, files: list[Path], excluded: list[Path], metadata, meta
     core.REPORT_BUILD.update(chapters=chapters, files=list(files), base=core.report_common_folder(files))
     try:
         built = core.convert_one(files[0], None, False, args.font, engines, variables, args.slide_level, pandoc_options,
-                                 given, output, preambles, target_format=target_format, from_format=args.from_format,
+                                 given, destination, preambles, target_format=target_format, from_format=args.from_format,
                                  no_auto=args.no_auto, verbose=args.verbose, debug=args.debug,
                                  stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup,
                                  backup_format=args.backup_format, extra_inputs=list(files[1:]) or None,
                                  cache_cli=args.cache, embed=embed_request, trust_embedded=args.trust_embedded,
-                                 self_contained=args.self_contained)
+                                 self_contained=args.self_contained, output_resolved=log_path is not None)
     finally:
         core.REPORT_BUILD.clear()
     ok = bool(built[1])
@@ -86,8 +89,7 @@ def build(core, *, args, files: list[Path], excluded: list[Path], metadata, meta
                 core.AUTO_LOG.record_file("YAML", metadata_file, args.verbose)
             else:
                 emit("normal", None, f"YAML  {core.display_path(metadata_file)}")
-    if not args.verbose:
-        core.AUTO_LOG.flush()
+    core.AUTO_LOG.flush(shown=not args.verbose)
     emit("result" if ok else "error", None, f"{'OK  ' if ok else 'FAIL'}  REPORT  {core.display_path(output)}" + core.time_label(built) + core.engine_label(built))
     if args.verbose:
         for line in core.time_breakdown(built):

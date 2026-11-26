@@ -234,6 +234,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mute", action="append", metavar="ID[,ID]",
                         help="accept named diagnostics without printing them or failing --strict. Also "
                              "`pdfmd-options: {mute: [ID]}` and `--setup`")
+    parser.add_argument("--log", type=Path, metavar="FILE",
+                        help="append build diagnostics, including hidden and muted lines, to FILE. Also "
+                             "`pdfmd-options: {log: FILE}` and `--setup`")
     parser.add_argument("--strict", action=argparse.BooleanOptionalAction, default=None,
                         help="a build that printed a warning (an engine that failed and was replaced, a missing glyph, "
                              "repaired source control characters, a Pandoc [WARNING]...) counts as failed: "

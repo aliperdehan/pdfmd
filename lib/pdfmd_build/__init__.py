@@ -178,8 +178,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
 
     def flush_summary() -> None:
         core.tablewidth_note(md_path, note)
-        if not verbose:
-            core.AUTO_LOG.flush()
+        core.AUTO_LOG.flush(shown=not verbose)
 
     from pdfmd_filters.lua import figure_fit_module
     figure_fit = figure_fit_module()

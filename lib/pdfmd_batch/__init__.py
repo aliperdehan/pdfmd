@@ -10,7 +10,8 @@ from __future__ import annotations
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from pdfmd_log import document_chatter, emit, verbose_output
+from pdfmd_base import core as bound_core
+from pdfmd_log import document_chatter, emit, transcript, verbose_output
 
 
 # The author wants this source-likeness ranking revised later (master queue 3fi D33).
@@ -114,6 +115,13 @@ def prepare_epubs(core, args, files: list[Path], output: Path | None) -> dict[Pa
     return destinations
 
 
+def convert_logged(log_path, positional, options):
+    with transcript.scope(log_path):
+        built = bound_core.convert_one(*positional, **options)
+    built.log_path = log_path
+    return built
+
+
 def run(core, *,
         args, embed_request, embeds_preamble, engines,
         metadata_for, need_engines, pandoc_options, paths, plan_bridge,
@@ -125,7 +133,7 @@ def run(core, *,
     # the helpers of pdfmd.py this function calls, bound here so the body reads as it did in run_main()
     ASSEMBLED_FORMAT, AUTO_LOG = core.ASSEMBLED_FORMAT, core.AUTO_LOG
     TEX_STANDALONE_FORMATS, announce_preambles = core.TEX_STANDALONE_FORMATS, core.announce_preambles
-    convert_one, default_output_format = core.convert_one, core.default_output_format
+    default_output_format = core.default_output_format
     document_preambles, effective_no_auto = core.document_preambles, core.effective_no_auto
     is_assembled_document, resolve_engines = core.is_assembled_document, core.resolve_engines
     restore_worker_state, worker_state = core.restore_worker_state, core.worker_state
@@ -220,26 +228,46 @@ def run(core, *,
         file_engines = (slides.engines(file, metadata_files, args.engine, request, target, args.verbose)
                         if request else resolve_engines(file, args.engine, engines, False, target, metadata_files, verbose_output(args.verbose)))
         return bool(request), metadata, file_engines
-    def settings(file):
-        given = metadata_for(file, announce=False) if file.suffix.lower() not in core.OFFICE_INPUT_EXTENSIONS else None
-        return document_chatter(file, given if isinstance(given, list) else [given] if given else [])
+    run_log = transcript.CURRENT.get()
+    initial_logs = set()
+    routing = core.load_package("pdfmd_routing.output")
 
-    def work(file):
-        with settings(file):
-            presentation, metadata, file_engines = file_build(file)
-            return convert_one(file, destinations[file], presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, preamble_files=preamble_for(file, metadata), target_format=file_target(file), from_format=args.from_format, no_auto=args.no_auto, verbose=verbose_output(args.verbose), debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained, cache_cli=args.cache)
+    def work(file, executor=None):
+        with transcript.scope(pending=True) as log:
+            given = metadata_for(file, announce=False) if file.suffix.lower() not in core.OFFICE_INPUT_EXTENSIONS else None
+            metadata_files = given if isinstance(given, list) else [given] if given else []
+            with document_chatter(file, metadata_files):
+                target = file_target(file)
+                log_path = transcript.destination(args.log, file, metadata_files)
+                output_file = None
+                if log_path is not None:
+                    output_file = routing.protected(file, routing.planned(file, destinations[file], target), target, metadata_files)
+                    if run_log is not None and log_path not in initial_logs:
+                        log.pending[:0] = run_log.pending or []
+                        initial_logs.add(log_path)
+                log.start(log_path, file, output_file)
+                presentation, metadata, file_engines = file_build(file)
+                preambles = preamble_for(file, metadata)
+                verbose = verbose_output(args.verbose)
+                positional = (file, destinations[file], presentation, args.font, file_engines, variables,
+                              args.slide_level, pandoc_options, metadata)
+                options = dict(output_file=output_file, output_resolved=output_file is not None,
+                               preamble_files=preambles, target_format=target, from_format=args.from_format,
+                               no_auto=args.no_auto, verbose=verbose, debug=args.debug, stamp_overrides=stamp_overrides,
+                               keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
+                               embed=embed_request, trust_embedded=args.trust_embedded,
+                               self_contained=args.self_contained, cache_cli=args.cache)
+                if executor is not None:
+                    AUTO_LOG.flush(shown=not verbose)    # what the parent found, before its worker's output
+                    return executor.submit(convert_logged, log_path, positional, options)
+                built = core.convert_one(*positional, **options)
+                built.log_path = log_path
+                return built
     results = []
     if jobs > 1:
         with ProcessPoolExecutor(max_workers=jobs, initializer=restore_worker_state,
                                  initargs=({**worker_state(), "DISPLAY_ALIAS": core.DISPLAY_ALIAS},)) as executor:
-            futures = []
-            for file in files:
-                with settings(file):
-                    presentation, metadata, file_engines = file_build(file)
-                    file_preambles = preamble_for(file, metadata)
-                    if not verbose_output(args.verbose):
-                        AUTO_LOG.flush()           # what the parent found for this file, before its worker's output
-                    futures.append(executor.submit(convert_one, file, destinations[file], presentation, args.font, file_engines, variables, args.slide_level, pandoc_options, metadata, None, file_preambles, file_target(file), args.from_format, args.no_auto, verbose_output(args.verbose), args.debug, stamp_overrides, args.keep_aux, args.backup, args.backup_format, embed=embed_request, trust_embedded=args.trust_embedded, self_contained=args.self_contained, cache_cli=args.cache))
+            futures = [work(file, executor) for file in files]
             results = [future.result() for future in as_completed(futures)]
             results.sort(key=lambda result: result[0].name.casefold())
     else:

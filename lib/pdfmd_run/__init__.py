@@ -21,7 +21,7 @@ from pathlib import Path
 
 from pdfmd_base import core
 from pdfmd_log import (CHATTER, chatter_scope, document_chatter, emit, emit_outcome, parse_mutes,
-                       select_chatter, visible, verbose_output)
+                       select_chatter, transcript, visible, verbose_output)
 
 
 POLISH_INFO_KEYS = {"title": "/Title", "subject": "/Subject", "author": "/Author", "keywords": "/Keywords"}
@@ -80,6 +80,7 @@ def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action],
 
 
 @chatter_scope(muted=frozenset())
+@transcript.scope(pending=True)
 def run_main() -> None:
     parser, hidden = command_line_parser()
     argv, excerpts = sys.argv[1:], None
@@ -846,6 +847,10 @@ def run_main() -> None:
         output = output_file or ((out_dir / f"{output_stem}{output_extension}") if out_dir
                                  else source.with_name(f"{output_stem}{output_extension}"))
         output = output_file = core.load_package("pdfmd_routing.output").single(source, output, convert_job, target_format, metadata_for)
+        log_metadata = metadata_for(source, announce=False) if source.suffix.lower() != ".qmd" else None
+        log_metadata = log_metadata if isinstance(log_metadata, list) else [log_metadata] if log_metadata else []
+        transcript.CURRENT.get().start(transcript.destination(args.log, source, log_metadata),
+                                       source, convert_job["final"] if convert_job else output)
         if source.suffix.lower() == ".qmd":
             core.BUILD["engine"], core.BUILD["failed"] = None, []
             core.begin_timer()
@@ -983,7 +988,7 @@ def run_main() -> None:
     failures = [result for result in results if not result[1]]
     for result in results:
         source, ok, error = result
-        with chatter_scope(getattr(result, "chatter", CHATTER.get())):
+        with chatter_scope(getattr(result, "chatter", CHATTER.get())), transcript.result_scope(args.batch, result):
             emit("result" if ok else "error", None,
                  f"{'OK  ' if ok else 'FAIL'}  {core.display_path(source)}{core.built_name(result)}"
                  f"{core.time_label(result)}{core.engine_label(result)}")
