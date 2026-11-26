@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from pandoc_support import discard_path  # noqa: E402
+from pandoc_support import WORD, office_markup  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
 FILTER = ROOT / "lib" / "pdfmd_lua" / "markup.lua"
@@ -73,11 +74,21 @@ class Filter(unittest.TestCase):
         self.assertEqual(out.count('<div style="break-inside: avoid">'), 4)
         self.assertIn("<p>tex keep</p>", out)
 
-    def test_word_keeps_the_text_and_says_so_once(self):
-        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "docx", "-o", discard_path(".docx"),
-                               "--lua-filter", str(FILTER), "-M", "pdfmd-markup=keep"], input=SOURCE, capture_output=True, text=True)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(done.stderr.count("keeping blocks together is not applied to docx"), 1)
+    def test_word_keeps_paragraphs_and_lists_without_joining_the_next_block(self):
+        source = SOURCE.replace("Second", "- First item\n- Last item") + "\nAfter.\n"
+        with tempfile.TemporaryDirectory() as folder:
+            document, _ = office_markup(folder, source, "docx", "--markup", "keep")
+            disabled, _ = office_markup(folder, source, "docx", "--no-markup")
+        for para in document.findall(".//w:body/w:p", WORD):
+            label = "".join(span.text or "" for span in para.findall(".//w:t", WORD))
+            with self.subTest(label=label):
+                self.assertTrue(label, "keep delimiters must not create empty paragraphs")
+                self.assertEqual(para.find("./w:pPr/w:keepLines", WORD) is not None,
+                                 label not in ("Before.", "After."))
+                self.assertEqual(para.find("./w:pPr/w:keepNext", WORD) is not None,
+                                 label in ("A kept para", "First item"))
+        self.assertEqual(len(document.findall(".//w:keepLines", WORD)), 6)
+        self.assertEqual(disabled.findall(".//w:keepLines", WORD), [])
 
     def test_only_when_the_kind_is_on(self):
         out, _ = convert("html5", enabled="toc")

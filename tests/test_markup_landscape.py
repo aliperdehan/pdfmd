@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from pandoc_support import discard_path  # noqa: E402
+from pandoc_support import ODF, office_markup  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
 FILTER = ROOT / "lib" / "pdfmd_lua" / "markup.lua"
@@ -77,11 +77,56 @@ class Filter(unittest.TestCase):
         self.assertIn("A wide table here", out)
         self.assertEqual(err.count("landscape pages are not made in this PDF engine"), 1)
 
-    def test_opendocument_keeps_the_text_and_says_so_once(self):
-        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "odt", "-o", discard_path(".odt"),
-                               "--lua-filter", str(FILTER), "-M", "pdfmd-markup=landscape"], input=SOURCE, capture_output=True, text=True)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(done.stderr.count("landscape pages are not made in odt"), 1)
+    def test_opendocument_uses_landscape_until_the_next_portrait_content(self):
+        source = SOURCE.replace("A wide table here", "| a | b |\n|---|---|\n| 1 | 2 |")
+        source += "\n::: landscape\n- One item\n- Another item\n:::\n"
+        with tempfile.TemporaryDirectory() as folder:
+            document, styles = office_markup(folder, source, "odt", "--paper", "a4", "--markup", "landscape")
+            disabled, _ = office_markup(folder, source, "odt", "--paper", "a4", "--no-markup")
+
+        def attribute(element, prefix, name):
+            return element.get(f"{{{ODF[prefix]}}}{name}")
+
+        master_pages = styles.findall(".//style:master-page", ODF)
+        self.assertEqual(len(master_pages), 2)
+        layout_names = [attribute(master, "style", "page-layout-name") for master in master_pages]
+        original, turned = [styles.find(f".//style:page-layout[@style:name='{name}']/style:page-layout-properties", ODF)
+                            for name in layout_names]
+        self.assertEqual(attribute(turned, "style", "print-orientation"), "landscape")
+        self.assertEqual(attribute(original, "fo", "page-width"), attribute(turned, "fo", "page-height"))
+        self.assertEqual(attribute(original, "fo", "page-height"), attribute(turned, "fo", "page-width"))
+        self.assertEqual(attribute(original, "fo", "margin-left"), attribute(turned, "fo", "margin-left"))
+        master_names = [attribute(master, "style", "name") for master in master_pages]
+        page_styles = {attribute(style, "style", "name"): attribute(style, "style", "master-page-name")
+                       for style in document.findall(".//style:style", ODF)
+                       if attribute(style, "style", "master-page-name")}
+        transitions = [(index, page_styles[name]) for index, element in
+                       enumerate(document.find(".//office:text", ODF).iter())
+                       if (name := attribute(element, "text", "style-name") or attribute(element, "table", "style-name"))
+                       in page_styles]
+        self.assertEqual([page for _, page in transitions], [master_names[1], master_names[0], master_names[1]])
+        table = document.find(".//table:table", ODF)
+        table_style = attribute(table, "table", "style-name")
+        self.assertEqual(page_styles[table_style], master_names[1])
+        properties = document.find(f".//style:style[@style:name='{table_style}']/style:table-properties", ODF)
+        self.assertEqual(attribute(properties, "fo", "break-before"), "page")
+        self.assertEqual(disabled.findall(".//style:style[@style:master-page-name]", ODF), [])
+
+    def test_opendocument_can_begin_on_a_landscape_page(self):
+        source = "::: landscape\nFirst paragraph.\n:::\n\nBack to the original layout.\n"
+        with tempfile.TemporaryDirectory() as folder:
+            document, _ = office_markup(folder, source, "odt", "--markup", "landscape")
+        paragraphs = document.findall(".//office:text/text:p", ODF)
+        self.assertEqual(["".join(para.itertext()) for para in paragraphs], ["First paragraph.", "Back to the original layout."])
+        for index, para in enumerate(paragraphs):
+            name = para.get(f"{{{ODF['text']}}}style-name")
+            style = document.find(f".//style:style[@style:name='{name}'][@style:master-page-name]", ODF)
+            self.assertIsNotNone(style)
+            properties = style.find("style:paragraph-properties", ODF)
+            if index:
+                self.assertEqual(properties.get(f"{{{ODF['fo']}}}break-before"), "page")
+            else:
+                self.assertTrue(properties is None or f"{{{ODF['fo']}}}break-before" not in properties.attrib)
 
     def test_only_when_the_kind_is_on(self):
         out, _ = convert("html5", "toc")

@@ -11,8 +11,12 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
+import zipfile
+from pathlib import Path
+from xml.etree import ElementTree
 
 
 def _version() -> tuple[int, ...]:
@@ -68,3 +72,26 @@ def needs_pandoc(*version: int, why: str = ""):
 def needs_crossref(test):
     """Skip the test unless pdfmd would run pandoc-crossref (installed, and built for this Pandoc)."""
     return unittest.skipUnless(CROSSREF_USABLE, "needs a pandoc-crossref built for this Pandoc")(test)
+
+
+def office_markup(folder: str, source: str, writer: str, *options: str):
+    """Build an Office file through pdfmd and return its document and styles XML."""
+    root = Path(folder)
+    document, output = root / "source.md", root / ("output." + writer)
+    document.write_text("---\npdfmd-options: {office: {latex: off}}\n---\n\n" + source, encoding="utf-8")
+    launcher = Path(__file__).resolve().parent.parent / "scripts" / "pdfmd"
+    route = ["-e", "pandoc"] if writer == "odt" else []
+    result = subprocess.run([sys.executable, str(launcher), str(document), "-o", str(output), "--no-stamp",
+                             *route, *options], cwd=root, capture_output=True, text=True, encoding="utf-8", timeout=60,
+                            env={**os.environ, "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"})
+    if result.returncode:
+        raise AssertionError(result.stdout + result.stderr)
+    with zipfile.ZipFile(output) as archive:
+        names = ("content.xml", "styles.xml") if writer == "odt" else ("word/document.xml", "word/styles.xml")
+        return tuple(ElementTree.fromstring(archive.read(name)) for name in names)
+
+
+ODF = {name: f"urn:oasis:names:tc:opendocument:xmlns:{namespace}:1.0" for name, namespace in {
+    "office": "office", "fo": "xsl-fo-compatible", "style": "style", "table": "table", "text": "text",
+}.items()}
+WORD = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}

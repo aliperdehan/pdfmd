@@ -8,6 +8,7 @@ import re
 import zipfile
 
 from pathlib import Path
+from xml.dom import Node, minidom
 
 from .spec import OfficeSpec
 from .units import length_to_twips
@@ -175,17 +176,17 @@ def patch_odt(data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:
 INDENT_USED = re.compile(r'text:style-name="pdfmd-(indent|hang)-([0-9p]+[a-z]+)"')
 
 
-def finish_indents(path: Path) -> int:
-    """Define the `pdfmd-indent-<length>` paragraph styles pdfmd_lua/indent.lua put on a stretch of text (and the `pdfmd-hang-<length>` ones of
-    pdfmd_lua/bibliography_indent.lua, on the entries of a reference list) (Pandoc only names
-    them in an `.odt`), based on Text body, with the first-line indent the name says; returns how many were added. A file
-    with none of them is not touched. An em is 12 pt here, as in a Word file."""
-    with zipfile.ZipFile(path) as archive:
-        entries = {name: archive.read(name) for name in archive.namelist()}
-        infos = {item.filename: item for item in archive.infolist()}
-    content = entries.get("content.xml", b"").decode("utf-8")
-    styles = entries.get("styles.xml", b"").decode("utf-8")
-    added = 0
+def with_paragraph_and_text_styles(content: str, styles: str) -> str:
+    """Supply the styles Pandoc names for pdfmd's custom-styled paragraphs and spans."""
+    for name, family, properties, parent in (
+        ("PdfmdCenter", "paragraph", '<style:paragraph-properties fo:text-align="center"/>', "Text_20_body"),
+        ("PdfmdHighlight", "text", '<style:text-properties fo:background-color="#ffff00"/>', ""),
+    ):
+        if (f'text:style-name="{name}"' in content
+                and not re.search(rf'<style:style\b[^>]*\bstyle:name="{name}"', styles)):
+            base = f' style:parent-style-name="{parent}"' if parent else ""
+            style = f'<style:style style:name="{name}" style:family="{family}"{base}>{properties}</style:style>'
+            styles = styles.replace("</office:styles>", style + "</office:styles>", 1)
     for kind, token in dict.fromkeys(INDENT_USED.findall(content)):
         name = f"pdfmd-{kind}-{token}"
         found = re.fullmatch(r"(\d+(?:p\d+)?)([a-z]+)", token)
@@ -198,13 +199,145 @@ def finish_indents(path: Path) -> int:
         style = (f'<style:style style:name="{name}" style:family="paragraph" style:parent-style-name="Text_20_body">'
                  f'<style:paragraph-properties {properties}/></style:style>')
         styles = styles.replace("</office:styles>", style + "</office:styles>", 1)
-        added += 1
-    if not added:
+
+    return styles
+
+
+def named_elements(node, tag: str) -> dict:
+    return {element.getAttribute("style:name"): element for element in node.getElementsByTagName(tag)}
+
+
+def unused_name(base: str, names: dict) -> str:
+    name = base
+    while name in names:
+        name += "_"
+    return name
+
+
+def landscape_master(styles):
+    """Copy the document's first master page and layout, preserving its margins, headers and footers."""
+    masters = named_elements(styles, "style:master-page")
+    portrait = next(iter(masters.values()), None)
+    if portrait is None:
+        return "", ""
+    normal = portrait.getAttribute("style:name")
+    layouts = named_elements(styles, "style:page-layout")
+    layout = layouts.get(portrait.getAttribute("style:page-layout-name"))
+    if layout is None:
+        return normal, normal
+    wide_layout = layout.cloneNode(True)
+    properties = next(iter(wide_layout.getElementsByTagName("style:page-layout-properties")), None)
+    if properties is None:
+        return normal, normal
+    width = properties.getAttribute("fo:page-width") or "8.5in"
+    height = properties.getAttribute("fo:page-height") or "11in"
+    if properties.getAttribute("style:print-orientation") == "landscape":
+        return normal, normal
+    if (length_to_twips(width) or 0) < (length_to_twips(height) or 0):
+        width, height = height, width
+    properties.setAttribute("fo:page-width", width)
+    properties.setAttribute("fo:page-height", height)
+    properties.setAttribute("style:print-orientation", "landscape")
+    layout_name = unused_name("PdfmdLandscapeLayout", layouts)
+    wide_layout.setAttribute("style:name", layout_name)
+    layout.parentNode.appendChild(wide_layout)
+    landscape = unused_name("PdfmdLandscape", masters)
+    master = portrait.cloneNode(True)
+    master.setAttribute("style:name", landscape)
+    master.setAttribute("style:page-layout-name", layout_name)
+    if master.hasAttribute("style:next-style-name"):
+        master.removeAttribute("style:next-style-name")
+    portrait.parentNode.appendChild(master)
+    return normal, landscape
+
+
+def page_transitions(body):
+    """Yield page switches on the first paragraph, heading or table of a new range."""
+    depth, wide, started = 0, False, False
+
+    def walk(parent, can_break=True):
+        nonlocal depth, wide, started
+        for node in list(parent.childNodes):
+            if node.nodeType == Node.COMMENT_NODE and node.data in ("pdfmd-landscape", "/pdfmd-landscape"):
+                if can_break:
+                    depth += 1 if node.data == "pdfmd-landscape" else -1
+                parent.removeChild(node)
+            elif node.nodeType == Node.ELEMENT_NODE:
+                block = node.tagName in ("text:p", "text:h", "table:table")
+                if block and can_break:
+                    if (depth > 0) != wide:
+                        wide = depth > 0
+                        yield node, wide, started
+                    started = True
+                yield from walk(node, can_break and not block)
+
+    yield from walk(body)
+
+
+def landscape_styles(content: str, styles: str) -> tuple[str, str]:
+    """Set the new master page directly on existing content, without inserting blank paragraphs."""
+    document = minidom.parseString(content)
+    body = document.getElementsByTagName("office:text")[0]
+    transitions = list(page_transitions(body))
+    if not transitions:
+        return document.toxml(), styles
+    references = minidom.parseString(styles)
+    normal, landscape = landscape_master(references)
+    if normal == landscape:
+        return document.toxml(), styles
+    automatic = document.getElementsByTagName("office:automatic-styles")[0]
+    existing = named_elements(automatic, "style:style")
+    occupied = {**named_elements(references, "style:style"), **existing}
+    added = {}
+    for block, wide, started in transitions:
+        family = "table" if block.tagName == "table:table" else "paragraph"
+        attr = "table:style-name" if family == "table" else "text:style-name"
+        original = block.getAttribute(attr)
+        master = landscape if wide else normal
+        key = (family, original, master, started)
+        if key not in added:
+            # Automatic styles cannot be inherited by name. Clone those and inherit the named styles.
+            if original in existing:
+                style = existing[original].cloneNode(True)
+            else:
+                style = document.createElement("style:style")
+                style.setAttribute("style:family", family)
+                if original:
+                    style.setAttribute("style:parent-style-name", original)
+            name = unused_name(f"PdfmdPage{len(added) + 1}", occupied)
+            style.setAttribute("style:name", name)
+            style.setAttribute("style:master-page-name", master)
+            if started:
+                tag = f"style:{family}-properties"
+                properties = next(iter(style.getElementsByTagName(tag)), None)
+                if properties is None:
+                    properties = style.insertBefore(document.createElement(tag), style.firstChild)
+                properties.setAttribute("fo:break-before", "page")
+            automatic.appendChild(style)
+            occupied[name] = style
+            added[key] = name
+        block.setAttribute(attr, added[key])
+    return document.toxml(), references.toxml()
+
+
+def finish_odt(path: Path) -> int:
+    """Supply the named styles and finish the landscape ranges of a Pandoc OpenDocument file."""
+    with zipfile.ZipFile(path) as archive:
+        entries = {name: archive.read(name) for name in archive.namelist()}
+        infos = {item.filename: item for item in archive.infolist()}
+    original_content = entries.get("content.xml", b"").decode("utf-8")
+    original_styles = entries.get("styles.xml", b"").decode("utf-8")
+    content = original_content
+    styles = with_paragraph_and_text_styles(content, original_styles)
+    if "<!--pdfmd-landscape-->" in content:
+        content, styles = landscape_styles(content, styles)
+    if content == original_content and styles == original_styles:
         return 0
+    entries["content.xml"] = content.encode("utf-8")
     entries["styles.xml"] = styles.encode("utf-8")
     temporary = path.with_suffix(path.suffix + ".part")
     with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as target:
         for name, data in entries.items():
             target.writestr(infos[name] if name in infos else name, data)
     temporary.replace(path)
-    return added
+    return 1

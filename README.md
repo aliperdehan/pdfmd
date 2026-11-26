@@ -2836,9 +2836,8 @@ sentence is text.
 **Centred text** (v3.29, `markup: centre`). `<center>` ... `</center>` around blocks (the closing tag in its own paragraph),
 `<div align="center">`, `<div style="text-align: center">`, a fenced `::: centre` and, for writers that are not LaTeX, a raw
 `\begin{center}` ... `\end{center}` all centre what they hold: LaTeX's `center` environment, Typst's `#align(center)[...]`, a
-`text-align` div in HTML, EPUB and the HTML engines' PDFs, and in a Word file the paragraph style `PdfmdCenter` (centred; the style
-is formatted in the file, a style of that name in your own reference document keeps its own look). OpenDocument and PowerPoint keep
-the text as it is and say so once. `markup: [callouts, toc, centre]` or `true` for all; `--markup centre` for one run.
+`text-align` div in HTML, EPUB and the HTML engines' PDFs, and in Word and OpenDocument the paragraph style `PdfmdCenter` (a style of that name in your own
+reference document keeps its own look). PowerPoint keeps the text and says so once. `markup: [callouts, toc, centre]` or `true` for all; `--markup centre` for one run.
 
 The built-in inkmd renderer also centres blocks, highlights text and draws
 underlines. Its markup warning lists the other universal styling it dropped,
@@ -2847,8 +2846,8 @@ and the text is kept. These interpretations respect `--no-markup`.
 **Highlighted text** (v3.29, `markup: highlight`). `==marked text==` (across several words, with emphasis inside, over a line
 break) is highlighted: LaTeX with `soul`'s `\hl` in a pale yellow (LuaLaTeX: `lua-ul`'s `\highLight`, with the `luacolor` it needs, when both are
 installed; plain text when `soul` is not installed either), Typst with
-`#highlight[...]`, HTML, EPUB and `--to gfm` with `<mark>`, Word with the character style `PdfmdHighlight` (a yellow shading);
-Pandoc's own Markdown output keeps `==...==`, and OpenDocument keeps the text and says once that it is not highlighted. A lone `==` or one inside code stays as written; a closing `==` followed by
+`#highlight[...]`, HTML, EPUB and `--to gfm` with `<mark>`, Word and OpenDocument with the character style `PdfmdHighlight` (yellow shading).
+Pandoc's own Markdown output keeps `==...==`. A lone `==` or one inside code stays as written; a closing `==` followed by
 punctuation (`==end==.`) works. `markup: [callouts, toc, centre, highlight]` or `true` for all; `--markup highlight` for one run.
 
 **Underlined text** (v3.32.26, `markup: underline`). `<u>text</u>` and `<ins>text</ins>`, which a Markdown reader keeps as raw HTML that
@@ -2858,7 +2857,8 @@ Word and OpenDocument an underlined run, HTML `<u>`; the Markdown family keeps t
 **Blocks kept on one page** (v3.29, `markup: keep`). A fenced `::: keep` (also `nobreak`, `keep-together`), a div with
 `style="break-inside: avoid"` and, for writers that are not LaTeX, a raw `\begin{samepage}` ... `\end{samepage}` hold what they
 contain on one page where it fits: LaTeX's `samepage` environment, Typst's `#block(breakable: false)[...]`, a `break-inside:
-avoid` div in HTML, EPUB and the HTML engines' PDFs. Word and OpenDocument keep the text and say once that it is not held.
+avoid` div in HTML, EPUB and the HTML engines' PDFs, and Word paragraph properties that keep each paragraph intact and link it
+to the next paragraph within the block. Pandoc's OpenDocument writer and PowerPoint keep the text and say once that it is not held.
 `--markup keep` for one run.
 
 **The paper** (v3.30.42). `--paper a4,landscape`, `papersize: a4,landscape`, `geometry: landscape` and `classoption: landscape` turn
@@ -2874,8 +2874,8 @@ installed; a `landscape` environment that a kit's package, the class or your `pr
 pdflscape is not loaded, v3.33.67), Typst with `#page(flipped: true)[...]`, WeasyPrint and the browsers with a named page (`@page landscape`: the browsers
 get the document's paper turned; WeasyPrint's is its own A4 unless your own `@page landscape` says otherwise), Word with two
 section breaks (the file's own paper and margins, headers and footers, turned for the block; a block at the very start or end, or two
-in a row, make no empty page). Calibre's PDF cannot name page types, and OpenDocument has no sections made from here: they keep the
-text and say once that no landscape page was made. `--markup landscape` for one run.
+in a row, make no empty page). OpenDocument switches between the document's page layout and a landscape copy using master pages.
+Calibre and PowerPoint keep the text and say once that no landscape page was made. `--markup landscape` for one run.
 
 **Where the appendix starts** (v3.29, `markup: appendix`). A raw `\appendix`, `<!-- appendix -->` or a heading with the class
 `{.appendix}` marks the start: the sections after it are lettered (A, B, A.1) in LaTeX (`\appendix`) and Typst (a heading

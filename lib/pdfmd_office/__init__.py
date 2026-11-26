@@ -17,9 +17,9 @@ from .spec import OfficeSpec, spec_from_metadata
 from .units import PAPER_TWIPS, length_to_twips, parse_geometry, parse_paper
 
 def finish_odt(path) -> int:
-    """The styles of an `.odt` Pandoc wrote that its text names but it does not define (the indent div)."""
-    from .odt import finish_indents
-    return finish_indents(path)
+    """Fill in the styles and page layouts of an `.odt` Pandoc wrote."""
+    from .odt import finish_odt
+    return finish_odt(path)
 
 
 def patch_reference(kind: str, data: bytes, spec: OfficeSpec, house: bool = True) -> bytes:

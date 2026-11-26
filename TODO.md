@@ -27,7 +27,6 @@ wait for an answer before any code.
 - [ ] Images and display math in `--view` through the kitty graphics protocol, after the queue: first a spike of Unicode placeholders in Ghostty (they survive the pager), else no pager when images are drawn [3dm D84]
 - [ ] `\md{...}`: nulabreport's macros taking `\md{}`; native tier; text-level pre-passes (table-ascii, includes, embed blocks) inside the macro, unchecked [3dc]
 - [ ] Mixed-format parts: docx, tex, odt, html parts inside a `parts: auto` build [3cl]
-- [ ] Word `keep`; markup (centre, highlight, landscape) in OpenDocument [3bh, 3ay]
 - [ ] CSS: MathJax for the non-STIX fonts (tall brackets) [3am, 3ao]
 - [ ] Hiding, properly: definitions inside a `hide` block keep working (TeX macros and other uses, as calc lines do), Quarto's `.hidden` macros handled, and possibly `hide` and `hidden` unified again [D98]
 - [ ] Calculator: `.qmd` spellings and the `all` mode, native tier, constants file included from the body, check mode, significant-figure tracking [3bw, 3cu]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from pandoc_support import discard_path  # noqa: E402
+from pandoc_support import ODF, office_markup  # noqa: E402
 
 PANDOC = shutil.which("pandoc")
 FILTER = ROOT / "lib" / "pdfmd_lua" / "markup.lua"
@@ -99,11 +100,17 @@ class Filter(unittest.TestCase):
             self.assertIn(word, out)
         self.assertEqual(err, "")
 
-    def test_opendocument_keeps_the_text_and_says_so_once(self):
-        done = subprocess.run([PANDOC, "-f", "markdown", "-t", "odt", "-o", discard_path(".odt"),
-                               "--lua-filter", str(FILTER), "-M", "pdfmd-markup=center"], input=SOURCE, capture_output=True, text=True)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(done.stderr.count("centring is not applied to odt"), 1)
+    def test_opendocument_styles_the_centred_paragraphs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            document, styles = office_markup(folder, SOURCE, "odt", "--markup", "centre")
+            disabled, _ = office_markup(folder, SOURCE, "odt", "--no-markup")
+        centered = styles.find(".//style:style[@style:name='PdfmdCenter']/style:paragraph-properties", ODF)
+        self.assertIsNotNone(centered)
+        self.assertEqual(centered.get(f"{{{ODF['fo']}}}text-align"), "center")
+        query = ".//text:p[@text:style-name='PdfmdCenter']"
+        self.assertEqual(["".join(para.itertext()) for para in document.findall(query, ODF)],
+                         ["Centred para", "A div", "Colon div", "tex centred", "Styled"])
+        self.assertEqual(disabled.findall(query, ODF), [])
 
     def test_only_when_the_kind_is_on(self):
         out, _ = convert("html5", enabled="toc")

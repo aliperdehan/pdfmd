@@ -385,7 +385,7 @@ def run(core, *,
                 from pdfmd_tables.measure import prepare
                 cmd = prepare(cmd, target_format, list(files), metadata_files, pandoc_cwd, args.verbose,
                               enabled=not auto_disabled(report_no_auto, "tablewidth"), export=True, state=measurement_state)
-                if report_office_arguments.filter_arguments:
+                if report_office_arguments.filter_arguments or target_format in ("docx", "odt"):
                     result = run_office_pandoc(cmd, output, report_office_arguments, pandoc_cwd,
                                                args.verbose, args.debug)
                 else:

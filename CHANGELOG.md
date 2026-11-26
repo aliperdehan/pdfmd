@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.74 — 2026-11-26
+
+Pre-edit state: commit `39edc32`. Word's keep blocks and OpenDocument's centre, highlight and landscape markup previously fell back to text. Word now writes keep-lines and keep-with-next on the paragraphs within a keep block. OpenDocument defines the paragraph and character styles named by Pandoc and uses a landscape copy of the document's master page for each landscape range. Office files are finished even when LaTeX conversion is off. The markup tests inspect Word and OpenDocument XML, including boundaries, lists, consecutive landscape blocks and markup switched off.
+
 ## v3.34.73a — 2026-11-27
 
 Pre-edit state: commit `e1ed446`. The chatter fixtures counted a PDF metadata stamping warning when pypdf was unavailable. Disable PDF metadata stamping for the fixtures so their summary and strict checks count the diagnostics they exercise. Six assertions fail before the change and pass after with Pandoc 3.13 and a scratch home without pypdf.

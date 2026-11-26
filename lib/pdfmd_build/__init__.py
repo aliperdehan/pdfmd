@@ -684,6 +684,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                                   verbose, enabled=tablewidth_auto, export=True, state=measurement_state)
                     if office_arguments.filter_arguments:
                         result = core.run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug)
+                    elif target_format in ("docx", "odt"):
+                        result = core.run_office_pandoc(cmd, output, office_arguments, pandoc_cwd, verbose, debug,
+                                                        prepare_command=core.headers_as_metadata)
                     else:
                         cmd = core.headers_as_metadata(cmd)
                         core.log_cmd(cmd, pandoc_cwd, verbose)

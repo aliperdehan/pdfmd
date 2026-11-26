@@ -157,11 +157,7 @@ def convert_via_soffice_bridge(md_path: Path, output: Path, effective_from: str 
                 from pdfmd_filters.properties import arguments as properties_arguments
 
                 cmd += properties_arguments(md_path, metadata_files, no_auto)
-                if office_arguments.filter_arguments:
-                    result = core.run_office_pandoc(cmd, odt, office_arguments, pandoc_cwd, verbose)
-                else:
-                    core.log_cmd(cmd, pandoc_cwd, verbose)
-                    result = pandoc_run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=pandoc_cwd)
+                result = core.run_office_pandoc(cmd, odt, office_arguments, pandoc_cwd, verbose)
                 core.office_finish(office_arguments, md_path, verbose)
         if result.returncode != 0 or not odt.exists():
             return False, result.stderr.strip() or "pandoc failed to produce an intermediate .docx"

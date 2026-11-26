@@ -170,6 +170,16 @@ positions, including gaps in `report#20+40`. Each selected part sees the same ne
 as the full build; document-level constants retain their place before the text. `seed-calc: off` disables that context.
 A part's own leading front matter remains discarded.
 
+## Office markup
+
+Word carries `::: keep` (also `nobreak`, `keep-together`, a div with
+`break-inside: avoid`, or `\begin{samepage}`) using Word's keep-lines and
+keep-with-next properties within the block. Pandoc's OpenDocument writer
+applies `PdfmdCenter` to centred paragraphs and `PdfmdHighlight` to
+highlighted spans. It starts landscape ranges on a landscape copy of the
+document's page layout and switches back on the next block. These kinds
+use the existing `markup:` setting, `--markup` and `--no-markup`.
+
 ## Lists of figures and tables
 
 Pandoc metadata `lof: true` and `lot: true` requests lists of captioned figures and tables.

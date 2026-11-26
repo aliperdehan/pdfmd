@@ -12,7 +12,7 @@ import re
 import zipfile
 from pathlib import Path
 
-from .docx import _edit_style
+from .docx import PPR_ORDER, _edit_style, _set
 from .units import length_to_twips
 
 REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
@@ -328,8 +328,52 @@ def sections_markup(document: str) -> tuple[str, int]:
     return document, count + int(ends_landscape) + (1 if start else 0)
 
 
+KEEP_TOKEN = re.compile(r'<w:p w:rsidR="00D0F00([34])"\s*/>|<w:p\b[^>]*?(?:/>|>.*?</w:p>)', re.S)
+
+
+def keep_paragraph(paragraph: str, linked: bool) -> str:
+    """Set the keep properties after pStyle, ahead of list numbering and layout properties."""
+    opening = re.match(r"<w:p\b[^>]*>", paragraph)
+    if opening.group(0).endswith("/>"):
+        paragraph = opening.group(0)[:-2].rstrip() + "></w:p>"
+        opening = re.match(r"<w:p\b[^>]*>", paragraph)
+    body = paragraph[opening.end():]
+    properties = re.match(r"\s*<w:pPr\b[^>]*?(?:/>|>(.*?)</w:pPr>)", body, re.S)
+    inner = (properties.group(1) or "") if properties else ""
+    if linked:
+        inner = _set(inner, PPR_ORDER, "keepNext", "<w:keepNext/>")
+    inner = _set(inner, PPR_ORDER, "keepLines", "<w:keepLines/>")
+    return opening.group(0) + "<w:pPr>" + inner + "</w:pPr>" + body[properties.end() if properties else 0:]
+
+
+def keep_markup(document: str) -> tuple[str, int]:
+    """Keep each marked run of paragraphs together and discard the private delimiters."""
+    if 'w:rsidR="00D0F003"' not in document:
+        return document, 0
+    edits = []
+    depth = 0
+    pending = None
+    for token in KEEP_TOKEN.finditer(document):
+        mark = token.group(1)
+        if mark:
+            depth += 1 if mark == "3" else -1
+            if depth == 0 and pending:
+                edits.append((pending.start(), pending.end(), keep_paragraph(pending.group(), False)))
+                pending = None
+            edits.append((token.start(), token.end(), ""))
+        elif depth > 0:
+            if pending:
+                edits.append((pending.start(), pending.end(), keep_paragraph(pending.group(), True)))
+            pending = token
+    pieces, position = [], 0
+    for start, end, replacement in sorted(edits):
+        pieces.extend((document[position:start], replacement))
+        position = end
+    return "".join(pieces) + document[position:], len(edits)
+
+
 def finish_markup(path: Path) -> int:
-    """Write the formatting of pdfmd's markup (centred text, highlighted text, landscape pages) into a Word file Pandoc made;
+    """Write the formatting of pdfmd's markup into a Word file Pandoc made;
     returns how many things changed. A file with none of it is not touched."""
     with zipfile.ZipFile(path) as archive:
         entries = {name: archive.read(name) for name in archive.namelist()}
@@ -343,8 +387,15 @@ def finish_markup(path: Path) -> int:
     styles, hung = style_hangs(styles) if "pdfmd-hang-" in styles else (styles, 0)
     styled += hung
     document, sections = sections_markup(document)
+    document, kept = keep_markup(document)
     document, spaced = bibliography_line_spacing(document)
-    if not styled and not sections and not spaced:
+    footnotes = "word/footnotes.xml"
+    if footnotes in entries:
+        text, finished = keep_markup(entries[footnotes].decode("utf-8"))
+        if finished:
+            entries[footnotes] = text.encode("utf-8")
+            kept += finished
+    if not styled and not sections and not spaced and not kept:
         return 0
     entries["word/document.xml"] = document.encode("utf-8")
     if styled:
@@ -354,4 +405,4 @@ def finish_markup(path: Path) -> int:
         for name, data in entries.items():
             target.writestr(infos[name] if name in infos else name, data)
     temporary.replace(path)
-    return styled + sections + spaced
+    return styled + sections + spaced + kept
