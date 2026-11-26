@@ -8,6 +8,7 @@ A short guide for a program or an AI assistant that runs `pdfmd`. The same text 
 For a build, `-qq` (`--chatter=result`) shows its final OK line. `-qqq` (`--chatter=off`) keeps errors on stderr
 and preserves the exit status. Use `-q` to show warnings as well.
 Use `--log FILE` to append the full diagnostics to a file while keeping the console quiet.
+Use `--summary` to count unmuted warnings, notes and errors after the last build result, including in a batch.
 `--mute ID[,ID]` accepts named warnings under `--strict`.
 
 ## The commands that matter

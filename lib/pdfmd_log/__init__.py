@@ -15,7 +15,7 @@ from pathlib import Path
 
 from pdfmd_base import core
 
-from . import transcript
+from . import summary, transcript
 
 CHATTER_LEVELS = ("off", "result", "warnings", "normal", "verbose", "debug")
 _MINIMUM = {"result": "result", "warning": "warnings", "error": "warnings",
@@ -32,13 +32,15 @@ def visible(level: str) -> bool:
     return CHATTER_LEVELS.index(current) >= CHATTER_LEVELS.index(_MINIMUM[level])
 
 
-def emit(level: str, id: str | None, text: str, *, file=None, end="\n", flush=False, shown=True) -> None:
+def emit(level: str, id: str | None, text: str, *, file=None, end="\n", flush=False, shown=True, counted=True) -> None:
     """Send a diagnostic to the console at the selected level and keep it in the build record."""
     muted = level not in ("error", "result") and is_muted(id)
     transcript.record(text, muted=muted)
     if muted:
         core.record_note(text)
         return
+    if counted:
+        summary.count(level)
     if shown and visible(level):
         if level == "error" and CHATTER.get() == "off":
             file = sys.stderr
@@ -125,11 +127,11 @@ def emit_outcome(text: str, ok: bool) -> None:
     if not text:
         return
     if not ok or visible("normal"):
-        emit("normal" if ok else "error", None, text)
+        emit("normal" if ok else "error", None, text, counted=False)
     else:
         for line in text.splitlines():
             if WARNING_LINE_RE.match(line):
-                emit("warning", None, line)
+                emit("warning", None, line, counted=False)
             else:
                 transcript.record(line)
 

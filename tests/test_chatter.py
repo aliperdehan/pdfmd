@@ -187,6 +187,48 @@ class Chatter(unittest.TestCase):
                 self.assertIn("OK    REPORT  book.tex", saved)
                 self.assertEqual(sum(line.startswith("pdfmd ") for line in saved.splitlines()), 1)
 
+    def test_summary_follows_the_result_and_counts_hidden_warnings(self):
+        done = self.run_pdfmd("a.md", "-qq", "--summary")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(done.stdout.splitlines(), ["OK    a.md > a.tex", "1 warning"])
+
+    def test_summary_omits_accepted_diagnostics_and_zero_counts(self):
+        done = self.run_pdfmd("a.md", "-qq", "--summary", "--strict", "--mute=table-mismatch")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(done.stdout, "OK    a.md > a.tex\n")
+
+    def test_summary_counts_warning_and_note_totals_across_a_batch(self):
+        self.write("b.md")
+        (self.folder / "skip.xyz").write_text("not an input", encoding="utf-8")
+        for jobs in ("1", "2"):
+            with self.subTest(jobs=jobs):
+                done = self.run_pdfmd("-b", "-j", jobs, "a.md", "b.md", "skip.xyz", "-qq", "--summary")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertEqual(done.stdout.splitlines(),
+                                 ["OK    a.md > a.tex", "OK    b.md > b.tex", "2 warnings, 1 note"])
+
+    def test_summary_preserves_strict_status_and_is_silent_at_off(self):
+        done = self.run_pdfmd("a.md", "-qq", "--summary", "--strict")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(done.stdout.splitlines()[-1], "1 warning, 1 error")
+        done = self.run_pdfmd("a.md", "-qqq", "--summary", "--strict")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(done.stdout, "")
+        self.assertIn("--strict: the build printed", done.stderr)
+        self.assertNotIn("1 warning, 1 error", done.stderr)
+
+    def test_summary_settings_use_document_precedence(self):
+        self.settings("  summary: true\n")
+        self.write("b.md", "---\npdfmd-options: {summary: false}\n---\n\n")
+        self.assertEqual(self.run_pdfmd("a.md", "-qq").stdout.splitlines()[-1], "1 warning")
+        self.assertEqual(self.run_pdfmd("b.md", "-qq").stdout, "OK    b.md > b.tex\n")
+        self.assertEqual(self.run_pdfmd("b.md", "-qq", "--summary").stdout.splitlines()[-1], "1 warning")
+        self.settings("  summary: false\n")
+        self.write("b.md", "---\npdfmd-options: {summary: true}\n---\n\n")
+        done = self.run_pdfmd("-b", "-j", "2", "a.md", "b.md", "-qq")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(done.stdout.splitlines()[-1], "2 warnings")
+
     def test_explicit_metadata_is_resolved_before_reading_its_settings(self):
         (self.folder / "explicit.yaml").write_text(
             "pdfmd-options: {chatter: result, mute: [table-mismatch]}\n", encoding="utf-8")

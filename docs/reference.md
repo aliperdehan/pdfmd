@@ -1741,6 +1741,12 @@ Use `pdfmd-options: {log: FILE}` or the `options.log` row in `--setup` to set th
 The precedence is the same as for `chatter`. Relative paths from settings are based at the document's
 folder. With `--log`, they are based at the current folder. Batch workers can append to the same file.
 
+`--summary` prints one line after the last build result, such as `2 warnings, 1 note`. It counts unmuted
+diagnostics, including those hidden by chatter and those from all workers in a batch. Zero counts are
+omitted. Chatter `off` suppresses the line. Set `options.summary` in `--setup` or
+`pdfmd-options: {summary: true}` for a document. If any document in a batch requests a summary, the line
+counts the whole batch.
+
 The closing line says how long the build took (v3.31.4): `OK    report.md > report.pdf  in 3:07  (lualatex)`, also for
 a file that failed. `--verbose` adds a TIME line for every step. `build-time: on|off` (`--build-time` / `--no-build-time`)
 and `time-format: auto|clock|seconds|words|TEMPLATE` (`--time-format`; tokens {d} {h} {hh} {m} {mm} {s} {ss} {s1} {s2}

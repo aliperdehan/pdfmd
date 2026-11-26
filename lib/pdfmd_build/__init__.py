@@ -35,7 +35,7 @@ from pdfmd_base import core
 from pdfmd_base import noted, timed
 
 from pdfmd_base import pandoc_run
-from pdfmd_log import CHATTER, document_chatter, emit, verbose_output
+from pdfmd_log import CHATTER, document_chatter, emit, summary, verbose_output
 from pdfmd_cite.aliases import apply as apply_citation_aliases
 from pdfmd_engines.memory import scoped
 
@@ -1051,6 +1051,8 @@ def finish_build(result, seen: list[str], md_path: Path, metadata_files: list[Pa
     # a repair is a warning too (lib/pdfmd_tex/repair.py); the run's TeX cache counts only for a build that TeX made
     run_wide = core.BUILD["repaired_run"] if core.BUILD["engine"] in core.LATEX_ENGINES else []
     problems = [*seen, *run_wide, *core.BUILD["repaired"]]
+    if len(result) > 2:
+        summary.returned_diagnostics(result[2], problems)
     if result[1] and len(result) > 2 and isinstance(result[2], str):
         known = {line.strip() for line in problems}
         problems += [line for line in re.findall(r"(?m)^(?:\[WARNING\]|WARN\b).*$", result[2]) if line.strip() not in known]
@@ -1102,7 +1104,7 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
             history_record.finish_history(False)
             where = recorder.finish(None, core.failure_text(error)) if recorder else None
             if where:
-                emit("error", None, f"      full record: {core.under_home(where)}", file=sys.stderr)
+                emit("error", None, f"      full record: {core.under_home(where)}", file=sys.stderr, counted=False)
             raise
         if recorder:
             built.record_path = recorder.finish(built)

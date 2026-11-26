@@ -21,7 +21,7 @@ from pathlib import Path
 
 from pdfmd_base import core
 from pdfmd_log import (CHATTER, chatter_scope, document_chatter, emit, emit_outcome, parse_mutes,
-                       select_chatter, transcript, visible, verbose_output)
+                       select_chatter, summary, transcript, visible, verbose_output)
 
 
 POLISH_INFO_KEYS = {"title": "/Title", "subject": "/Subject", "author": "/Author", "keywords": "/Keywords"}
@@ -81,6 +81,7 @@ def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action],
 
 @chatter_scope(muted=frozenset())
 @transcript.scope(pending=True)
+@summary.scope(display=True)
 def run_main() -> None:
     parser, hidden = command_line_parser()
     argv, excerpts = sys.argv[1:], None
@@ -124,6 +125,10 @@ def run_main() -> None:
     core.MUTE_CLI = parse_mutes(args.mute) if args.mute is not None else None
     source = args.path[0] if args.path and not (args.batch or args.report) and args.path[0].is_file() else None
     args.verbose = select_chatter(source)
+    if args.batch or args.report or len(args.path or []) > 1:
+        summary.CURRENT.get().requested = args.summary
+    else:
+        summary.select(args.summary, source)
     core.use_managed_tools()
     if not (args.path and all(path.suffix.lower() == ".pdf" for path in args.path)):
         from pdfmd_args.paths import invocation_paths
@@ -678,6 +683,7 @@ def run_main() -> None:
             else:
                 given = None
             args.verbose = select_chatter(plan_source, given if isinstance(given, list) else [given] if given else [])
+            summary.select(args.summary, plan_source, given if isinstance(given, list) else [given] if given else [])
             if args.presentation is None:
                 metadata = None if plan_source.suffix.lower() == ".qmd" else metadata_for(plan_source)
                 presentation_request = slides.source(plan_source, metadata, args.presentation)
@@ -987,6 +993,7 @@ def run_main() -> None:
         results = core.finish_convert_job(convert_job, results, args.verbose)
     failures = [result for result in results if not result[1]]
     for result in results:
+        summary.collect(result)
         source, ok, error = result
         with chatter_scope(getattr(result, "chatter", CHATTER.get())), transcript.result_scope(args.batch, result):
             emit("result" if ok else "error", None,
@@ -998,7 +1005,8 @@ def run_main() -> None:
             emit_outcome(error, ok)
             if getattr(result, "record_path", None) and (verbose_output(args.verbose) or not ok):
                 emit("verbose" if ok else "error", None,
-                     f"{'      full record: ' if not ok else 'RECORD  '}{core.under_home(result.record_path)}")
+                     f"{'      full record: ' if not ok else 'RECORD  '}{core.under_home(result.record_path)}",
+                     counted=False)
     if args.batch and args.bopen is not None:
         built = [Path(result.output) for result in results
                  if result[1] and getattr(result, "output", None) is not None and Path(result.output).is_file()]

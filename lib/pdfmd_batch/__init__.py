@@ -11,7 +11,7 @@ import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from pdfmd_base import core as bound_core
-from pdfmd_log import document_chatter, emit, transcript, verbose_output
+from pdfmd_log import document_chatter, emit, summary, transcript, verbose_output
 
 
 # The author wants this source-likeness ranking revised later (master queue 3fi D33).
@@ -116,9 +116,10 @@ def prepare_epubs(core, args, files: list[Path], output: Path | None) -> dict[Pa
 
 
 def convert_logged(log_path, positional, options):
-    with transcript.scope(log_path):
+    with transcript.scope(log_path), summary.scope() as tally:
         built = bound_core.convert_one(*positional, **options)
     built.log_path = log_path
+    built.diagnostic_counts = tally.counts
     return built
 
 
@@ -236,6 +237,7 @@ def run(core, *,
         with transcript.scope(pending=True) as log:
             given = metadata_for(file, announce=False) if file.suffix.lower() not in core.OFFICE_INPUT_EXTENSIONS else None
             metadata_files = given if isinstance(given, list) else [given] if given else []
+            summary.select(args.summary, file, metadata_files, batch=True)
             with document_chatter(file, metadata_files):
                 target = file_target(file)
                 log_path = transcript.destination(args.log, file, metadata_files)

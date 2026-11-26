@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.71 — 2026-11-26
+
+Pre-edit state: commit `02d643f`. Builds had no run-wide count of diagnostics. Add --summary, its document and setup options, and collect unmuted diagnostics from both the main process and batch workers. The summary stays silent at chatter off and keeps the exit status. Regression tests fail before and pass after with Pandoc 3.13 for hidden warnings, muted warnings, notes, strict failures, and serial and parallel batches.
+
 ## v3.34.70 — 2026-11-26
 
 Pre-edit state: commit `361011d`. Quiet builds could not retain their diagnostics in a requested file. Add --log and its document and setup settings, with a versioned header, muted tags and one append write per line even in a worker batch. Regression tests reproduce the previous Pandoc log or missing log and pass with Pandoc 3.13 for append, quiet and muted diagnostics, path errors, precedence, reports and parallel builds.

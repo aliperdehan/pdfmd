@@ -96,7 +96,8 @@ def build(core, *, args, files: list[Path], excluded: list[Path], metadata, meta
             emit("verbose", None, line)
     emit_outcome(built[2], ok)
     if getattr(built, "record_path", None) and (args.verbose or not ok):
-        emit("verbose" if ok else "error", None, f"{'      full record: ' if not ok else 'RECORD  '}{core.under_home(built.record_path)}")
+        emit("verbose" if ok else "error", None, f"{'      full record: ' if not ok else 'RECORD  '}{core.under_home(built.record_path)}",
+             counted=False)
     if not ok:
         raise SystemExit(1)
     if args.open:
