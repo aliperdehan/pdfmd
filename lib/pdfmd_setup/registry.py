@@ -790,9 +790,11 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         text("options.calc.typeset-upright", "Name pieces a typeset calculation sets upright",
              "Comma separated pieces: V makes V_el an upright V with an el subscript, e makes c_e an upright e. A piece is the letters "
              "of a name's base or one word after an underscore. The default is one letter italic, a longer piece upright. "
-             "Greek names are not styled. Empty: none. Per run: --calc-typeset-upright.", "Calculations"),
+             "Greek names keep their usual style. For one calculation line use {upright: s, V} in its text. "
+             "Empty: none. Per run: --calc-typeset-upright.", "Calculations"),
         text("options.calc.typeset-italic", "Name pieces a typeset calculation sets italic",
-             "Comma separated pieces: el makes V_el an italic word, DNA makes k_DNA an italic DNA. Empty: none. "
+             "Comma separated pieces: el makes V_el an italic word, DNA makes k_DNA an italic DNA. "
+             "For one calculation line use {italic: el, DNA} in its text. Empty: none. "
              "Per run: --calc-typeset-italic.", "Calculations"),
         choice("options.calc.noindent", "Leave the first-line indent off a ::: calc div",
                (("lines", "off the calculation lines; the prose between them keeps the document's (the default)"),

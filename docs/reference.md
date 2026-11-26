@@ -164,7 +164,9 @@ on the div, or a nested `::: indent` / `::: noindent` div, wins). Added by
 `calc_filter_args()` only for a document that has such a span or div. The settings are
 `pdfmd-options: {calc: {enabled, digits: 4sf|2dp, round: even|away, subs, typeset: true|display, noindent, space, align}}` (`calc: off` is the short form), --calc /
 --no-calc, --calc-digits, --calc-round, --calc-subs / --no-calc-subs, --calc-typeset [inline|display] / --no-calc-typeset, --calc-typeset-upright, --calc-typeset-italic, --calc-noindent [lines|all] / --no-calc-noindent, --calc-space, --calc-align or --setup; round() sends an exact half to the
-even digit (R, Python) unless away. Needs Pandoc (the built-in renderer shows the source as written). README "Calculations inside the text";
+even digit (R, Python) unless away. A calculation can override its line's name styles with markers such as `{upright: s, V}`
+or `{italic: el, DNA}`. Spaces around the pieces are optional. Needs Pandoc (the built-in renderer shows the source as written).
+README "Calculations inside the text";
 docs/recipes.md 1.11. Partial builds replay the skipped parts' defining calc statements as hidden content at their real
 positions, including gaps in `report#20+40`. Each selected part sees the same nearest definition above, else first below,
 as the full build; document-level constants retain their place before the text. `seed-calc: off` disables that context.

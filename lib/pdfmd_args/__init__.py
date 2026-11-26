@@ -842,10 +842,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--calc-typeset-upright", metavar="PIECES", default=None,
                         help="pieces of a name a typeset calculation sets upright (\\mathrm), comma separated: V for V_el, e for c_e. The "
                              "default is a one-letter piece italic and a longer one upright. A piece is the letters of a name's base or "
-                             "one word after an underscore. Also `pdfmd-options: {calc: {typeset-upright: [V]}}`, or --setup")
+                             "one word after an underscore. Use {upright: s, V} in the text for one calculation line. "
+                             "Also `pdfmd-options: {calc: {typeset-upright: [V]}}`, or --setup")
     parser.add_argument("--calc-typeset-italic", metavar="PIECES", default=None,
                         help="pieces of a name a typeset calculation sets italic, comma separated: el for V_el, DNA for k_DNA (a word of "
-                             "several letters is one italic word, \\mathit). Also `pdfmd-options: {calc: {typeset-italic: [el]}}`, or --setup")
+                             "several letters is one italic word, \\mathit). Use {italic: el, DNA} in the text for one calculation line. "
+                             "Also `pdfmd-options: {calc: {typeset-italic: [el]}}`, or --setup")
     parser.add_argument("--calc-noindent", nargs="?", const="all", choices=("lines", "all"), default=None, metavar="lines|all",
                         help="the first-line indent in a `::: calc` div: `lines` (the default) takes it off the paragraphs that hold a "
                              "calculation line and leaves the document's on the prose between them; `--calc-noindent` (all) takes it off "

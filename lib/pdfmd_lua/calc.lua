@@ -820,14 +820,13 @@ local function strip_styles(text)
     if not s then break end
     from = e + 1
     if word == "upright" or word == "italic" then
-      local count = 0
       for piece in (list .. ","):gmatch("([^,]*),") do
+        piece = trim(piece)
         if not piece:match("^%a+$") then
-          fail("'{" .. word .. ":" .. list .. "}' takes pieces of names that are letters, comma separated without spaces, as {" .. word .. ":V,el}")
+          fail("'{" .. word .. ":" .. list .. "}' takes pieces of names that are letters, comma separated, as {" .. word .. ": V, el}")
         end
         if styles[piece] and styles[piece] ~= word then fail("'" .. piece .. "' is both {upright:...} and {italic:...} in one text") end
         styles[piece] = word
-        count = count + 1
       end
       local first = s
       if text:sub(s - 1, s - 1):match("%s") and (e == #text or text:sub(e + 1, e + 1):match("%s")) then first = s - 1 end
@@ -1503,9 +1502,41 @@ local function process_line(items, a, b)
   if changed then return line end
 end
 
-local function process_paragraph(inlines)
+local function open_style_marker(text)
+  return text:find("{upright:[^}]*$") or text:find("{italic:[^}]*$")
+end
+
+-- Keep a complete style marker in one Str so both passes see its whole text and the edit can remove it.
+-- Only plain text and spaces on the same line can occur inside the marker.
+local function join_style_markers(inlines)
   local items = pandoc.Inlines({})
-  for _, item in ipairs(inlines) do items:insert(item) end
+  local index = 1
+  while index <= #inlines do
+    local item = inlines[index]
+    if item.t == "Str" and open_style_marker(item.text) then
+      local parts, last = {item.text}, index
+      for following = index + 1, #inlines do
+        local piece = inlines[following]
+        if piece.t ~= "Str" and piece.t ~= "Space" then break end
+        parts[#parts + 1] = piece.t == "Space" and " " or piece.text
+        if piece.t == "Str" and piece.text:find("}", 1, true) then
+          last = following
+          if not open_style_marker(piece.text) then break end
+        end
+      end
+      if last > index then
+        item = pandoc.Str(table.concat(parts, "", 1, last - index + 1))
+        index = last
+      end
+    end
+    items:insert(item)
+    index = index + 1
+  end
+  return items
+end
+
+local function process_paragraph(inlines)
+  local items = join_style_markers(inlines)
   local out, changed, first = pandoc.Inlines({}), false, 1
   for index = 1, #items + 1 do
     local item = items[index]

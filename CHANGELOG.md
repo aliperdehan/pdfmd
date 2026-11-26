@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.75 — 2026-11-26
+
+Pre-edit state: commit `88ca922`. Calculator style markers rejected spaces, and Pandoc split a spaced marker across several inlines in a calc div. Rejoin the marker before evaluating the line and allow spaces around its comma-separated pieces. The regression compares compact and spaced markers in calc divs, fences and spans with LaTeX and Typst output and with typesetting off.
+
 ## v3.34.74 — 2026-11-26
 
 Pre-edit state: commit `39edc32`. Word's keep blocks and OpenDocument's centre, highlight and landscape markup previously fell back to text. Word now writes keep-lines and keep-with-next on the paragraphs within a keep block. OpenDocument defines the paragraph and character styles named by Pandoc and uses a landscape copy of the document's master page for each landscape range. Office files are finished even when LaTeX conversion is off. The markup tests inspect Word and OpenDocument XML, including boundaries, lists, consecutive landscape blocks and markup switched off.

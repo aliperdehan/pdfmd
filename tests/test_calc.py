@@ -248,6 +248,30 @@ class Variables(unittest.TestCase):
     def flat(text: str) -> str:
         return " ".join(text.split())
 
+    def test_style_markers_accept_spaces_in_divs_fences_and_spans(self):
+        compact = ("::: calc\n"
+                   "First: V = 2 {upright:V} + 1 = {ans} mL\n"
+                   "Second: m = V + 1 = {ans} ng {upright:V,m}\n"
+                   "Third: DNA = V + m = {ans}{italic:DNA}\n"
+                   ":::\n\n"
+                   "```{=calc}\nfence = DNA + 1 = {ans} {italic:fence,DNA}\n```\n\n"
+                   "Span: `k = fence + 1 = {ans} {upright:k}`{=}.\n")
+        spaced = (compact.replace("{upright:V}", "{upright: V }")
+                  .replace("{upright:V,m}", "{upright: V , m }")
+                  .replace("{italic:DNA}", "{italic: DNA }")
+                  .replace("{italic:fence,DNA}", "{italic: fence,  DNA }")
+                  .replace("{upright:k}", "{upright: k }"))
+        for writer, mode in (("latex", "inline"), ("latex", "display"), ("typst", "display"), ("plain", "off")):
+            with self.subTest(writer=writer, mode=mode):
+                option = f"pdfmd-calc-typeset={mode}"
+                expected = self.convert(compact, option, writer=writer)
+                result = self.convert(spaced, option, writer=writer)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("WARN  calc:", result.stderr)
+                self.assertEqual(result.stdout, expected.stdout)
+        invalid = spaced.replace("{upright: V , m }", "{upright: V m }")
+        self.assertIn("letters, comma separated", self.convert(invalid).stderr)
+
     def test_statements(self):
         for source, expected in STATEMENTS:
             with self.subTest(source=source):

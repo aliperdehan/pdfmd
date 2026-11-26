@@ -30,7 +30,7 @@ wait for an answer before any code.
 - [ ] CSS: MathJax for the non-STIX fonts (tall brackets) [3am, 3ao]
 - [ ] Hiding, properly: definitions inside a `hide` block keep working (TeX macros and other uses, as calc lines do), Quarto's `.hidden` macros handled, and possibly `hide` and `hidden` unified again [D98]
 - [ ] Calculator: `.qmd` spellings and the `all` mode, native tier, constants file included from the body, check mode, significant-figure tracking [3bw, 3cu]
-- [ ] Calculator typeset styling: Greek names (upright/italic), styling one occurrence of a piece in a line (the in-name `V_[x]s`), spaces inside the `{upright:..}` marker [3cw]
+- [ ] Calculator typeset styling: Greek names (upright/italic) and styling one occurrence of a piece in a line (the in-name `V_[x]s`) [3cw]
 - [ ] `--to ansi`: stacked math (levels b and c) [3ci]
 - [ ] `table-keep` limits: grid tables, height-based rule, the Pandoc floor for caption attributes [3cf]
 - [ ] Quarto islands and streams, the trust model, `pdfmd --install quarto`, then the tiers [3bs, 3bt, 3bn]
