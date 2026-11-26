@@ -36,9 +36,10 @@ class Chatter(unittest.TestCase):
         (self.folder / name).write_text(f"{options}# Sample\n\n{body}", encoding="utf-8")
 
     def run_pdfmd(self, *args):
-        # Strict tests count table warnings independently of the machine's fonts.
+        # Count the fixture's warnings independently of installed fonts and PDF stamping tools.
         command = [sys.executable, str(ROOT / "scripts" / "pdfmd"), "--rewrite", "--to", "latex",
-                   "--no-build-time", "--path-style", "relative", *args, "--no-auto", "font", "unicode"]
+                   "--no-stamp-pdf-metadata", "--no-build-time", "--path-style", "relative", *args,
+                   "--no-auto", "font", "unicode"]
         return subprocess.run(
             command,
             cwd=self.folder, env={**os.environ, "PDFMD_CONFIG": str(self.config), "PDFMD_NO_PROMPT": "1"},

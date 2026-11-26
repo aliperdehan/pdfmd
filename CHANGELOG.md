@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.73a — 2026-11-27
+
+Pre-edit state: commit `e1ed446`. The chatter fixtures counted a PDF metadata stamping warning when pypdf was unavailable. Disable PDF metadata stamping for the fixtures so their summary and strict checks count the diagnostics they exercise. Six assertions fail before the change and pass after with Pandoc 3.13 and a scratch home without pypdf.
+
 ## v3.34.73 — 2026-11-27
 
 Pre-edit state: commit `8879196`. The early summary lookup read top-level document options before path formatting was set. In verbose builds this printed the same option twice under different spellings of the source path. Resolve the summary setting during build routing, after path formatting and metadata discovery. The top-level options regression fails before and passes after with Pandoc 3.13, with one announcement using the full source path.
