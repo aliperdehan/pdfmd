@@ -87,6 +87,11 @@ class Parser(argparse.ArgumentParser):
                 # The original switch can come immediately before a positional file.
                 parsed[index] += "=true"
         named, extras = super().parse_known_args(parsed, namespace)
+        if named.quiet:
+            if named.quiet > 3:
+                self.error("-q can be given at most three times")
+            if named.verbose or named.debug:
+                self.error("-q cannot be combined with -v/--verbose or --debug")
         orientation = getattr(named, "persona_orientation", None)
         if orientation is not None:
             size, _ = core.paper_words(named.paper)
@@ -220,6 +225,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "a recognized extension (e.g. .html, .tex, .typ) also selects the "
                              "target format, same as --to")
     from pdfmd_log import CHATTER_LEVELS
+    parser.add_argument("-q", dest="quiet", action="count", default=0,
+                        help="-q shows warnings and results, -qq shows results, -qqq keeps only errors. "
+                             "--chatter takes precedence. Incompatible with -v/--verbose and --debug")
     parser.add_argument("--chatter", type=lambda word: word.strip().casefold(), choices=CHATTER_LEVELS, metavar="LEVEL",
                         help="build output: off, result, warnings, normal (default), verbose or debug. Also "
                              "`pdfmd-options: {chatter: LEVEL}` and `--setup`")

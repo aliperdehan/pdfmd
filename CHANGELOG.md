@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.69 — 2026-11-26
+
+Pre-edit state: commit `30f8531`. The chatter levels had no short spelling. Add counted -q, with explicit --chatter taking precedence and conflicting verbosity flags rejected as usage errors. The CLI regression tests fail before and pass after with Pandoc 3.13, including a parallel batch and a hidden strict failure.
+
 ## v3.34.68 — 2026-11-27
 
 Pre-edit state: commit `e1b8569`. `PDFMD_NO_SOFFICE=1` in the environment turns LibreOffice off for every route, like `soffice-timeout: 0` but beyond the settings and a test's own scratch config: a Codex sandbox crashes `soffice` (AppKit) and leaves a crash dialog on the screen for each test that reached it. `tools.soffice_limit()` returns 0 when the variable is non-empty, so `resolve_soffice()` finds nothing and `run_soffice()` refuses. Test: `tests/test_probes.py`.

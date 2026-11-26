@@ -1724,6 +1724,9 @@ citation, a LaTeX undefined reference), into a failed file: the output is kept, 
 same discovery and commands as `-v`, and `debug` adds engine failure diagnostics. The level leaves the exit status
 unchanged, including `--strict` failures. Set `options.chatter` in `--setup` or `pdfmd-options: {chatter: LEVEL}` in
 the document. The command line wins, then the document, its metadata, folder settings and global settings.
+Use `-q` for `warnings`, `-qq` for `result` or `-qqq` for `off`. Repeated `-q` flags add up
+to a maximum of three. An explicit `--chatter LEVEL` wins over `-q`. Combining `-q` with
+`-v`/`--verbose` or `--debug` is a usage error (exit 2).
 
 `--mute ID[,ID]` accepts named warnings, notes and automatic discovery messages. For example,
 `--mute table-mismatch,table-unparsed,YAML` accepts table cell-count differences, tables the reader cannot parse,

@@ -5,7 +5,8 @@
 A short guide for a program or an AI assistant that runs `pdfmd`. The same text is in the README, the recipes and
 `pdfmd --help all`; this is the part you need first. `pdfmd --doc` lists the documents that came with your version.
 
-For a build, `--chatter=result` shows its final OK line. `--chatter=off` keeps errors on stderr and preserves the exit status.
+For a build, `-qq` (`--chatter=result`) shows its final OK line. `-qqq` (`--chatter=off`) keeps errors on stderr
+and preserves the exit status. Use `-q` to show warnings as well.
 `--mute ID[,ID]` accepts named warnings under `--strict`.
 
 ## The commands that matter

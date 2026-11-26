@@ -64,6 +64,41 @@ class Chatter(unittest.TestCase):
         self.assertIn("--strict: the build printed", done.stderr)
         self.assertIn("WARN  table-repair:", done.stderr)
 
+    def test_counted_quiet_levels_and_precedence(self):
+        self.settings("  chatter: verbose\n")
+        self.write("a.md", "---\npdfmd-options: {chatter: off}\n---\n\n")
+        for flags, warning, result in [(("-q",), True, True), (("-qq",), False, True),
+                                       (("-q", "-qq"), False, False),
+                                       (("--chatter=result", "-q"), False, True)]:
+            with self.subTest(flags=flags):
+                done = self.run_pdfmd("a.md", *flags)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                self.assertEqual("WARN  table-repair:" in done.stdout, warning)
+                self.assertEqual("OK    a.md > a.tex" in done.stdout, result)
+                self.assertNotIn("FOUND", done.stdout)
+                self.assertNotIn("AUTO YAML", done.stdout)
+
+    def test_quiet_usage_errors(self):
+        for flag in ("-v", "--verbose", "--debug", "-qqq"):
+            with self.subTest(flag=flag):
+                done = self.run_pdfmd("a.md", "-q", flag)
+                self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+                self.assertIn("-q", done.stderr)
+                if flag != "-qqq":
+                    self.assertIn(flag, done.stderr)
+                else:
+                    self.assertIn("at most three", done.stderr)
+
+    def test_quiet_workers_and_strict_status(self):
+        self.write("b.md")
+        done = self.run_pdfmd("-b", "-j", "2", "a.md", "b.md", "-qq")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(done.stdout.splitlines(), ["OK    a.md > a.tex", "OK    b.md > b.tex"])
+        done = self.run_pdfmd("a.md", "-qqq", "--strict")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(done.stdout, "")
+        self.assertIn("--strict: the build printed", done.stderr)
+
     def test_metadata_can_set_the_level(self):
         (self.folder / "metadata.yaml").write_text("pdfmd-options: {chatter: result}\n", encoding="utf-8")
         self.settings("  chatter: warnings\n")

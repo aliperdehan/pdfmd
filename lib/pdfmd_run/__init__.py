@@ -117,7 +117,9 @@ def run_main() -> None:
         for flag in [flag for flag in reader_parser._option_string_actions if len(flag) > 2 and flag[1] != "-"]:
             del reader_parser._option_string_actions[flag]     # `-cwd`: older argparse still abbreviates it
         args, pandoc_options = reader_parser.parse_known_args()
-    core.CHATTER_CLI = args.chatter or ("debug" if args.debug else "verbose" if args.verbose else None)
+    core.CHATTER_CLI = args.chatter or (None, "warnings", "result", "off")[args.quiet]
+    if core.CHATTER_CLI is None:
+        core.CHATTER_CLI = "debug" if args.debug else "verbose" if args.verbose else None
     core.MUTE_CLI = parse_mutes(args.mute) if args.mute is not None else None
     source = args.path[0] if args.path and not (args.batch or args.report) and args.path[0].is_file() else None
     args.verbose = select_chatter(source)

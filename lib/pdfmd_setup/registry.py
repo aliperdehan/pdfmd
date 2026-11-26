@@ -894,7 +894,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.chatter", "How much a build says",
                (("off", "errors on stderr"), ("result", "the final OK line"), ("warnings", "results, warnings and errors"),
                 ("normal", "usual build output"), ("verbose", "discovery and commands"), ("debug", "engine diagnostics too")),
-               "", "Per run: --chatter LEVEL. Per document: pdfmd-options.chatter.", "Checks and limits"),
+               "", "Per run: --chatter LEVEL, or -q (warnings), -qq (result), -qqq (off). "
+               "Per document: pdfmd-options.chatter.", "Checks and limits"),
         text("options.mute", "Diagnostic IDs to accept",
              "Comma-separated, e.g. table-mismatch, table-unparsed, YAML. Muted warnings pass --strict. "
              "Per run: --mute ID[,ID]. Per document: pdfmd-options.mute.", "Checks and limits", "config"),
