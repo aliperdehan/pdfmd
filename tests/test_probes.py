@@ -118,6 +118,24 @@ class SofficeVersion(unittest.TestCase):
         self.assertEqual(self.asked(""), ["soffice", "--version"])
 
 
+class SofficeSwitchedOffByTheEnvironment(unittest.TestCase):
+    """`PDFMD_NO_SOFFICE=1` is `soffice-timeout: 0` for the whole process, whatever the config says."""
+
+    def test_the_variable_turns_libreoffice_off(self):
+        from pdfmd_engines import tools
+        with mock.patch.dict(os.environ, {"PDFMD_NO_SOFFICE": "1"}):
+            self.assertEqual(tools.soffice_limit(), 0)
+            self.assertIsNone(tools.resolve_soffice())
+            run = tools.run_soffice(["soffice", "--version"])
+        self.assertEqual(run.returncode, 1)
+        self.assertIn("turned off", run.stderr)
+
+    def test_an_empty_variable_changes_nothing(self):
+        from pdfmd_engines import tools
+        with mock.patch.dict(os.environ, {"PDFMD_NO_SOFFICE": ""}):
+            self.assertNotEqual(tools.soffice_limit(), 0)
+
+
 @unittest.skipIf(sys.platform == "win32", "a script named pandoc on PATH")
 class HungProgram(unittest.TestCase):
     """A `pandoc` and a `kpsewhich` that never answer: pdfmd goes on as if they were not there."""

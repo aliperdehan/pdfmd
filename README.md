@@ -247,7 +247,7 @@ folders; the system installers below do the same job:
   `pdfmd --doctor` says so. For an install somewhere else, name it in `pdfmd --setup` (section "Tool locations") or in the
   config's `options:`: `pandoc-path`, `typst-path`, `chrome-path`, `tesseract-path`, `soffice-path`, `dot-path`, `mmdc-path`
   (a program or its folder) and `poppler-path` (a folder).
-  **LibreOffice time limit:** every LibreOffice run (Office files, spreadsheets, SVG pictures) may take `soffice-timeout` seconds, 300 by
+  **LibreOffice time limit:** every LibreOffice run (Office files, spreadsheets, SVG pictures) may take `soffice-timeout` seconds, 300 by The environment variable `PDFMD_NO_SOFFICE=1` means `soffice-timeout: 0` for one process whatever the settings say (an agent's sandbox crashes LibreOffice and leaves a crash dialog behind).
   default; a run that takes longer is stopped together with the process it started, its file fails with the setting named, and a batch
   goes on. `0` never runs LibreOffice (it counts as not installed), a negative number (`-1`) removes the limit. It is a `pdfmd-options` key
   (one document), a config key and a row of `pdfmd --setup` ("Checks and limits").

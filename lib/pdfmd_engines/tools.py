@@ -144,7 +144,10 @@ def soffice_timeout_from(value) -> float:
 
 
 def soffice_limit() -> float:
-    """Seconds one LibreOffice run may take (0: never run it; negative: no limit)."""
+    """Seconds one LibreOffice run may take (0: never run it; negative: no limit). The environment variable `PDFMD_NO_SOFFICE`
+    (any non-empty value) means 0 whatever the settings say: an agent's sandbox crashes LibreOffice and leaves a crash dialog."""
+    if os.environ.get("PDFMD_NO_SOFFICE"):
+        return 0
     return core.SOFFICE_TIMEOUT_NOW if core.SOFFICE_TIMEOUT_NOW is not None else soffice_timeout_from(core.config_options().get("soffice-timeout"))
 
 
