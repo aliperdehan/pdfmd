@@ -135,6 +135,39 @@ class Writers(unittest.TestCase):
                     self.assertEqual(len(widths), len(spellings))
                     self.assertEqual(widths, self.proportions(expected, writer))
 
+    def test_uses_the_reader_to_mask_a_raw_html_div(self):
+        for reader in ("gfm", "markdown"):
+            with self.subTest(reader=reader):
+                text = ("<DiV class=\"fixture\">\n| Raw | Div |\n|–––|===|\n| a | b |\n</DiV>\n\n"
+                        "| After | Div |\n|---+---|\n| c | d |\n")
+                result, html = self.build(text, reader, "html", "--table-repair", "widest")
+                notices = [line for line in result.stdout.splitlines() if "WARN  table-separator:" in line]
+                self.assertEqual([int(re.search(r"line (\d+):", line)[1]) for line in notices],
+                                 [8] if reader == "gfm" else [3, 8])
+                self.assertEqual("|–––|===|" in html, reader == "gfm")
+                self.assertEqual(len(self.proportions(html, "html")), 1 if reader == "gfm" else 2)
+
+    def test_repairs_a_table_after_a_blank_inside_a_gfm_div(self):
+        text = "<div>\n\n| A | B |\n|–––|===|\n| a | b |\n\n</div>\n"
+        result, html = self.build(text, "gfm", "html")
+        self.assertIn("WARN  table-separator: doc.md, line 4:", result.stdout)
+        self.assertEqual(len(self.proportions(html, "html")), 1)
+
+    def test_masks_a_nested_list_fence_with_blank_lines(self):
+        literal = [spelling for spelling, _ in SPELLINGS]
+        code = "\n\n".join(f"        | Raw | Code |\n        {spelling}" for spelling in literal)
+        text = ("1.  Outer\n\n    -   Inner\n\n        ```\n" + code + "\n\n        ```\n\n"
+                "| After | List |\n|: - :|———|\n| a | b |\n")
+        outside_line = len(text.splitlines()) - 1
+        for reader in ("gfm", "markdown"):
+            with self.subTest(reader=reader):
+                result, html = self.build(text, reader, "html", "--table-repair", "widest")
+                notices = [line for line in result.stdout.splitlines() if "WARN  table-separator:" in line]
+                self.assertEqual([int(re.search(r"line (\d+):", line)[1]) for line in notices], [outside_line])
+                for spelling in literal:
+                    self.assertIn(spelling, html)
+                self.assertEqual(len(self.proportions(html, "html")), 1)
+
     def test_alignment_colons_do_not_change_chosen_widths_unless_counted(self):
         body = (f"| A | B |\n|:---:|---|\n| {PROSE} | {PROSE} |\n\n"
                 f"| A | B |\n|:----:|------|\n| {PROSE} | {PROSE} |\n")

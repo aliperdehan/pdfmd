@@ -100,6 +100,8 @@ class Bibliography:
 
 FRONT_RE = re.compile(r"\A\ufeff?---[ \t]*\n(?P<yaml>.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)", re.DOTALL)
 FENCE_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})(.*)$")
+LIST_MARKER_RE = re.compile(r"^ {0,3}(?:[-+*]|[0-9]+[.)]) +")
+HTML_DIV_RE = re.compile(r"^ {0,3}</?div(?=[ \t\r]|/?>|$)", re.I)
 INLINE_TOKEN_RE = re.compile(r"<!--|(`+)")
 DISPLAY_MATH_RE = re.compile(r"\$\$.*?\$\$", re.DOTALL)
 INLINE_MATH_RE = re.compile(r"(?<![\\$\w])\$(?![\s$])(?:[^$\n\\]|\\.)+?(?<![\s\\])\$(?!\d)")
@@ -202,17 +204,19 @@ def mask_inline(text: str, in_comment: bool) -> tuple[str, bool, int | None]:
     return "".join(pieces), in_comment, opened
 
 
-def mask_code(body: str) -> tuple[str, list[tuple[int, str]]]:
+def mask_code(body: str, *, list_fences: bool = False, raw_divs: bool = False) -> tuple[str, list[tuple[int, str]]]:
     """``body`` with its fenced code, inline code (across a line break too) and comments blanked, and the
-    (line, code) of what is never closed."""
+    (line, code) of what is never closed. The table pre-pass also follows list-relative fences
+    and, for GFM, the raw HTML div blocks that end at a blank line."""
     lines = body.split("\n")
     out: list[str] = []
     paragraph: list[str] = []
-    fence: tuple[str, int, int] | None = None
+    fence: tuple[str, int, int, int] | None = None
     in_comment, comment_line = False, 0
     first_of_paragraph = 1
     indented_code = False
-    list_indent: int | None = None
+    list_indents: list[int] = []
+    raw_div_margin: int | None = None
 
     def flush() -> None:
         nonlocal in_comment, comment_line
@@ -227,34 +231,58 @@ def mask_code(body: str) -> tuple[str, list[tuple[int, str]]]:
     for number, line in enumerate(lines, 1):
         expanded = line.expandtabs(4)
         indent = len(expanded) - len(expanded.lstrip(" "))
-        if not in_comment and fence is None:
-            if indented_code and not line.strip():
+        nonblank = bool(line.strip())
+        if raw_div_margin is not None:
+            if nonblank and indent >= raw_div_margin:
+                out.append(blank(line))
+                continue
+            raw_div_margin = None
+        if fence is not None:
+            character, length, _, margin = fence
+            if not nonblank or indent >= margin:
+                closing = FENCE_RE.match(expanded[margin:] if margin else line)
+                if closing and closing.group(2)[0] == character and len(closing.group(2)) >= length \
+                        and not closing.group(3).strip():
+                    fence = None
+                out.append(blank(line))
+                continue
+            fence = None
+        margin = 0
+        content = line
+        if not in_comment:
+            if indented_code and not nonblank:
                 out.append(line)
                 continue
             if indented_code and indent < 4:
                 indented_code = False
-            marker = re.match(r"^( {0,3})(?:[-+*]|[0-9]+[.)])[ \t]+", line)
-            if marker:
-                list_indent = len(marker.group().expandtabs(4))
-            elif line.strip() and list_indent is not None and indent < list_indent:
-                list_indent = None
+            while nonblank and list_indents and indent < list_indents[-1]:
+                list_indents.pop()
+            if list_fences and list_indents:
+                margin = list_indents[-1]
+            if marker := LIST_MARKER_RE.match(expanded[margin:]):
+                if not list_fences:
+                    list_indents.clear()
+                list_indents.append(margin + marker.end())
+                if list_fences:
+                    margin = list_indents[-1]
+            if margin:
+                content = expanded[margin:]
+            if raw_divs and HTML_DIV_RE.match(content):
+                flush()
+                if not in_comment:
+                    raw_div_margin = margin
+                    out.append(blank(line))
+                    continue
             after_blank = number == 1 or not lines[number - 2].strip()
-            if (indented_code or (after_blank and indent >= 4 and list_indent is None)) and line.strip():
+            if (indented_code or (after_blank and indent >= 4 and not list_indents)) and nonblank:
                 flush()
                 indented_code = True
                 out.append(blank(line))
                 continue
-        if fence is not None:
-            closing = FENCE_RE.match(line)
-            if closing and closing.group(2)[0] == fence[0] and len(closing.group(2)) >= fence[1] \
-                    and not closing.group(3).strip():
-                fence = None
-            out.append(blank(line))
-            continue
-        opening = None if in_comment else FENCE_RE.match(line)
+        opening = None if in_comment else FENCE_RE.match(content)
         if opening and not (opening.group(2)[0] == "`" and "`" in opening.group(3)):
             flush()
-            fence = (opening.group(2)[0], len(opening.group(2)), number)
+            fence = (opening.group(2)[0], len(opening.group(2)), number, margin)
             out.append(blank(line))
             continue
         if not line.strip() and not in_comment:

@@ -569,7 +569,7 @@ def table_ascii_mode(md_path: Path, metadata_files: list[Path]) -> str:
     return word
 
 
-def repair_ascii_text(text: str, mode: str, label: str) -> str:
+def repair_ascii_text(text: str, mode: str, label: str, *, reader: str | None = None) -> str:
     """``text`` with its ASCII tables turned into pipe tables (mode `repair`), or unchanged with a NOTE for each (`note`);
     ``label`` names the file in the messages. Nothing to say, and nothing done, when there is no such table."""
     if mode == "off":
@@ -578,7 +578,7 @@ def repair_ascii_text(text: str, mode: str, label: str) -> str:
         from pdfmd_tables.ascii import repair_ascii_tables
     except ImportError:
         return text
-    fixed, repairs = repair_ascii_tables(text)
+    fixed, repairs = repair_ascii_tables(text, reader=reader)
     for repair in repairs:
         if repair.kind == "extras":          # a pipe table that was fine: only the `#+` lines around it were dealt with
             if mode != "note":

@@ -1912,7 +1912,9 @@ a Lua filter that rebuilds captions (nulabreport.lua does).
 On the line directly below a pipe-table header, pdfmd normalises separator spellings in memory and warns with
 the source line number. En dashes become two hyphens and em dashes three. Minus signs, figure dashes, Unicode
 hyphens and non-breaking hyphens become single hyphens. `=` becomes `-`, `+` becomes `|` and `: - :` becomes
-`:-:`. Grid tables, code, comments, YAML, raw blocks, maths and `.csv` div data are left alone.
+`:-:`. Grid tables, code (including fences inside lists), comments, YAML, raw blocks, maths and `.csv` div
+data are left alone. GFM treats HTML div blocks as raw up to a blank line. The Markdown reader can parse
+tables inside a div, so separator normalisation applies to those tables.
 Builds and `--check` warn with `table-unparsed` when the source resembles a table the reader cannot read as
 written. The warning identifies problems such as a missing separator, a mismatched header and separator, or
 a grid table under GFM. A single pipe line without a separator is left alone.

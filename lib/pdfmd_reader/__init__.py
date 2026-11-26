@@ -538,7 +538,8 @@ def prepared_title_source(md_path: Path, metadata_files: list[Path] = (),
         text = core.obsidian_source(text, md_path, metadata_files, keep_wikilinks=keep_wikilinks)
         if override is None and not disabled:
             text, shifted = promote_bare_title(text, has_external_metadata=bool(metadata_files))
-        text = core.repair_ascii_text(text, core.table_ascii_mode(md_path, list(metadata_files)), core.display_path(md_path))
+        text = core.repair_ascii_text(text, core.table_ascii_mode(md_path, list(metadata_files)), core.display_path(md_path),
+                                      reader=reader)
         text = core.cell_tags_text(text, md_path, metadata_files, core.display_path(md_path))
     chapter = (core.REPORT_BUILD.get("chapters") or {}).get(md_path) if override is None else None
     if chapter is not None:

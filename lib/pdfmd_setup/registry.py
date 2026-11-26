@@ -539,7 +539,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         choice("options.table-repair", "Fit each pipe-table row to the same number of cells",
                (("pandoc", "let Pandoc read the original row shapes"), ("header", "pad or cut to the header's count"),
                 ("widest", "pad to the highest count, keeping every cell")), "pandoc",
-               "Header and widest also add a missing separator or header when possible. --table-repair overrides this setting.", "Tables"),
+               "Header and widest also add a missing separator or header when possible. All modes leave list code fences "
+               "and GFM raw HTML div blocks alone. --table-repair overrides this setting.", "Tables"),
         text("options.column-outlier", "A cell this many times longer than the next wraps instead of widening its column",
              "Default 2; 0 switches it off. One table: {column-outlier=3} after its caption (Pandoc 3.8.2 or newer).",
              "Tables", "config", "number"),

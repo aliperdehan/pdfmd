@@ -392,7 +392,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     numbered_source = numbered_citations and target_format == "markdown"
     if numbered_citations:
         effective_from = numbered.reader_for(effective_from)
-    transform_part = core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format)
+    transform_part = core.ascii_table_transform(md_path, metadata_files, parts_inputs, from_format, reader=effective_from)
     colons = table_colons(md_path, metadata_files) if parts_inputs else "ignore"
     repair = table_repair(md_path, metadata_files) if parts_inputs else "pandoc"
     with contextlib.ExitStack() as reference_files, document_filter_scope(), core.prepared_title_source(md_path, metadata_files, disabled=core.auto_disabled(no_auto, "title") or flat_target or target_format == "ansi",

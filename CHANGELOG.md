@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.72 — 2026-11-26
+
+Pre-edit state: commit `5fb048c`. [tables] The separator pre-pass treated tables in GFM raw HTML div blocks and deeply indented list fences as prose. Mask both before diagnosis and repair, and pass the reader through the ASCII-table pass so it respects the same boundaries. The Pandoc 3.13 regressions fail before and pass after for literal content and the original warning line numbers. Tables in Markdown divs and immediately after either region still build.
+
 ## v3.34.71 — 2026-11-26
 
 Pre-edit state: commit `02d643f`. Builds had no run-wide count of diagnostics. Add --summary, its document and setup options, and collect unmuted diagnostics from both the main process and batch workers. The summary stays silent at chatter off and keeps the exit status. Regression tests fail before and pass after with Pandoc 3.13 for hidden warnings, muted warnings, notes, strict failures, and serial and parallel batches.

@@ -335,7 +335,7 @@ def pipe_table_end(lines: list[str], index: int) -> int | None:
     return end
 
 
-def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
+def repair_ascii_tables(text: str, *, reader: str | None = None) -> tuple[str, list[Repair]]:
     """``text`` with every table of the kinds in the module docstring turned into a pipe table, and one Repair for
     each. Not inside code (fenced or indented), HTML comments, YAML front matter or raw blocks."""
     newline = "\r\n" if "\r\n" in text else "\n"
@@ -344,7 +344,7 @@ def repair_ascii_tables(text: str) -> tuple[str, list[Repair]]:
         return text, []
     from .prepass import visible_lines
 
-    visible = visible_lines(text)
+    visible = visible_lines(text, reader)
     out: list[str] = []
     repairs: list[Repair] = []
     changed = False                       # a caption or a `#+` line was taken from a table that needed no repair

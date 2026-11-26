@@ -777,7 +777,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="turn each `.csv` block into a pipe table with all its rows and caption. Keep its CSV file")
     parser.add_argument("--table-repair", choices=("pandoc", "header", "widest"), metavar="MODE",
                         help="pipe rows: pandoc (default), header (pad or cut), widest (pad, keep every cell)")
-    parser.add_argument("--fix-tables", type=Path, metavar="FILE", help="save normalised pipe tables with a backup")
+    parser.add_argument("--fix-tables", type=Path, metavar="FILE",
+                        help="save normalised pipe tables with a backup. Keeps code fences inside lists "
+                             "and raw HTML div blocks under GFM")
     parser.add_argument("--csv", action=argparse.BooleanOptionalAction, default=None,
                         help="build a table from a `::: {.csv}` div (on by default); --no-csv leaves the div as written, "
                              "a plain div with its text. Also `pdfmd-options: {csv: off}` (or `csv: {enabled: false}`), "

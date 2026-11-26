@@ -26,12 +26,12 @@ MARKDOWN_READERS = frozenset({"markdown", "markdown_strict", "markdown_mmd", "ma
                               "commonmark_x", "commonmark"})
 
 
-def visible_lines(text: str) -> list[str]:
+def visible_lines(text: str, reader: str | None = None) -> list[str]:
     """Keep line indices while blanking the places whose text is literal or hidden."""
     from pdfmd_check.lint import blank_matches, mask_code
 
     prose = blank_matches(FRONT, text)
-    prose, _ = mask_code(prose)
+    prose, _ = mask_code(prose, list_fences=True, raw_divs=reader_family(reader) == "gfm")
     lines = blank_matches(LITERAL, prose).split("\n")
     csv_fence = 0
     for index, line in enumerate(lines):
@@ -110,7 +110,7 @@ def unparsed_tables(text: str, reader: str | None) -> list[tuple[int, str]]:
         return []
     if "|" not in text and "+" not in text:
         return []
-    lines = visible_lines(text)
+    lines = visible_lines(text, reader)
     grids = grid_lines(lines)
     reasons = []
     for start, _, separator in pipe_blocks(lines, grids):
@@ -180,11 +180,11 @@ def ignore_colons(separator: str) -> str:
     return re.sub(r":?-+:?", lambda _: next(encoded), separator)
 
 
-def normalise_separators(text: str, *, colons: str | None = None) -> tuple[str, list[int]]:
+def normalise_separators(text: str, *, colons: str | None = None, reader: str | None = None) -> tuple[str, list[int]]:
     """Return the prepared text and the one-based lines of changed separators."""
     if not SUSPECT.search(text):
         return text, []
-    visible = visible_lines(text)
+    visible = visible_lines(text, reader)
     grids = grid_lines(visible)
     lines = text.split("\n")
     changed = []
@@ -212,11 +212,11 @@ def render_row(line: str, cells: list[str], separator: bool) -> str:
     return f"{indent}|{inner}|{ending}"
 
 
-def repair_pipe_tables(text: str, mode: str) -> tuple[str, list[tuple[int, str, str]]]:
+def repair_pipe_tables(text: str, mode: str, *, reader: str | None = None) -> tuple[str, list[tuple[int, str, str]]]:
     """Fit pipe rows to the header or widest row. In pandoc mode leave the bytes as received."""
     if "|" not in text:
         return text, []
-    visible = visible_lines(text)
+    visible = visible_lines(text, reader)
     lines = text.split("\n")
     fixed = lines.copy()
     notices = []
@@ -264,12 +264,12 @@ def table_source(text: str, label: str, *, colons: str | None = "ignore", reader
         return text
     for line, reason in unparsed_tables(text, reader):
         emit("warning", "table-unparsed", f"WARN  table-unparsed: {label}, line {line}: {reason}")
-    fixed, changes = normalise_separators(text)
+    fixed, changes = normalise_separators(text, reader=reader)
     for line in changes:
         emit("warning", "table-separator", f"WARN  table-separator: {label}, line {line}: normalised the pipe-table separator")
-    fixed, notices = repair_pipe_tables(fixed, repair)
+    fixed, notices = repair_pipe_tables(fixed, repair, reader=reader)
     for line, code, reason in notices:
         emit("warning", code, f"WARN  table-repair: {label}, line {line}: {reason}")
     if colons is not None and ":" in fixed:
-        fixed, _ = normalise_separators(fixed, colons=colons)
+        fixed, _ = normalise_separators(fixed, colons=colons, reader=reader)
     return fixed
