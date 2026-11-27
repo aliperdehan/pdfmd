@@ -28,7 +28,7 @@ def run(core, **options) -> None:
 
 def _run(core, *, records,
         args, default_target, embed_request, engines,
-        need_engines, pandoc_options, paths, stamp_overrides,
+        pandoc_options, paths, stamp_overrides,
         target_format, variables) -> None:
     # the helpers of pdfmd.py this function calls, bound here so the body reads as it did in run_main()
     ASSEMBLED_FORMAT, AUTO_LOG = core.ASSEMBLED_FORMAT, core.AUTO_LOG
@@ -118,6 +118,10 @@ def _run(core, *, records,
         raise SystemExit(str(error))
     metadata_files = ([] if metadata is AUTO_METADATA_DISABLED else
                       (metadata if isinstance(metadata, list) else ([metadata] if metadata else [])))
+    from pdfmd_engines.tools import tool_paths
+    records.enter_context(tool_paths(files[0], metadata_files))
+    if not core.which("pandoc"):
+        raise SystemExit(core.PANDOC_MISSING)
     args.verbose = select_chatter(files[0], metadata_files)
     summary.select(args.summary, files[0], metadata_files)
     core.deferred("pdfmd_engines.memory", "set_limit")(files[0], metadata_files)
@@ -127,7 +131,8 @@ def _run(core, *, records,
     target_format = default_target(files[0], metadata_files)
     output = route.output_path(core, args, target_format)
     log_path = transcript.destination(args.log, files[0], metadata_files)
-    need_engines(target_format)
+    if target_format == "pdf":
+        engines = core.select_engines(args.engine, args.presentation)
     engines = resolve_engines(files[0], args.engine, engines, args.presentation, target_format, metadata_files, args.verbose)
     report_build = route.resolve_build(core, files[0], metadata_files)
     report_chapters, title_notes = titles.plan(core, files, metadata_files, titles.resolve_policy(core, files[0], metadata_files))

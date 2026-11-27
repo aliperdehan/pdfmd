@@ -60,7 +60,9 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "setup": ("installing, configuring and checking pdfmd itself", (
         "--setup", "--disabled", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor", "--json",
         "--check-dependencies", "--version", "--trust-lua", "--deep", "--init", "--doc", "--print", "--path",
-        "--user-path", "--add-to-path", "--remove-from-path", "--show-user-path", "--yes")),
+        "--user-path", "--add-to-path", "--remove-from-path", "--show-user-path", "--yes",
+        "--pandoc-path", "--typst-path", "--chrome-path", "--tesseract-path", "--soffice-path", "--dot-path",
+        "--mmdc-path", "--poppler-path")),
     "debug": ("seeing what pdfmd decided, and turning decisions off", (
         "-v", "-q", "--no-auto", "--full-paths", "--path-style", "--path-up", "--debug", "--keep-aux", "--strict", "--chatter", "--mute", "--log", "--summary", "--check", "--check-ignore",
         "--max-asset-mb", "--max-output-mb", "--build-time", "--no-build-time", "--time-format", "--build-log", "--last-build", "--failed")),

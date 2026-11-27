@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.79 — 2026-11-27
+
+Pre-edit state: commit `a2864f3`. Tool locations were read only from the machine configuration. Let flags and document, metadata and folder layers pin the executable through the same precedence as soffice-timeout. Each worker resolves its own paths, and doctor reports the winning layer. Tests exercise flag precedence, folder setup, invalid paths, scoped restoration and separate Pandoc launches in a parallel batch.
+
+---
+
 ## v3.34.78 — 2026-11-27
 
 Pre-edit state: commit `afa0fc1`. Build records now cover Quarto, direct Typst and HTML, and both report routes. Pandoc previously discarded its LaTeX log and direct TeX discarded the scratch log without recording it. Read the actual engine log where available and record the TeX Live year and loaded package dates and versions. Quarto provides package details when it retains a fresh TeX log. Regression checks exercise Pandoc and direct TeX, direct Typst, a stand-in for Quarto, and the default and patch report routes.

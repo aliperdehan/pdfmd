@@ -119,13 +119,14 @@ local last_error = ""
 
 local function run_in(folder, command, args, input, in_place)
   if timed_out[command] then return false end
-  local run, run_args = command, args
+  local program = (command == "dot" or command == "mmdc") and os.getenv("PDFMD_TOOL_" .. command:upper()) or command
+  local run, run_args = program, args
   if limit and python and runner then       -- the runner starts the tool and stops it, with what it started, when the time is up
-    run, run_args = python, {runner, tostring(limit), command}
+    run, run_args = python, {runner, tostring(limit), program}
     for _, value in ipairs(args) do run_args[#run_args + 1] = value end
   elseif not POSIX and command == "mmdc" then
     -- on Windows npm writes mmdc.cmd, a command script: a program started by its bare name has to be an .exe, so cmd starts it
-    run, run_args = "cmd", {"/c", command}
+    run, run_args = "cmd", {"/c", program}
     for _, value in ipairs(args) do run_args[#run_args + 1] = value end
   end
   if POSIX then
@@ -183,6 +184,8 @@ local function draw(tool, source, attributes, format)
   current_tool = tool
   last_error = ""
   local key = pandoc.sha1(table.concat({tool, format, attributes.engine or "", attributes.theme or "", attributes.layout or "", source}, "\0"))
+  local pin = os.getenv("PDFMD_TOOL_" .. tool:upper())
+  if pin then key = pandoc.sha1(key .. "\0" .. pin) end
   if image_dpi ~= 192 then key = pandoc.sha1(key .. tostring(image_dpi)) end
   local target = cache_dir .. "/" .. key .. "." .. format
   if file_exists(target) and #(read_file(target) or "") > 0 then return target end

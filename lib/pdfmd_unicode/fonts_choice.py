@@ -171,7 +171,7 @@ def unicode_code_text(md_paths: list[Path]) -> str:
         except (OSError, UnicodeDecodeError):
             continue
         text = core.EMBED_BLOCK_RE.sub("", text)
-        pandoc = shutil.which("pandoc")
+        pandoc = core.which("pandoc")
         if pandoc:
             reader = core.flavour_reader(path)[0] or "markdown"
             try:

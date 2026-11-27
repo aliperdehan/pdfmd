@@ -54,9 +54,13 @@ def set_limit(source: Path, metadata_files: list[Path]) -> None:
     os.environ[ENV] = size or ""
 
 
-def command(arguments):
-    """Leave other tools untouched; append the RTS heap limit to every Pandoc invocation."""
-    if not arguments or Path(str(arguments[0])).name.lower() not in ("pandoc", "pandoc.exe"):
+def heap_command(arguments):
+    """Append the RTS heap limit to every Pandoc invocation."""
+    if not arguments:
+        return arguments
+    from pdfmd_engines.tools import pinned_program
+    program = str(arguments[0])
+    if Path(program).name.lower() not in ("pandoc", "pandoc.exe") and program != pinned_program("pandoc"):
         return arguments
     value = os.environ.get(ENV)
     if value is None and bound() is not None:
@@ -66,6 +70,15 @@ def command(arguments):
     except ValueError as error:
         raise SystemExit(f"pdfmd-options.pandoc-memory must be {error}, not {value!r}") from None
     return [*arguments, "+RTS", "-M" + size, "-RTS"] if size else arguments
+
+
+def command(arguments):
+    """Apply Pandoc's heap limit and exact tool filenames before running or logging."""
+    arguments = heap_command(arguments)
+    if bound() is None:
+        return arguments
+    from pdfmd_engines.tools import pinned_command
+    return pinned_command(arguments)
 
 
 def heap_note(error, arguments):

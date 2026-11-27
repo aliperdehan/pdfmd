@@ -32,6 +32,9 @@ def tool_note(name: str) -> str:
     """What ``--doctor`` adds to a tool that is not found on PATH: where it was found, or the setting that names it."""
     if name not in core.FOUND_TOOLS:
         return ""
+    from pdfmd_engines.tools import tool_setting
+    if source := tool_setting(name):
+        return f"set by {source}"
     file, how = core.TOOLS_FOUND.get(name) or core.locate_tool(name)
     if how == "key":
         return f"set by options.{core.FOUND_TOOLS[name][0]}"
@@ -99,6 +102,7 @@ Text with math $x^2 + \\alpha$, an accent (café), `code`, ~~struck out~~, and a
 def deep_checks(engines: list[str], timeout: int = 180) -> list[tuple[str, bool, str]]:
     """--doctor --deep: build a small page with each engine by running pdfmd itself (the way a user would), in a
     scratch folder. [(engine, built, seconds or the reason it failed)]; an engine that hangs is stopped."""
+    from pdfmd_engines.tools import pinned_flags
     results: list[tuple[str, bool, str]] = []
     with tempfile.TemporaryDirectory(prefix="pdfmd-deep-") as scratch:
         folder = Path(scratch)
@@ -111,7 +115,7 @@ def deep_checks(engines: list[str], timeout: int = 180) -> list[tuple[str, bool,
             started = time.monotonic()
             try:
                 done = subprocess.run([sys.executable, str(Path(core.__file__).resolve()), "sample.md", "-e", engine,
-                                       "-o", output.name, "--no-backup", "--no-stamp"],
+                                       "-o", output.name, "--no-backup", "--no-stamp", *pinned_flags()],
                                       capture_output=True, encoding="utf-8", errors="replace", cwd=folder, env=environment, timeout=timeout)
             except subprocess.TimeoutExpired:
                 results.append((entry, False, f"no answer after {timeout} s"))
@@ -211,7 +215,8 @@ def doctor_report(deep: bool = False, *, as_json: bool = False) -> bool:
         line("native-renderer", bool(native), "built-in renderer: " + (", ".join(native) if native else "none"), required=True)
     for name in ("typst", "chrome"):
         if tool_note(name):
-            line(f"tool-location:{name}", None, f"{name}: {core.TOOLS_FOUND.get(name, (core.locate_tool(name)[0],))[0]}  -- {tool_note(name)}")
+            where = core.locate_tool(name)[0] or core.TOOLS_FOUND.get(name, (None, ""))[0]
+            line(f"tool-location:{name}", None, f"{name}: {where}  -- {tool_note(name)}")
     quarto = core.which("quarto")
     line("quarto", None, "quarto: " + (quarto or "not installed (only .qmd files need it)"))
     soffice = core.resolve_soffice()

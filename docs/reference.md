@@ -2345,6 +2345,13 @@ make the LaTeX engine try a missing converted file. `--no-auto remoteimages` dis
 Plain `--doctor` checks discovery and reports the engine order. Run `pdfmd --doctor --deep` to test-compile
 a page with each engine and check whether the installed engines can actually build.
 
+The Tool locations section of `--setup` also works for a folder. The keys `pandoc-path`, `typst-path`, `chrome-path`,
+`tesseract-path`, `soffice-path`, `dot-path`, `mmdc-path` and `poppler-path` are also `pdfmd-options` keys
+and flags (for example `--pandoc-path PATH`). They follow the `soffice-timeout` layers, with flags first, then
+document, metadata, folder, per-install and user defaults. Supply a program file or its directory, or the directory
+holding `pdftotext` and `pdftoppm` for Poppler. Paths relative to the current working folder, `~`, and environment
+variables work as in the config. `pdfmd --doctor FILE` shows the source of an effective pin.
+
 ## Licence
 
 pdfmd is available under your choice of the MIT License or the Apache License 2.0. The licence texts are in

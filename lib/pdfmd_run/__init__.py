@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from contextlib import ExitStack
 import pdfmd_routing
 import re
 import shlex
@@ -83,6 +84,11 @@ def refuse_disabled(args: argparse.Namespace, hidden: list[argparse.Action],
 @transcript.scope(pending=True)
 @summary.scope(display=True)
 def run_main() -> None:
+    with ExitStack() as tools, ExitStack() as document_tools:
+        _run_main(tools, document_tools)
+
+
+def _run_main(tools, document_tools) -> None:
     parser, hidden = command_line_parser()
     argv, excerpts = sys.argv[1:], None
     if "--excerpts" in argv:
@@ -123,11 +129,14 @@ def run_main() -> None:
     if core.CHATTER_CLI is None:
         core.CHATTER_CLI = "debug" if args.debug else "verbose" if args.verbose else None
     core.MUTE_CLI = parse_mutes(args.mute) if args.mute is not None else None
-    source = args.path[0] if args.path and not (args.batch or args.report) and args.path[0].is_file() else None
+    source = args.path[0] if len(args.path or []) == 1 and not (args.batch or args.report) and args.path[0].is_file() else None
     args.verbose = select_chatter(source)
     # Build routes resolve the summary setting after path formatting and metadata discovery.
     summary.CURRENT.get().requested = args.summary
     core.use_managed_tools()
+    from pdfmd_engines.tools import TOOL_KEYS, tool_paths
+    core.TOOL_PATHS_CLI = {key: value for key in TOOL_KEYS if (value := getattr(args, key.replace("-", "_"))) is not None}
+    tools.enter_context(tool_paths())
     if not (args.path and all(path.suffix.lower() == ".pdf" for path in args.path)):
         from pdfmd_args.paths import invocation_paths
         pandoc_options = invocation_paths(pandoc_options, Path.cwd())
@@ -347,7 +356,20 @@ def run_main() -> None:
     if args.deep and not args.doctor:
         raise SystemExit("--deep goes with --doctor: pdfmd --doctor --deep")
     if args.doctor:
-        raise SystemExit(0 if core.doctor_report(deep=args.deep, as_json=args.json) else 1)
+        if len(args.path or []) > 1:
+            raise SystemExit("--doctor accepts one document or folder")
+        target = (args.path or [Path.cwd()])[0]
+        if target.is_dir():
+            scope = tool_paths(directory=target)
+        else:
+            try:
+                document = core.find_markdown(target)
+            except FileNotFoundError as error:
+                raise SystemExit(str(error))
+            files = [] if document.suffix.lower() in (".qmd", ".pdf") else core.scaffold_metadata_files(document, args.metadata_file)
+            scope = tool_paths(document, files)
+        with scope:
+            raise SystemExit(0 if core.doctor_report(deep=args.deep, as_json=args.json) else 1)
     if args.cache_info or isinstance(args.clear_cache, str):
         status = core.cache_command(args)                        # --cache-info, --clear-cache WHAT (pdfmd_cache.manage)
         if status is not None:
@@ -435,15 +457,14 @@ def run_main() -> None:
         from pdfmd_batch import prepare_inputs
         prepare_inputs(core, args)
     else:
-        routed = core.route_pdf_input(args, pandoc_options)
-        if routed is not None:
-            raise SystemExit(routed)
-        routed = core.route_text_input(args, pandoc_options)
-        if routed is not None:
-            raise SystemExit(routed)
-        core.route_ebook_input(args)
-    if not pdfmd_routing.quarto_input(args) and not core.which("pandoc") and not core.native_possible(args):
-        raise SystemExit(core.PANDOC_MISSING)
+        with tool_paths(directory=source.parent if source else None):
+            routed = core.route_pdf_input(args, pandoc_options)
+            if routed is not None:
+                raise SystemExit(routed)
+            routed = core.route_text_input(args, pandoc_options)
+            if routed is not None:
+                raise SystemExit(routed)
+            core.route_ebook_input(args)
     paths = args.path or [Path.cwd()]
     if args.clear_cache:
         if args.path:
@@ -680,8 +701,12 @@ def run_main() -> None:
                 given = metadata_for(plan_source, announce=False)
             else:
                 given = None
-            args.verbose = select_chatter(plan_source, given if isinstance(given, list) else [given] if given else [])
-            summary.select(args.summary, plan_source, given if isinstance(given, list) else [given] if given else [])
+            source_options = given if isinstance(given, list) else [given] if given else []
+            document_tools.enter_context(tool_paths(plan_source, source_options))
+            if not pdfmd_routing.quarto_input(args) and not core.which("pandoc") and not core.native_possible(args):
+                raise SystemExit(core.PANDOC_MISSING)
+            args.verbose = select_chatter(plan_source, source_options)
+            summary.select(args.summary, plan_source, source_options)
             if args.presentation is None:
                 metadata = None if plan_source.suffix.lower() == ".qmd" else metadata_for(plan_source)
                 presentation_request = slides.source(plan_source, metadata, args.presentation)
@@ -775,6 +800,13 @@ def run_main() -> None:
         return
     if scaffold_plan is not None:
         core.PART_CUTS.update(scaffold_plan.cuts)
+        if scaffold_plan.scaffold != plan_source:
+            source_given = metadata_for(scaffold_plan.scaffold, announce=False)
+            document_tools.close()
+            document_tools.enter_context(tool_paths(scaffold_plan.scaffold, source_given if isinstance(source_given, list)
+                                                    else [source_given] if source_given else []))
+            if target_format == "pdf":
+                engines, engines_error = core.select_engines(args.engine, False), None
     if args.watch:
         if args.batch or args.report:
             raise SystemExit("-w/--watch only supports single-file mode, not -b/--batch or -r/--report")
@@ -789,7 +821,7 @@ def run_main() -> None:
     if args.report:
         from pdfmd_report import run as run_report
         return run_report(core, args=args, default_target=default_target, embed_request=embed_request,
-                          engines=engines, need_engines=need_engines, pandoc_options=pandoc_options, paths=paths,
+                          engines=engines, pandoc_options=pandoc_options, paths=paths,
                           stamp_overrides=stamp_overrides, target_format=target_format, variables=variables)
     def embeds_preamble(file) -> bool:
         """Whether the assembled stage folds `file`'s preamble in (so it has to be found)."""
@@ -806,7 +838,7 @@ def run_main() -> None:
     if args.batch:
         from pdfmd_batch import run as run_batch
         results = run_batch(core, args=args, embed_request=embed_request, embeds_preamble=embeds_preamble,
-                            engines=engines, metadata_for=metadata_for, need_engines=need_engines,
+                            engines=engines, metadata_for=metadata_for,
                             pandoc_options=pandoc_options, paths=paths, plan_bridge=plan_bridge, stamp_overrides=stamp_overrides,
                             stop_at=stop_at, target_explicit=target_explicit, target_format=target_format,
                             variables=variables)

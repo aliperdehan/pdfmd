@@ -11,10 +11,13 @@ import shutil
 import signal
 import subprocess
 import sys
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_base import spelling
 
 from pdfmd_base import pandoc_run
 from pdfmd_log import emit
@@ -45,6 +48,132 @@ TOOLS_FOUND: dict[str, tuple[str, str]] = {}      # tool -> (file, "key" | "prob
 
 
 TOOL_WARNED: set[str] = set()
+
+
+TOOL_KEYS = tuple(item[0] for item in FOUND_TOOLS.values() if item[0])
+TOOL_PINS = ContextVar("tool_pins", default={})
+
+
+def pinned_program(program: str) -> str | None:
+    found = TOOL_PINS.get().get(program)
+    return found[0] if found else None
+
+
+def which(program: str) -> str | None:
+    return pinned_program(program) or shutil.which(program)
+
+
+def tool_setting(name: str) -> str | None:
+    for program in FOUND_TOOLS[name][1]:
+        if found := TOOL_PINS.get().get(program):
+            return found[1]
+    return None
+
+
+def named_program(place: Path, programs: tuple[str, ...], name: str) -> Path | None:
+    if place.is_dir():
+        return next((found for program in programs if (found := tool_program(place, program))), None)
+    return place if name != "poppler" and place.is_file() else None
+
+
+@contextmanager
+def tool_paths(document: Path | None = None, metadata_files=(), *, directory: Path | None = None):
+    """Scope executable pins like soffice-timeout, with the command line above the option layers."""
+    cli = getattr(core, "TOOL_PATHS_CLI", {})
+    layers = None
+    if document is not None:
+        try:
+            layers = core.option_sources(document, metadata_files)
+        except (OSError, UnicodeError):
+            directory = document.parent
+    if layers is None:
+        layers = [*(core.folder_layers(directory / ".pdfmd") if directory else []), ("config", core.config_options())]
+    pins: dict[str, tuple[str, str]] = {}
+    directories = []
+    updates = {}
+    for name, (key, programs, _, _, on_path) in FOUND_TOOLS.items():
+        if key is None:
+            continue
+        if key in cli:
+            named, source = cli[key], "--" + key
+        else:
+            named, source = next(((values[alias], f"options.{key}" if label == "config" else f"{label} ({key})")
+                                  for label, values in layers for alias in spelling.spellings(key) if alias in values),
+                                 (None, ""))
+        if not isinstance(named, str) or not named.strip():
+            continue
+        place = Path(os.path.expandvars(named.strip())).expanduser().absolute()
+        file = named_program(place, programs, name)
+        if file is None:
+            if (warning := f"{key}:{named}") not in core.TOOL_WARNED:
+                core.TOOL_WARNED.add(warning)
+                emit("warning", None, f"WARN  {source} ({named}) holds no {programs[0]}; looking on PATH and in the usual folders",
+                     file=sys.stderr)
+            continue
+        if name == "poppler":
+            for program in programs:
+                if found := tool_program(place, program):
+                    pins[program] = str(found), source
+        else:
+            pins[programs[0]] = str(file), source
+        if on_path:
+            directories.append(str(file.parent))
+        if name == "chrome":
+            updates["PDFMD_BROWSER"] = str(file)
+        if name in ("pandoc", "typst"):
+            updates["QUARTO_" + name.upper()] = str(file)
+        if name in ("dot", "mmdc"):
+            updates["PDFMD_TOOL_" + name.upper()] = str(file)
+    if directories:
+        updates["PATH"] = os.pathsep.join(dict.fromkeys([*directories, *os.environ.get("PATH", "").split(os.pathsep)]))
+    previous = {key: os.environ.get(key) for key in updates}
+    pandoc_changed = pinned_program("pandoc") != pins.get("pandoc", (None, ""))[0]
+    cache = {}
+    if pandoc_changed:
+        for key, default in (("_PANDOC_VERSION", None), ("_PANDOC_DATA_DIR", False), ("_PANDOC_HELP", None)):
+            cache[key] = getattr(core, key)
+            setattr(core, key, default)
+        extensions = core._PANDOC_EXTENSIONS.copy()
+        core._PANDOC_EXTENSIONS.clear()
+    token = TOOL_PINS.set(pins)
+    try:
+        os.environ.update(updates)
+        yield
+    finally:
+        TOOL_PINS.reset(token)
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        for key, value in cache.items():
+            setattr(core, key, value)
+        if pandoc_changed:
+            core._PANDOC_EXTENSIONS.clear()
+            core._PANDOC_EXTENSIONS.update(extensions)
+
+
+def pinned_command(arguments):
+    """Use exact filenames, including for a Typst subprocess started by Pandoc."""
+    if not arguments or not TOOL_PINS.get():
+        return arguments
+    program, *rest = arguments
+    fixed = pinned_program(str(program))
+    if str(program) in ("pandoc", "pandoc.exe", pinned_program("pandoc")):
+        if typst := pinned_program("typst"):
+            rest = [f"--pdf-engine={typst}" if arg == "--pdf-engine=typst" else
+                    typst if arg == "typst" and index and rest[index - 1] == "--pdf-engine" else arg
+                    for index, arg in enumerate(rest)]
+    return [fixed or program, *rest]
+
+
+def pinned_flags() -> list[str]:
+    """Pass the tools selected for this document to a diagnostic child."""
+    options = []
+    for key, programs, *_ in FOUND_TOOLS.values():
+        if key and (program := next((pinned_program(name) for name in programs if pinned_program(name)), None)):
+            options.extend(("--" + key, str(Path(program).parent) if key == "poppler-path" else program))
+    return options
 
 
 def tool_program(folder: Path, program: str) -> Path | None:
@@ -81,11 +210,12 @@ def locate_tool(name: str) -> tuple[str | None, str]:
     folder; a folder only for poppler), ``"path"`` (PATH), ``"probe"`` (the usual Windows install folders, then the registry's
     App Paths), or (None, ""). A key that names nothing is said once and passed over."""
     key, programs, folders, roots, _ = FOUND_TOOLS[name]
+    if found := next((pinned_program(program) for program in programs if pinned_program(program)), None):
+        return found, "key"
     named = core.config_options().get(key) if key else None
     if isinstance(named, str) and named.strip():
         place = Path(os.path.expandvars(named.strip())).expanduser()
-        found = (next((tool_program(place, program) for program in programs if tool_program(place, program)), None)
-                 if place.is_dir() else place if place.is_file() and name != "poppler" else None)
+        found = named_program(place, programs, name)
         if found:
             return str(found), "key"
         if f"{key}:{named}" not in core.TOOL_WARNED:
@@ -406,15 +536,22 @@ def kpsewhich_path(name: str) -> Path | None:
 
 
 @lru_cache(maxsize=None)
+def _engine_version_line(program: str) -> str:
+    done = core.run_probe([program, "--version"])
+    out = done.stdout if done else ""
+    return out.splitlines()[0] if out else ""
+
+
 def engine_version_line(engine: str) -> str:
-    program = engine
+    program = pinned_program(engine) or engine
     if engine == "soffice":                    # found beyond PATH too; on Windows soffice.exe is the window launcher, which does not
         program = core.engine_executable("soffice") or engine      # answer --version and leaves soffice.bin running: soffice.com does
         if os.name == "nt" and Path(program).suffix.lower() == ".exe" and Path(program).with_suffix(".com").is_file():
             program = str(Path(program).with_suffix(".com"))
-    done = core.run_probe([program, "--version"])
-    out = done.stdout if done else ""
-    return out.splitlines()[0] if out else ""
+    return _engine_version_line(program)
+
+
+engine_version_line.cache_clear = _engine_version_line.cache_clear
 
 
 def typst_version() -> tuple[int, ...]:

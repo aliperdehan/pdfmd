@@ -47,7 +47,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.34.78"
+PDFMD_VERSION = "3.34.79"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
@@ -63,7 +63,6 @@ if sys.version_info < (3, 9):
                      "which picks a suitable Python, or run pdfmd.py with a newer python3.")
 import inspect  # noqa: F401 -- read as core.inspect by lib/pdfmd_bridge/odt.py and as pdfmd.inspect by tests
 from pathlib import Path
-from shutil import which  # noqa: F401 -- retain the patched core lookup and startup
 import tempfile
 
 
@@ -391,7 +390,7 @@ names("pdfmd_engines.native", "INSTALL_KINDS INSTALL_SIZES PANDOC_MIN warn_old_p
                               "md2pdf_available matplotlib_available inkmd_emoji_font is_native_engine "
                               "native_available available_native_engines native_request native_possible "
                               "native_run_note system_install_hint pandoc_install_hint offer_native_upgrade")
-names("pdfmd_engines.tools", "FOUND_TOOLS TOOLS_FOUND TOOL_WARNED app_path_file locate_tool use_found_tools "
+names("pdfmd_engines.tools", "which FOUND_TOOLS TOOLS_FOUND TOOL_WARNED app_path_file locate_tool use_found_tools "
                              "SOFFICE_TIMEOUT soffice_timeout_from soffice_limit run_soffice tool_folders_off_path "
                              "resolve_soffice calibre_own_folders resolve_calibre engine_executable tools_directory "
                              "bundled_pandoc_directory managed_tool_directories use_managed_tools tex_install_patterns "
@@ -562,6 +561,7 @@ _PANDOC_DATA_DIR: Path | None | bool = False
 
 # Cached Pandoc version tuple.
 _PANDOC_VERSION: tuple[int, ...] | None = None
+TOOL_PATHS_CLI: dict[str, str] = {}
 
 # --css FILE (repeatable)
 CSS_CLI: list[str] = []

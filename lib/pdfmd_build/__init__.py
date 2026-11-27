@@ -1087,7 +1087,8 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
     bound = inspect.signature(_convert_one_recorded).bind(md_path, *args, **kwargs).arguments
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
-    with document_chatter(md_path, metadata_files):
+    from pdfmd_engines.tools import tool_paths
+    with document_chatter(md_path, metadata_files), tool_paths(md_path, metadata_files):
         bound["verbose"] = verbose_output(bound.get("verbose", False))
         core.deferred("pdfmd_engines.memory", "set_limit")(md_path, metadata_files)
         set_soffice_limit(md_path, metadata_files)

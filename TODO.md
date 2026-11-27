@@ -102,7 +102,6 @@ is low priority. [3di]
 
 - [ ] Coloured links on by default in LaTeX and Typst, with the other default flips; the `colorlinks` setup row is the opt-in until then [3fl D84]
 - [ ] Pandoc + TeX tests on Windows and macOS (Linux only today) [3db]
-- [ ] Tool paths per document and on the command line: the `tesseract-path`, `soffice-path` ... keys also as `pdfmd-options` and flags, so one document can pin another version of a tool [3dt]
 - [ ] Windows guide (16 sections): the Windows session adds it to the repo as a docs file; wire it into `pdfmd --doc` with the documentation programme [3dg, 3dp]
 - [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo (GitHub Pages, indexable) and bundled for `pdfmd --doc`; a layered README tested by a beginner on a clean machine; agent surfaces (task table, `--help` as JSON, `llms.txt` hosted); an audit of ambiguous names (one meaning per word, a test for collisions and aliases); feature pages carry the version added, fixed and last tested [3dg]
 - [ ] One event log for every route; the split itself is done [3fi] [3bh]

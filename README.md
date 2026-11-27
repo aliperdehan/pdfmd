@@ -246,7 +246,9 @@ folders; the system installers below do the same job:
   their folder off `PATH`. pdfmd looks in the usual install folders (and the registry's App Paths) and uses what it finds, and
   `pdfmd --doctor` says so. For an install somewhere else, name it in `pdfmd --setup` (section "Tool locations") or in the
   config's `options:`: `pandoc-path`, `typst-path`, `chrome-path`, `tesseract-path`, `soffice-path`, `dot-path`, `mmdc-path`
-  (a program or its folder) and `poppler-path` (a folder).
+  (a program or its folder) and `poppler-path` (a folder). The same keys work in a folder's setup and in
+  `pdfmd-options`, and the flags (for example `--pandoc-path PATH`) override them for one run.
+  `pdfmd --doctor FILE` reports where the document's chosen paths came from.
   **LibreOffice time limit:** every LibreOffice run (Office files, spreadsheets, SVG pictures) may take `soffice-timeout` seconds, 300 by The environment variable `PDFMD_NO_SOFFICE=1` means `soffice-timeout: 0` for one process whatever the settings say (an agent's sandbox crashes LibreOffice and leaves a crash dialog behind).
   default; a run that takes longer is stopped together with the process it started, its file fails with the setting named, and a batch
   goes on. `0` never runs LibreOffice (it counts as not installed), a negative number (`-1`) removes the limit. It is a `pdfmd-options` key

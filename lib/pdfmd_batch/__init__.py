@@ -108,7 +108,9 @@ def prepare_epubs(core, args, files: list[Path], output: Path | None) -> dict[Pa
             document = copy(args)
             # Only the reading stage: its suggested PDF name is unused, and media stay with the scratch Markdown.
             document.path, document.batch, document.out, document.to = [file], False, None, "pdf"
-            core.route_ebook_input(document)
+            from pdfmd_engines.tools import tool_paths
+            with tool_paths(directory=file.parent):
+                core.route_ebook_input(document)
             destination = output or file.parent
             file = document.path[0]
         destinations[file] = destination
@@ -125,10 +127,11 @@ def convert_logged(log_path, positional, options):
 
 def run(core, *,
         args, embed_request, embeds_preamble, engines,
-        metadata_for, need_engines, pandoc_options, paths, plan_bridge,
+        metadata_for, pandoc_options, paths, plan_bridge,
         stamp_overrides, stop_at, target_explicit, target_format, variables) -> list:
     from functools import cache
 
+    from pdfmd_engines.tools import tool_paths
     from pdfmd_run import presentation as slides
 
     # the helpers of pdfmd.py this function calls, bound here so the body reads as it did in run_main()
@@ -220,14 +223,15 @@ def run(core, *,
     def file_build(file):
         request = file_presentation(file)
         target = file_target(file)
-        if not request:
-            need_engines(target)
+        if target not in ("pdf", "ansi") and not core.which("pandoc"):
+            raise SystemExit(core.PANDOC_MISSING)
+        candidates = core.select_engines(args.engine, False) if target == "pdf" and not request else engines
         if file.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS:
-            return False, None, engines
+            return False, None, candidates
         metadata = metadata_for(file)
         metadata_files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
         file_engines = (slides.engines(file, metadata_files, args.engine, request, target, args.verbose)
-                        if request else resolve_engines(file, args.engine, engines, False, target, metadata_files, verbose_output(args.verbose)))
+                        if request else resolve_engines(file, args.engine, candidates, False, target, metadata_files, verbose_output(args.verbose)))
         return bool(request), metadata, file_engines
     run_log = transcript.CURRENT.get()
     initial_logs = set()
@@ -238,7 +242,7 @@ def run(core, *,
             given = metadata_for(file, announce=False) if file.suffix.lower() not in core.OFFICE_INPUT_EXTENSIONS else None
             metadata_files = given if isinstance(given, list) else [given] if given else []
             summary.select(args.summary, file, metadata_files, batch=True)
-            with document_chatter(file, metadata_files):
+            with document_chatter(file, metadata_files), tool_paths(file, metadata_files):
                 target = file_target(file)
                 log_path = transcript.destination(args.log, file, metadata_files)
                 output_file = None

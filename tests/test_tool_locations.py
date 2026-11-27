@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import io
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -20,6 +22,36 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import pdfmd  # noqa: E402
+
+
+@unittest.skipUnless(shutil.which("pandoc") and os.name != "nt", "needs Pandoc and POSIX launchers")
+class DocumentPins(unittest.TestCase):
+    def test_each_batch_worker_uses_its_own_pandoc_and_doctor_names_the_winner(self):
+        pandoc = shutil.which("pandoc")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            launchers = []
+            for name in ("ordinary", "alternate"):
+                program = root / name
+                program.write_text(f"#!{sys.executable}\n"
+                                   "import pathlib, subprocess, sys\n"
+                                   f"if '--version' not in sys.argv: pathlib.Path({name + '.used'!r}).touch()\n"
+                                   f"sys.exit(subprocess.call([{pandoc!r}, *sys.argv[1:]]))\n", encoding="utf-8")
+                program.chmod(0o755)
+                launchers.append(program)
+                (root / (name + ".md")).write_text(
+                    f"---\npdfmd-options: {{pandoc-path: '{program.as_posix()}'}}\n---\n\nExample.\n", encoding="utf-8")
+            cli = [sys.executable, str(ROOT / "scripts/pdfmd")]
+            done = subprocess.run([*cli, "--doctor", "ordinary.md", "--pandoc-path", str(launchers[1])],
+                                  cwd=root, capture_output=True, encoding="utf-8")
+            self.assertIn(f"{launchers[1]})  -- set by --pandoc-path", done.stdout)
+            for name in ("ordinary", "alternate"):
+                self.assertFalse((root / (name + ".used")).exists())
+            done = subprocess.run([*cli, "ordinary.md", "alternate.md", "--jobs", "2", "--to", "html",
+                                   "--no-stamp", "--no-backup"], cwd=root, capture_output=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertTrue((root / "ordinary.used").exists())
+            self.assertTrue((root / "alternate.used").exists())
 
 
 class ToolLocations(unittest.TestCase):
@@ -53,7 +85,8 @@ class ToolLocations(unittest.TestCase):
                   "mmdc": self.make("roaming", "npm", "mmdc.cmd")}
         for name, file in wanted.items():
             self.assertEqual(pdfmd.locate_tool(name), (str(file), "probe"), name)
-        self.assertEqual(pdfmd.resolve_soffice(), str(wanted["soffice"]))
+        with mock.patch("pdfmd_engines.tools.soffice_limit", return_value=300):
+            self.assertEqual(pdfmd.resolve_soffice(), str(wanted["soffice"]))
 
     def test_pandoc_typst_and_chrome_are_found_in_their_install_folders(self):
         wanted = {"pandoc": self.make("local", "Pandoc", "pandoc.exe"),
@@ -71,6 +104,29 @@ class ToolLocations(unittest.TestCase):
         pdfmd.use_found_tools()
         self.assertEqual(os.environ["PDFMD_BROWSER"], str(chrome))
         self.assertNotIn(str(chrome.parent), os.environ["PATH"].split(os.pathsep))      # a browser's folder is not for PATH
+
+    def test_layered_tool_paths_and_scopes(self):
+        from pdfmd_engines.tools import tool_paths, pinned_program
+        folder = self.make("folder", "pandoc.exe")
+        metadata = self.make("metadata", "pandoc.exe")
+        document = self.make("document", "pandoc.exe")
+        cli = self.make("cli", "pandoc-alternate.exe")
+        source = self.make("source.md")
+        layers = [("document", {}), ("metadata.yaml", {}), ("folder settings", {"pandoc-path": str(folder.parent)})]
+        original_path = os.environ["PATH"]
+        with mock.patch.object(pdfmd, "option_sources", return_value=layers):
+            for path, author, layer in ((folder, "folder settings", None), (metadata, "metadata.yaml", 1),
+                                        (document, "document", 0), (cli, "--pandoc-path", None)):
+                if layer is not None:
+                    layers[layer][1]["pandoc-path"] = str(path)
+                command_line = {"pandoc-path": str(cli)} if path == cli else {}
+                with self.subTest(author=author), mock.patch.object(pdfmd, "TOOL_PATHS_CLI", command_line):
+                    with tool_paths(source, []):
+                        self.assertEqual(pinned_program("pandoc"), str(path))
+                        self.assertIn(author, pdfmd.tool_note("pandoc"))
+                        self.assertEqual(os.environ["PATH"].split(os.pathsep)[0], str(path.parent))
+                    self.assertIsNone(pinned_program("pandoc"))
+                    self.assertEqual(os.environ["PATH"], original_path)
 
     def test_a_tool_on_path_is_used_before_a_folder(self):
         self.make("pf", "Graphviz", "bin", "dot.exe")

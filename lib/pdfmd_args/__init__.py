@@ -917,12 +917,18 @@ def build_parser() -> argparse.ArgumentParser:
                              "| false}` (fast: object streams only), or --setup, sets it for a document or every document")
     parser.add_argument("--doctor", action="store_true",
                         help="one report on everything pdfmd uses (Pandoc and engines, fonts, emoji, PDF "
-                             "reading, OCR, diagram SVG converters, config, cache) and the command that fixes each missing piece")
+                             "reading, OCR, diagram SVG converters, config, cache) and the command that fixes each missing piece; "
+                             "name a document to see its effective tool paths")
     parser.add_argument("--deep", action="store_true",
                         help="with --doctor: also build a small page with each installed engine (a few seconds "
                              "each), to find one that is installed but cannot make a PDF")
     parser.add_argument("--check-dependencies", action="store_true",
                         help="show Pandoc and supported PDF-engine availability, then exit")
+    from pdfmd_engines.tools import TOOL_KEYS
+    for key in TOOL_KEYS:
+        kind = "folder holding pdftotext and pdftoppm" if key == "poppler-path" else "program or its folder"
+        parser.add_argument("--" + key, metavar="PATH",
+                            help=f"pin the {key.removesuffix('-path')} {kind} for this run; also pdfmd-options.{key}")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="parallel workers in batch mode")
     parser.add_argument("-V", "--var", action="append", default=[], dest="variable", metavar="KEY=VALUE")
     parser.add_argument("-y", "--metadata-file", nargs="*", default=None, metavar="FILE",

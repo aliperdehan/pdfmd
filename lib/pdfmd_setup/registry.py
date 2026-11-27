@@ -106,9 +106,7 @@ UNSET = {
 }
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
-MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "options.tesseract-path", "options.soffice-path", "options.dot-path",
-                     "options.mmdc-path", "options.poppler-path", "options.pandoc-path", "options.typst-path", "options.chrome-path",
-                     "options.cache.max-mb"})
+MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "options.cache.max-mb"})
 
 # What `pdfmd --setup DIR` offers (v3.29.29), by the key of the row: the `options:` a document's build reads through its folder
 # layers (first_pdfmd_option / option_sources, or config_options(document)), and the metadata rows below. A row that is not here
@@ -116,6 +114,8 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 # to a place that is not the document's ...): the folder screen leaves it out and says so instead of offering a row that would
 # change nothing. tests/test_setup_folder.py walks this list against the folder layers.
 FOLDER_OPTIONS = frozenset({
+    "options.pandoc-path", "options.typst-path", "options.chrome-path", "options.tesseract-path",
+    "options.soffice-path", "options.dot-path", "options.mmdc-path", "options.poppler-path",
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
     "options.numbered-references", "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.pandoc-memory", "options.css-scope", "options.indent", "options.paragraph-spacing", "options.bibliography-indent",
     "options.typst-line-spacing", "options.figure-fit", "options.page-numbers",
@@ -979,7 +979,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "`nulabreport:qca`, or `none`. Layers stack: the document's own `kit:` is laid over this one.", "Kits"),
         text("options.kit-stack", "What --kit stacks on", "`off` (default: --kit replaces every kit setting), `all`, or the "
              "layers it keeps: global, preset, folder, document (e.g. folder,document).", "Kits"),
-        # -- tool locations (this computer: Windows installers often leave a tool off PATH)
+        # -- tool locations (Windows installers often leave a tool off PATH)
         text("options.tesseract-path", "Tesseract", "The tesseract program, or the folder that holds it. Without it pdfmd looks on "
              "PATH, then in the usual Windows install folders.", "Tool locations"),
         text("options.soffice-path", "LibreOffice", "The soffice program, or the folder that holds it. Without it pdfmd looks on "
