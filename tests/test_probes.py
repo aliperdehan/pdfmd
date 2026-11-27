@@ -8,6 +8,7 @@ import contextlib
 import io
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -86,6 +87,56 @@ class Helper(unittest.TestCase):
                 self.assertIsNone(pdfmd.run_probe(SLEEPS))
         self.assertEqual(seen.getvalue(), "")
 
+    def test_pandoc_version_and_data_directory_share_one_probe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data = Path(directory) / "Pandoc Data"
+            command = ["pandoc", "--version"]
+            data_line = f"User data directory: {data}\n"
+            answers = [
+                (f"pandoc 3.13\n{data_line}", (3, 13), data),
+                (f"pandoc 3.1.3\n{data_line}", (3, 1, 3), data),
+                ("pandoc 3.13\n", (3, 13), None),
+                (f"unknown version\n{data_line}", (0,), data),
+                ("", (0,), None),
+                (None, (0,), None),
+            ]
+            for output, expected_version, expected_dir in answers:
+                result = subprocess.CompletedProcess(command, 0, output, "") if output is not None else None
+                for directory_first in (False, True):
+                    with self.subTest(output=output, directory_first=directory_first), \
+                            mock.patch.object(pdfmd, "_PANDOC_INFO", None), \
+                            mock.patch.object(pdfmd, "run_probe", return_value=result) as probe:
+                        if directory_first:
+                            self.assertEqual(pdfmd.pandoc_user_data_dir(), expected_dir)
+                        self.assertEqual(pdfmd.pandoc_version(), expected_version)
+                        self.assertEqual(pdfmd.pandoc_user_data_dir(), expected_dir)
+                        probe.assert_called_once_with(command)
+
+    def test_pandoc_probe_is_scoped_to_the_active_tool_pin(self):
+        from pdfmd_engines.tools import pinned_program, tool_paths
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / "alternate-pandoc.exe"
+            executable.touch()
+            default_data, pinned_data = root / "default", root / "pinned"
+            command = ["pandoc", "--version"]
+
+            def answer(args):
+                version, data = ("3.1.3", pinned_data) if pinned_program("pandoc") else ("3.13", default_data)
+                return subprocess.CompletedProcess(args, 0, f"pandoc {version}\nUser data directory: {data}\n", "")
+
+            with mock.patch.object(pdfmd, "_PANDOC_INFO", None), \
+                    mock.patch.object(pdfmd, "run_probe", side_effect=answer) as probe:
+                self.assertEqual(pdfmd.pandoc_version(), (3, 13))
+                self.assertEqual(pdfmd.pandoc_user_data_dir(), default_data)
+                with mock.patch.object(pdfmd, "TOOL_PATHS_CLI", {"pandoc-path": str(executable)}), tool_paths():
+                    self.assertEqual(pdfmd.pandoc_user_data_dir(), pinned_data)
+                    self.assertEqual(pdfmd.pandoc_version(), (3, 1, 3))
+                self.assertEqual(pdfmd.pandoc_version(), (3, 13))
+                self.assertEqual(pdfmd.pandoc_user_data_dir(), default_data)
+                self.assertEqual(probe.call_args_list, [mock.call(command), mock.call(command)])
+
 
 class SofficeVersion(unittest.TestCase):
     """soffice.exe, LibreOffice's window launcher on Windows, does not answer --version and leaves soffice.bin running after the
@@ -154,7 +205,7 @@ class HungProgram(unittest.TestCase):
         self.addCleanup(__import__("shutil").rmtree, self.bin, True)
 
     def test_the_pandoc_version_is_unknown(self):
-        with mock.patch.object(pdfmd, "_PANDOC_VERSION", None):
+        with mock.patch.object(pdfmd, "_PANDOC_INFO", None):
             self.assertEqual(pdfmd.pandoc_version(), (0,))
 
     def test_what_pandoc_lists_is_empty(self):

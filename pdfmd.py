@@ -47,7 +47,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.34.94"
+PDFMD_VERSION = "3.34.95"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
@@ -556,11 +556,9 @@ PART_CUTS: dict[Path, list[Heading]] = {}  # noqa: F821 -- Heading is served laz
 # Cached Pandoc help text for capability checks.
 _PANDOC_HELP: str | None = None
 
-# Cached Pandoc data directory; False means not checked.
-_PANDOC_DATA_DIR: Path | None | bool = False
+# Cached Pandoc version and user data directory for the active tool scope.
+_PANDOC_INFO: tuple[tuple[int, ...], Path | None] | None = None
 
-# Cached Pandoc version tuple.
-_PANDOC_VERSION: tuple[int, ...] | None = None
 TOOL_PATHS_CLI: dict[str, str] = {}
 
 # --css FILE (repeatable)

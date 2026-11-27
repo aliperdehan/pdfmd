@@ -71,7 +71,7 @@ wait for an answer before any code.
 
 ## Making the main `pdfmd.py` main code more manageable [3fi]
 
-- [ ] Runtime: lazy heavy imports (pypdf alone is about half of every start), a probe cache, fewer engine re-runs; no Rust/Go rewrite [3fj]
+- [ ] Runtime: measure font probes and source scans, and whether caching tool probes across runs pays off; no Rust/Go rewrite [3fj]
 - [ ] After the whole queue: pytest + pytest-xdist as an optional development extra (CI stays on unittest); `scripts/test_parallel.py` stays the runner unless it keeps failing in the waves [3fi D62]
 
 ## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]

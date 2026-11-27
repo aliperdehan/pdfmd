@@ -132,9 +132,9 @@ def tool_paths(document: Path | None = None, metadata_files=(), *, directory: Pa
     pandoc_changed = pinned_program("pandoc") != pins.get("pandoc", (None, ""))[0]
     cache = {}
     if pandoc_changed:
-        for key, default in (("_PANDOC_VERSION", None), ("_PANDOC_DATA_DIR", False), ("_PANDOC_HELP", None)):
+        for key in ("_PANDOC_INFO", "_PANDOC_HELP"):
             cache[key] = getattr(core, key)
-            setattr(core, key, default)
+            setattr(core, key, None)
         extensions = core._PANDOC_EXTENSIONS.copy()
         core._PANDOC_EXTENSIONS.clear()
     token = TOOL_PINS.set(pins)
@@ -478,28 +478,32 @@ def use_tex_install() -> None:
     os.environ["PATH"] = os.pathsep.join([os.environ.get("PATH", ""), str(folder)]).strip(os.pathsep)
 
 
+def _pandoc_info() -> tuple[tuple[int, ...], Path | None]:
+    """Share the version probe within the current Pandoc tool scope."""
+    if core._PANDOC_INFO is not None:
+        return core._PANDOC_INFO
+    done = core.run_probe(["pandoc", "--version"])
+    lines = (done.stdout or "").splitlines() if done else []
+    match = re.search(r"(\d+(?:\.\d+)+)", lines[0]) if lines else None
+    try:
+        version = tuple(int(part) for part in match.group(1).split(".")) if match else (0,)
+    except ValueError:
+        version = (0,)
+    directory = None
+    for line in lines:
+        if line.lower().startswith("user data directory:"):
+            directory = Path(line.split(":", 1)[1].strip())
+    core._PANDOC_INFO = version, directory
+    return core._PANDOC_INFO
+
+
 def pandoc_user_data_dir() -> Path | None:
-    """Pandoc's user data directory (where it also looks for a `csl:` style, in
-    its `csl/` subfolder), from the "User data directory:" line of
-    `pandoc --version`; None if there is none."""
-    if core._PANDOC_DATA_DIR is False:
-        core._PANDOC_DATA_DIR = None
-        done = core.run_probe(["pandoc", "--version"])
-        for line in (done.stdout if done else "").splitlines():
-            if line.lower().startswith("user data directory:"):
-                core._PANDOC_DATA_DIR = Path(line.split(":", 1)[1].strip())
-    return core._PANDOC_DATA_DIR or None
+    """Pandoc's user data directory, where it also looks for CSL styles."""
+    return _pandoc_info()[1]
 
 
 def pandoc_version() -> tuple[int, ...]:
-    if core._PANDOC_VERSION is None:
-        try:
-            done = core.run_probe(["pandoc", "--version"])
-            first = done.stdout.splitlines()[0]                                  # (no answer: an AttributeError, below)
-            core._PANDOC_VERSION = tuple(int(part) for part in re.search(r"(\d+(?:\.\d+)+)", first).group(1).split("."))
-        except (OSError, IndexError, AttributeError, ValueError):
-            core._PANDOC_VERSION = (0,)
-    return core._PANDOC_VERSION
+    return _pandoc_info()[0]
 
 
 # `pandoc --version`, `kpsewhich`, `typst --version` ... answer at once; a hung one (a broken install, a network drive, a tool

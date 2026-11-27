@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.34.95 — 2026-11-27
+
+Pre-edit state: commit `5b7a12f`. A build that needed both Pandoc's version and its
+user data directory ran `pandoc --version` twice. Read both values from one
+probe, and save and restore its answer when the active Pandoc pin changes.
+Regression tests cover both call orders, missing or partial probe output,
+and a nested tool scope with a different Pandoc version and data directory.
+In the original six interleaved page-citation builds with Pandoc 3.13, the
+version probe ran twice before and once after, with a median combined time
+of 105.0 ms before and 57.2 ms after. The text output matched byte for byte.
+
 ## v3.34.94 — 2026-11-27
 
 Pre-edit state: commit `ab9f1cf`. Batch selection guessed that a file was an earlier output when it matched another
