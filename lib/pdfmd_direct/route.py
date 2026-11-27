@@ -207,5 +207,5 @@ def build_standalone(kind, source, output, metadata_files, target_format, args, 
         if built[1]:
             core.backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
         if recorder:
-            built.record_path = recorder.finish(built)
+            built.record_path = recorder.finish(built, wrote_output=result[1])
         return built

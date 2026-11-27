@@ -111,6 +111,7 @@ def picture_destination(output: Path | None, home: Path, name: str) -> Path:
 # Other writers get their own invocation, as with explicit --to lists since
 # 3.31.28. The PDF and all of its derivatives share one normal PDF invocation.
 _TARGET_OPTIONS = {"-t": 1, "--to": 1}
+_DESTINATION_OPTIONS = {"-o": 1, "--out": 1, "--output": 1, "-d": 0, "-cwd": 0, "--cwd": 0, "--destination-cwd": 0}
 _PICTURE_OPTIONS = {"--crop": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1,
                     "--image-quality": 1, "--image-background": 1, "--page-folder": 0, "--no-page-folder": 0}
 
@@ -123,14 +124,15 @@ def kept_arguments(argv, options, paths=()):
             skip -= 1
         elif key in options:
             skip = 0 if equals else options[key]
-        elif any(word.startswith(flag) and word != flag for flag in ("-t", "-j") if flag in options):
+        elif any(word.startswith(flag) and word != flag for flag in ("-t", "-j", "-o") if flag in options):
             continue
         elif not paths or (word != "--" and str(Path(word)) not in paths):
             kept.append(word)
     return kept
 
 
-def multi_target_command(args, *, formats=None, source=None, batch_file=False, original=None, cropped=False) -> int:
+def multi_target_command(args, *, formats=None, source=None, batch_file=False, original=None, cropped=False,
+                         output_overrides=None) -> int:
     """Build unrelated writer targets separately. Pin a resolved default to its input."""
     formats = list(formats or args.to_many)
     supported = pdf_formats(cropped)
@@ -148,8 +150,13 @@ def multi_target_command(args, *, formats=None, source=None, batch_file=False, o
     status = 0
     for targets in [[name] for name in others] + ([pdf_targets] if pdf_targets else []):
         options = removed if targets == pdf_targets else {**removed, **_PICTURE_OPTIONS}
+        destination = (output_overrides or {}).get(targets[0]) if len(targets) == 1 else None
+        if destination is not None:
+            options = {**options, **_DESTINATION_OPTIONS}
         command = [*argv, "--to", ",".join(targets),
                    *kept_arguments(sys.argv[1:] if original is None else original, options, paths)]
+        if destination is not None:
+            command.extend(("-o", str(destination)))
         if source is not None:
             command.extend(("--", str(source)))
         sys.stdout.flush()
@@ -157,8 +164,9 @@ def multi_target_command(args, *, formats=None, source=None, batch_file=False, o
     return status
 
 
-def build_batch_writers(args, source, formats, cropped, original=None, *, chatter=None):
-    status = multi_target_command(args, formats=formats, source=source, batch_file=True, original=original, cropped=cropped)
+def build_batch_writers(args, source, formats, cropped, original=None, *, chatter=None, output_overrides=None):
+    status = multi_target_command(args, formats=formats, source=source, batch_file=True, original=original,
+                                  cropped=cropped, output_overrides=output_overrides)
     built = core.Built((source, status == 0, ""))
     built.chatter = chatter
     return built

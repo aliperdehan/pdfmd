@@ -357,7 +357,7 @@ pdfmd notes -b                     # or: every file its own PDF, in parallel (-j
 pdfmd notes -b --recursive -o out/ # include subfolders; collect the PDFs in out/
 pdfmd -b a.md notes/               # mix explicit inputs and folders; build duplicates once
 pdfmd a.md b.md                    # same as -b a.md b.md; -r still joins into one document
-pdfmd -b *                        # skip earlier PDFs, pictures and other non-input paths in one NOTE
+pdfmd -b *                        # skip non-input paths and earlier outputs verified against build records
 ```
 
 Folders still supply only `.md` files; named files may use other Pandoc input formats. Single-file readers for PDFs,

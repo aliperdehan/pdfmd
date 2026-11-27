@@ -23,7 +23,7 @@ pdfmd report.md -o out.pdf          # a name; the suffix picks the format (.docx
 pdfmd report.md --to docx           # the format by name
 pdfmd -b a.md notes/                # separate builds from files and folders; each folder supplies *.md
 pdfmd a.md b.md                     # several paths imply -b; -r still merges them
-pdfmd *                            # skip non-inputs (including PDFs and pictures) in one NOTE; deduplicate inputs
+pdfmd *                            # deduplicate inputs and skip non-inputs and verified outputs from build records
 pdfmd report.md -e typst            # a PDF engine by name (or a list: -e typst,lualatex)
 pdfmd report.md --kit apa7         # build with a kit (a house style); `pdfmd --kits apa7` describes it, builds nothing
 pdfmd --install diagram:resvg        # SVG to PNG tool, GitHub SHA-256 checked, in pdfmd’s tools folder

@@ -1164,6 +1164,15 @@ its heading styles. Typst's template can override the CSS rules.
 Batch mode (-b) and report/book mode (-r) only look in the given directory
 by default; add --recursive to also include subdirectories.
 
+Batch mode also handles several named paths without `-b`. It skips readable files whose current contents and file
+identity match an output in a retained build record. It looks in the global build records and in document caches in
+the working folder and folders represented in the batch. Replacing a file or removing its record releases the path
+for use as an input. Records made before output verification lack the file fingerprint.
+
+When inputs share an output destination, the batch builds one. It prefers Markdown, other text markup, HTML,
+then office or ebook formats, with name order breaking ties. The batch names the skipped inputs and uses a
+numbered destination if writing over the ordinary name would replace another selected source file.
+
 Auto-discovered metadata YAML, preambles, and Lua filters (see "Suppressing
 pdfmd's own defaults" below for what each of these is) are looked for beside
 the document itself -- the original convention -- and, if present, inside a

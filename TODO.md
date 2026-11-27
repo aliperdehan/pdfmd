@@ -22,7 +22,6 @@ wait for an answer before any code.
 
 ## Features, agreed
 
-- [ ] Multi-path builds (3.33.140): replace the guesses (non-inputs, earlier outputs, same-output clashes) with a record of what pdfmd wrote, with the build record [3fi D33 3dn D84]
 - [ ] Images and display math in `--view` through the kitty graphics protocol, after the queue: first a spike of Unicode placeholders in Ghostty (they survive the pager), else no pager when images are drawn [3dm D84]
 - [ ] `\md{...}`: nulabreport's macros taking `\md{}`; native tier; text-level pre-passes (table-ascii, includes, embed blocks) inside the macro, unchecked [3dc]
 - [ ] Mixed-format parts: docx, tex, odt, html parts inside a `parts: auto` build [3cl]

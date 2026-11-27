@@ -111,6 +111,7 @@ class Checkout(unittest.TestCase):
         self.environment = dict(os.environ, PDFMD_CONFIG="", PDFMD_NO_PROMPT="1", PYTHONIOENCODING="utf-8",
                                 XDG_CONFIG_HOME=str(self.folder / "config"),
                                 XDG_CACHE_HOME=str(self.folder / "cache"),
+                                LOCALAPPDATA=str(self.folder / "cache"),
                                 XDG_DATA_HOME=str(self.folder / "data"))
         self.names = ("04 Motivation letter (RU).md", "05 Достижения [RU].md")
         for name in self.names:
@@ -308,15 +309,101 @@ class Checkout(unittest.TestCase):
         self.assertTrue((self.work / "out/same.pdf").is_file())
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_an_independent_html_source_wins_over_a_planned_html_output(self):
+        (self.work / "a.md").write_text("# Markdown\n\nMarkdown source.\n", encoding="utf-8")
+        html = self.work / "a.html"
+        html.write_text("<p>Independent HTML</p>", encoding="utf-8")
+        done = self.run_pdfmd("a.html", "a.md", "--to", "html")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(html.read_text(encoding="utf-8"), "<p>Independent HTML</p>")
+        self.assertIn("NOTE  skipped (same output as a.md): a.html", done.stdout)
+        self.assertIn("Markdown source", (self.work / "a (1).html").read_text(encoding="utf-8"))
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_numbering_to_protect_a_source_reserves_other_planned_destinations(self):
+        html = self.work / "a.html"
+        html.write_text("<p>Independent HTML</p>", encoding="utf-8")
+        (self.work / "a.md").write_text("# A\n\nFirst source.\n", encoding="utf-8")
+        (self.work / "a (1).md").write_text("# B\n\nSecond source.\n", encoding="utf-8")
+        done = self.run_pdfmd("a.md", "a.html", "a (1).md", "--to", "html", "-j", "2")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(html.read_text(encoding="utf-8"), "<p>Independent HTML</p>")
+        self.assertIn("First source", (self.work / "a (2).html").read_text(encoding="utf-8"))
+        self.assertIn("Second source", (self.work / "a (1).html").read_text(encoding="utf-8"))
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_separate_writers_protect_and_reserve_the_html_destination(self):
+        html = self.work / "a.html"
+        html.write_text("<p>Independent HTML</p>", encoding="utf-8")
+        (self.work / "a.md").write_text("# A\n\nFirst source.\n", encoding="utf-8")
+        (self.work / "a (1).md").write_text("# B\n\nSecond source.\n", encoding="utf-8")
+        done = self.run_pdfmd("a.html", "a.md", "a (1).md", "--to", "latex,html", "-j", "2", "--build-log", "on")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("NOTE  skipped (same output as a.md): a.html", done.stdout)
+        self.assertEqual(html.read_text(encoding="utf-8"), "<p>Independent HTML</p>")
+        self.assertIn("First source", (self.work / "a (2).html").read_text(encoding="utf-8"))
+        self.assertIn("Second source", (self.work / "a (1).html").read_text(encoding="utf-8"))
+        self.assertTrue((self.work / "a.tex").is_file() and (self.work / "a (1).tex").is_file())
+        rebuilt = self.run_pdfmd(self.names[1], "a (2).html", "--to", "latex", "-o", "out")
+        self.assert_built(rebuilt, 1, self.work / "out", ".tex")
+        self.assertIn("NOTE  skipped built outputs: a (2).html", rebuilt.stdout)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_renamed_export_is_skipped_without_its_source_in_the_batch(self):
+        export = "renamed export.html"
+        first = self.run_pdfmd(self.names[0], "-o", export, "--build-log", "on")
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        done = self.run_pdfmd("-b", self.names[1], export, "--to", "latex")
+        self.assert_built(done, 1, suffix=".tex")
+        self.assertIn("NOTE  skipped built outputs: " + export, done.stdout)
+        case_alias = export.upper()
+        if (self.work / case_alias).exists():
+            self.assert_built(self.run_pdfmd("-b", self.names[1], case_alias, "--to", "latex"), 1, suffix=".tex")
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_replaced_export_is_an_input_even_with_identical_content(self):
+        export = self.work / "renamed.html"
+        first = self.run_pdfmd(self.names[0], "-o", export, "--build-log", "on")
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        replacement = self.work / "replacement.html"
+        replacement.write_bytes(export.read_bytes())
+        replacement.replace(export)
+        self.assert_built(self.run_pdfmd(self.names[1], export, "--to", "latex"), 2, suffix=".tex")
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_clearing_document_build_records_releases_an_export(self):
+        export = "renamed.html"
+        first = self.run_pdfmd(self.names[0], "-o", export, "--build-log", "on", "--cache-location", "document")
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        args = ("-b", self.names[1], export, "--to", "latex")
+        self.assert_built(self.run_pdfmd(*args), 1, suffix=".tex")
+        cleared = self.run_pdfmd("--clear-cache", "all")
+        self.assertEqual(cleared.returncode, 0, cleared.stdout + cleared.stderr)
+        self.assert_built(self.run_pdfmd(*args), 2, suffix=".tex")
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_expired_record_releases_the_export(self):
+        (self.work / self.names[0]).write_text("---\npdfmd-options: {build-log-keep: 1}\n---\n# Example\n\nText.\n",
+                                               encoding="utf-8")
+        for name in ("earlier.html", "retained.html"):
+            done = self.run_pdfmd(self.names[0], "-o", name, "--build-log", "on")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        done = self.run_pdfmd(self.names[1], "earlier.html", "retained.html", "--to", "latex")
+        self.assert_built(done, 2, suffix=".tex")
+        self.assertIn("NOTE  skipped built outputs: retained.html", done.stdout)
+        self.assertTrue((self.work / "earlier.tex").is_file())
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_rebuild_glob_skips_built_outputs_but_keeps_independent_html(self):
         independent = self.work / "independent.html"
         for prefix in ((), ("-b",)):
             with self.subTest(prefix=prefix):
-                self.assert_built(self.run_pdfmd(*prefix, *self.names, "--to", "html"), 2, suffix=".html")
+                self.assert_built(self.run_pdfmd(*prefix, *self.names, "--to", "html", "--build-log", "on"),
+                                  2, suffix=".html")
                 independent.write_text("<p>Independent</p>", encoding="utf-8")
                 done = self.run_pdfmd(*prefix, *sorted(self.work.iterdir()), "--to", "html", "-o", "out")
-                # Outputs in the source folder are not outputs in the selected destination.
-                self.assertNotIn("built outputs:", done.stdout)
+                self.assert_built(done, 3, self.work / "out", ".html")
+                self.assertIn("built outputs:", done.stdout)
                 done = self.run_pdfmd(*prefix, *sorted(p for p in self.work.iterdir() if p.is_file()), "--to", "html")
                 self.assertIn("built outputs:", done.stdout)
                 for name in self.names:
@@ -329,7 +416,7 @@ class Checkout(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_rebuild_respects_no_rewrite(self):
-        self.assert_built(self.run_pdfmd(*self.names, "--to", "html"), 2, suffix=".html")
+        self.assert_built(self.run_pdfmd(*self.names, "--to", "html", "--build-log", "on"), 2, suffix=".html")
         done = self.run_pdfmd("-b", *sorted(self.work.iterdir()), "--to", "html", "--no-rewrite")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("built outputs:", done.stdout)
@@ -339,9 +426,8 @@ class Checkout(unittest.TestCase):
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_glob_outputs_in_named_directory_and_compound_extension(self):
         out = self.work / "out"
-        out.mkdir()
-        for name in self.names:
-            (out / Path(name).with_suffix(".gfm.md")).write_text("old", encoding="utf-8")
+        first = self.run_pdfmd(*self.names, "--to", "gfm", "-o", out, "--build-log", "on", "-j", "2")
+        self.assert_built(first, 2, out, ".gfm.md")
         done = self.run_pdfmd(*self.names, *sorted(out.iterdir()), "--to", "gfm", "-o", out)
         self.assert_built(done, 2, out, ".gfm.md")
         self.assertIn("built outputs:", done.stdout)

@@ -2067,7 +2067,13 @@ Special single-file readers such as PDF-to-Markdown, Calibre ebook input and Qua
 Pandoc-readable EPUB files are accepted. With two paths, a skipped PDF beside a selected input also gives the hint
 `to name the output, use -o NAME.pdf`. To build just that PDF as an input, name it alone.
 
-Every input becomes its own output; `-j N` sets the number of workers over the whole list.
+Batch builds skip earlier outputs verified against retained build records, including exports given a custom name
+with `-o`. Replacing or editing an output, clearing its record or letting the record expire makes the file eligible
+as a source again. If several inputs would write the same destination, Markdown wins over other text markup, then
+HTML, then office and ebook formats, with name order breaking ties. If the chosen build would replace a selected
+source file, it uses a numbered name instead.
+
+Each build produces its own output. `-j N` sets the number of workers over the whole list.
 `-o DIR` collects the results in a folder; `-o FILE.pdf` is refused (an existing directory with that name is allowed).
 Single-document options such as `--watch` and `--section` are refused as in folder batches.
 `--bopen SPEC` opens some of the finished files when

@@ -158,6 +158,13 @@ class Build(unittest.TestCase):
                 self.assertIn(f"book.epub > {Path(destination or '.') / 'book.html'}", done.stdout)
                 self.assertEqual(self.calls(), [])
 
+    def test_a_markdown_source_wins_the_epubs_compound_destination(self):
+        (self.directory / "book.md").write_text("# Book\n\nIndependent Markdown.\n", encoding="utf-8")
+        done = self.run_pdfmd("book.epub", "book.md", "--to", "gfm", "-j", "2", calibre=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("NOTE  skipped (same output as book.md): book.epub", done.stdout)
+        self.assertIn("Independent Markdown", (self.directory / "book.gfm.md").read_text(encoding="utf-8"))
+
     def test_a_non_pandoc_ebook_is_skipped_in_a_batch(self):
         (self.directory / "other.md").write_text("Hello\n", encoding="utf-8")
         done = self.run_pdfmd("book.mobi", "other.md", "--to", "html", calibre=False)

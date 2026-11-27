@@ -19,6 +19,19 @@ same commit as the change.
 
 ---
 
+## v3.34.94 — 2026-11-27
+
+Pre-edit state: commit `ab9f1cf`. Batch selection guessed that a file was an earlier output when it matched another
+input's planned name. That could overwrite an independent HTML source and accept an export given a custom name.
+Retained build records now identify written destinations by path, file identity and content. Batch skips a readable
+output only while it matches a retained record. Shared destinations keep the source preference and use a numbered
+output if the chosen build would replace another source. Separate batch writers receive the protected destinations
+allocated by the batch. Checkout regressions cover independent HTML, renamed exports, replacement, record clearing
+and expiry, parallel destination allocation, separate writers and EPUB compound destinations. Build-record tests
+also cover edits and concurrent writes. `pdfmd.py` remains 789 lines.
+
+---
+
 ## v3.34.93 — 2026-11-27
 
 Pre-edit state: commit `5b5c800`. LaTeX errors only searched the main source for their context, and the PDF engine chain retried when Pandoc itself rejected the input. Match the TeX context against the original scaffold, part and report files, and stop the chain on confirmed Pandoc YAML or citation-input errors. Regressions with Pandoc 3.13 cover ordinary and cached scaffolds, both report routes, ambiguous contexts, missing bibliography and CSL files, invalid CSL and YAML, preservation of an existing PDF, and continued fallback for engine failures.

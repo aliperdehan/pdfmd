@@ -9,8 +9,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from threading import Barrier
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -51,6 +53,25 @@ class Pure(unittest.TestCase):
         self.assertEqual(second.name, "20261029-140533-2-ok.log")
         self.assertEqual(record.records(self.path), [second, first])
         self.assertEqual(sorted(p.name for p in self.path.iterdir()), sorted([first.name, second.name]))      # no .tmp left
+
+    def test_simultaneous_writers_keep_both_records(self):
+        when = datetime(2026, 10, 29, 14, 5, 33)
+        both_named = Barrier(2)
+        calls = iter(range(2))
+        file_name = record.file_name
+
+        def race(*args):
+            name = file_name(*args)
+            if next(calls, None) is not None:
+                both_named.wait(timeout=5)
+            return name
+
+        def write(text):
+            return record.write(self.path, text, True, 5, 1000, when, "")
+
+        with mock.patch.object(record, "file_name", side_effect=race), ThreadPoolExecutor(2) as pool:
+            paths = list(pool.map(write, ("first", "second")))
+        self.assertEqual([path.read_text(encoding="utf-8") for path in paths], ["first", "second"])
 
     def test_pruning_keeps_the_newest_and_the_newest_failure(self):
         for second, ok in enumerate([False, True, True, True, True, True]):
@@ -140,6 +161,10 @@ class Builds(unittest.TestCase):
         for expected in ("pdfmd build record", "result:    ok", "command:   pdfmd d.md --to html", "CMD  pandoc d.md",
                          "what pdfmd printed, and what it ran", "TIME  d.md"):
             self.assertIn(expected, text)
+        self.assertEqual(record.matching_outputs([self.path / "d.html"], {self.cache / "pdfmd" / "builds"}),
+                         {self.path / "d.html"})
+        (self.path / "d.html").write_text("<p>Edited</p>", encoding="utf-8")
+        self.assertEqual(record.matching_outputs([self.path / "d.html"], {self.cache / "pdfmd" / "builds"}), set())
         self.assertNotIn("full record", done.stdout)               # nothing to point at when the build went well
 
     def test_report_routes_record_the_final_output(self):
@@ -211,6 +236,7 @@ class Builds(unittest.TestCase):
         self.assertEqual(len(failed), 1)
         text = failed[0].read_text(encoding="utf-8")
         self.assertIn("result:    FAILED", text)
+        self.assertNotIn("\nwritten:", text)
         self.assertIn("Could not find data file", text)
 
     def test_a_good_build_after_a_failure_does_not_erase_it(self):

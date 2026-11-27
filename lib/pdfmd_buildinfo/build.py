@@ -277,7 +277,7 @@ class BuildRecorder:
             rows.append(("reason", failure))
         return ["pdfmd build record", *(f"{name + ':':<10} {value}" for name, value in rows)]
 
-    def finish(self, built=None, failure: str = "") -> Path | None:
+    def finish(self, built=None, failure: str = "", *, wrote_output: bool = False) -> Path | None:
         """Stop listening and write the record (a failed build always; a good one unless build-log is `failed`). The path."""
         if not self.active:
             return None
@@ -286,15 +286,24 @@ class BuildRecorder:
         if ok and self.mode == "failed":
             return None
         try:
+            record = record_module()
+            written = None
+            if (ok or wrote_output) and (destination := getattr(built, "output", None)):
+                output = Path(destination).resolve()
+                if fingerprint := record.output_fingerprint(output):
+                    written = f"written:   {record.output_key(output)} {fingerprint}"
+            header = self.header(built, failure)
+            if written:
+                header.insert(1, written)
             steps = time_breakdown(built) if built is not None else []
             answer = built[2].strip() if built is not None and len(built) > 2 and isinstance(built[2], str) else ""
-            text = "\n".join([*self.header(built, failure), "", *steps, "",
+            text = "\n".join([*header, "", *steps, "",
                               "----- what pdfmd printed, and what it ran -----", *self.lines, "",
                               *(["----- what the build answered (the last 3000 characters of Pandoc's messages) -----", answer, ""]
                                 if answer else [])])
             folder = self.build_folder()
             core.prepare_cache_root(folder.parent.parent)
-            return record_module().write(folder, text, ok, self.keep, self.kilobytes * 1024)
+            return record.write(folder, text, ok, self.keep, self.kilobytes * 1024)
         except Exception:
             return None
 

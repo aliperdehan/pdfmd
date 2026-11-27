@@ -139,7 +139,7 @@ def rewrite_template(md_path: Path, metadata_files: list[Path]) -> str:
     return template
 
 
-def numbered_output(output: Path, template: str = REWRITE_NAME) -> Path:
+def numbered_output(output: Path, template: str = REWRITE_NAME, *, reserved: set[Path] | None = None) -> Path:
     """``output`` when nothing is there, else the first free numbered name (`report (1).pdf`)."""
     if not output.exists():
         return output
@@ -148,7 +148,7 @@ def numbered_output(output: Path, template: str = REWRITE_NAME) -> Path:
         name = (template.replace("{stem}", output.stem).replace("{ext}", output.suffix)
                 .replace("{date}", today).replace("{n}", str(number)))
         candidate = output.with_name(name)
-        if not candidate.exists():
+        if not candidate.exists() and (not reserved or candidate.resolve() not in reserved):
             return candidate
     raise SystemExit(f"{core.display_path(output)} and the 999 numbered copies of it exist; remove some or name the output with -o")
 

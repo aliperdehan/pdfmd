@@ -1143,7 +1143,7 @@ def convert_one(md_path: Path, *args, export=None, **kwargs) -> "Built":  # noqa
                 emit("error", None, f"      full record: {core.under_home(where)}", file=sys.stderr, counted=False)
             raise
         if recorder:
-            built.record_path = recorder.finish(built)
+            built.record_path = recorder.finish(built, wrote_output=result[1])
         built.chatter = CHATTER.get()
         return built
 

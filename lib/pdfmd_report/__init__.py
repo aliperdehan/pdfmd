@@ -694,7 +694,7 @@ def _run(core, *, records,
     emit_outcome(result.stderr[-3000:], result.returncode == 0)
     if report_strict_failed:
         emit("error", None, report_answer, counted=False)
-    if recorder and (where := recorder.finish(report_built)) and (args.verbose or not report_ok):
+    if recorder and (where := recorder.finish(report_built, wrote_output=result.returncode == 0)) and (args.verbose or not report_ok):
         emit("verbose" if report_ok else "error", None,
              f"{'RECORD  ' if report_ok else '      full record: '}{core.under_home(where)}", counted=False)
     if result.returncode or report_strict_failed:

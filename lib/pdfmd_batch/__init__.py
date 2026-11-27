@@ -3,7 +3,7 @@
 Moved out of `pdfmd.py`'s `run_main()` unchanged (v3.32.13). `core` is the `pdfmd` module itself (the file may be running as
 `__main__`, so it is passed in, never imported: a second import would be a second copy with its own state). `run` returns
 the list of results that `run_main()` prints. Several paths without `-r` also use this pipeline. Input selection happens
-before single-file routing, so PDFs left by earlier builds are skipped rather than read back through batchocr."""
+before single-file routing, so PDFs are outside the batch reader set."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pdfmd_base import core as bound_core
 from pdfmd_log import CHATTER, document_chatter, emit, summary, transcript, verbose_output
 
 
-# The author wants this source-likeness ranking revised later (master queue 3fi D33).
+# D33's preference among sources sharing an output.
 SOURCE_LIKENESS = (
     frozenset({".md", ".markdown", ".mdown", ".mkd"}),
     frozenset({".txt", ".rst", ".org", ".adoc", ".asciidoc", ".textile", ".tex", ".latex",
@@ -131,9 +131,11 @@ def run(core, *,
         stamp_overrides, stop_at, target_explicit, target_format, variables, cli_export=None) -> list:
     from functools import cache
 
+    from pdfmd_buildinfo import record
     from pdfmd_crop.build import CROPPED_OFFICE, build_target, crop_requested, pdf_formats
     from pdfmd_crop.targets import build_batch_writers
     from pdfmd_engines.tools import tool_paths
+    from pdfmd_routing import output as routing
     from pdfmd_run import presentation as slides
 
     # the helpers of pdfmd.py this function calls, bound here so the body reads as it did in run_main()
@@ -144,13 +146,23 @@ def run(core, *,
     is_assembled_document, resolve_engines = core.is_assembled_document, core.resolve_engines
     restore_worker_state, worker_state = core.restore_worker_state, core.worker_state
 
-    files = list(paths)       # prepare_inputs has already expanded, filtered and resolved the paths
+    # prepare_inputs has already expanded folders and selected supported reader formats.
+    folders = {Path.cwd(), *(file.parent for file in paths),
+               *(path.resolve() for path in args.batch_original_paths if path.is_dir())}
+    roots = {core.cache_root() / "builds", *(folder / core.LOCAL_CACHE_DIRNAME / "builds" for folder in folders)}
+    owned = record.matching_outputs(paths, roots)
+    outputs = [file for file in paths if file in owned]
+    files = [file for file in paths if file not in owned]
+    if not files:
+        selection_note(core, args.batch_original_paths, files, args.batch_skipped, outputs)
+        raise SystemExit("No buildable input files remain; the selected files are built outputs")
     output = Path.cwd() if args.destination_cwd else (args.out.resolve() if args.out else None)
     if target_format == ASSEMBLED_FORMAT:
         # Not an assembly of an assembly: a file written by an earlier run
         # (NAME.assembled.md) would otherwise come out as NAME.assembled.assembled.md.
         files = [file for file in files if not is_assembled_document(file)]
         if not files:
+            selection_note(core, args.batch_original_paths, files, args.batch_skipped, outputs)
             raise SystemExit("No buildable input files remain; the selected files are already assembled")
     jobs = max(1, args.jobs)
     @cache
@@ -195,38 +207,67 @@ def run(core, *,
         formats = file_formats(file).split(",")
         return formats if len(formats) > 1 and any(name not in pdf_formats(file_cropped(file)) for name in formats) else None
 
-    # Compare the ordinary output names before rewrite protection picks a numbered copy.
-    # A source must never exclude itself when its input and output suffixes coincide.
-    built = set()
-    for file in files:
-        planned = core.load_package("pdfmd_routing.output").planned(file, output, file_output(file)).resolve()
-        if planned != file:
-            built.add(planned)
-    outputs = [file for file in files if file in built]
-    files = [file for file in files if file not in built]
-    destinations_by_output = {}
-    for file in files:
-        planned = core.load_package("pdfmd_routing.output").planned(file, output, file_output(file)).resolve()
-        destinations_by_output.setdefault(planned, []).append(file)
+    def writer_outputs(file, directory, source=None):
+        formats = separate_writers(file) or ()
+        supported = pdf_formats(file_cropped(file))
+        pdf_writers = sum(name in supported for name in formats)
+        return {name: routing.planned(source or file, directory, name)
+                for name in formats if name not in supported or pdf_writers == 1}
+
+    def identity(path):
+        try:
+            info = path.stat()
+        except OSError:
+            return None
+        return record.file_identity(info) if info.st_ino else None
+
+    def original(file):
+        return core.DISPLAY_ALIAS.get(file, file)
+
+    def preference(file):
+        file = original(file)
+        rank = next((i for i, suffixes in enumerate(SOURCE_LIKENESS) if file.suffix.lower() in suffixes),
+                    len(SOURCE_LIKENESS))
+        return rank, file.name, str(file)
+
+    def shared_destinations(plans):
+        claimed = {}
+        pairs = []
+        for file in sorted(plans, key=preference):
+            paths = [output_file.resolve() for output_file in plans[file]]
+            keys = [identity(path) or path for path in paths]
+            if chosen := next((claimed[key] for key in keys if key in claimed), None):
+                pairs.append((file, chosen))
+            else:
+                claimed.update(dict.fromkeys(keys, file))
+        return pairs
+
+    sources = set(files)
+    source_ids = {key for file in files if (key := identity(file)) is not None}
     collisions = []
-    for group in destinations_by_output.values():
-        if len(group) < 2:
-            continue
-        def preference(file):
-            rank = next((i for i, suffixes in enumerate(SOURCE_LIKENESS) if file.suffix.lower() in suffixes),
-                        len(SOURCE_LIKENESS))
-            return rank, file.name, str(file)
-        chosen = min(group, key=preference)
-        collisions.extend((file, chosen) for file in group if file != chosen)
-    excluded = {file for file, _ in collisions}
-    files = [file for file in files if file not in excluded]
-    selection_note(core, args.batch_original_paths, files, args.batch_skipped, outputs, collisions)
-    if not files:
-        raise SystemExit("No buildable input files remain; the selected files are built outputs")
+    epubs = {file for file in files if file.suffix.lower() == ".epub"}
+    if epubs and target_explicit:
+        # With a fixed target we can skip a losing EPUB before unpacking its Markdown.
+        plans = {}
+        for file in files:
+            source = file.with_suffix(".md") if file in epubs else file
+            plans[file] = (routing.planned(source, output, file_output(file)),
+                           *writer_outputs(file, output, source).values())
+        collisions = shared_destinations(plans)
+        excluded = {file for file, _ in collisions}
+        files = [file for file in files if file not in excluded]
+    destinations = prepare_epubs(core, args, files, output)
+    planned_outputs = {file: routing.planned(file, directory, file_output(file)) for file, directory in destinations.items()}
+    separate_outputs = {file: writer_outputs(file, directory) for file, directory in destinations.items()}
+    plans = {file: (path, *separate_outputs[file].values()) for file, path in planned_outputs.items()}
+    for file, chosen in shared_destinations(plans):
+        collisions.append((original(file), original(chosen)))
+        del planned_outputs[file]
+    files = list(planned_outputs)
+    selection_note(core, args.batch_original_paths, [original(file) for file in files], args.batch_skipped, outputs, collisions)
     if output:
         output.mkdir(parents=True, exist_ok=True)
-    destinations = prepare_epubs(core, args, files, output)
-    files = list(destinations)
+    reserved = {path.resolve() for file in files for path in plans[file]}
     for file in files:
         if request := file_presentation(file):
             slides.validate(request, file_target(file), stop_at, document=file)
@@ -259,7 +300,16 @@ def run(core, *,
         return bool(request), metadata, file_engines
     run_log = transcript.CURRENT.get()
     initial_logs = set()
-    routing = core.load_package("pdfmd_routing.output")
+
+    def protect_output(file, planned, target, metadata, export=None):
+        destination = planned.resolve()
+        destination_id = identity(destination)
+        source_clash = destination != file and (destination in sources or
+            (destination_id in source_ids and destination_id != identity(file)))
+        if export is None or export.keep_pdf or source_clash:
+            planned = routing.protected(file, planned, target, metadata, reserved=reserved, source_clash=source_clash)
+        reserved.add(planned.resolve())
+        return planned
 
     def work(file, executor=None):
         with transcript.scope(pending=True) as log:
@@ -272,16 +322,20 @@ def run(core, *,
                     # The writer subprocesses each open the transcript for their actual output.
                     chatter = CHATTER.get()
                     cropped = file_cropped(file)
+                    overrides = {}
+                    for name, planned in separate_outputs[file].items():
+                        writer_target, writer_export = build_target(name, cropped=cropped)
+                        destination = protect_output(file, planned, writer_target, metadata_files, writer_export)
+                        if destination != planned:
+                            overrides[name] = destination
                     if executor is not None:
                         AUTO_LOG.flush(shown=not verbose_output(args.verbose))
-                        return executor.submit(build_batch_writers, args, file, formats, cropped, sys.argv[1:], chatter=chatter)
-                    return build_batch_writers(args, file, formats, cropped, chatter=chatter)
+                        return executor.submit(build_batch_writers, args, file, formats, cropped, sys.argv[1:],
+                                               chatter=chatter, output_overrides=overrides)
+                    return build_batch_writers(args, file, formats, cropped, chatter=chatter, output_overrides=overrides)
                 log_path = transcript.destination(args.log, file, metadata_files)
-                output_file = None
+                output_file = protect_output(file, planned_outputs[file], target, metadata_files, export)
                 if log_path is not None:
-                    output_file = routing.planned(file, destinations[file], file_output(file))
-                    if export is None or export.keep_pdf:
-                        output_file = routing.protected(file, output_file, target, metadata_files)
                     if run_log is not None and log_path not in initial_logs:
                         log.pending[:0] = run_log.pending or []
                         initial_logs.add(log_path)
@@ -291,7 +345,7 @@ def run(core, *,
                 verbose = verbose_output(args.verbose)
                 positional = (file, destinations[file], presentation, args.font, file_engines, variables,
                               args.slide_level, pandoc_options, metadata)
-                options = dict(output_file=output_file, output_resolved=output_file is not None,
+                options = dict(output_file=output_file, output_resolved=True,
                                preamble_files=preambles, target_format=target, from_format=args.from_format,
                                no_auto=args.no_auto, verbose=verbose, debug=args.debug, stamp_overrides=stamp_overrides,
                                keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,

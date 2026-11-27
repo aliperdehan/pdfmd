@@ -15,9 +15,84 @@ from __future__ import annotations
 import os
 import re
 from datetime import datetime
+from hashlib import sha256
 from pathlib import Path
+from stat import S_ISREG
+from unicodedata import normalize
 
 NAME = re.compile(r"^(\d{8}-\d{6})(?:-(\d+))?-(ok|failed)\.log$")
+WRITTEN = re.compile(r"written:   ([0-9a-f]{64}) ([0-9a-f]{64})\n")
+
+
+def output_key(path: Path) -> str:
+    """Find candidate records even under a different spelling on a case-insensitive file system."""
+    spelling = normalize("NFC", str(path.resolve()).casefold())
+    return sha256(os.fsencode(spelling)).hexdigest()
+
+
+def file_identity(info: os.stat_result) -> tuple[int, int, int | float | None]:
+    birth = getattr(info, "st_birthtime", None)
+    if os.name == "nt":
+        birth = getattr(info, "st_birthtime_ns", info.st_ctime_ns)
+    return info.st_dev, info.st_ino, birth
+
+
+def output_fingerprint(path: Path) -> str | None:
+    """Identify the written file and its contents. A byte-identical replacement is a different file."""
+    def state(info):
+        return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+
+    try:
+        before = path.stat()
+        if not S_ISREG(before.st_mode):
+            return None
+        with path.open("rb") as handle:
+            if state(before) != state(os.fstat(handle.fileno())):
+                return None
+            digest = sha256(repr(file_identity(before)).encode("ascii"))
+            for block in iter(lambda: handle.read(128 * 1024), b""):
+                digest.update(block)
+            if state(before) == state(path.stat()):
+                return digest.hexdigest()
+    except OSError:
+        pass
+    return None
+
+
+def matching_outputs(paths: list[Path], roots: set[Path]) -> set[Path]:
+    """Look at retained build records only. Older records lack a fingerprint and prove no ownership."""
+    candidates = {}
+    for path in paths:
+        candidates.setdefault(output_key(path), set()).add(path)
+    fingerprints = {}
+    found = set()
+    for root in roots:
+        try:
+            entries = list(root.glob("*/*.log"))
+        except OSError:
+            continue
+        for entry in entries:
+            if not NAME.fullmatch(entry.name):
+                continue
+            try:
+                with entry.open(encoding="utf-8", errors="replace") as handle:
+                    if handle.readline() != "pdfmd build record\n":
+                        continue
+                    match = WRITTEN.fullmatch(handle.readline())
+            except OSError:
+                continue
+            if match is None or (key := match[1]) not in candidates:
+                continue
+            for path in candidates[key] - found:
+                if path not in fingerprints:
+                    fingerprints[path] = output_fingerprint(path)
+                if fingerprints[path] == match[2]:
+                    found.add(path)
+            if candidates[key] <= found:
+                del candidates[key]
+            if not candidates:
+                return found
+    return found
 
 
 def scrub_home(text: str, home: str) -> str:
@@ -44,7 +119,7 @@ def file_name(when: datetime, ok: bool, folder: Path) -> str:
     base = when.strftime("%Y%m%d-%H%M%S")
     kind = "ok" if ok else "failed"
     name, number = f"{base}-{kind}.log", 1
-    while (folder / name).exists():
+    while os.path.lexists(folder / name) or os.path.lexists(folder / (name + ".tmp")):
         number += 1
         name = f"{base}-{number}-{kind}.log"
     return name
@@ -101,9 +176,26 @@ def write(folder: Path, text: str, ok: bool, keep: int, limit: int, when: dateti
     when = when or datetime.now()
     home = str(Path.home()) if home is None else home
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / file_name(when, ok, folder)
-    temporary = folder / (path.name + ".tmp")
-    temporary.write_text(scrub_home(clip(text, limit), home), encoding="utf-8", errors="replace")
-    os.replace(temporary, path)
+    text = scrub_home(clip(text, limit), home)
+    while True:
+        path = folder / file_name(when, ok, folder)
+        temporary = folder / (path.name + ".tmp")
+        try:
+            handle = temporary.open("x", encoding="utf-8", errors="replace")
+        except FileExistsError:
+            continue
+        try:
+            with handle:
+                taken = os.path.lexists(path)    # a concurrent writer finished after file_name checked
+                if not taken:
+                    handle.write(text)
+            if taken:
+                temporary.unlink()
+                continue
+            os.replace(temporary, path)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+        break
     prune(folder, keep)
     return path

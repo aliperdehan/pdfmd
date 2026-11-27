@@ -894,7 +894,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                (("on", "every build"), ("failed", "only a build that failed"), ("off", "none")), "on",
                "A plain-text file in the cache (where `cache: location` says) with the command line, the commands run, what pdfmd "
                "printed and what the engines said. A failed build prints its path; `pdfmd --last-build FILE [--failed]` shows it. "
-               "Per run: --build-log MODE.", "Messages"),
+               "Batch builds skip outputs that still match a retained record. Use --build-log MODE for one run.", "Messages"),
         text("options.build-log-keep", "How many records of a document to keep",
              "The newest ones, and the newest failed one whatever its age. Default 5.", "Messages", "config", "number"),
         text("options.build-log-max-size", "Size cap of one record (KB)",

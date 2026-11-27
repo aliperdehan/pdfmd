@@ -214,7 +214,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-presentation", dest="presentation", action="store_false",
                         help="turn off Beamer slides for this run, overriding the document's settings")
     parser.add_argument("--slide-level", type=int, help="Beamer heading level used for slide breaks")
-    parser.add_argument("-b", "--batch", action="store_true", help="build files and folders separately (folders select *.md); skip non-inputs")
+    parser.add_argument("-b", "--batch", action="store_true",
+                        help="build named files or folders of *.md. Skip non-inputs and verified build outputs.")
     parser.add_argument("-r", "--report", "--book", action="store_true",
                         help="combine all Markdown files in PATH into one PDF")
     parser.add_argument("--recursive", action="store_true",

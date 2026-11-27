@@ -13,11 +13,12 @@ def planned(source: Path, directory: Path | None, target: str) -> Path:
     return directory / (source.stem + extension) if directory else source.with_suffix(extension)
 
 
-def protected(source: Path, output: Path, target: str, metadata) -> Path:
+def protected(source: Path, output: Path, target: str, metadata, *, reserved: set[Path] | None = None,
+              source_clash: bool = False) -> Path:
     files = metadata if isinstance(metadata, list) else ([metadata] if metadata else [])
-    if target == core.ASSEMBLED_FORMAT or core.rewrite_wanted(source, files):
+    if not source_clash and (target == core.ASSEMBLED_FORMAT or core.rewrite_wanted(source, files)):
         return output
-    return core.numbered_output(output, core.rewrite_template(source, files))
+    return core.numbered_output(output, core.rewrite_template(source, files), reserved=reserved)
 
 
 def job_target(final: Path | None, source: Path, goal: str) -> Path:
