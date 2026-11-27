@@ -171,7 +171,7 @@ def frontmatter_pdfmd_options(md_path: Path) -> dict:
     unconditionally for every input, .tex and now office documents
     included, on the way to either one's own direct (non-Pandoc) branch.
     """
-    if core.yaml is None or md_path.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS:
+    if core.yaml is None or md_path.suffix.lower() in {".pdf", *core.OFFICE_INPUT_EXTENSIONS}:
         return {}
     text = md_path.read_text(encoding="utf-8-sig")
     front_matter = re.match(r"^---\s*\n(.*?)\n(?:---|\.\.\.)\s*(?:\n|$)", text, re.DOTALL)

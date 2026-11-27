@@ -11,7 +11,7 @@ import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from pdfmd_base import core as bound_core
-from pdfmd_log import document_chatter, emit, summary, transcript, verbose_output
+from pdfmd_log import CHATTER, document_chatter, emit, summary, transcript, verbose_output
 
 
 # The author wants this source-likeness ranking revised later (master queue 3fi D33).
@@ -128,9 +128,11 @@ def convert_logged(log_path, positional, options):
 def run(core, *,
         args, embed_request, embeds_preamble, engines,
         metadata_for, pandoc_options, paths, plan_bridge,
-        stamp_overrides, stop_at, target_explicit, target_format, variables) -> list:
+        stamp_overrides, stop_at, target_explicit, target_format, variables, cli_export=None) -> list:
     from functools import cache
 
+    from pdfmd_crop.build import build_target
+    from pdfmd_crop.targets import build_batch_writers
     from pdfmd_engines.tools import tool_paths
     from pdfmd_run import presentation as slides
 
@@ -161,7 +163,7 @@ def run(core, *,
         return slides.source(file, metadata_for(file, announce=False), None)
 
     @cache
-    def file_target(file):
+    def file_formats(file):
         """This file's target: the command line's, else its own default-output."""
         if file_presentation(file):
             return "beamer" if stop_at == "tex" else target_format
@@ -171,18 +173,33 @@ def run(core, *,
         chosen = default_output_format(file, found if isinstance(found, list) else ([found] if found else []))
         return chosen or target_format
 
+    def file_plan(file):
+        target, export = build_target(file_formats(file))
+        return target, cli_export or export
+
+    def file_target(file):
+        return file_plan(file)[0]
+
+    def file_output(file):
+        target, export = file_plan(file)
+        return export.primary if export else target.split(",")[0]
+
+    def separate_writers(file):
+        formats = file_formats(file).split(",")
+        return formats if len(formats) > 1 and any(name not in core.PICTURE_FORMATS for name in formats) else None
+
     # Compare the ordinary output names before rewrite protection picks a numbered copy.
     # A source must never exclude itself when its input and output suffixes coincide.
     built = set()
     for file in files:
-        planned = core.load_package("pdfmd_routing.output").planned(file, output, file_target(file)).resolve()
+        planned = core.load_package("pdfmd_routing.output").planned(file, output, file_output(file)).resolve()
         if planned != file:
             built.add(planned)
     outputs = [file for file in files if file in built]
     files = [file for file in files if file not in built]
     destinations_by_output = {}
     for file in files:
-        planned = core.load_package("pdfmd_routing.output").planned(file, output, file_target(file)).resolve()
+        planned = core.load_package("pdfmd_routing.output").planned(file, output, file_output(file)).resolve()
         destinations_by_output.setdefault(planned, []).append(file)
     collisions = []
     for group in destinations_by_output.values():
@@ -243,11 +260,20 @@ def run(core, *,
             metadata_files = given if isinstance(given, list) else [given] if given else []
             summary.select(args.summary, file, metadata_files, batch=True)
             with document_chatter(file, metadata_files), tool_paths(file, metadata_files):
-                target = file_target(file)
+                target, export = file_plan(file)
+                if formats := separate_writers(file):
+                    # The writer subprocesses each open the transcript for their actual output.
+                    chatter = CHATTER.get()
+                    if executor is not None:
+                        AUTO_LOG.flush(shown=not verbose_output(args.verbose))
+                        return executor.submit(build_batch_writers, args, file, formats, sys.argv[1:], chatter=chatter)
+                    return build_batch_writers(args, file, formats, chatter=chatter)
                 log_path = transcript.destination(args.log, file, metadata_files)
                 output_file = None
                 if log_path is not None:
-                    output_file = routing.protected(file, routing.planned(file, destinations[file], target), target, metadata_files)
+                    output_file = routing.planned(file, destinations[file], file_output(file))
+                    if export is None or export.keep_pdf:
+                        output_file = routing.protected(file, output_file, target, metadata_files)
                     if run_log is not None and log_path not in initial_logs:
                         log.pending[:0] = run_log.pending or []
                         initial_logs.add(log_path)
@@ -262,7 +288,7 @@ def run(core, *,
                                no_auto=args.no_auto, verbose=verbose, debug=args.debug, stamp_overrides=stamp_overrides,
                                keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format,
                                embed=embed_request, trust_embedded=args.trust_embedded,
-                               self_contained=args.self_contained, cache_cli=args.cache)
+                               self_contained=args.self_contained, cache_cli=args.cache, export=export)
                 if executor is not None:
                     AUTO_LOG.flush(shown=not verbose)    # what the parent found, before its worker's output
                     return executor.submit(convert_logged, log_path, positional, options)

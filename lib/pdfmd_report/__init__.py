@@ -130,8 +130,15 @@ def _run(core, *, records,
     report_kit_kinds = kit_no_auto_kinds(files[0], metadata_files, report_no_auto)
     if report_kit_kinds:
         report_no_auto = effective_no_auto(files[0], args.no_auto, report_kit_kinds)
-    target_format = default_target(files[0], metadata_files)
-    output = route.output_path(core, args, target_format)
+    from pdfmd_crop import CropError
+    from pdfmd_crop.build import build_target
+    chosen = default_target(files[0], metadata_files)
+    formats = chosen.split(",")
+    if len(formats) > 1 and any(name not in core.PICTURE_FORMATS for name in formats):
+        from pdfmd_crop.targets import multi_target_command
+        raise SystemExit(multi_target_command(args, formats=formats))
+    target_format, export = build_target(chosen)
+    output = route.output_path(core, args, target_format, export)
     log_path = transcript.destination(args.log, files[0], metadata_files)
     if target_format == "pdf":
         engines = core.select_engines(args.engine, args.presentation)
@@ -149,7 +156,7 @@ def _run(core, *, records,
         route.build(core, args=args, files=files, excluded=excluded, metadata=metadata, metadata_files=metadata_files,
                     target_format=target_format, engines=engines, variables=variables, pandoc_options=pandoc_options,
                     stamp_overrides=stamp_overrides, embed_request=embed_request, no_auto=report_no_auto,
-                    chapters=report_chapters, notes=title_notes, output=output, log_path=log_path)
+                    chapters=report_chapters, notes=title_notes, output=output, log_path=log_path, export=export)
         return
     transcript.CURRENT.get().start(log_path, files[0], output)
     BUILD.update(engine=None, failed=[], tried=[], chain=None, repaired=[], output=None)
@@ -168,6 +175,10 @@ def _run(core, *, records,
                               report_no_auto, report_reader_reason)
     if report_reader_reason:
         report_note("READER", report_reader_reason)
+    destination = output
+    output = export.output(records, destination) if export else destination
+    if export and not export.keep_pdf:
+        stamp_overrides = {**stamp_overrides, "enabled": False}
     if target_format == ASSEMBLED_FORMAT:
         # --stop-at markdown: the chapters, as one Markdown text, in the
         # order Pandoc would read them. Nothing else of the build runs.
@@ -637,7 +648,8 @@ def _run(core, *, records,
         for file in files:
             stamp_after_success(file, metadata_files, stamp_preambles, stamp_overrides,
                                 output, args.verbose, report_output=output)
-            backup_after_success(file, metadata_files, args.backup, args.verbose, args.backup_format)
+            if not export or export.keep_pdf:
+                backup_after_success(file, metadata_files, args.backup, args.verbose, args.backup_format)
         if target_format == "pdf" and crop is None:
             polish_pdf(output, list(files), args.verbose)
         if target_format == "pdf" and resolve_attach(files[0], metadata_files):
@@ -645,6 +657,12 @@ def _run(core, *, records,
                 files[0], output, list(files[1:]), metadata_files, list(stamp_preambles), report_no_auto,
                 args.verbose, report=True,
                 base=report_common_folder(files), named_reader=args.from_format, pandoc_options=pandoc_options)
+        if export:
+            try:
+                output = export.finish(output, destination, files[0], metadata_files)
+            except (CropError, OSError) as error:
+                result.returncode = 1
+                result.stderr += "\n" + str(error)
     report_problems.extend(history_record.reader_warnings())
     report_strict_failed = bool(result.returncode == 0 and report_problems and resolve_strict(files[0], metadata_files))
     history_record.finish_history(result.returncode == 0 and not report_strict_failed)

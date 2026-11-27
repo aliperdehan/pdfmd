@@ -269,18 +269,22 @@ def default_output_format(md_path: Path, metadata_files: list[Path]) -> str | No
     if md_path.suffix.lower() not in (".md", ".markdown"):
         return None
     value = cascaded_option(md_path, metadata_files, "default-output")
-    if not isinstance(value, str) or not value.strip():
-        return None
-    name = value.strip().casefold().lstrip(".")
-    name = DEFAULT_OUTPUT_ALIASES.get(name, name)
-    if name == "ascii" or name.startswith("ascii:"):
-        raise SystemExit(f"{core.display_path(md_path)}: pdfmd-options.default-output cannot be '{name}'; ASCII output is "
-                         "asked for on the command line (--to ascii) or by the output's name (-o x.ascii.txt)")
-    ASSEMBLED_FORMAT = core.ASSEMBLED_FORMAT
-    if name == ASSEMBLED_FORMAT:
-        raise SystemExit(f"{core.display_path(md_path)}: pdfmd-options.default-output cannot be "
-                         f"'{ASSEMBLED_FORMAT}'; use --stop-at markdown")
-    return name
+    names = value.split(",") if isinstance(value, str) else value if isinstance(value, list) else []
+    formats = []
+    for name in names:
+        if not isinstance(name, str):
+            raise SystemExit(f"{core.display_path(md_path)}: pdfmd-options.default-output takes format names")
+        name = name.strip().casefold().lstrip(".")
+        name = DEFAULT_OUTPUT_ALIASES.get(name, name)
+        if name == "ascii" or name.startswith("ascii:"):
+            raise SystemExit(f"{core.display_path(md_path)}: pdfmd-options.default-output cannot be '{name}'; ASCII output is "
+                             "asked for on the command line (--to ascii) or by the output's name (-o x.ascii.txt)")
+        if name == core.ASSEMBLED_FORMAT:
+            raise SystemExit(f"{core.display_path(md_path)}: pdfmd-options.default-output cannot be "
+                             f"'{core.ASSEMBLED_FORMAT}'; use --stop-at markdown")
+        if name and name not in formats:
+            formats.append(name)
+    return ",".join(formats) or None
 
 
 def html_settings(md_path: Path, metadata_files: list[Path]) -> dict:

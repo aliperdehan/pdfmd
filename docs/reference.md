@@ -77,7 +77,12 @@ or the `--setup` row. The default is off. `--no-crop` overrides the setting.
 With an existing PDF input, `--crop` writes `NAME-crop.pdf` by default.
 Ghostscript measures the ink and pypdf sets the page boxes. Use
 `--crop-pad PT` (default 2), `--crop-ignore-bottom PT` (default 0) and
-`--crop-page N` (default all pages) to adjust one run.
+`--crop-page N` (default all pages) to adjust one run. These settings and
+`image-dpi` (300 for exported pages), `image-quality` (90 for JPEG) and
+`page-folder` (on) use the same layers as `crop`. Command-line values win,
+followed by front matter, metadata, folder settings and global configuration.
+Each has a `--setup` row. Picture formats are drawn from the normal PDF
+build, after any crop. The PDF is saved as an output when the request includes `pdf`.
 
 An office document (.docx, .doc, .odt, .ott, .rtf, .pptx, .ppt, .odp,
 .xlsx, .xls, .ods) targeting PDF is a third special case, as of
@@ -699,9 +704,12 @@ to when the command line names none (no --to, no -o with a recognized
 extension, no --stop-at, no -p): any Pandoc writer name (or pdf; tex, md,
 txt, typ, htm are accepted shortcuts). It is read from the document, else
 its metadata files (a shared metadata.yaml sets it for every document that
-finds it, any one can still override it), per document in -b batch mode and
-from the first file in -r report mode. A missing PDF engine is an error
-only for a document that really builds a PDF.
+finds it, any one can still override it), then from folder settings and
+global configuration (including `--setup`). It is read per document in
+`-b` batch mode and from the first file in `-r` report mode. Use a YAML list
+such as `[pdf, png, html]` or a quoted comma-separated string. The PDF and
+its pictures share one build. Other formats each use their own writer.
+A missing PDF engine matters only for formats that use the PDF build.
 
 `pdfmd-options: {html: {...}}` shapes an HTML build; without a full
 page setting, pdfmd's HTML output stays a fragment:

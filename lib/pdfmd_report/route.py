@@ -30,10 +30,17 @@ def resolve_build(core, first: Path, metadata_files: list[Path]) -> str:
     return word
 
 
-def output_path(core, args, target_format: str) -> Path:
+def output_path(core, args, target_format: str, export=None) -> Path:
     """Where the report is written: `book.EXT` in the current folder, or in/at what `-o` names."""
-    extension = core.output_extension_for(target_format)
-    if target_format == "pdf" and args.crop and len(args.path or []) == 1:
+    output_kind = export.primary if export else target_format
+    extension = core.output_extension_for(output_kind)
+    if export and args.out:
+        from pdfmd_crop.targets import check_suffix, output_folder
+        many = export.keep_pdf or len(export.formats) > 1
+        if not many:
+            check_suffix(args.out, export.primary)
+        output_folder(args.out, many)
+    if (export or (target_format == "pdf" and args.crop)) and len(args.path or []) == 1:
         source = args.path[0].resolve()
         name = (source.name if source.is_dir() else source.stem) + extension
         if args.out is None:
@@ -44,7 +51,7 @@ def output_path(core, args, target_format: str) -> Path:
     if args.out:
         # Check is-a-directory BEFORE adding a default suffix -- a dot-less directory name (e.g. "out/") would otherwise
         # get ".pdf" appended to the directory's own name instead of being used as a directory.
-        output = args.out / f"book{extension}" if args.out.is_dir() else core.default_output_path(args.out, target_format)
+        output = args.out / f"book{extension}" if args.out.is_dir() else core.default_output_path(args.out, output_kind)
     else:
         output = Path.cwd() / f"book{extension}"
     return output.resolve()
@@ -52,9 +59,9 @@ def output_path(core, args, target_format: str) -> Path:
 
 def build(core, *, args, files: list[Path], excluded: list[Path], metadata, metadata_files: list[Path], target_format: str,
           engines: list[str], variables: list[str], pandoc_options: list[str], stamp_overrides: dict, embed_request,
-          no_auto: list[str] | None, chapters: dict, notes: list[str], output: Path, log_path: Path | None) -> None:
+          no_auto: list[str] | None, chapters: dict, notes: list[str], output: Path, log_path: Path | None, export=None) -> None:
     destination = output
-    if log_path is not None:
+    if log_path is not None and (export is None or export.keep_pdf):
         destination = core.load_package("pdfmd_routing.output").protected(files[0], output, target_format, metadata_files)
     transcript.CURRENT.get().start(log_path, files[0], destination)
     preambles: list[Path] = []
@@ -73,7 +80,7 @@ def build(core, *, args, files: list[Path], excluded: list[Path], metadata, meta
                                  stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup,
                                  backup_format=args.backup_format, extra_inputs=list(files[1:]) or None,
                                  cache_cli=args.cache, embed=embed_request, trust_embedded=args.trust_embedded,
-                                 self_contained=args.self_contained, output_resolved=log_path is not None)
+                                 self_contained=args.self_contained, output_resolved=log_path is not None, export=export)
     finally:
         core.REPORT_BUILD.clear()
     ok = bool(built[1])
@@ -90,6 +97,7 @@ def build(core, *, args, files: list[Path], excluded: list[Path], metadata, meta
             else:
                 emit("normal", None, f"YAML  {core.display_path(metadata_file)}")
     core.AUTO_LOG.flush(shown=not args.verbose)
+    output = getattr(built, "output", None) or output
     emit("result" if ok else "error", None, f"{'OK  ' if ok else 'FAIL'}  REPORT  {core.display_path(output)}" + core.time_label(built) + core.engine_label(built))
     if args.verbose:
         for line in core.time_breakdown(built):

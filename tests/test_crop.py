@@ -291,6 +291,73 @@ class Pictures(unittest.TestCase):
         done = self.run_pdfmd("doc.md", "--to", "png", "--image-dpi", "30", "--page-folder", path=self.native_path())   # the flag wins
         self.assertTrue((self.dir / "doc" / "001.png").is_file(), done.stderr)
 
+    def test_default_output_list_and_finish_use_the_same_pdf(self):
+        (self.dir / "note.md").write_text(
+            "---\npdfmd-options:\n  default-output: [PNG, pdf]\n  crop: true\n"
+            "  crop-page: 2\n  crop-pad: 5\n  image-dpi: 72\n---\n\nFirst\n\n\\newpage\n\nSecond\n",
+            encoding="utf-8",
+        )
+        done = self.run_pdfmd("note.md", "-e", "inkmd", "--no-stamp", "--no-backup", path=self.native_path())
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        pdf = self.dir / "note.pdf"
+        self.assertEqual(len(pypdf.PdfReader(str(pdf)).pages), 1)
+        left, bottom, right, top = media(pdf)
+        width, height = png_size(self.dir / "note.png")
+        self.assertAlmostEqual(width, right - left, delta=1)
+        self.assertAlmostEqual(height, top - bottom, delta=1)
+
+    def test_picture_settings_follow_metadata_and_cli(self):
+        (self.dir / "note.md").write_text("First\n\n\\newpage\n\nSecond\n", encoding="utf-8")
+        (self.dir / "metadata.yaml").write_text(
+            "pdfmd-options: {image-dpi: 36, page-folder: false, image-quality: 75}\n", encoding="utf-8",
+        )
+        config = self.dir / "config.yaml"
+        config.write_text("options: {image-dpi: 144, page-folder: true, image-quality: 0}\n", encoding="utf-8")
+        done = self.run_pdfmd("note.md", "-e", "inkmd", "-t", "jpg,png", "-y", "metadata.yaml",
+                              "--image-dpi", "72", "--no-backup", config=str(config), path=self.native_path())
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(png_size(self.dir / "note-001.png"), (595, 842))
+        self.assertTrue((self.dir / "note-002.jpg").is_file())
+        self.assertFalse((self.dir / "note.pdf").exists())
+        done = self.run_pdfmd("note.md", "-e", "inkmd", "-t", "png", "-y", "metadata.yaml",
+                              "--page-folder", "--no-backup", config=str(config), path=self.native_path())
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(png_size(self.dir / "note" / "001.png"), (298, 421))
+
+    def test_standalone_crop_uses_config_padding_page_and_bottom(self):
+        config = self.dir / "config.yaml"
+        config.write_text("options: {crop-pad: 0, crop-page: 1, crop-ignore-bottom: 20}\n", encoding="utf-8")
+        done = self.run_pdfmd("formula.pdf", "--crop", config=str(config))
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        cropped = self.dir / "formula-crop.pdf"
+        self.assertEqual(len(pypdf.PdfReader(str(cropped)).pages), 1)
+        self.assertEqual(media(cropped), [50.0, 30.0, 110.0, 50.0])
+
+    def test_batch_folder_defaults_apply_to_each_pdf_and_picture(self):
+        source = self.dir / "notes"
+        source.mkdir()
+        for name in ("a.md", "b.md"):
+            (source / name).write_text("First\n\n\\newpage\n\nSecond\n", encoding="utf-8")
+        layer = source / ".pdfmd"
+        layer.mkdir()
+        (layer / "config.yaml").write_text(
+            "options: {default-output: 'png, pdf', page-folder: off, image-dpi: 72}\n", encoding="utf-8",
+        )
+        done = self.run_pdfmd("notes", "-b", "-j", "2", "-e", "inkmd", "-o", "out", path=self.native_path())
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        for name in ("a", "b"):
+            self.assertTrue((self.dir / "out" / f"{name}.pdf").is_file())
+            self.assertEqual(png_size(self.dir / "out" / f"{name}-002.png"), (595, 842))
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_default_formats_can_include_a_separate_writer(self):
+        (self.dir / "note.md").write_text(
+            "---\npdfmd-options: {default-output: [html, PNG, pdf]}\n---\n\nHello\n", encoding="utf-8",
+        )
+        done = self.run_pdfmd("note.md", "-e", "inkmd", "-o", "out")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(sorted(path.name for path in (self.dir / "out").iterdir()), ["note.html", "note.pdf", "note.png"])
+
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_a_format_that_is_not_a_picture_is_a_run_of_its_own(self):
         (self.dir / "note.md").write_text("# T\n\ntext\n", encoding="utf-8")
@@ -329,12 +396,13 @@ class Pictures(unittest.TestCase):
     def test_batch_needs_one_folder(self):
         self.assertEqual(self.run_pdfmd("-b", "--crop", "formula.pdf").returncode, 1)
 
+    @unittest.skipUnless(shutil.which("pandoc") and shutil.which("typst"), "needs Pandoc and Typst")
     def test_a_report_is_one_result_named_after_its_folder(self):
         folder = self.dir / "rep"
         folder.mkdir()
         for name in ("01-a", "02-b"):
             (folder / f"{name}.md").write_text(f"# {name}\n\ntext\n", encoding="utf-8")
-        done = self.run_pdfmd("rep", "-r", "--crop", "--crop-ignore-bottom", "60", "--to", "png", path=self.native_path())
+        done = self.run_pdfmd("rep", "-r", "--crop", "--crop-ignore-bottom", "60", "--to", "png", "-e", "typst")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue((folder / "rep.png").is_file() or (folder / "rep" / "001.png").is_file())
 

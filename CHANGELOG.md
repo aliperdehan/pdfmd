@@ -19,6 +19,20 @@ same commit as the change.
 
 ---
 
+## v3.34.86 — 2026-11-27
+
+Pre-edit state: commit `0142bbf`. Picture exports rebuilt sources in a separate
+process and missed settings from attached metadata. Export pictures from the
+normal PDF build and share that PDF across all picture targets. Read the crop
+and picture controls through the document, metadata, folder, config and
+command-line layers, with setup rows. Accept a list of default formats.
+Regressions exercise a shared cropped PDF and PNG, metadata precedence and
+standalone crop settings.
+
+The replay keeps the current tool-path and diagnostic scopes, including the direct-build record. The setup default is restored by the last patch in this series.
+
+---
+
 ## v3.34.85 — 2026-11-27
 
 Pre-edit state: commit `4294041`. [tables] Pandoc's Markdown reader gave long pipe tables with equal separator

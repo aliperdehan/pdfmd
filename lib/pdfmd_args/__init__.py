@@ -531,10 +531,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "Calibre writes: azw3, mobi, kepub, lit, lrf, pdb, rb, snb, tcr, pmlz, htmlz, txtz. "
                              "Default is pdf. An -o/--out filename with a recognized extension "
                              "(single-file/report modes only, e.g. -o notes.html) implies this too; "
-                             "an explicit --to always wins. No PDF engine is involved, or required "
-                             "to be installed, for a non-pdf target -- Pandoc writes that format directly. "
-                             "Also png, jpg, tiff, eps, ps, svg (pictures; see --crop), and a list without spaces: "
-                             "--to png,docx,tex (one run each; -o is then a folder)")
+                             "an explicit --to always wins. png, jpg, tiff, eps, ps and svg are made from a PDF build. "
+                             "For a comma-separated list (e.g. --to pdf,png,docx), the PDF and pictures share a build, "
+                             "and -o names a folder. Also pdfmd-options.default-output and --setup")
     parser.add_argument("--from", dest="from_format", default=None, metavar="FORMAT",
                         type=lambda reader: core.load_package("pdfmd_reader").markdown_reader_alias(reader),
                         help="Pandoc source format override (no short flag: -f is --font). Only needed "
@@ -665,14 +664,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "Also pdfmd-options: {crop: true} and --setup (default off). --no-crop overrides the setting. "
                              "Needs Ghostscript and pypdf. Options: --crop-pad, --crop-ignore-bottom, --crop-page")
     parser.add_argument("--crop-pad", type=float, default=None, metavar="PT",
-                        help="with --crop: points of room left around the ink (default 2)")
+                        help="with --crop: points of room left around the ink (default 2); also pdfmd-options.crop-pad and --setup")
     parser.add_argument("--crop-ignore-bottom", type=float, default=None, metavar="PT",
-                        help="with --crop: do not look at the bottom PT points of each page (a page number); default 0")
+                        help="with --crop: ignore the bottom PT points of each page (default 0); also pdfmd-options.crop-ignore-bottom and --setup")
     parser.add_argument("--image-dpi", type=float, default=None, metavar="DPI",
                         help="pixels per inch: SVG images and raster diagrams (default 192), exported png, jpg or tiff pages (300); "
                              "also pdfmd-options: {image-dpi: N} and --setup")
     parser.add_argument("--image-quality", type=int, default=None, metavar="1-100",
-                        help="with --to jpg: the JPEG quality (default 90)")
+                        help="with --to jpg: the JPEG quality (default 90); also pdfmd-options.image-quality and --setup")
     parser.add_argument("--page-numbers", action=argparse.BooleanOptionalAction, default=None,
                         help="keep the writer's page numbering (the default), or suppress it with --no-page-numbers. "
                              "Also pdfmd-options: {page-numbers: off} and --setup. A Markdown --crop build suppresses "
@@ -680,9 +679,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--page-folder", action=argparse.BooleanOptionalAction, default=None,
                         help="with a picture target of several pages: put them in a folder NAME/ (001.png ...; the default) "
                              "or, with --no-page-folder, beside the document as NAME-001.png ... (also `pdfmd-options: "
-                             "{page-folder: false}`)")
+                             "{page-folder: false}` and --setup)")
     parser.add_argument("--crop-page", type=int, default=None, metavar="N",
-                        help="with --crop: keep page N alone, cropped (default: every page, each to its own ink)")
+                        help="with --crop: keep page N alone, cropped (default all pages); also pdfmd-options.crop-page and --setup")
     parser.add_argument("--editor", metavar="CMD", default=None,
                         help="with --edit: an editor of your own instead of the built-in one (\"code --wait\", \"vim\"); "
                              "the file is watched and rebuilt on every save. On a PDF that carries its source the "

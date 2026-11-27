@@ -185,27 +185,24 @@ def convert_qmd(source: Path, output: Path, target_format: str,
     return source, result.returncode == 0, (result.stdout + result.stderr)[-3000:]
 
 
-def build_standalone(kind, source, output, metadata_files, target_format, args, variables, pandoc_options):
+def build_standalone(kind, source, output, metadata_files, target_format, args, variables, pandoc_options, *, export=None):
     """Build directly, with the same record and timing as the Pandoc route."""
     from pdfmd_buildinfo.build import build_record
-    from pdfmd_crop.build import prepare as prepare_crop
+    from pdfmd_crop.build import finish_direct
+
+    def build(destination):
+        if kind == "quarto":
+            return core.convert_qmd(source, destination, target_format, variables, pandoc_options, args.verbose)
+        settings = core.config_options().get("apply-defaults", False) if args.apply_defaults is None else args.apply_defaults
+        return core.convert_direct(kind, source, destination, args.engine, args.verbose, args.debug,
+                                   apply_defaults=settings not in (False, "false", "False", 0, ""),
+                                   metadata_request=args.metadata_file)
 
     core.BUILD.update(engine=None, failed=[], tried=[], chain=None, repaired=[], output=None)
     core.begin_timer()
     with build_record(source, metadata_files) as recorder:
-        with core.warning_capture() as seen, prepare_crop(
-                source, output, metadata_files, target_format, args.verbose) as crop:
-            if kind == "quarto":
-                result = core.convert_qmd(source, output, target_format, variables, pandoc_options, args.verbose)
-            else:
-                settings = core.config_options().get("apply-defaults", False) if args.apply_defaults is None else args.apply_defaults
-                result = core.convert_direct(kind, source, output, args.engine, args.verbose, args.debug,
-                                             apply_defaults=settings not in (False, "false", "False", 0, ""),
-                                             metadata_request=args.metadata_file)
-            if result[1]:
-                core.BUILD["output"] = output
-                if crop is not None and (problem := crop()):
-                    result = source, False, problem
+        with core.warning_capture() as seen:
+            result = finish_direct(source, output, metadata_files, target_format, args.verbose, export, build)
         built = core.finish_build(result, seen, source, [])
         if built[1]:
             core.backup_after_success(source, [], args.backup, args.verbose, args.backup_format)

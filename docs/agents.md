@@ -209,6 +209,10 @@ with Pandoc's own `-H FILE`, which pdfmd passes on.
 
 Use `--crop` or `pdfmd-options: {crop: true}` to crop the PDF of a build
 to its ink. The default is off. `--no-crop` overrides a saved setting.
+Use `default-output: [pdf, png]` in `pdfmd-options` to save both from
+one build. Set `crop-pad`, `crop-ignore-bottom`, `crop-page`, `image-dpi`,
+`image-quality` and `page-folder` in `pdfmd-options` or through `--setup`.
+The matching command-line flags override these defaults.
 
 A trailing numbered list of web sources and matching markers such as
 `[1]` or `[1, 3]` become Pandoc citations in the pdfmd and Obsidian flavours.

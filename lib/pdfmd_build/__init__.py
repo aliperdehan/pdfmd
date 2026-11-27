@@ -1085,7 +1085,7 @@ def set_soffice_limit(md_path: Path, metadata_files: list[Path]) -> None:
 
 
 @scoped
-def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quoted, never evaluated: pdfmd.py's Built
+def convert_one(md_path: Path, *args, export=None, **kwargs) -> "Built":  # noqa: F821 -- quoted, never evaluated: pdfmd.py's Built
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
     core.BUILD["engine"], core.BUILD["failed"], core.BUILD["output"], core.BUILD["sources"], core.BUILD["partial"], core.BUILD["root"] = None, [], None, [], None, None
     core.BUILD.pop("bibliography-discovery", None)
@@ -1098,12 +1098,22 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
     given = bound.get("metadata_file")
     metadata_files = given if isinstance(given, list) else ([given] if given else [])
     from pdfmd_engines.tools import tool_paths
-    with document_chatter(md_path, metadata_files), tool_paths(md_path, metadata_files):
+    with document_chatter(md_path, metadata_files), tool_paths(md_path, metadata_files), contextlib.ExitStack() as stack:
         bound["verbose"] = verbose_output(bound.get("verbose", False))
         core.deferred("pdfmd_engines.memory", "set_limit")(md_path, metadata_files)
         set_soffice_limit(md_path, metadata_files)
         recorder = core.load_package("pdfmd_buildinfo.build").BuildRecorder.start(md_path, metadata_files)
         try:
+            if export is not None:
+                from pdfmd_crop import CropError
+
+                destination = bound.get("output_file") or core.load_package("pdfmd_routing.output").planned(
+                    md_path, bound.get("out_dir"), export.primary)
+                bound["output_file"] = export.output(stack, destination)
+                if not export.keep_pdf:
+                    bound["output_resolved"] = True
+                    bound["stamp_overrides"] = {**(bound.get("stamp_overrides") or {}), "enabled": False}
+                    bound["backup"] = False
             with core.warning_capture() as seen:
                 pdfmd_cache.check_location(md_path, metadata_files,
                                            False if bound.get("target_format") in core.HTML_TARGETS else bound.get("cache_cli"))
@@ -1113,7 +1123,16 @@ def convert_one(md_path: Path, *args, **kwargs) -> "Built":  # noqa: F821 -- quo
                     core.load_package("pdfmd_shrink").shrink_output(core.BUILD["output"], md_path, metadata_files, bound["verbose"])
                     core.check_output_budget(core.BUILD["output"], core.BUILD["sources"] or [md_path], md_path, metadata_files)
                     history_record.reader_warnings()
+                    if export is not None:
+                        try:
+                            pdf = core.BUILD["output"]
+                            core.BUILD["output"] = export.finish(
+                                pdf, pdf if export.keep_pdf else destination, md_path, metadata_files)
+                        except (CropError, OSError) as error:
+                            result = md_path, False, str(error)
             built = finish_build(result, seen, md_path, metadata_files)
+            if export is not None:
+                built.picture_export = True
             history_record.finish_history(built[1])
         except BaseException as error:
             history_record.finish_history(False)

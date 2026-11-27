@@ -160,6 +160,7 @@ def _run_main(tools, document_tools) -> None:
     if args.verbose and core.config_path() is None:
         core.load_package("pdfmd_config").note_config_off()
     args.to_many = None
+    args.original_source_paths = tuple(str(path) for path in args.path or [])
     if args.to and "," in args.to:
         # `--to png,pdf`: several picture formats from one build (see picture_command)
         wanted = []
@@ -168,6 +169,8 @@ def _run_main(tools, document_tools) -> None:
             name = core.DEFAULT_OUTPUT_ALIASES.get(name, name)
             if name and name not in wanted:
                 wanted.append(name)
+        if not wanted:
+            raise SystemExit("--to needs at least one output format")
         args.to_many, args.to = wanted, wanted[0]
     if args.to:
         # `--to md`, `--to tex`, `--to typ`: the names of the files, as `default-output:` takes them
@@ -231,6 +234,7 @@ def _run_main(tools, document_tools) -> None:
                       bookmarks=args.bookmarks or bool(configured.get("bookmarks")),
                       attach_links=args.attach_links or bool(configured.get("attach-links")),
                       crop=(args.crop, args.crop_pad, args.crop_ignore_bottom, args.crop_page),
+                      **{"image-quality": args.image_quality, "page-folder": args.page_folder},
                       info={POLISH_INFO_KEYS[name]: getattr(args, f"pdf_{name}")
                             for name in POLISH_INFO_KEYS if getattr(args, f"pdf_{name}")})
     if args.restore is not None:
@@ -375,19 +379,18 @@ def _run_main(tools, document_tools) -> None:
         if status is not None:
             raise SystemExit(status)
     pdf_input = any(path.suffix.casefold() == ".pdf" for path in args.path or [])
-    if (args.crop is False or (args.crop is None and pdf_input)) and any(
+    if args.crop is False and any(
             value is not None for value in (args.crop_pad, args.crop_ignore_bottom, args.crop_page)):
         from pdfmd_crop.build import CROP_OPTIONS_REQUIRED
         raise SystemExit(CROP_OPTIONS_REQUIRED)
-    if args.image_quality is not None and not (args.crop or args.to_many or core.picture_target(args) in core.PICTURE_ONLY):
-        raise SystemExit("--image-quality goes with --to png, jpg, tiff, eps, ps or svg")
     if (args.image_dpi is not None and args.path and all(path.suffix.lower() == ".pdf" for path in args.path)
             and not (args.crop or args.to_many or core.picture_target(args) in core.PICTURE_ONLY)):
         raise SystemExit("--image-dpi on a PDF input goes with --to png, jpg, tiff, eps, ps or svg")
-    if args.to_many:
+    if args.to_many and any(target not in core.PICTURE_FORMATS for target in args.to_many):
         raise SystemExit(core.multi_target_command(args))
     picture = core.picture_target(args)
-    if picture in core.PICTURE_ONLY or (args.crop and (pdf_input or picture not in (None, "pdf"))):
+    if pdf_input and (args.crop or picture in core.PICTURE_ONLY or args.to_many
+                      or any(value is not None for value in (args.crop_pad, args.crop_ignore_bottom, args.crop_page))):
         raise SystemExit(core.picture_command(args))
     if args.check_docx:
         raise SystemExit(core.check_docx_command(args, pandoc_options))
@@ -589,6 +592,11 @@ def _run_main(tools, document_tools) -> None:
         or (core.format_from_output(args.out) if args.out and not args.batch else None)
         or "pdf"
     )
+    from pdfmd_crop.build import build_target
+    from pdfmd_crop.targets import check_suffix, output_folder
+    if args.to_many and len(args.to_many) > 1:
+        output_folder(args.out, True)
+    target_format, cli_export = build_target(",".join(args.to_many or [target_format]))
     target_format, ascii_named = core.split_ascii_target(target_format)      # `-o notes.ascii.txt`
     core.ASCII_CLI["on"] = core.ASCII_CLI["on"] or ascii_named
     if cli_presentation:
@@ -736,6 +744,7 @@ def _run_main(tools, document_tools) -> None:
         return target_format, None
 
     convert_job = None
+    export = cli_export
     if single_input:
         target_format, convert_job = plan_bridge(target_format)
     if (args.engine is not None and target_format != "pdf" and stop_at != "markdown"
@@ -745,7 +754,7 @@ def _run_main(tools, document_tools) -> None:
               "no PDF engine is involved", file=sys.stderr)
     # Explicit: the command line named a format (or a stage), so a document's
     # pdfmd-options.default-output does not apply.
-    target_explicit = (stop_at is not None or bool(args.to) or presentation or args.crop is True
+    target_explicit = (stop_at is not None or bool(args.to) or presentation
                        or bool(core.format_from_output(args.out) if args.out and not args.batch else None))
     engines: list[str] = []
     engines_error: SystemExit | None = None
@@ -773,7 +782,7 @@ def _run_main(tools, document_tools) -> None:
                 slides.validate(request, target_format, stop_at, report=True)
             plan_bridge(target_format)
         if target_explicit:
-            return target_format
+            return ",".join(args.to_many) if args.to_many else cli_export.primary if cli_export else target_format
         chosen = core.default_output_format(document, metadata_files)
         if chosen and chosen != target_format:
             emit("normal", "OUTPUT", f"AUTO OUTPUT  {core.display_path(document)}: default-output {chosen} (pdfmd-options)")
@@ -840,7 +849,7 @@ def _run_main(tools, document_tools) -> None:
         results = run_batch(core, args=args, embed_request=embed_request, embeds_preamble=embeds_preamble,
                             engines=engines, metadata_for=metadata_for,
                             pandoc_options=pandoc_options, paths=paths, plan_bridge=plan_bridge, stamp_overrides=stamp_overrides,
-                            stop_at=stop_at, target_explicit=target_explicit, target_format=target_format,
+                            stop_at=stop_at, target_explicit=target_explicit, target_format=target_format, cli_export=cli_export,
                             variables=variables)
     else:
         if not single_input:
@@ -862,12 +871,25 @@ def _run_main(tools, document_tools) -> None:
         elif section_plan is not None:
             output_stem = section_plan.output_stem
         source_metadata = core.scaffold_metadata_files(source, args.metadata_file)
-        target_format = default_target(source, source_metadata)
+        chosen = default_target(source, source_metadata)
+        if "," in chosen and any(name not in core.PICTURE_FORMATS for name in chosen.split(",")):
+            raise SystemExit(core.multi_target_command(args, formats=chosen.split(","), source=paths[0]))
+        target_format, export = build_target(chosen)
+        if cli_export is not None:
+            export = cli_export
+        if "," in chosen:
+            output_folder(args.out, True)
+        if export is not None and args.out and not export.keep_pdf and len(export.formats) == 1:
+            check_suffix(args.out, export.primary)
+            output_folder(args.out, False)
+        elif args.image_quality is not None and export is None and not args.crop:
+            raise SystemExit("--image-quality goes with a picture output format")
         direct_kind = (core.direct_route(source, target_format, args.from_format, args.no_auto, args.engine)
                        if scaffold_plan is None and section_plan is None and not presentation else None)
         if direct_kind is None and not presentation:
             need_engines(target_format)
-        output_extension = core.output_extension_for(target_format, source)
+        output_kind = export.primary if export is not None else target_format
+        output_extension = core.output_extension_for(output_kind, source)
         out_dir = None
         output_file = None
         if args.out and not args.destination_cwd and args.out.is_dir():
@@ -877,12 +899,14 @@ def _run_main(tools, document_tools) -> None:
             out_dir = args.out.resolve()
         elif args.out:
             requested_output = Path.cwd() / args.out.name if args.destination_cwd else args.out.resolve()
-            output_file = core.default_output_path(requested_output, target_format)
+            output_file = core.default_output_path(requested_output, output_kind)
         elif args.destination_cwd:
             output_file = Path.cwd() / f"{output_stem}{output_extension}"
         output = output_file or ((out_dir / f"{output_stem}{output_extension}") if out_dir
                                  else source.with_name(f"{output_stem}{output_extension}"))
-        output = output_file = core.load_package("pdfmd_routing.output").single(source, output, convert_job, target_format, metadata_for)
+        if export is None or export.keep_pdf:
+            output = core.load_package("pdfmd_routing.output").single(source, output, convert_job, target_format, metadata_for)
+        output_file = output
         log_metadata = metadata_for(source, announce=False) if source.suffix.lower() != ".qmd" else None
         log_metadata = log_metadata if isinstance(log_metadata, list) else [log_metadata] if log_metadata else []
         transcript.CURRENT.get().start(transcript.destination(args.log, source, log_metadata),
@@ -890,7 +914,7 @@ def _run_main(tools, document_tools) -> None:
         if source.suffix.lower() == ".qmd" or direct_kind is not None:
             from pdfmd_direct.route import build_standalone
             kind, crop_metadata = (("quarto", []) if source.suffix.lower() == ".qmd" else (direct_kind, source_metadata))
-            results = [build_standalone(kind, source, output, crop_metadata, target_format, args, variables, pandoc_options)]
+            results = [build_standalone(kind, source, output, crop_metadata, target_format, args, variables, pandoc_options, export=export)]
         elif source.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS:
             # A binary office document (.docx/.pptx/.xlsx/.odt/etc.) has no
             # YAML front matter, documentclass, or LaTeX preamble to go
@@ -908,7 +932,7 @@ def _run_main(tools, document_tools) -> None:
             # document never has and can't be read as (same crash as
             # above) -- engines (from select_engines(args.engine, ...) at
             # the top of main()) is used as-is.
-            results = [core.convert_one(source, out_dir, False, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, output_resolved=True)]
+            results = [core.convert_one(source, out_dir, False, args.font, engines, variables, args.slide_level, pandoc_options, None, output_file, [], target_format=target_format, from_format=args.from_format, no_auto=args.no_auto, verbose=args.verbose, debug=args.debug, stamp_overrides=stamp_overrides, keep_aux=args.keep_aux, backup=args.backup, backup_format=args.backup_format, output_resolved=True, export=export)]
         else:
             if scaffold_plan is not None or section_plan is not None:
                 # _convert_one derives the output name from the document's own
@@ -937,7 +961,8 @@ def _run_main(tools, document_tools) -> None:
                                    source_override=((section_plan.text, section_plan.shifted)
                                                     if section_plan is not None else None),
                                    full_override=(section_plan.full_text if section_plan is not None else None),
-                                   calc_text_override=(section_plan.calc_text if section_plan is not None else None), output_resolved=True)]
+                                   calc_text_override=(section_plan.calc_text if section_plan is not None else None),
+                                   output_resolved=True, export=export)]
             if section_plan is not None and results[0][1] and target_format != core.ASSEMBLED_FORMAT:
                 if core.LAST_WHOLE:
                     emit("note", None, "NOTE  section build: the whole document was numbered and this section kept, so its "
@@ -994,7 +1019,7 @@ def _run_main(tools, document_tools) -> None:
                       "environment pdfmd does not know, so a reference to one outside this build prints ?? rather "
                       "than the number of the heading before it (--seed-labels draft counts them exactly)")
         if args.open and results[0][1]:
-            core.open_file(output)
+            core.open_file(getattr(results[0], "output", None) or output)
     if convert_job is not None:
         results = core.finish_convert_job(convert_job, results, args.verbose)
     failures = [result for result in results if not result[1]]
@@ -1008,7 +1033,10 @@ def _run_main(tools, document_tools) -> None:
             if verbose_output(args.verbose):
                 for line in core.time_breakdown(result):
                     emit("verbose", None, line)
-            emit_outcome(error, ok)
+            if not ok and error and (export is not None or getattr(result, "picture_export", False)):
+                emit("error", None, error, file=sys.stderr, counted=False)
+            else:
+                emit_outcome(error, ok)
             if getattr(result, "record_path", None) and (verbose_output(args.verbose) or not ok):
                 emit("verbose" if ok else "error", None,
                      f"{'      full record: ' if not ok else 'RECORD  '}{core.under_home(result.record_path)}",

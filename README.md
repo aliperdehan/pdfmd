@@ -864,10 +864,9 @@ machine that has Ghostscript and pypdf. A rotated page is handled; a page that d
 - `--crop-pad PT` sets the room around the ink (default 2); `--crop-ignore-bottom PT` leaves the foot of each page out of the
   measurement (for example, a page number already in a PDF). `--crop-page N` keeps page N alone.
   Markdown sources are built with page numbers suppressed for cropping. Give `--page-numbers` to keep the writer's numbering.
-- **Several at once.** `--to png,pdf`, `--to png,docx,tex` (no spaces, or quote the list): pdfmd runs once per format that is not a
-  picture (the same command line with that `--to`: a plain `pdf` is an ordinary build, with its stamp and backup, unless `--crop`
-  cuts it) and once for the pictures, which are cropped and drawn together. Each result sits beside the others; `-o` is then a
-  folder. A document cannot yet ask for this itself (`default-output` takes one format).
+- **Several at once.** With `--to pdf,png,docx`, pdfmd draws the pictures from the same PDF that it saves
+  and builds the Word document separately. Each result sits beside the others. Use a directory for `-o`.
+  Set `pdfmd-options: {default-output: [pdf, png]}` to choose a list when the command line names no format.
 - **Targets.** `--to pdf` (the default), `png`, `jpg` (`jpeg`), `tiff` (`tif`), `eps`, `ps` or `svg`; `-o x.png` picks the format by its suffix. PNG is drawn by
   Ghostscript on a transparent background at `--image-dpi` (default 300); JPEG the same on white, at `--image-quality` (default 90); `tiff` (LZW, white, all pages in one file), `eps` (vector; one file per page, its box is the ink) and `ps` (vector, all pages in one file); SVG by `pdftocairo` (poppler) or else `mutool` (MuPDF). `--to png|svg`
   draws the whole page when cropping is off.
@@ -877,11 +876,15 @@ machine that has Ghostscript and pypdf. A rotated page is handled; a page that d
   or the `--setup` row) writes `NAME-001.png` ... beside the document instead.
 - **Names.** A normal PDF build writes its cropped result to the usual output
   path. When an existing PDF is the source, the default output is `NAME-crop.pdf`.
-  Picture exports use a temporary PDF and leave the build stamp and backup alone.
+  A picture-only export uses the normal PDF build with a temporary output and suppresses the stamp and backup.
 - `--crop` with `--to docx`, `odt`, `html` ... is an error: those have no page to cut.
 - **Many files.** Name them (`pdfmd *.tex --crop -o out/`, a PDF, Markdown or anything pdfmd builds), or use `-b` on a folder
   (`pdfmd notes -b --crop -o out/ -j 4`: its `*.md`, `--recursive` for subfolders; `-j` files at a time). `-r` makes one result
   of a report folder, named after the folder; `-p` draws a picture per slide.
+
+`crop-pad`, `crop-ignore-bottom`, `crop-page`, `image-dpi`, `image-quality` and `page-folder` are also
+`pdfmd-options` keys in front matter or metadata. Folder settings, global configuration and `--setup`
+provide defaults. Command-line values take precedence.
 
 ### A small editor
 
