@@ -42,6 +42,7 @@ def optional(module: str) -> bool:
 def reports():
     for name in ("ghostscript", "mutool", "pdftocairo", "pdftoppm", "sips"):
         yield name, find(name), None
+    yield "ImageMagick", find("magick"), None
     for name, module in (("pypdfium2", "pypdfium2"), ("Pillow", "PIL")):
         yield name, None, "Python module" if optional(module) else None
 

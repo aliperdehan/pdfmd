@@ -531,7 +531,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "Calibre writes: azw3, mobi, kepub, lit, lrf, pdb, rb, snb, tcr, pmlz, htmlz, txtz. "
                              "Default is pdf. An -o/--out filename with a recognized extension "
                              "(single-file/report modes only, e.g. -o notes.html) implies this too; "
-                             "an explicit --to always wins. png, jpg, tiff, eps, ps and svg are made from a PDF build. "
+                             "an explicit --to always wins. png, jpg, tiff, eps, ps, svg and webp are made from a PDF build. "
                              "For a comma-separated list (e.g. --to pdf,png,docx), the PDF and pictures share a build, "
                              "and -o names a folder. Also pdfmd-options.default-output and --setup")
     parser.add_argument("--from", dest="from_format", default=None, metavar="FORMAT",
@@ -669,10 +669,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--crop-ignore-bottom", type=float, default=None, metavar="PT",
                         help="with --crop: ignore the bottom PT points of each page (default 0); also pdfmd-options.crop-ignore-bottom and --setup")
     parser.add_argument("--image-dpi", type=float, default=None, metavar="DPI",
-                        help="pixels per inch: SVG images and raster diagrams (default 192), exported png, jpg or tiff pages (300); "
+                        help="pixels per inch: SVG images and raster diagrams (default 192), exported png, jpg, tiff or webp pages (300); "
                              "also pdfmd-options: {image-dpi: N} and --setup")
     parser.add_argument("--image-quality", type=int, default=None, metavar="1-100",
-                        help="with --to jpg: the JPEG quality (default 90); also pdfmd-options.image-quality and --setup")
+                        help="JPEG or WebP export quality (default 90); also pdfmd-options.image-quality and --setup")
+    parser.add_argument("--image-background", default=None, metavar="COLOUR",
+                        help="paint this colour behind exported pages, e.g. white or '#ddeeff'. Default transparent "
+                             "for formats with alpha and white for opaque raster formats. Use transparent to restore "
+                             "the format default. Also pdfmd-options.image-background and --setup")
     parser.add_argument("--page-numbers", action=argparse.BooleanOptionalAction, default=None,
                         help="keep the writer's page numbering (the default), or suppress it with --no-page-numbers. "
                              "Also pdfmd-options: {page-numbers: off} and --setup. A Markdown --crop build suppresses "

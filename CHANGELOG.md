@@ -19,6 +19,17 @@ same commit as the change.
 
 ---
 
+## v3.34.88 — 2026-11-27
+
+Pre-edit state: commit `13c1135`. Picture exports only had their built-in
+backgrounds and could not write WebP. Add layered `image-background` with a
+setup row and paint a requested colour after cropping. Keep the format
+defaults for transparency and opaque backgrounds. Encode WebP with Pillow
+first and ImageMagick as a fallback, using the shared image quality and DPI
+settings. Regressions inspect PNG, JPEG and WebP backgrounds and alpha.
+
+---
+
 ## v3.34.87 — 2026-11-27
 
 Pre-edit state: commit `f6bf7c0`. A missing or broken converter stopped PDF

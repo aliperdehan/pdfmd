@@ -13,7 +13,7 @@ from pdfmd_base import core
 from pdfmd_log import emit
 
 
-PICTURE_ONLY = ("png", "jpg", "tiff", "eps", "ps", "svg")   # the targets only this command writes
+PICTURE_ONLY = ("png", "jpg", "tiff", "eps", "ps", "svg", "webp")
 
 
 PICTURE_FORMATS = ("pdf", *PICTURE_ONLY)
@@ -30,7 +30,7 @@ ASSEMBLED_SUFFIX = ".assembled.md"
 # missing here fall back to ".<format>" -- a reasonable guess, since Pandoc's
 # own format names are usually also their file extension.
 FORMAT_EXTENSION = {
-    "pdf": ".pdf", "png": ".png", "svg": ".svg", "jpg": ".jpg", "tiff": ".tiff", "eps": ".eps", "ps": ".ps",
+    "pdf": ".pdf", "png": ".png", "svg": ".svg", "jpg": ".jpg", "tiff": ".tiff", "eps": ".eps", "ps": ".ps", "webp": ".webp",
     "html": ".html", "html4": ".html", "html5": ".html", "chunkedhtml": ".html",
     "latex": ".tex", "beamer": ".tex", "context": ".tex",
     "typst": ".typ",
@@ -67,7 +67,7 @@ EXTENSION_FORMAT = {
     ".md": "markdown", ".markdown": "markdown",
     ".docx": "docx", ".odt": "odt", ".pptx": "pptx",
     ".epub": "epub", ".rst": "rst", ".org": "org", ".rtf": "rtf", ".adoc": "asciidoc",
-    ".json": "json", ".pdf": "pdf", ".png": "png", ".svg": "svg", ".jpg": "jpg", ".jpeg": "jpg", ".tif": "tiff", ".tiff": "tiff", ".eps": "eps", ".ps": "ps",
+    ".json": "json", ".pdf": "pdf", ".png": "png", ".svg": "svg", ".jpg": "jpg", ".jpeg": "jpg", ".tif": "tiff", ".tiff": "tiff", ".eps": "eps", ".ps": "ps", ".webp": "webp",
     **{"." + name: name for name in CALIBRE_ONLY_FORMATS},
     ".doc": "doc",                                                    # LibreOffice writes it (v3.29.1; see soffice_goal)
 }

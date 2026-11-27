@@ -83,6 +83,7 @@ UNSET = {
     "options.crop": "off",
     "options.crop-pad": "2 pt", "options.crop-ignore-bottom": "0 pt", "options.crop-page": "all pages",
     "options.image-quality": "90", "options.default-output": "pdf",
+    "options.image-background": "transparent where supported, white for opaque raster formats",
     "options.no-auto": "nothing switched off", "options.auto.explicit-only": "none", "options.auto.on": "none",
     "options.dialect-detect": "basic", "options.flavour": "auto: obsidian in a vault, pdfmd elsewhere", "options.embed-px-to-pt": "0.75 (1 CSS pixel)", "options.embed-fit": "text-width", "options.embed-search": "vault", "options.single-newline": "the flavour's: a line break in obsidian (or as the vault says), a space elsewhere", "options.unclosed-comment": "hide in an Obsidian vault (the rest of the note, as Obsidian does), keep elsewhere",
     "options.page-numbers": "keep the writer's page numbering",
@@ -923,8 +924,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "Output", check="number"),
         text("options.crop-page", "Crop and keep only this page", "Counts from 1. Leave unset for all pages. Per run: --crop-page.",
              "Output", check="positive"),
-        text("options.image-quality", "JPEG export quality", "A whole number from 1 to 100, default 90. Per run: --image-quality.",
+        text("options.image-quality", "JPEG and WebP export quality", "A whole number from 1 to 100, default 90. Per run: --image-quality.",
              "Output", check="positive"),
+        text("options.image-background", "Background of exported pages", "A colour name or hex colour such as #ddeeff. "
+             "Transparent uses the format's default. Per run: --image-background.", "Output"),
         # -- checks and limits
         choice("options.chatter", "How much a build says",
                (("off", "errors on stderr"), ("result", "the final OK line"), ("warnings", "results, warnings and errors"),
@@ -953,7 +956,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "(-1): no limit. Per document: `soffice-timeout` in `pdfmd-options`.", "Checks and limits", "config", "number"),
         text("options.image-dpi", "Raster image resolution (pixels per inch)",
              "A number above 0. SVG images and raster diagrams default to 192 (the existing diagram resolution); "
-             "exported pages (--to png, jpg, tiff) default to 300. Per run: --image-dpi. "
+             "exported pages (--to png, jpg, tiff, webp) default to 300. Per run: --image-dpi. "
              "Per document: image-dpi in pdfmd-options. Vector PDFs keep their size.", "Output", "config", "number"),
         text("options.diagram-timeout", "Time limit of one diagram tool run (seconds)",
              "mmdc, dot, d2 and the converters behind them: a run that takes longer is stopped, with the process it started, "

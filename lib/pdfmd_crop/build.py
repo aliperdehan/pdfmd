@@ -96,10 +96,11 @@ def draw_targets(pdf, destination, formats, document, metadata, *, exact=False) 
     quality = number(document, metadata, "image-quality", core.POLISH_CLI.get("image-quality"),
                      DEFAULT_QUALITY, 1, integer=True, maximum=100)
     folder = core.option_flag(setting(document, metadata, "page-folder", core.POLISH_CLI.get("page-folder"))) is not False
+    background = setting(document, metadata, "image-background", core.POLISH_CLI.get("image-background"))
     written = []
     for target in formats:
         target_path = destination if exact else destination.with_suffix(core.output_extension_for(target))
-        made = pictures(pdf, target_path, target, dpi, quality, folder)
+        made = pictures(pdf, target_path, target, dpi, quality, folder, background=background)
         if len(made) > 1:
             where = "beside it" if made[0].parent == target_path.parent else f"in {core.display_path(made[0].parent)}/"
             emit("note", None, f"NOTE  {len(made)} pages: one {target} each, {where}", file=sys.stderr)

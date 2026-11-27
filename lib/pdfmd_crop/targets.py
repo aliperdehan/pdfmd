@@ -107,7 +107,7 @@ def picture_destination(output: Path | None, home: Path, name: str) -> Path:
 # 3.31.28. The PDF and all of its derivatives share one normal PDF invocation.
 _TARGET_OPTIONS = {"-t": 1, "--to": 1}
 _PICTURE_OPTIONS = {"--crop": 0, "--no-crop": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1,
-                    "--image-quality": 1, "--page-folder": 0, "--no-page-folder": 0}
+                    "--image-quality": 1, "--image-background": 1, "--page-folder": 0, "--no-page-folder": 0}
 
 
 def kept_arguments(argv, options, paths=()):

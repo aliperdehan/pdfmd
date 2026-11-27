@@ -234,7 +234,8 @@ def _run_main(tools, document_tools) -> None:
                       bookmarks=args.bookmarks or bool(configured.get("bookmarks")),
                       attach_links=args.attach_links or bool(configured.get("attach-links")),
                       crop=(args.crop, args.crop_pad, args.crop_ignore_bottom, args.crop_page),
-                      **{"image-quality": args.image_quality, "page-folder": args.page_folder},
+                      **{"image-quality": args.image_quality, "image-background": args.image_background,
+                         "page-folder": args.page_folder},
                       info={POLISH_INFO_KEYS[name]: getattr(args, f"pdf_{name}")
                             for name in POLISH_INFO_KEYS if getattr(args, f"pdf_{name}")})
     if args.restore is not None:
@@ -385,7 +386,7 @@ def _run_main(tools, document_tools) -> None:
         raise SystemExit(CROP_OPTIONS_REQUIRED)
     if (args.image_dpi is not None and args.path and all(path.suffix.lower() == ".pdf" for path in args.path)
             and not (args.crop or args.to_many or core.picture_target(args) in core.PICTURE_ONLY)):
-        raise SystemExit("--image-dpi on a PDF input goes with --to png, jpg, tiff, eps, ps or svg")
+        raise SystemExit("--image-dpi on a PDF input goes with a picture output format")
     if args.to_many and any(target not in core.PICTURE_FORMATS for target in args.to_many):
         raise SystemExit(core.multi_target_command(args))
     picture = core.picture_target(args)
@@ -882,8 +883,11 @@ def _run_main(tools, document_tools) -> None:
         if export is not None and args.out and not export.keep_pdf and len(export.formats) == 1:
             check_suffix(args.out, export.primary)
             output_folder(args.out, False)
-        elif args.image_quality is not None and export is None and not args.crop:
-            raise SystemExit("--image-quality goes with a picture output format")
+        elif export is None:
+            if args.image_background is not None:
+                raise SystemExit("--image-background goes with a picture output format")
+            if args.image_quality is not None and not args.crop:
+                raise SystemExit("--image-quality goes with a picture output format")
         direct_kind = (core.direct_route(source, target_format, args.from_format, args.no_auto, args.engine)
                        if scaffold_plan is None and section_plan is None and not presentation else None)
         if direct_kind is None and not presentation:

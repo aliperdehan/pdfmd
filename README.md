@@ -866,8 +866,10 @@ A rotated page is handled. A page that draws nothing keeps its page boxes and pr
 - **Several at once.** With `--to pdf,png,docx`, pdfmd draws the pictures from the same PDF that it saves
   and builds the Word document separately. Each result sits beside the others. Use a directory for `-o`.
   Set `pdfmd-options: {default-output: [pdf, png]}` to choose a list when the command line names no format.
-- **Targets.** `--to pdf` (the default), `png`, `jpg` (`jpeg`), `tiff` (`tif`), `eps`, `ps` or `svg`. `-o x.png` picks the format by its suffix.
-  PNG is transparent at `--image-dpi` (default 300). JPEG is white, at `--image-quality` (default 90).
+- **Targets.** `--to pdf` (the default), `png`, `jpg` (`jpeg`), `tiff` (`tif`), `eps`, `ps`, `svg` or `webp`. `-o x.png` picks the format by its suffix.
+  PNG and WebP preserve alpha and JPEG and TIFF default to white. Set `--image-background '#ddeeff'`
+  to paint a background. Use `--image-dpi` (default 300) for raster export and
+  `--image-quality` (default 90) for JPEG or WebP.
   TIFF and PostScript hold all pages in one file. EPS uses one file per page with an ink bounding box.
   PNG and SVG use the first working converter listed in `--doctor` and draw the whole page when cropping is off.
 - **Pages.** A PDF keeps all its pages, each cut to its own ink. A picture format is one picture per page (`tiff` and `ps` keep all pages in one file): `NAME.png` beside the
@@ -882,7 +884,7 @@ A rotated page is handled. A page that draws nothing keeps its page boxes and pr
   (`pdfmd notes -b --crop -o out/ -j 4`: its `*.md`, `--recursive` for subfolders; `-j` files at a time). `-r` makes one result
   of a report folder, named after the folder; `-p` draws a picture per slide.
 
-`crop-pad`, `crop-ignore-bottom`, `crop-page`, `image-dpi`, `image-quality` and `page-folder` are also
+`crop-pad`, `crop-ignore-bottom`, `crop-page`, `image-dpi`, `image-quality`, `image-background` and `page-folder` are also
 `pdfmd-options` keys in front matter or metadata. Folder settings, global configuration and `--setup`
 provide defaults. Command-line values take precedence.
 Use the `ghostscript-path`, `mutool-path` and `poppler-path` rows in `--setup` to choose installed converters.

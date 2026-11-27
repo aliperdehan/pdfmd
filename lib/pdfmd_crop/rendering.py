@@ -40,22 +40,31 @@ def pnm(path: Path, header: bytes) -> tuple[int, int, bytes]:
     return width, height, pixels
 
 
+def paint_behind(page, colour: tuple[int, int, int]) -> None:
+    """Place an opaque, crop-box-sized rectangle behind a PDF page."""
+    from pypdf import PageObject
+    from pypdf.generic import DecodedStreamObject, NameObject
+
+    area = page.cropbox
+    width, height = float(area.width), float(area.height)
+    background = PageObject.create_blank_page(width=width, height=height)
+    background.mediabox = background.cropbox = area
+    stream = DecodedStreamObject()
+    rgb = " ".join(f"{value / 255:.8f}" for value in colour)
+    stream.set_data(f"{rgb} rg {float(area.left):f} {float(area.bottom):f} {width:f} {height:f} re f".encode("ascii"))
+    background[NameObject("/Contents")] = stream
+    page.merge_page(background, over=False)
+
+
 def _single_pdf(pdf: Path, page: int, destination: Path, *, black: bool = False) -> tuple[float, float]:
     from pypdf import PdfReader, PdfWriter
-    from pypdf.generic import DecodedStreamObject, NameObject
 
     writer = PdfWriter()
     target = writer.add_page(PdfReader(str(pdf)).pages[page - 1])
     area = target.cropbox
     width, height = float(area.width), float(area.height)
     if black:
-        background = writer.add_blank_page(width, height)
-        background.mediabox = background.cropbox = area
-        stream = DecodedStreamObject()
-        stream.set_data(f"0 g {float(area.left):f} {float(area.bottom):f} {width:f} {height:f} re f".encode("ascii"))
-        background[NameObject("/Contents")] = stream
-        target.merge_page(background, over=False)
-        writer.remove_page(1)
+        paint_behind(target, (0, 0, 0))
     else:
         target.mediabox = area
     writer.write(str(destination))

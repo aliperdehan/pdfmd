@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import CropError, ghostscript, rendering, tools
 
-KINDS = ("png", "jpg", "tiff", "eps", "ps", "svg")
+KINDS = ("png", "jpg", "tiff", "eps", "ps", "svg", "webp")
 ONE_FILE = ("tiff", "ps")   # formats that hold all the pages in one file
 DEFAULT_DPI = 300   # pixels per inch of a PNG or JPEG; `--image-dpi`
 DEFAULT_QUALITY = 90   # JPEG quality, 1-100; `--image-quality`
@@ -29,7 +29,7 @@ def _pages(pdf: Path) -> int:
 
 
 def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quality: int = DEFAULT_QUALITY,
-             folder: bool = True) -> list[Path]:
+             folder: bool = True, *, background=None) -> list[Path]:
     """Draw every page of `pdf` as `kind` ("png", "jpg" or "svg"). One page is written to `target`; several go into a folder
     named like `target` without its suffix, as `001.png`, `002.png`... (zero-padded so they sort); with `folder` off
     they are written beside it as `NAME-001.png`... Returns the files written. Raises CropError."""
@@ -50,6 +50,12 @@ def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quali
         names = [target.with_name(f"{target.stem}-{number:0{width}d}{target.suffix}") for number in range(1, count + 1)]
     with tempfile.TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
         work = Path(scratch)
+        if background is not None:
+            from pdfmd_crop.colour import colour_for, matte
+            if colour := colour_for(background):
+                painted = work / "background.pdf"
+                matte(pdf, painted, colour)
+                pdf = painted
         if kind in ("tiff", "eps", "ps"):
             gs = ghostscript()
             if gs is None:
@@ -68,6 +74,11 @@ def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quali
             for number, path in enumerate(made, 1):
                 if kind == "png":
                     rendering.png(pdf, path, number, dpi, gs)
+                elif kind == "webp":
+                    from pdfmd_crop.colour import webp
+                    png = path.with_suffix(".png")
+                    rendering.png(pdf, png, number, dpi, gs)
+                    webp(png, path, quality)
                 elif kind == "svg":
                     rendering.svg(pdf, path, number, gs)
                 else:

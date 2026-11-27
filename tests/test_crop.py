@@ -4,6 +4,7 @@ ink is known exactly."""
 from __future__ import annotations
 
 import os
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -259,6 +260,48 @@ class Pictures(unittest.TestCase):
         self.assertEqual(self.run_pdfmd("formula.pdf", "--crop", "-o", "x.jpeg", "--crop-page", "1").returncode, 0)
         self.assertTrue((self.dir / "x.jpeg").is_file())
 
+    @unittest.skipUnless(importlib.util.find_spec("PIL"), "needs Pillow to inspect pixels")
+    def test_background_changes_only_when_requested(self):
+        from PIL import Image
+
+        for target, colour, expected in (("png", None, (0, 0, 0, 0)), ("png", "#0a3296", (10, 50, 150, 255)),
+                                         ("jpg", None, (255, 255, 255, 255)), ("jpg", "#0a3296", (10, 50, 150, 255))):
+            with self.subTest(target=target, colour=colour):
+                args = ("--image-background", colour) if colour else ()
+                done = self.run_pdfmd("formula.pdf", "--crop", "--crop-page", "2", "--image-dpi", "72",
+                                      "--crop-pad", "20", "--image-quality", "100", "-o", f"image.{target}", *args)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                with Image.open(self.dir / f"image.{target}") as image:
+                    pixel = image.convert("RGBA").getpixel((1, 1))
+                if colour is None and target == "png":
+                    self.assertEqual(pixel[3], 0)
+                elif target == "jpg":
+                    for actual, wanted in zip(pixel, expected):
+                        self.assertAlmostEqual(actual, wanted, delta=3)
+                else:
+                    self.assertEqual(pixel, expected)
+
+    @unittest.skipUnless(importlib.util.find_spec("PIL"), "needs Pillow to inspect WebP")
+    def test_webp_supports_alpha_and_layered_background(self):
+        from PIL import Image, features
+        if not features.check("webp"):
+            self.skipTest("needs Pillow with WebP support")
+        config = self.dir / "config.yaml"
+        config.write_text("options: {image-background: blue}\n", encoding="utf-8")
+        for args, colour in (((), (0, 0, 255, 255)), (("--image-background", "transparent"), (0, 0, 0, 0))):
+            with self.subTest(args=args):
+                done = self.run_pdfmd("formula.pdf", "-o", "x.webp", "--image-dpi", "72", "--image-quality", "100",
+                                      *args, config=str(config))
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                with Image.open(self.dir / "x" / "001.webp") as image:
+                    self.assertEqual(image.format, "WEBP")
+                    self.assertEqual(image.size, (200, 100))
+                    pixel = image.convert("RGBA").getpixel((0, 0))
+                    self.assertEqual(pixel[3], colour[3])
+                    if colour[3]:
+                        for actual, wanted in zip(pixel[:3], colour[:3]):
+                            self.assertAlmostEqual(actual, wanted, delta=2)
+
     def test_tiff_and_postscript_hold_all_pages_in_one_file_and_eps_one_each(self):
         for target, magic in (("tiff", (b"II*\x00", b"MM\x00*")), ("ps", (b"%!PS",))):
             done = self.run_pdfmd("formula.pdf", "--to", target, "--image-dpi", "72")
@@ -405,7 +448,7 @@ class Pictures(unittest.TestCase):
     def test_a_target_without_pages_is_refused_before_anything_is_built(self):
         done = self.run_pdfmd("formula.pdf", "--crop", "--to", "docx")
         self.assertEqual(done.returncode, 1)
-        self.assertIn("pdf, png, jpg, tiff, eps, ps or svg", done.stderr)
+        self.assertIn("pdf, png, jpg, tiff, eps, ps, svg or webp", done.stderr)
         self.assertEqual(sorted(path.name for path in self.dir.iterdir() if path.suffix != ".ps"), ["formula.pdf"])
 
     def native_path(self) -> str:

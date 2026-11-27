@@ -80,7 +80,7 @@ from pdftoppm, pdftocairo or MuPDF at four pixels per point. pypdf sets the
 page boxes. Use
 `--crop-pad PT` (default 2), `--crop-ignore-bottom PT` (default 0) and
 `--crop-page N` (default all pages) to adjust one run. These settings and
-`image-dpi` (300 for exported pages), `image-quality` (90 for JPEG) and
+`image-dpi` (300 for exported pages), `image-quality` (90 for JPEG and WebP) and
 `page-folder` (on) use the same layers as `crop`. Command-line values win,
 followed by front matter, metadata, folder settings and global configuration.
 Each has a `--setup` row. Picture formats are drawn from the normal PDF
@@ -93,6 +93,14 @@ the next one. See `--doctor` or `--check-dependencies` for the optional tools.
 Set `ghostscript-path` and `mutool-path` to executables or their folders.
 `poppler-path` selects a folder with the Poppler executables. These keys follow
 the tool-path layers and have matching flags and `--setup` rows.
+
+`--to webp` or `-o NAME.webp` exports one WebP per page. pdfmd uses Pillow
+with WebP support first, then ImageMagick. PNG and WebP preserve transparency.
+JPEG and TIFF default to white. `--image-background COLOUR` paints a
+background behind the exported page, outside the ink measurement. Use a
+hex colour such as `'#ddeeff'`, a basic colour name like `white` or `navy`, or
+`transparent` to restore the format default. Pillow recognises additional CSS
+colours. `pdfmd-options.image-background` and `--setup` set the same default.
 
 An office document (.docx, .doc, .odt, .ott, .rtf, .pptx, .ppt, .odp,
 .xlsx, .xls, .ods) targeting PDF is a third special case, as of
