@@ -1999,10 +1999,15 @@ or a fraction from 0 to 1. `0`, `off` or `column-word-ceil: off` disables the ce
 `{column-ceil-margin=40%}` after a table's caption (Pandoc 3.8.2 or newer) to override it for that table.
 A cell more than `column-outlier` (2) times longer than the next one in its column, at least 30 characters, in a
 column of four rows or more, does not size its column: it wraps and the others keep their room (0 switches it off).
-`pdfmd-options: {column-widths: keep}` (or the same in the config, or --setup; `table-widths` is the older name) bypasses both the floor and the ceiling;
-`force` ignores the dashes and balances every table. A table's own `{widths=force word-floor=off}` after its
-caption wins. `--no-auto tablewidth` switches the filter off. In count mode this applies to LaTeX engines only:
-the other writers take Pandoc's widths as given. Typst PDF builds can opt in to measure below.
+`pdfmd-options: {column-widths: keep}` preserves the widths Pandoc read. The same setting works in the config
+or `--setup`. The older name is `table-widths`. With LaTeX balancing, `force` ignores the dashes and balances every
+table. A table's own `{widths=keep}` or `{widths=force word-floor=off}` after its caption wins.
+`--no-auto tablewidth` switches the filter off.
+
+Typst, HTML, Word and ODT use their default sizing when Pandoc's Markdown reader gives a pipe table equal
+full-width columns. Unequal widths, fixed CSV widths and explicit percentages from the table attribute line still
+apply. The Word and OpenDocument office filter can size default columns to their contents. Typst PDF builds
+can opt in to measured balancing below.
 
 `pdfmd-options: {column-estimate: count}` is the default. For LaTeX, pdfmd estimates the characters per
 line from the resolved paper and orientation, horizontal margins and font size. It divides the available

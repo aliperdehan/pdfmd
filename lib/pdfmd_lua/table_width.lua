@@ -112,6 +112,7 @@ end
 -- Loaded only for the opt-in mode. Measurements are taken at this filter's table position in the document.
 local tables_seen = 0
 local measurements = nil
+local writer_widths = false
 local function dimensions(tbl, o)
   local char_rows, char_longest, char_word = collect(tbl, o.count_raw)
   local data = o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]
@@ -546,15 +547,28 @@ local function without_dash_widths(tbl)
   for index, spec in ipairs(tbl.colspecs) do tbl.colspecs[index] = {spec[1]} end
 end
 
+-- Pandoc gives a long pipe table with equal dashes exactly 1/n per column.
+-- A narrower grid table or even slightly unequal separator widths carry a choice.
+local function restore_writer_widths(tbl, mode)
+  if mode == "keep" or #tbl.colspecs == 0 then return nil end
+  local share = 1 / #tbl.colspecs
+  for _, spec in ipairs(tbl.colspecs) do
+    if spec[2] ~= share then return nil end
+  end
+  for index, spec in ipairs(tbl.colspecs) do tbl.colspecs[index] = {spec[1]} end
+  return tbl
+end
+
 local function rebalance(tbl, o)
   local ncols = #tbl.colspecs
   if ncols == 0 then return nil end
   local typst = FORMAT:match("typst") ~= nil
-  if not typst then without_dash_widths(tbl) end
-  if typst then
-    if not (o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]) then return nil end
-    without_dash_widths(tbl)
+  local measured_typst = typst and o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]
+  if not measured_typst then
+    if writer_widths then return restore_writer_widths(tbl, o.mode) end
+    if typst then return nil end
   end
+  without_dash_widths(tbl)
   if o.mode == "keep" then return nil end
   local path = cache_path(tbl, o)
   local cached, kind = cached_widths(path, ncols)
@@ -623,10 +637,15 @@ end
 local function format_table(tbl)
   tables_seen = tables_seen + 1
   local attributes = tbl.attr.attributes
+  local fixed = attributes["data-pdfmd-widths"] == "fixed"
+  if writer_widths and not measurements then
+    if fixed then return nil end
+    local given = attributes["widths"] and attributes["widths"]:lower()
+    return restore_writer_widths(tbl, MODES[given] and given or GLOBAL.mode)
+  end
   local style = style_of(attributes["table-style"]) or table_style
   local spacing = spacing_of(attributes["table-row-spacing"]) or row_spacing
   attributes["table-style"], attributes["table-row-spacing"] = nil, nil
-  local fixed = attributes["data-pdfmd-widths"] == "fixed"
   local spaced = style == "spaced" and (FORMAT == "latex" or FORMAT == "beamer")
   if fixed and not spaced then return nil end
   local o = table_options(attributes)
@@ -653,6 +672,8 @@ local function setting(meta, name, global_name)
 end
 
 function Pandoc(doc)
+  writer_widths = doc.meta["pdfmd-writer-widths"] == true and FORMAT ~= "latex" and FORMAT ~= "beamer"
+  doc.meta["pdfmd-writer-widths"] = nil
   local directory, layout = doc.meta["pdfmd-width-cache-dir"], doc.meta["pdfmd-width-cache-layout"]
   if directory and layout then
     cache_dir = pandoc.utils.stringify(directory)

@@ -149,6 +149,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     # extra_inputs: parts-mode parts, joined to md_path (the scaffold) in one
     # Pandoc run -- see plan_scaffold(). partial: only some of them, so this
     # isn't the report itself and writes no BUILD NOTES stamp.
+    from pdfmd_tables.settings import writer_width_filter_args
+
     stamp_overrides = stamp_overrides or {}
     parts_inputs = list(extra_inputs or [])
     if partial:      # for the history (stamp_build): which parts this build is made of, or the text of the sections
@@ -642,9 +644,12 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += core.slide_notes_args([md_path, *parts_inputs], metadata_files, target_format == "beamer")
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
-                if is_tex_target and tablewidth_auto:
-                    cmd += core.width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd,
-                                                  latex_sources=(source, *part_files))
+                if tablewidth_auto:
+                    if is_tex_target:
+                        cmd += core.width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd,
+                                                      latex_sources=(source, *part_files))
+                    else:
+                        cmd += writer_width_filter_args(width_filter, target_format, md_path, effective_from)
                 cmd += core.cellalign_args([md_path, *parts_inputs], metadata_files)
                 if target_format in core.OFFICE_REFERENCE_EXTENSIONS:
                     cmd += core.image_filter_args(no_auto, [md_path, *parts_inputs], metadata_files, format="png")
@@ -928,13 +933,16 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # width-balancing pass a hand-written one would.
                     if fonts_filter is not None:
                         cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
-                    if tablewidth_auto and engine in core.LATEX_ENGINES:
-                        cmd += core.width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd,
-                                                      latex_sources=(source, *part_files))
-                    if tablewidth_auto and engine == "typst":
-                        from pdfmd_tables.measure import requested
-                        if requested([md_path, *parts_inputs], metadata_files):
-                            cmd += core.width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd)
+                    if tablewidth_auto:
+                        if engine in core.LATEX_ENGINES:
+                            cmd += core.width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd,
+                                                          latex_sources=(source, *part_files))
+                        else:
+                            from pdfmd_tables.measure import requested
+
+                            measure = engine == "typst" and requested([md_path, *parts_inputs], metadata_files)
+                            cmd += writer_width_filter_args(width_filter, engine, md_path, effective_from, measure=measure,
+                                                            command=cmd, cwd=pandoc_cwd)
                     cmd += core.cellalign_args([md_path, *parts_inputs], metadata_files)
                     if engine in core.LATEX_ENGINES:
                         cmd += core.tblr_header_args([md_path, *parts_inputs], metadata_files)

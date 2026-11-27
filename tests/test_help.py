@@ -156,6 +156,7 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("table-chars", text)
         self.assertIn("table-style", text)
         self.assertIn("table-row-spacing", text)
+        self.assertIn("default sizing in Typst, HTML, Word and ODT", " ".join(text.split()))
 
     def test_every_topic_prints(self):
         for topic in [*pdfmd_help.TOPICS, "other"]:

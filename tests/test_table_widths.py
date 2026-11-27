@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -239,7 +240,60 @@ def export_table(test, text, front="", *options, writer="latex", linked=""):
         done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "-v", "--to", writer,
                                "-o", str(output), str(source), *options], cwd=root, capture_output=True, encoding="utf-8")
         test.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        if writer in ("docx", "odt"):
+            with zipfile.ZipFile(output) as archive:
+                member = "word/document.xml" if writer == "docx" else "content.xml"
+                return archive.read(member).decode("utf-8"), done.stdout + done.stderr
         return output.read_text(encoding="utf-8"), done.stdout + done.stderr
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class WriterWidths(unittest.TestCase):
+    TABLE = f"| A | B | C |\n|---|---|---|\n| {LONG} | short | z |\n"
+    MARKDOWN = ("--from", "markdown")
+
+    def test_equal_dashes_leave_widths_to_each_writer(self):
+        with self.subTest(writer="html"):
+            html, _ = export_table(self, self.TABLE, "", *self.MARKDOWN, writer="html")
+            self.assertNotIn("<colgroup>", html)
+        if pandoc_version() >= (3, 13):  # the older Typst writer can already omit the widths
+            with self.subTest(writer="typst"):
+                typst, _ = export_table(self, self.TABLE, "", *self.MARKDOWN, writer="typst")
+                self.assertRegex(typst, r"\bcolumns:\s*3\b")
+        for writer, pattern in (("docx", r'<w:gridCol\b[^>]*\bw:w="(\d+)"'),
+                                ("odt", r'\bstyle:rel-column-width="(\d+)\*"')):
+            with self.subTest(writer=writer):
+                front = "pdfmd-options: {odt: {engine: pandoc}}" if writer == "odt" else ""
+                xml, _ = export_table(self, self.TABLE, front, *self.MARKDOWN, writer=writer)
+                wide, short, narrow = map(int, re.findall(pattern, xml))
+                self.assertGreater(wide, short)
+                self.assertGreater(short, narrow)
+
+    def test_column_width_choices_and_opt_out_are_respected(self):
+        chosen = self.TABLE.replace("|---|---|---|", "|------|---|---|")
+        nearly_equal = self.TABLE.replace("|---|---|---|", "|" + "-" * 100 + "|" + "-" * 101 + "|" + "-" * 100 + "|")
+        csv = '::: {.csv widths="1,1,1"}\nA,B,C\nlong text,short,z\n:::\n'
+        grid = "+---------+---------+\n| A       | B       |\n+=========+=========+\n| a       | b       |\n+---------+---------+\n"
+        for text, front, extra in (
+            (chosen, "", ()),
+            (nearly_equal, "", ()),
+            (csv, "", ()),
+            (grid, "", ()),
+            (self.TABLE, "pdfmd-options: {column-widths: keep}", ()),
+            (self.TABLE, "", ("--no-auto", "tablewidth")),
+        ):
+            with self.subTest(text=text, front=front, extra=extra):
+                html, _ = export_table(self, text, front, *self.MARKDOWN, *extra, writer="html")
+                self.assertIn("<colgroup>", html)
+
+    def test_equal_repaired_dashes_keep_alignment_and_explicit_percentages(self):
+        text = self.TABLE.replace("|---|---|---|", "|:––– + :–––: + –––:|")
+        html, _ = export_table(self, text, "", *self.MARKDOWN, writer="html")
+        self.assertNotIn("<colgroup>", html)
+        for alignment in ("left", "center", "right"):
+            self.assertIn(f"text-align: {alignment}", html)
+        html, _ = export_table(self, self.TABLE + '\n{widths="20% * *"}\n', "", *self.MARKDOWN, writer="html")
+        self.assertRegex(html, r'<col style="width:\s*20%')
 
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")

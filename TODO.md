@@ -44,7 +44,7 @@ wait for an answer before any code.
 
 ## Tables line, one feature line (3.31.0, full suite) [3dj]
 
-- [ ] Widths outside LaTeX: Typst, HTML, Word, ODT get Pandoc's equal thirds; give "no opinion" tables back to the engine; absolute widths (`3cm`) of the attribute line are drawn in LaTeX only (HTML has percentages) [3fa]
+- [ ] Absolute widths (`3cm`) from the attribute line in Typst, HTML, Word and ODT [3fa]
 - [ ] Cell tags: vertical alignment and heights in Typst, Word and ODT; an exact row height (tabularray's `ht` is a minimum); `j` (justify) [3fa]
 - [ ] Cell tags: a table rebuilt as `longtblr` is raw LaTeX to later filters (`table-keep`, `labtabular`, Beamer untested); the native tier and grid tables read no tags [3fa]
 - [ ] Revise the thin features of this line (line breaks, table captions, `<c>` cells, Org extras) against unusual input users will try, while the documentation programme writes them up [3el, 3dg]

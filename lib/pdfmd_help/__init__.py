@@ -203,10 +203,10 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
     if topic == "tables":
         parser.description += (". column-estimate: count (default) | measure (LaTeX/Typst PDF). "
                                "--verbose reports measured/cached widths. table-chars: 95 (LaTeX fallback). "
-                               "table-style: spaced for wrapping LaTeX tables (default off). "
-                               "table-row-spacing: 1.4 (stretch). column-word-ceil: on | off. "
-                               "table-colons: ignore | count. column-ceil-margin: 25% (fraction or %, 0 disables). "
-                               "Use pdfmd-options or --setup. --check reports table-unparsed.")
+                               "table-style: spaced. table-row-spacing: 1.4. "
+                               "Equal dashes use default sizing in Typst, HTML, Word and ODT. "
+                               "table-colons: ignore | count, column-widths: keep, column-word-ceil: on | off, "
+                               "column-ceil-margin: 25% (pdfmd-options or --setup). --check reports table-unparsed.")
     try:
         text = parser.format_help()
         if topic == "output":

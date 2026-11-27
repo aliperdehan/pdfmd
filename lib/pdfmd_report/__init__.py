@@ -30,6 +30,8 @@ def _run(core, *, records,
         args, default_target, embed_request, engines,
         pandoc_options, paths, stamp_overrides,
         target_format, variables) -> None:
+    from pdfmd_tables.settings import writer_width_filter_args
+
     # the helpers of pdfmd.py this function calls, bound here so the body reads as it did in run_main()
     ASSEMBLED_FORMAT, AUTO_LOG = core.ASSEMBLED_FORMAT, core.AUTO_LOG
     AUTO_METADATA_DISABLED, BROWSER_ENGINES, BUILD = core.AUTO_METADATA_DISABLED, core.BROWSER_ENGINES, core.BUILD
@@ -369,8 +371,11 @@ def _run(core, *, records,
                 cmd += core.bibliography_spacing_args(files[0], metadata_files, cmd)
                 if report_fonts_filter is not None:
                     cmd += ["--lua-filter", str(report_fonts_filter)]
-                if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
-                    cmd += width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd, latex_sources=tuple(prepared_files))
+                if not auto_disabled(report_no_auto, "tablewidth"):
+                    if is_tex_target:
+                        cmd += width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd, latex_sources=tuple(prepared_files))
+                    else:
+                        cmd += writer_width_filter_args(width_filter, target_format, files[0], linked_reader)
                 cmd += cellalign_args(files, metadata_files)
                 if target_format in core.OFFICE_REFERENCE_EXTENSIONS:
                     cmd += image_filter_args(report_no_auto, list(files), metadata_files, format="png")
@@ -533,12 +538,14 @@ def _run(core, *, records,
                         cmd += markup_header_args(list(files), metadata_files, cmd)
                     if report_fonts_filter is not None:
                         cmd += ["--lua-filter", str(report_fonts_filter)]
-                    if report_tablewidth_auto and engine in LATEX_ENGINES:
-                        cmd += width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd, latex_sources=tuple(prepared_files))
-                    if report_tablewidth_auto and engine == "typst":
-                        from pdfmd_tables.measure import requested
-                        if requested(list(files), metadata_files):
-                            cmd += width_filter_args(width_filter)
+                    if report_tablewidth_auto:
+                        if engine in LATEX_ENGINES:
+                            cmd += width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd, latex_sources=tuple(prepared_files))
+                        else:
+                            from pdfmd_tables.measure import requested
+
+                            measure = engine == "typst" and requested(list(files), metadata_files)
+                            cmd += writer_width_filter_args(width_filter, engine, files[0], linked_reader, measure=measure)
                     cmd += cellalign_args(files, metadata_files)
                     if engine in LATEX_ENGINES:
                         cmd += code_filter_args(report_no_auto, list(files), metadata_files) + image_filter_args(report_no_auto, list(files), metadata_files)

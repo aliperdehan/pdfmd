@@ -18,7 +18,7 @@ from pdfmd_base import core
 from pdfmd_log import emit
 
 
-# Auto-applied on every LaTeX-family render (see table_width_filter() below).
+# Used for LaTeX balancing and to restore writer-default widths in other builds.
 # Pandoc's LaTeX writer only wraps pipe-table cells when every column has an
 # explicit width; a table with none (ColWidth "default" -- what gfm's reader
 # always produces, see resolve_from_format()) instead gets plain unwrapped
@@ -141,6 +141,24 @@ def width_filter_args(width_filter: Path, *, command: list[str] | None = None, c
             if chars is not None:
                 args += ["-M", f"pdfmd-table-chars={chars}"]
         args += width_cache_args(width_filter, command, directory)
+    return args
+
+
+def writer_width_filter_args(width_filter: Path, target: str, source: Path, reader: str | None, *,
+                             measure: bool = False, command: list[str] | None = None,
+                             cwd: Path | None = None) -> list[str]:
+    """Restore default pipe-table widths before the non-LaTeX writer, or use Typst measurements when requested."""
+    from .prepass import reader_family
+
+    natural = (target in core.HTML_TARGETS or target in ("typst", "docx", "odt", "calibre")
+               or target in core.ENGINE_GROUPS["html"] or target in core.BROWSER_ENGINES)
+    natural = (natural and reader_family(reader) == "markdown"
+               and (reader is not None or source.suffix.lower() in (".md", ".markdown")))
+    if not natural and not measure:
+        return []
+    args = width_filter_args(width_filter, command=command if measure else None, cwd=cwd)
+    if natural:
+        args += ["-M", "pdfmd-writer-widths=true"]
     return args
 
 

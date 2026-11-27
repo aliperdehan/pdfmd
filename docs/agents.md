@@ -269,6 +269,8 @@ or a positive factor (`1` for single spacing) to override it in LaTeX, Typst, Wo
 then root `csl:`. For spacing, `bibliography-line-spacing` wins over `csl.spacing`. Conflicting values produce a WARN.
 
 The default LaTeX table-width count estimates the line capacity from the paper, margins and type size.
+Typst, HTML, Word and ODT use default sizing for a pipe table with equal separators.
+`pdfmd-options: {column-widths: keep}` preserves the widths Pandoc read.
 `pdfmd-options: {table-chars: 95}` sets the fallback when those inputs cannot be resolved. A table caption
 can carry `{table-chars=120}` (recent Pandoc), and a CSV div can carry `table-chars=120`.
 For LaTeX tables with wrapping cells, opt in to more space between rows with

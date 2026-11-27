@@ -527,10 +527,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "Default 1.4. Use a decimal of at least 1. One table: {table-row-spacing=1.5} after its caption or on a .csv div.",
              "Tables", check="number"),
         choice("options.column-widths", "Pipe-table column widths",
-               (("auto", "a `---|---` separator means no opinion: widths that give the fewest lines"),
-                ("keep", "exactly the widths the separator's dashes say"),
-                ("force", "the dashes are ignored: every table gets the widths that give the fewest lines")), "auto",
-               "Auto keeps unequal dashes (Pandoc's Markdown reader only; LaTeX engines only) and balances equal ones. "
+               (("auto", "LaTeX balances wide tables with equal dashes; Typst, HTML, Word and ODT use default sizing"),
+                ("keep", "preserve the widths Pandoc read"),
+                ("force", "ignore the dashes when balancing columns")), "auto",
+               "Unequal dashes express a width choice under Pandoc's Markdown reader. "
                "One table: {widths=force} after its caption (Pandoc 3.8.2 or newer). Older name: table-widths.", "Tables"),
         choice("options.column-word-floor", "A narrow column keeps its longest word whole",
                (("on", "a chosen column too narrow for its longest word is widened to it"),

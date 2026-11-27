@@ -188,7 +188,7 @@ class Writers(unittest.TestCase):
         first = f"| A | B |\n|:---:|---|\n| {PROSE} | {PROSE} |\n"
         second = first + "\n: Caption {table-colons=count}\n"
         _, output = self.build(first + "\n" + second, "markdown", "html")
-        self.assertEqual(self.proportions(output, "html"), [["50", "50"], ["62", "37"]])
+        self.assertEqual(self.proportions(output, "html"), [[], ["62", "37"]])
 
     def test_build_warns_about_unparsed_table_shapes(self):
         text = ("a | b\nc | d\n\ncommand | other\n\n| A | B |\n|---+---|\n| x | y |\n\n"

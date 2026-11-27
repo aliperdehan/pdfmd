@@ -522,8 +522,10 @@ The comment goes on the line above a table or `.csv` block, or under its caption
 
 ### 4.4 Wide tables
 
-A pipe table with plain `---` separators gets the column widths that give the fewest lines within the text width.
-Unequal dashes (`|:--|----------|`) are your choice and are kept; equal dashes with long rows count as "not chosen".
+LaTeX balances a wide pipe table with plain `---` separators to minimise wrapping. Typst, HTML, Word and ODT
+use the writer's default sizing for equal dashes. Unequal dashes such as `|:--|----------|` express a width
+choice when Pandoc's Markdown reader reads the widths. Use `pdfmd-options: {column-widths: keep}` to keep
+the widths Pandoc read.
 
 ### 4.5 Measured column widths
 

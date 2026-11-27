@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.85 — 2026-11-27
+
+Pre-edit state: commit `4294041`. [tables] Pandoc's Markdown reader gave long pipe tables with equal separator
+dashes fixed, equal-width columns. Typst, HTML, Word and OpenDocument now receive default column widths in
+that case. Unequal shares and fixed CSV widths are preserved, and the table attribute line can still supply
+explicit percentages. Use `column-widths: keep` or `--no-auto tablewidth` to keep the reader's widths.
+Regression tests cover the four writers, repaired separators, alignment, fixed widths and the opt-outs.
+
+---
+
 ## v3.34.84a — 2026-11-27
 
 Pre-edit state: commit `de0e8ea`. macOS CI lacked coverage for Pandoc builds with a TeX Live engine. Add a non-gating job using BasicTeX and Poppler for section builds, Beamer slide notes and LaTeX diagnostics. The workflow regression checks that the job runs on macOS and keeps the subset non-gating.
