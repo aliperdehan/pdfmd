@@ -23,11 +23,11 @@ import pdfmd  # noqa: E402
 
 class WorkerState(unittest.TestCase):
     def test_every_global_main_sets_reaches_a_worker(self):
-        # run_main is lib/pdfmd_run's (3.33.212): it sets pdfmd's state as `core.NAME = ...`, where it said `global NAME`
+        # The routing entry point and its helper set pdfmd's state through core.
         source = (ROOT / "lib" / "pdfmd_run" / "__init__.py").read_text(encoding="utf-8")
-        run_main = next(node for node in ast.parse(source).body
-                        if isinstance(node, ast.FunctionDef) and node.name == "run_main")
-        names = {node.attr for node in ast.walk(run_main)
+        routes = [node for node in ast.parse(source).body
+                  if isinstance(node, ast.FunctionDef) and node.name in {"run_main", "_run_main"}]
+        names = {node.attr for route in routes for node in ast.walk(route)
                  if isinstance(node, ast.Attribute) and isinstance(node.ctx, (ast.Store, ast.Del))
                  and isinstance(node.value, ast.Name) and node.value.id == "core"}
         self.assertTrue(names)

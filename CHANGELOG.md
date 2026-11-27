@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.81b — 2026-11-27
+
+Pre-edit state: commit `a31f70e`. The worker-state test found no assignments after the routing entry point began delegating to a helper. Check the entry point and the helper for assignments that must reach workers. The check failed before the update and passes alongside the serial and parallel build comparison.
+
+---
+
 ## v3.34.81a — 2026-11-27
 
 Pre-edit state: commit `9dd524f`. The native install test still expected full to stop after Pandoc and Typst, so it reached the real font downloader. Mock the font installer and verify that the core group runs third. The old expectation fails with the downloader mocked and the updated test passes offline.
