@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.34.90 — 2026-11-27
+
+Pre-edit state: commit `d15a155`. The setup row for format lists had
+no registered default, so `--show-config --json` reported null for
+`default-output`. Restore the built-in PDF default in the format-list
+row. The existing configuration provenance test covers the regression.
+
+---
+
 ## v3.34.89 — 2026-11-27
 
 Pre-edit state: commit `194559c`. Cropping could not export Word or

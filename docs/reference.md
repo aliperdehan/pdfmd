@@ -727,7 +727,8 @@ wrong one for a particular document's glyphs.
 `pdfmd-options: {default-output: FORMAT}` is the format a document builds
 to when the command line names none (no --to, no -o with a recognized
 extension, no --stop-at, no -p): any Pandoc writer name (or pdf; tex, md,
-txt, typ, htm are accepted shortcuts). It is read from the document, else
+txt, typ, htm are accepted shortcuts). The built-in default is PDF.
+The setting is read from the document, else
 its metadata files (a shared metadata.yaml sets it for every document that
 finds it, any one can still override it), then from folder settings and
 global configuration (including `--setup`). It is read per document in
