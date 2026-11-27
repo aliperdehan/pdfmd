@@ -1,4 +1,4 @@
-"""v3.29.7: `pdfmd --install core:tex` (also `cortex`): Pandoc and Tectonic. No test downloads anything."""
+"""Core installations and their aliases. No test downloads anything."""
 
 from __future__ import annotations
 
@@ -72,28 +72,54 @@ class Kinds(unittest.TestCase):
                 size = pdfmd.INSTALL_SIZES.get(kind, "")
                 self.assertIn("Pandoc 35 MB", size)
                 self.assertIn(engine, size)
+                self.assertIn("fonts 8 MB", size)
                 self.assertNotIn("Tectonic" if engine == "Typst" else "Typst", size)
 
     def test_install_help_names_core_and_its_typst_alias(self):
         action = next(action for action in pdfmd.build_parser()._actions if action.dest == "install")
-        self.assertIn("'core' (also 'core:typst' and 'full': Pandoc and Typst", action.help)
-        self.assertIn("'core:tex' (also 'cortex': Pandoc and Tectonic", action.help)
+        self.assertIn("'core' (also 'core:typst' and 'full': Pandoc, Typst and fonts:core", action.help)
+        self.assertIn("'core:tex' (also 'cortex': Pandoc, Tectonic and fonts:core", action.help)
 
-    def test_core_is_full_and_core_tex_is_pandoc_then_tectonic(self):
+    def test_all_core_aliases_install_fonts_after_pandoc_and_the_engine(self):
         calls: list[str] = []
         with mock.patch.object(pdfmd, "install_typst", lambda: calls.append("typst") or True), \
                 mock.patch.object(pdfmd, "install_tectonic", lambda: calls.append("tectonic") or True), \
                 mock.patch.object(pdfmd.subprocess, "run", lambda *a, **k: calls.append("pip") or mock.Mock(returncode=0, stderr="")), \
+                mock.patch("pdfmd_install.install_fonts", lambda group: calls.append(group) or True), \
                 contextlib.redirect_stdout(io.StringIO()):
-            pdfmd.install_extra("core:tex")
-            pdfmd.install_extra("cortex")
-            self.assertEqual(calls.count("tectonic"), 2)
-            self.assertNotIn("typst", calls)
-            calls.clear()
-            for kind in ("core", "core:typst", "full"):
-                calls.clear()
-                pdfmd.install_extra(kind)
-                self.assertEqual(calls, ["pip", "typst"], kind)
+            for kind, engine in (("core", "typst"), ("core:typst", "typst"), ("full", "typst"),
+                                 ("core:tex", "tectonic"), ("cortex", "tectonic")):
+                with self.subTest(kind=kind):
+                    calls.clear()
+                    self.assertTrue(pdfmd.install_extra(kind))
+                    self.assertEqual(calls, ["pip", engine, "core"])
+
+    def test_a_failed_prerequisite_prevents_the_fonts_step(self):
+        for kind, engine in (("full", "install_typst"), ("cortex", "install_tectonic")):
+            for pip_status in (0, 1):
+                with self.subTest(kind=kind, pip_status=pip_status), \
+                        mock.patch.object(pdfmd, engine, return_value=False) as build_engine, \
+                        mock.patch.object(pdfmd.subprocess, "run", return_value=mock.Mock(returncode=pip_status, stderr="")), \
+                        mock.patch("pdfmd_install.install_fonts") as fonts, contextlib.redirect_stdout(io.StringIO()):
+                    self.assertFalse(pdfmd.install_extra(kind))
+                    self.assertEqual(build_engine.call_count, int(pip_status == 0))
+                    fonts.assert_not_called()
+
+    def test_the_fonts_step_can_fail_a_core_install(self):
+        with mock.patch.object(pdfmd, "install_typst", return_value=True), \
+                mock.patch.object(pdfmd.subprocess, "run", return_value=mock.Mock(returncode=0, stderr="")), \
+                mock.patch("pdfmd_install.install_fonts", return_value=False) as fonts, \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertFalse(pdfmd.install_extra("full"))
+        fonts.assert_called_once_with("core")
+
+    def test_catalogue_names_the_fonts_and_their_removal(self):
+        from pdfmd_install.catalogue import table
+        rows = table().splitlines()
+        for name in ("core", "full", "cortex", "core:typst", "core:tex"):
+            row = next(row for row in rows if row.startswith(name + " | "))
+            self.assertIn("fonts:core", row)
+            self.assertIn("--uninstall fonts:core", row)
 
 
 class Install(unittest.TestCase):

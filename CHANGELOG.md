@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.81 — 2026-11-27
+
+Pre-edit state: commit `43f194a`. Core installs omitted the default font group despite providing the tools that use it. Full, core and cortex, including their aliases, now install fonts:core after the prerequisites. Update the sizes, catalogue and help. Mocked regressions verify the installation order, short-circuiting on a failed prerequisite, and the outcome of a failed fonts step.
+
+---
+
 ## v3.34.80 — 2026-11-27
 
 Pre-edit state: commit `900cf76`. The existing Windows troubleshooting guide was missing from the offline document registry and distributions. Register it for listing, printing, path lookup, sections and search, and include it in the source distribution, wheel and zipapp. Documentation and packaging regressions check the guide and its bundle entries.

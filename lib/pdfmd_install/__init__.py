@@ -1041,8 +1041,8 @@ def install_kind(value: str) -> str:
         raise argparse.ArgumentTypeError(f"invalid choice: {value!r} (choose from {', '.join(core.INSTALL_KINDS)}; "
                                          "fonts takes names: fonts:arabic,cjk-sc; ocr takes languages: ocr:rus,kaz; "
                                          "math:mathjax is MathJax and math:katex is KaTeX, for math in WeasyPrint's PDFs; diagram:d2 and "
-                                         "diagram:dot draw ```d2 and ```dot blocks; diagram:resvg converts SVG to PNG; core:tex (also cortex) is Pandoc and Tectonic, "
-                                         "core (also core:typst and full) is Pandoc and Typst; "
+                                         "diagram:dot draw ```d2 and ```dot blocks; diagram:resvg converts SVG to PNG; core:tex (also cortex) is Pandoc, Tectonic and fonts:core, "
+                                         "core (also core:typst and full) is Pandoc, Typst and fonts:core; "
                                          "kit:SOURCE installs the kits of a repository: kit:owner/repo, kit:owner/repo@v1#name, kit:apa7)")
     return value
 
@@ -1198,14 +1198,12 @@ def install_extra(kind: str, assume_yes: bool = False) -> bool:
         return True
     if kind == "kit" or kind.startswith("kit:"):
         return install_kits(kind.partition(":")[2], assume_yes)
-    if kind == "full":
-        return core.install_extra("pandoc") and core.install_extra("typst")
+    if kind in ("full", "core", "core:typst"):
+        return core.install_extra("pandoc") and core.install_extra("typst") and core.install_extra("fonts:core")
     if kind == "typst":
         return core.install_typst()
-    if kind in ("core", "core:typst"):
-        return core.install_extra("full")
     if kind in ("core:tex", "cortex"):
-        return core.install_extra("pandoc") and core.install_tectonic()
+        return core.install_extra("pandoc") and core.install_tectonic() and core.install_extra("fonts:core")
     if kind == "math:katex":
         return install_katex()
     if kind == "math:mathjax":

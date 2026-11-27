@@ -233,8 +233,8 @@ install git+https://github.com/aliperdehan/pdfmd`.)
 For the full pipeline, `pdfmd` drives programs that pip can't install, so you
 also need (without them it still makes a plain PDF; see
 [No Pandoc?](#no-pandoc-the-built-in-fallback) below). The quickest way, with no
-admin rights, is `pdfmd --install full`, which puts Pandoc and Typst in pdfmd's own
-folders; the system installers below do the same job:
+admin rights, is `pdfmd --install full`, which installs Pandoc, Typst and the default fonts.
+You can also install the tools through your system:
 
 - **[Pandoc](https://pandoc.org/installing.html)**
 - **at least one PDF engine**. [Typst](https://typst.app) is the quickest
@@ -271,7 +271,7 @@ sudo dnf install pipx pandoc texlive-xetex  # Fedora (add Typst with `pdfmd --in
 sudo pacman -S python-pipx pandoc-cli typst texlive   # Arch
 ```
 
-On any Linux, `pdfmd --install full` (Pandoc and Typst) needs no package manager and no root.
+On any Linux, `pdfmd --install full` (Pandoc, Typst and the default fonts) needs no package manager and no root.
 
 A bare `pdfmd --install` prints every install kind with its approximate size, what it fetches and from where,
 its target folder and removal command. It fetches nothing. Bare `--install diagram` lists the tools;
@@ -601,17 +601,17 @@ OK    notes.md > notes.pdf
 - `pdfmd --install math:mathjax` (MathJax 4 and its STIX Two math font, about 12 MB to download, about 2 MB on
   disk) and `pdfmd --install math:katex` (KaTeX, about 1.5 MB) are for WeasyPrint's PDFs, not the built-in
   renderer: they typeset its math (see "WeasyPrint does not typeset math itself" below).
-- `pdfmd --install core:tex` (also `cortex`, Pandoc 35 MB and Tectonic 10 to 22 MB download) is the other core: **Pandoc and Tectonic**, the self-contained
-  LaTeX engine (its release from GitHub, checked against the SHA-256 GitHub lists, into pdfmd's own tools folder). Tectonic
-  fetches the TeX files a document needs from the network the first time, then works from its cache. `core:typst`
-  (or `core`) is `--install full` below: Pandoc 35 MB and Typst 15 MB download (about 50 MB). `pan-tec` (see "Other command names") runs pdfmd on it.
+- `pdfmd --install core:tex` (also `cortex`) installs **Pandoc, Tectonic and the default fonts** for about 53 to 65 MB.
+  Tectonic is a self-contained LaTeX engine from GitHub whose download is checked against the release's SHA-256.
+  It fetches the TeX files a document needs on first use, then works from its cache. `pan-tec` runs pdfmd on it.
 - `pdfmd --install full` leaves the fallback behind: it installs **Pandoc** (the
   real binary from PyPI's `pypandoc_binary`, about 35 MB, also `--install pandoc`
   / `pdfmd-cli[pandoc]`) and **Typst** (Typst's own release from GitHub, about
-  15 MB, also `--install typst`, checked against the SHA-256 GitHub lists) into
-  pdfmd's own folders (`~/.local/share/pdfmd/bin`, `%LOCALAPPDATA%\pdfmd\bin`),
-  with no admin rights. A Pandoc or Typst already on your PATH always wins; to
-  remove them, `pip uninstall pypandoc_binary` and delete the `typst` file.
+  15 MB, also `--install typst`, checked against the release's SHA-256).
+  It also installs `fonts:core` (STIX Two, JetBrains Mono, Noto Serif and symbols, about 8 MB),
+  for about 58 MB altogether. `core` and `core:typst` are aliases. Tools already on PATH take precedence
+  over managed tools by default. To remove the installed components, use `pip uninstall pypandoc_binary`,
+  delete the managed `typst` file, and run `pdfmd --uninstall fonts:core`.
 
 Every input is treated as GitHub-flavoured Markdown. Pandoc-only syntax is
 converted where possible (`\newpage` and `<!-- pagebreak -->` become a page

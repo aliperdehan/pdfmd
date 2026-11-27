@@ -105,7 +105,6 @@ is low priority. [3di]
 - [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo (GitHub Pages, indexable) and bundled for `pdfmd --doc`; a layered README tested by a beginner on a clean machine; agent surfaces (task table, `--help` as JSON, `llms.txt` hosted); an audit of ambiguous names (one meaning per word, a test for collisions and aliases); feature pages carry the version added, fixed and last tested [3dg]
 - [ ] One event log for every route; the split itself is done [3fi] [3bh]
 - [ ] Lean install: extras that survive their absence with one message and a CI leg for the core only; a separate core distribution (`pdfmd-cli` staying the full default) only if that leg shows a real saving [3dx N144]
-- [ ] `--install full|core|cortex` also fetch the default fonts (`fonts:core`: STIX Two, JetBrains Mono, Noto Serif, symbols; about 8 MB), sizes table updated [3ei]
 - [ ] Docs: a table of every install kind (pip or download, size, `--uninstall`, `--check-dependencies`), decided together with the lean install [3ei, 3dg, 3dx]
 - [ ] The pre-4.0 pass (code review, edge cases, documentation) reads pdfmd as an agent would, not only as a human: exit codes, output size, non-TTY, name guessing, untrusted documents; then tested with the author's local models on real tasks [3ff, 3dg]
 - [ ] 4.0

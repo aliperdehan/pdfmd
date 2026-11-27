@@ -23,17 +23,21 @@ NATIVE_ALIASES = {"ink": "inkmd", "reportlab": "md2pdf", "pymd2pdf": "md2pdf", "
 INSTALL_KINDS = ("pandoc", "typst", "full", "core", "cortex", "math", "diagram", "calibre", "emoji", "batchocr", "fonts", "translit", "ocr", "tui", "kit")
 
 
+CORE_TYPST_SIZE = "Pandoc 35 MB, Typst 15 MB and fonts 8 MB (about 58 MB download)"
+CORE_TEX_SIZE = "Pandoc 35 MB, Tectonic 10 to 22 MB and fonts 8 MB (about 53 to 65 MB download)"
+
+
 INSTALL_SIZES = {"kit": "the repository you name", "tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
-                 "typst": "about 15 MB download", "full": "Pandoc 35 MB and Typst 15 MB download (about 50 MB)",
+                 "typst": "about 15 MB download", "full": CORE_TYPST_SIZE,
                  "diagram": "about 22 MB: D2 17 MB, Graphviz 2 MB, resvg about 3 MB",
                  "diagram:resvg": "about 3 MB download",
                  "diagram:d2": "about 17 MB download", "diagram:dot": "about 2 MB, plus node if needed",
                  "diagram:all": "about 22 MB, plus node if needed",
                  "math:katex": "about 1.5 MB, plus node if needed", "math:mathjax": "about 12 MB, plus node if needed",
-                 "calibre": "190 to 360 MB download", "core": "Pandoc 35 MB and Typst 15 MB download (about 50 MB)",
-                 "core:typst": "Pandoc 35 MB and Typst 15 MB download (about 50 MB)",
-                 "core:tex": "Pandoc 35 MB and Tectonic 10 to 22 MB download",
-                 "cortex": "Pandoc 35 MB and Tectonic 10 to 22 MB download",
+                 "calibre": "190 to 360 MB download", "core": CORE_TYPST_SIZE,
+                 "core:typst": CORE_TYPST_SIZE,
+                 "core:tex": CORE_TEX_SIZE,
+                 "cortex": CORE_TEX_SIZE,
                  "batchocr": "about 40 MB with PyMuPDF"}
 
 
@@ -215,7 +219,7 @@ def offer_native_upgrade() -> None:
     if "emoji" in core.NATIVE_LOST and inkmd_emoji_font() is None:
         options.append(("emoji", f"install the colour emoji font ({INSTALL_SIZES['emoji']})"))
     if not (core.which("pandoc") and core.installed_engines()):
-        options.append(("full", f"install Pandoc and Typst now ({INSTALL_SIZES['full']}, into pdfmd's own "
+        options.append(("full", f"install Pandoc, Typst and the default fonts now ({INSTALL_SIZES['full']}, into pdfmd's own "
                                 "folders, no admin rights) for the full-quality route"))
     options.append(("never", "continue as is and don't ask again"))
     print(f"\nThe native renderer could not render: {lost}.")

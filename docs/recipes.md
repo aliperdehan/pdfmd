@@ -968,7 +968,7 @@ pdfmd --completion zsh > ~/.zfunc/_pdfmd        # bash and fish too; generated f
 
 ```sh
 pdfmd --doctor                       # one report: tools, fonts, OCR, config, cache, and the command that fixes each gap
-pdfmd --install full                 # Pandoc and Typst into pdfmd's own folders, no admin rights
+pdfmd --install full                 # Pandoc, Typst and the default fonts, no admin rights
 pdfmd --install pandoc|typst|math|emoji|fonts|translit|ocr|batchocr|tui
 pdfmd --uninstall fonts:NAME         # or ocr:LANG
 ```

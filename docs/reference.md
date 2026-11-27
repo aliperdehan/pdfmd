@@ -431,9 +431,10 @@ lists the affected kinds in one warning. `--no-markup` switches off these
 interpretations.
 See normalise_gfm() in lib/pdfmd_native and the native renderer in lib/pdfmd_engines/native.py.
 
-`--install core` (also `core:typst`, `full`) installs Pandoc and Typst: 35 MB and 15 MB download,
-about 50 MB together. `--install core:tex` (also `cortex`) installs Pandoc and Tectonic: 35 MB and
-10 to 22 MB download. Tectonic fetches the TeX files a document needs on first use and then caches them.
+`--install core` (also `core:typst`, `full`) installs Pandoc, Typst and `fonts:core` for about 58 MB.
+`--install core:tex` (also `cortex`) installs Pandoc, Tectonic and the same fonts for about 53 to 65 MB.
+The fonts are STIX Two, JetBrains Mono, Noto Serif and symbols (about 8 MB). Tectonic fetches the TeX files a
+document needs on first use and then caches them.
 
 ## Finding a document by name
 
