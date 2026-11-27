@@ -46,9 +46,11 @@ def watch_output(source, args, default_target, scaffold_plan, section_plan) -> P
     """The same output path that single-file dispatch chooses for this build."""
     stem = scaffold_plan.output_stem if scaffold_plan is not None else (
         section_plan.output_stem if section_plan is not None else source.stem)
-    target = default_target(source, core.scaffold_metadata_files(source, args.metadata_file))
-    from pdfmd_crop.build import build_target
-    writer, export = build_target(target)
+    metadata = core.scaffold_metadata_files(source, args.metadata_file)
+    target = default_target(source, metadata)
+    from pdfmd_crop.build import CROPPED_OFFICE, build_target, crop_requested
+    cropped = bool(set(target.split(",")) & set(CROPPED_OFFICE)) and crop_requested(source, metadata)
+    writer, export = build_target(target, cropped=cropped)
     target = export.primary if export else writer.split(",")[0]
     extension = core.output_extension_for(target, source)
     if args.out and not args.destination_cwd and args.out.is_dir():

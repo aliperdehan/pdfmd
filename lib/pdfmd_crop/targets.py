@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 
 from pdfmd_base import core
 from pdfmd_crop import CropError, crop_pdf
-from pdfmd_crop.build import crop_settings, draw_targets
+from pdfmd_crop.build import CROPPED_OFFICE, crop_settings, draw_targets, pdf_formats
 
 
 def picture_target(args) -> str | None:
@@ -21,9 +21,9 @@ def picture_target(args) -> str | None:
 def picture_command(args) -> int:
     """Export a PDF that already exists, without invoking a document writer."""
     targets = list(args.to_many or [picture_target(args) or "pdf"])
-    if any(target not in core.PICTURE_FORMATS for target in targets):
+    if any(target not in pdf_formats(True) for target in targets):
         names = ", ".join(core.PICTURE_FORMATS[:-1]) + " or " + core.PICTURE_FORMATS[-1]
-        raise SystemExit(f"--crop cuts a PDF page: it goes with --to {names}")
+        raise SystemExit(f"--crop cuts a PDF page: it goes with --to {names}. Cropped pages can also be exported as docx or odt.")
     if args.batch:
         raise SystemExit("-b takes one folder")
     many = len(args.path) > 1 or len(targets) > 1
@@ -49,6 +49,8 @@ def picture_command(args) -> int:
             metadata = core.find_metadata(source.parent, args.metadata_file, document_stem=source.stem, document=source)
             metadata = metadata if isinstance(metadata, list) else [metadata] if isinstance(metadata, Path) else []
             crop = crop_settings(source, metadata, "pdf")
+            if crop is None and any(target in CROPPED_OFFICE for target in targets):
+                raise CropError("Exporting PDF pages to Word or OpenDocument requires --crop")
             from pdfmd_engines.tools import tool_paths
 
             with tool_paths(source, metadata), TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
@@ -91,7 +93,7 @@ def check_suffix(output: Path, target: str) -> None:
 
 def output_folder(output: Path | None, many: bool) -> Path | None:
     if output is not None and (many or not output.suffix):
-        if output.suffix and not output.is_dir():
+        if output.is_file() or (output.suffix and not output.is_dir()):
             raise SystemExit(f"Several outputs: -o names a folder, not a file ({output})")
         output.mkdir(parents=True, exist_ok=True)
     return output
@@ -106,7 +108,7 @@ def picture_destination(output: Path | None, home: Path, name: str) -> Path:
 # Other writers get their own invocation, as with explicit --to lists since
 # 3.31.28. The PDF and all of its derivatives share one normal PDF invocation.
 _TARGET_OPTIONS = {"-t": 1, "--to": 1}
-_PICTURE_OPTIONS = {"--crop": 0, "--no-crop": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1,
+_PICTURE_OPTIONS = {"--crop": 0, "--crop-pad": 1, "--crop-ignore-bottom": 1, "--crop-page": 1,
                     "--image-quality": 1, "--image-background": 1, "--page-folder": 0, "--no-page-folder": 0}
 
 
@@ -118,16 +120,19 @@ def kept_arguments(argv, options, paths=()):
             skip -= 1
         elif key in options:
             skip = 0 if equals else options[key]
+        elif any(word.startswith(flag) and word != flag for flag in ("-t", "-j") if flag in options):
+            continue
         elif not paths or (word != "--" and str(Path(word)) not in paths):
             kept.append(word)
     return kept
 
 
-def multi_target_command(args, *, formats=None, source=None, batch_file=False, original=None) -> int:
+def multi_target_command(args, *, formats=None, source=None, batch_file=False, original=None, cropped=False) -> int:
     """Build unrelated writer targets separately. Pin a resolved default to its input."""
     formats = list(formats or args.to_many)
-    pdf_targets = [name for name in formats if name in core.PICTURE_FORMATS]
-    others = [name for name in formats if name not in core.PICTURE_FORMATS]
+    supported = pdf_formats(cropped)
+    pdf_targets = [name for name in formats if name in supported]
+    others = [name for name in formats if name not in supported]
     output_folder(args.out, len(formats) > 1)
     argv = [sys.executable, str(Path(core.__file__).resolve())]
     removed = _TARGET_OPTIONS.copy()
@@ -149,8 +154,8 @@ def multi_target_command(args, *, formats=None, source=None, batch_file=False, o
     return status
 
 
-def build_batch_writers(args, source, formats, original=None, *, chatter=None):
-    status = multi_target_command(args, formats=formats, source=source, batch_file=True, original=original)
+def build_batch_writers(args, source, formats, cropped, original=None, *, chatter=None):
+    status = multi_target_command(args, formats=formats, source=source, batch_file=True, original=original, cropped=cropped)
     built = core.Built((source, status == 0, ""))
     built.chatter = chatter
     return built

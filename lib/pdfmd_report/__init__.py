@@ -131,13 +131,14 @@ def _run(core, *, records,
     if report_kit_kinds:
         report_no_auto = effective_no_auto(files[0], args.no_auto, report_kit_kinds)
     from pdfmd_crop import CropError
-    from pdfmd_crop.build import build_target
+    from pdfmd_crop.build import CROPPED_OFFICE, build_target, crop_requested, pdf_formats
     chosen = default_target(files[0], metadata_files)
     formats = chosen.split(",")
-    if len(formats) > 1 and any(name not in core.PICTURE_FORMATS for name in formats):
+    cropped = bool(set(formats) & set(CROPPED_OFFICE)) and crop_requested(files[0], metadata_files)
+    if len(formats) > 1 and any(name not in pdf_formats(cropped) for name in formats):
         from pdfmd_crop.targets import multi_target_command
-        raise SystemExit(multi_target_command(args, formats=formats))
-    target_format, export = build_target(chosen)
+        raise SystemExit(multi_target_command(args, formats=formats, cropped=cropped))
+    target_format, export = build_target(chosen, cropped=cropped)
     output = route.output_path(core, args, target_format, export)
     log_path = transcript.destination(args.log, files[0], metadata_files)
     if target_format == "pdf":

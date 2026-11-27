@@ -879,7 +879,10 @@ A rotated page is handled. A page that draws nothing keeps its page boxes and pr
 - **Names.** A normal PDF build writes its cropped result to the usual output
   path. When an existing PDF is the source, the default output is `NAME-crop.pdf`.
   A picture-only export uses the normal PDF build with a temporary output and suppresses the stamp and backup.
-- `--crop` with `--to docx`, `odt`, `html` ... is an error: those have no page to cut.
+- **Office pages.** `--crop --to docx` or `--crop --to odt` embeds one picture per cropped
+  PDF page in a Word or OpenDocument file. Each page uses its cropped size, with
+  SVG where available and PNG for compatibility. Use `--no-crop` for the usual
+  editable Office export from source.
 - **Many files.** Name them (`pdfmd *.tex --crop -o out/`, a PDF, Markdown or anything pdfmd builds), or use `-b` on a folder
   (`pdfmd notes -b --crop -o out/ -j 4`: its `*.md`, `--recursive` for subfolders; `-j` files at a time). `-r` makes one result
   of a report folder, named after the folder; `-p` draws a picture per slide.

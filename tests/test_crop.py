@@ -10,8 +10,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
+from xml.etree import ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
 import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
@@ -423,7 +425,7 @@ class Pictures(unittest.TestCase):
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_a_format_that_is_not_a_picture_is_a_run_of_its_own(self):
         (self.dir / "note.md").write_text("# T\n\ntext\n", encoding="utf-8")
-        done = self.run_pdfmd("note.md", "--to", "html,png", "--crop", "--crop-ignore-bottom", "60", "--image-dpi", "30", "-o", "out",
+        done = self.run_pdfmd("note.md", "--to", "html,png", "--crop", "--crop-ignore-bottom", "60", "--image-dpi", "30", "-o", "out", "-e", "inkmd",
                               path=os.environ.get("PATH", "") + os.pathsep + str(Path(GS).parent))
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(sorted(path.name for path in (self.dir / "out").iterdir()), ["note.html", "note.png"])
@@ -446,10 +448,83 @@ class Pictures(unittest.TestCase):
         self.assertEqual([png_size(path) for path in made], [(200, 100), (200, 100)])
 
     def test_a_target_without_pages_is_refused_before_anything_is_built(self):
-        done = self.run_pdfmd("formula.pdf", "--crop", "--to", "docx")
+        done = self.run_pdfmd("formula.pdf", "--crop", "--to", "html")
         self.assertEqual(done.returncode, 1)
         self.assertIn("pdf, png, jpg, tiff, eps, ps, svg or webp", done.stderr)
         self.assertEqual(sorted(path.name for path in self.dir.iterdir() if path.suffix != ".ps"), ["formula.pdf"])
+
+    def test_standalone_cropped_office_pages_have_their_own_sizes(self):
+        for target in ("docx", "odt"):
+            with self.subTest(target=target):
+                done = self.run_pdfmd("formula.pdf", "--crop", "--crop-pad", "0", "--image-dpi", "72", "-t", target)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                with zipfile.ZipFile(self.dir / f"formula.{target}") as archive:
+                    if target == "docx":
+                        word = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+                        document = ElementTree.fromstring(archive.read("word/document.xml"))
+                        sizes = [(int(node.attrib[word + "w"]), int(node.attrib[word + "h"]))
+                                 for node in document.iter(word + "pgSz")]
+                        self.assertEqual(len(sizes), 2)
+                        for actual, expected in zip(sizes, [(1200, 400), (400, 400)]):
+                            self.assertAlmostEqual(actual[0], expected[0], delta=1)
+                            self.assertAlmostEqual(actual[1], expected[1], delta=1)
+                        prefix = "word/media"
+                    else:
+                        style = "{urn:oasis:names:tc:opendocument:xmlns:style:1.0}"
+                        fo = "{urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0}"
+                        styles = ElementTree.fromstring(archive.read("styles.xml"))
+                        sizes = [(float(node.attrib[fo + "page-width"][:-2]), float(node.attrib[fo + "page-height"][:-2]))
+                                 for node in styles.iter(style + "page-layout-properties")]
+                        self.assertEqual(len(sizes), 2)
+                        for actual, expected in zip(sizes, [(60, 20), (20, 20)]):
+                            self.assertAlmostEqual(actual[0], expected[0], delta=0.1)
+                            self.assertAlmostEqual(actual[1], expected[1], delta=0.1)
+                        prefix = "Pictures"
+                    for index, size in enumerate(((60, 20), (20, 20)), 1):
+                        data = archive.read(f"{prefix}/page-{index}.png")
+                        self.assertEqual((int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")), size)
+                        if shutil.which("pdftocairo") or shutil.which("mutool"):
+                            self.assertIn(b"<svg", archive.read(f"{prefix}/page-{index}.svg"))
+
+    def test_source_crop_and_office_outputs_share_the_pdf(self):
+        document = self.dir / "note.md"
+        document.write_text(
+            "---\npdfmd-options: {default-output: [docx, pdf, odt], crop: true, crop-page: 2}\n---\n"
+            "\nFirst\n\n\\newpage\n\nSecond\n", encoding="utf-8",
+        )
+        done = self.run_pdfmd("note.md", "-e", "inkmd", "--no-stamp", "--no-backup", path=self.native_path())
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        pdf = self.dir / "note.pdf"
+        self.assertEqual(len(pypdf.PdfReader(str(pdf)).pages), 1)
+        left, bottom, right, top = media(pdf)
+        for target, entry in (("docx", "word/media/page-1.png"), ("odt", "Pictures/page-1.png")):
+            with zipfile.ZipFile(self.dir / f"note.{target}") as archive:
+                data = archive.read(entry)
+                self.assertNotIn(entry.replace("-1.", "-2."), archive.namelist())
+                self.assertAlmostEqual(int.from_bytes(data[16:20], "big"), (right - left) * 300 / 72, delta=2)
+                self.assertAlmostEqual(int.from_bytes(data[20:24], "big"), (top - bottom) * 300 / 72, delta=2)
+
+    def test_cropped_office_uses_png_when_vector_export_fails(self):
+        from pdfmd_crop import rendering
+        from pdfmd_office.cropped import write
+
+        targets = {kind: self.dir / f"fallback.{kind}" for kind in ("docx", "odt")}
+        with mock.patch.object(rendering, "svg", side_effect=pdfmd_crop.CropError("no vector converter")):
+            self.assertEqual(write(self.source, targets, 72, None), list(targets.values()))
+        for kind, prefix in (("docx", "word/media"), ("odt", "Pictures")):
+            with zipfile.ZipFile(targets[kind]) as archive:
+                assets = sorted(name for name in archive.namelist() if name.startswith(f"{prefix}/"))
+                self.assertEqual(assets, [f"{prefix}/page-1.png", f"{prefix}/page-2.png"])
+
+    @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+    def test_no_crop_keeps_the_editable_word_writer(self):
+        (self.dir / "note.md").write_text(
+            "---\npdfmd-options: {crop: true}\n---\n\nEditable word.\n", encoding="utf-8",
+        )
+        done = self.run_pdfmd("note.md", "-t", "docx,pdf", "--no-crop", "-e", "inkmd")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        with zipfile.ZipFile(self.dir / "note.docx") as archive:
+            self.assertIn(b"Editable word.", archive.read("word/document.xml"))
 
     def native_path(self) -> str:
         return str(Path(GS).parent) + os.pathsep + "/usr/bin" + os.pathsep + "/bin"

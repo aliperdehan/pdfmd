@@ -917,7 +917,8 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "On: NAME/001.png ... ; off: NAME-001.png ... beside the document. Per run: --page-folder / --no-page-folder.",
                "Output"),
         choice("options.crop", "Crop PDF builds to the ink of each page", on_off, "",
-               "Off by default. Per run: --crop / --no-crop. Needs pypdf and a PDF measuring tool (see --doctor).", "Output"),
+               "Off by default. With Word or OpenDocument output, embed pictures of the cropped pages. "
+               "Per run: --crop / --no-crop. Needs pypdf and a PDF measuring tool (see --doctor).", "Output"),
         text("options.crop-pad", "Points of padding around the crop", "Default 2 pt. Per run: --crop-pad.",
              "Output", check="number"),
         text("options.crop-ignore-bottom", "Points at the bottom excluded from the crop", "Default 0 pt. Per run: --crop-ignore-bottom.",

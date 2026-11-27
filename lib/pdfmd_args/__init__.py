@@ -661,6 +661,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--crop", action=argparse.BooleanOptionalAction, default=None,
                         help="cut each PDF page to what it draws. With a source, crop the result of the normal PDF build. "
                              "With an existing PDF, write NAME-crop.pdf. For pictures, crop before drawing them. "
+                             "With --to docx or odt, embed the cropped pages as full-page pictures. "
                              "Also pdfmd-options: {crop: true} and --setup (default off). --no-crop overrides the setting. "
                              "Needs pypdf and Ghostscript, MuPDF or Poppler (see --doctor). "
                              "Options: --crop-pad, --crop-ignore-bottom, --crop-page")

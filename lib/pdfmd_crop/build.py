@@ -17,6 +17,7 @@ from pdfmd_crop import DEFAULT_PAD, CropError, crop_pdf
 
 
 CROP_OPTIONS_REQUIRED = "--crop-pad, --crop-ignore-bottom and --crop-page go with --crop or pdfmd-options.crop"
+CROPPED_OFFICE = ("docx", "odt")
 
 
 def setting(document: Path, metadata: list[Path], key: str, cli=None):
@@ -56,6 +57,15 @@ def crop_settings(document, metadata, target):
     }
 
 
+def crop_requested(document, metadata) -> bool:
+    cli = core.POLISH_CLI.get("crop", (None,))[0]
+    return core.option_flag(setting(document, metadata, "crop", cli)) is True
+
+
+def pdf_formats(cropped: bool) -> tuple[str, ...]:
+    return (*core.PICTURE_FORMATS, *CROPPED_OFFICE) if cropped else core.PICTURE_FORMATS
+
+
 @dataclass(frozen=True)
 class Export:
     """Picture destinations of one normal PDF build."""
@@ -82,9 +92,10 @@ class Export:
         return written[0] if len(written) == 1 or written[0].parent == destination.parent else written[0].parent
 
 
-def build_target(target: str) -> tuple[str, Export | None]:
+def build_target(target: str, *, cropped: bool = False) -> tuple[str, Export | None]:
     formats = tuple(target.split(","))
-    pictures = tuple(name for name in formats if name in core.PICTURE_ONLY)
+    supported = pdf_formats(cropped)
+    pictures = tuple(name for name in formats if name in supported and name != "pdf")
     if pictures:
         return "pdf", Export(pictures, "pdf" in formats)
     return target, None
@@ -98,13 +109,22 @@ def draw_targets(pdf, destination, formats, document, metadata, *, exact=False) 
     folder = core.option_flag(setting(document, metadata, "page-folder", core.POLISH_CLI.get("page-folder"))) is not False
     background = setting(document, metadata, "image-background", core.POLISH_CLI.get("image-background"))
     written = []
+    office = {}
     for target in formats:
         target_path = destination if exact else destination.with_suffix(core.output_extension_for(target))
+        if target in CROPPED_OFFICE:
+            if target_path.resolve() == document.resolve():
+                raise CropError(f"{target_path.name}: the export would replace its source")
+            office[target] = target_path
+            continue
         made = pictures(pdf, target_path, target, dpi, quality, folder, background=background)
         if len(made) > 1:
             where = "beside it" if made[0].parent == target_path.parent else f"in {core.display_path(made[0].parent)}/"
             emit("note", None, f"NOTE  {len(made)} pages: one {target} each, {where}", file=sys.stderr)
         written.extend(made)
+    if office:
+        from pdfmd_office.cropped import write
+        written.extend(write(pdf, office, dpi, background))
     return written
 
 

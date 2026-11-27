@@ -126,12 +126,34 @@ def crop_page(pdf: Path, page: int, kind: str, folder: Path) -> Path | None:
     return single
 
 
-def convert_pages(pdf: Path, count: int, folder: Path, kinds: list[str] | None = None, jobs: int = 4) -> list[dict]:
+def convert_pages(pdf: Path, count: int, folder: Path, kinds: list[str] | None = None, jobs: int = 4, *,
+                  export_dpi: float | None = None) -> list[dict]:
     """Page i of `pdf` as folder/page-i.svg and .png; returns [{svg, png, width, height, trimmed}]. With `kinds`
     (one per page) the pages are first cropped from their border back to the fragment (crop_page); `trimmed` says
-    whether that worked (otherwise the border is still there)."""
+    whether that worked (otherwise the border is still there). With export_dpi, use the PDF's current page
+    sizes and the picture fallback chain so a full-page Office export can use PNG alone."""
+    if export_dpi is not None:
+        from pypdf import PdfReader
+        from pdfmd_crop import CropError, ghostscript, rendering
+
+        reader = PdfReader(str(pdf))
+        gs = ghostscript()
+
     def one(page: int) -> dict:
         stem = folder / f"page-{page}"
+        if export_dpi is not None:
+            svg, png = stem.with_suffix(".svg"), stem.with_suffix(".png")
+            rendering.png(pdf, png, page, export_dpi, gs)
+            try:
+                rendering.svg(pdf, svg, page, gs)
+            except CropError:
+                svg.unlink(missing_ok=True)
+            original = reader.pages[page - 1]
+            area = original.cropbox
+            width, height = float(area.width) * float(original.user_unit), float(area.height) * float(original.user_unit)
+            if original.rotation % 180:
+                width, height = height, width
+            return {"svg": str(svg), "png": str(png), "trimmed": True, "width": width, "height": height}
         single = crop_page(pdf, page, kinds[page - 1], folder) if kinds is not None else None
         source, first = (single, 1) if single is not None else (pdf, page)
         _run(["pdftocairo", "-svg", "-f", str(first), "-l", str(first), str(source), f"{stem}.svg"])
@@ -142,6 +164,8 @@ def convert_pages(pdf: Path, count: int, folder: Path, kinds: list[str] | None =
             if svg.is_file() else None
         return {"svg": f"{stem}.svg", "png": f"{stem}.png", "trimmed": single is not None or kinds is None,
                 "width": float(size.group(1)) if size else 0.0, "height": float(size.group(2)) if size else 0.0}
+    if jobs == 1:
+        return [one(page) for page in range(1, count + 1)]
     with ThreadPoolExecutor(max_workers=jobs) as pool:
         return list(pool.map(one, range(1, count + 1)))
 

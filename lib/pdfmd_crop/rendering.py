@@ -147,7 +147,9 @@ def png(pdf: Path, output: Path, page: int, dpi: float, gs: str | None) -> None:
 def svg(pdf: Path, output: Path, page: int, gs: str | None) -> None:
     commands = []
     if cairo := tools.find("pdftocairo"):
-        commands.append([cairo, "-svg", "-cropbox", *page_args(page), str(pdf), str(output)])
+        # SVG already uses the visible page box. Poppler accepts -cropbox
+        # only for its raster output options.
+        commands.append([cairo, "-svg", *page_args(page), str(pdf), str(output)])
     if mupdf := tools.find("mutool"):
         # The draw command expands %d to the real page number. With no
         # placeholder it may insert a page number into the output name.

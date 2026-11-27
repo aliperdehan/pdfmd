@@ -216,6 +216,9 @@ The matching command-line flags override these defaults.
 Use `--doctor` to see which optional PDF crop and picture converters are available.
 Use `--to webp` for compressed pictures with alpha, or
 `--image-background '#ffffff'` for an opaque background.
+Use `--crop --to docx` or `--crop --to odt` to place cropped PDF pages in an
+Office document. Each page is a picture at its cropped size. Use
+`--no-crop` when the document needs editable text.
 
 A trailing numbered list of web sources and matching markers such as
 `[1]` or `[1, 3]` become Pandoc citations in the pdfmd and Obsidian flavours.

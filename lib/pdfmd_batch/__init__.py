@@ -131,7 +131,7 @@ def run(core, *,
         stamp_overrides, stop_at, target_explicit, target_format, variables, cli_export=None) -> list:
     from functools import cache
 
-    from pdfmd_crop.build import build_target
+    from pdfmd_crop.build import CROPPED_OFFICE, build_target, crop_requested, pdf_formats
     from pdfmd_crop.targets import build_batch_writers
     from pdfmd_engines.tools import tool_paths
     from pdfmd_run import presentation as slides
@@ -165,17 +165,24 @@ def run(core, *,
     @cache
     def file_formats(file):
         """This file's target: the command line's, else its own default-output."""
-        if file_presentation(file):
-            return "beamer" if stop_at == "tex" else target_format
-        if target_explicit or file.suffix.lower() not in (".md", ".markdown"):
-            return target_format
+        if file_presentation(file) and stop_at == "tex":
+            return "beamer"
+        if file_presentation(file) or target_explicit or file.suffix.lower() not in (".md", ".markdown"):
+            return ",".join(args.to_many) if args.to_many else cli_export.primary if cli_export else target_format
         found = metadata_for(file, announce=False)
         chosen = default_output_format(file, found if isinstance(found, list) else ([found] if found else []))
         return chosen or target_format
 
+    @cache
+    def file_cropped(file):
+        if not set(file_formats(file).split(",")) & set(CROPPED_OFFICE):
+            return False
+        metadata = metadata_for(file, announce=False)
+        return crop_requested(file, metadata if isinstance(metadata, list) else [metadata] if metadata else [])
+
+    @cache
     def file_plan(file):
-        target, export = build_target(file_formats(file))
-        return target, cli_export or export
+        return build_target(file_formats(file), cropped=file_cropped(file))
 
     def file_target(file):
         return file_plan(file)[0]
@@ -186,7 +193,7 @@ def run(core, *,
 
     def separate_writers(file):
         formats = file_formats(file).split(",")
-        return formats if len(formats) > 1 and any(name not in core.PICTURE_FORMATS for name in formats) else None
+        return formats if len(formats) > 1 and any(name not in pdf_formats(file_cropped(file)) for name in formats) else None
 
     # Compare the ordinary output names before rewrite protection picks a numbered copy.
     # A source must never exclude itself when its input and output suffixes coincide.
@@ -264,10 +271,11 @@ def run(core, *,
                 if formats := separate_writers(file):
                     # The writer subprocesses each open the transcript for their actual output.
                     chatter = CHATTER.get()
+                    cropped = file_cropped(file)
                     if executor is not None:
                         AUTO_LOG.flush(shown=not verbose_output(args.verbose))
-                        return executor.submit(build_batch_writers, args, file, formats, sys.argv[1:], chatter=chatter)
-                    return build_batch_writers(args, file, formats, chatter=chatter)
+                        return executor.submit(build_batch_writers, args, file, formats, cropped, sys.argv[1:], chatter=chatter)
+                    return build_batch_writers(args, file, formats, cropped, chatter=chatter)
                 log_path = transcript.destination(args.log, file, metadata_files)
                 output_file = None
                 if log_path is not None:

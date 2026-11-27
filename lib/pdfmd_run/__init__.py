@@ -380,17 +380,18 @@ def _run_main(tools, document_tools) -> None:
         if status is not None:
             raise SystemExit(status)
     pdf_input = any(path.suffix.casefold() == ".pdf" for path in args.path or [])
+    from pdfmd_crop.build import CROPPED_OFFICE, pdf_formats
     if args.crop is False and any(
             value is not None for value in (args.crop_pad, args.crop_ignore_bottom, args.crop_page)):
         from pdfmd_crop.build import CROP_OPTIONS_REQUIRED
         raise SystemExit(CROP_OPTIONS_REQUIRED)
     if (args.image_dpi is not None and args.path and all(path.suffix.lower() == ".pdf" for path in args.path)
-            and not (args.crop or args.to_many or core.picture_target(args) in core.PICTURE_ONLY)):
+            and not (args.crop or args.to_many or core.picture_target(args) in (*core.PICTURE_ONLY, *CROPPED_OFFICE))):
         raise SystemExit("--image-dpi on a PDF input goes with a picture output format")
-    if args.to_many and any(target not in core.PICTURE_FORMATS for target in args.to_many):
-        raise SystemExit(core.multi_target_command(args))
+    if pdf_input and args.to_many and any(target not in pdf_formats(bool(args.crop)) for target in args.to_many):
+        raise SystemExit(core.multi_target_command(args, cropped=bool(args.crop)))
     picture = core.picture_target(args)
-    if pdf_input and (args.crop or picture in core.PICTURE_ONLY or args.to_many
+    if pdf_input and (args.crop or picture in (*core.PICTURE_ONLY, *CROPPED_OFFICE) or args.to_many
                       or any(value is not None for value in (args.crop_pad, args.crop_ignore_bottom, args.crop_page))):
         raise SystemExit(core.picture_command(args))
     if args.check_docx:
@@ -593,11 +594,13 @@ def _run_main(tools, document_tools) -> None:
         or (core.format_from_output(args.out) if args.out and not args.batch else None)
         or "pdf"
     )
-    from pdfmd_crop.build import build_target
+    from pdfmd_crop.build import build_target, crop_requested
     from pdfmd_crop.targets import check_suffix, output_folder
     if args.to_many and len(args.to_many) > 1:
         output_folder(args.out, True)
-    target_format, cli_export = build_target(",".join(args.to_many or [target_format]))
+    requested_formats = ",".join(args.to_many or [target_format])
+    target_format, cli_export = build_target(requested_formats, cropped=args.crop is True)
+    target_format = target_format.split(",")[0]
     target_format, ascii_named = core.split_ascii_target(target_format)      # `-o notes.ascii.txt`
     core.ASCII_CLI["on"] = core.ASCII_CLI["on"] or ascii_named
     if cli_presentation:
@@ -719,6 +722,9 @@ def _run_main(tools, document_tools) -> None:
             if args.presentation is None:
                 metadata = None if plan_source.suffix.lower() == ".qmd" else metadata_for(plan_source)
                 presentation_request = slides.source(plan_source, metadata, args.presentation)
+            if set(requested_formats.split(",")) & set(CROPPED_OFFICE):
+                if crop_requested(plan_source, source_options):
+                    target_format, cli_export = build_target(requested_formats, cropped=True)
         except (FileNotFoundError, ValueError) as error:
             raise SystemExit(str(error))
         if presentation_request:
@@ -746,7 +752,7 @@ def _run_main(tools, document_tools) -> None:
 
     convert_job = None
     export = cli_export
-    if single_input:
+    if single_input and not args.to_many:
         target_format, convert_job = plan_bridge(target_format)
     if (args.engine is not None and target_format != "pdf" and stop_at != "markdown"
             and not (target_format == "odt" and args.engine.strip().casefold() == "pandoc")):
@@ -763,7 +769,7 @@ def _run_main(tools, document_tools) -> None:
         try:
             engines = core.select_engines(args.engine, False)
         except SystemExit as error:
-            if target_explicit and single_input:
+            if target_explicit and single_input and not args.to_many:
                 raise
             # A document can choose its own output or the Beamer engine chain.
             engines_error = error
@@ -775,13 +781,18 @@ def _run_main(tools, document_tools) -> None:
     def need_engines(format_name: str) -> None:
         if format_name == "pdf" and engines_error is not None:
             raise engines_error
+        if format_name == "pdf" and not engines:
+            engines[:] = core.select_engines(args.engine, False)
+        if format_name in CROPPED_OFFICE and not core.which("pandoc"):
+            raise SystemExit(core.PANDOC_MISSING)
 
     def default_target(document: Path, metadata_files: list[Path]) -> str:
         """target_format, or the document's own default-output (never over an explicit one)."""
         if args.report:
             if request := slides.source(document, metadata_files, args.presentation):
                 slides.validate(request, target_format, stop_at, report=True)
-            plan_bridge(target_format)
+            if target_format not in CROPPED_OFFICE or not crop_requested(document, metadata_files):
+                plan_bridge(target_format)
         if target_explicit:
             return ",".join(args.to_many) if args.to_many else cli_export.primary if cli_export else target_format
         chosen = core.default_output_format(document, metadata_files)
@@ -873,11 +884,11 @@ def _run_main(tools, document_tools) -> None:
             output_stem = section_plan.output_stem
         source_metadata = core.scaffold_metadata_files(source, args.metadata_file)
         chosen = default_target(source, source_metadata)
-        if "," in chosen and any(name not in core.PICTURE_FORMATS for name in chosen.split(",")):
-            raise SystemExit(core.multi_target_command(args, formats=chosen.split(","), source=paths[0]))
-        target_format, export = build_target(chosen)
-        if cli_export is not None:
-            export = cli_export
+        cropped = crop_requested(source, source_metadata) if set(chosen.split(",")) & set(CROPPED_OFFICE) else False
+        if "," in chosen and any(name not in pdf_formats(cropped) for name in chosen.split(",")):
+            named = Path(args.original_source_paths[0]) if args.original_source_paths else paths[0]
+            raise SystemExit(core.multi_target_command(args, formats=chosen.split(","), source=named, cropped=cropped))
+        target_format, export = build_target(chosen, cropped=cropped)
         if "," in chosen:
             output_folder(args.out, True)
         if export is not None and args.out and not export.keep_pdf and len(export.formats) == 1:
@@ -894,6 +905,8 @@ def _run_main(tools, document_tools) -> None:
             need_engines(target_format)
         output_kind = export.primary if export is not None else target_format
         output_extension = core.output_extension_for(output_kind, source)
+        if export and output_kind in CROPPED_OFFICE and source.suffix.casefold() == output_extension and not args.out:
+            output_stem += "-crop"
         out_dir = None
         output_file = None
         if args.out and not args.destination_cwd and args.out.is_dir():

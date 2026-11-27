@@ -19,6 +19,18 @@ same commit as the change.
 
 ---
 
+## v3.34.89 — 2026-11-27
+
+Pre-edit state: commit `194559c`. Cropping could not export Word or
+OpenDocument pages. Use the normal PDF build and the Office fragment
+converter to place a drawing on a page sized to each retained crop.
+Include SVG where available and PNG for compatibility. Ordinary editable
+Office builds remain available with `--no-crop`. Regressions inspect
+multipage packages, shared cropped PDF output, PNG fallback and the
+editable Word route.
+
+---
+
 ## v3.34.88 — 2026-11-27
 
 Pre-edit state: commit `13c1135`. Picture exports only had their built-in

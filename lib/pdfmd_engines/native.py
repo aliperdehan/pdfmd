@@ -157,7 +157,9 @@ def native_possible(args: argparse.Namespace) -> bool:
         return False
     chosen = args.to.casefold() if args.to else (
         core.format_from_output(args.out) if args.out and not args.batch else None)
-    return chosen in (None, "ansi", *core.PICTURE_FORMATS)  # pictures are made from a PDF build
+    from pdfmd_crop.build import CROPPED_OFFICE
+    return (chosen in (None, "ansi", *core.PICTURE_FORMATS)
+            or (chosen in CROPPED_OFFICE and getattr(args, "crop", None) is not False))
 
 
 def native_run_note(engines: list[str]) -> None:

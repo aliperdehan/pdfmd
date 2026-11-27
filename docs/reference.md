@@ -102,6 +102,13 @@ hex colour such as `'#ddeeff'`, a basic colour name like `white` or `navy`, or
 `transparent` to restore the format default. Pillow recognises additional CSS
 colours. `pdfmd-options.image-background` and `--setup` set the same default.
 
+With cropping enabled, `--to docx` and `--to odt` also use the cropped PDF.
+Each retained page becomes a full-page picture in an Office page of the
+same size. The file includes SVG when a vector converter succeeds and PNG
+for readers without SVG support. This export works on an existing PDF and
+on a source build. Its page contents are pictures. Use `--no-crop` for the
+editable Word or OpenDocument writer from source.
+
 An office document (.docx, .doc, .odt, .ott, .rtf, .pptx, .ppt, .odp,
 .xlsx, .xls, .ods) targeting PDF is a third special case, as of
 v3.2.0: it converts straight to PDF via headless LibreOffice
