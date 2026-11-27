@@ -100,6 +100,7 @@ UNSET = {
     "options.tesseract-path": "PATH, then the usual install folders", "options.soffice-path": "PATH, then the usual install folders",
     "options.dot-path": "PATH, then the usual install folders", "options.mmdc-path": "PATH, then npm's global folder",
     "options.poppler-path": "PATH, then the usual install folders",
+    "options.ghostscript-path": "PATH, then the usual install folders", "options.mutool-path": "PATH, then App Paths on Windows",
     "options.pandoc-path": "PATH, then the usual install folders", "options.typst-path": "PATH, then the usual install folders",
     "options.chrome-path": "PATH, then the usual install folders",
     "user-path": "nothing changed until you choose it", "kits": "kits/ folders above the document, then the TeX tree", "options.kit": "no kit", "options.kit-stack": "off (--kit replaces every kit setting)", "options.metadata-append": "nothing appends (a document value replaces)", "options.path-style": "auto", "options.path-up": "2", "options.metadata-parents": "1 (one parent above the scaffold or document folder)",
@@ -120,6 +121,7 @@ MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "o
 FOLDER_OPTIONS = frozenset({
     "options.pandoc-path", "options.typst-path", "options.chrome-path", "options.tesseract-path",
     "options.soffice-path", "options.dot-path", "options.mmdc-path", "options.poppler-path",
+    "options.ghostscript-path", "options.mutool-path",
     "options.global-metadata", "options.preset", "options.rewrite", "options.rewrite-name", "options.fallback", "options.missing", "options.citation-engine",
     "options.numbered-references", "options.csl-fallback", "options.fullcite-list", "options.attach-bibliography", "options.pdf-engine", "options.engine-fallback", "options.tex-repair", "options.pandoc-memory", "options.css-scope", "options.indent", "options.paragraph-spacing", "options.bibliography-indent",
     "options.typst-line-spacing", "options.figure-fit", "options.page-numbers",
@@ -914,7 +916,7 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                "On: NAME/001.png ... ; off: NAME-001.png ... beside the document. Per run: --page-folder / --no-page-folder.",
                "Output"),
         choice("options.crop", "Crop PDF builds to the ink of each page", on_off, "",
-               "Off by default. Per run: --crop / --no-crop. Cropping requires Ghostscript and pypdf.", "Output"),
+               "Off by default. Per run: --crop / --no-crop. Needs pypdf and a PDF measuring tool (see --doctor).", "Output"),
         text("options.crop-pad", "Points of padding around the crop", "Default 2 pt. Per run: --crop-pad.",
              "Output", check="number"),
         text("options.crop-ignore-bottom", "Points at the bottom excluded from the crop", "Default 0 pt. Per run: --crop-ignore-bottom.",
@@ -1010,8 +1012,12 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "then in the usual Windows install folders.", "Tool locations"),
         text("options.mmdc-path", "Mermaid", "The mmdc program, or the folder that holds it. Without it pdfmd looks on PATH, "
              "then in npm's global folder.", "Tool locations"),
-        text("options.poppler-path", "Poppler", "The folder that holds pdftotext and pdftoppm. Without it pdfmd looks on PATH, "
+        text("options.poppler-path", "Poppler", "The folder that holds pdftotext, pdftoppm and pdftocairo. Without it pdfmd looks on PATH, "
              "then in the usual Windows install folders.", "Tool locations"),
+        text("options.ghostscript-path", "Ghostscript", "The gs program (gswin64c or gswin32c on Windows), or its folder. "
+             "Without it pdfmd looks on PATH, then in the usual Windows install folders.", "Tool locations"),
+        text("options.mutool-path", "MuPDF", "The mutool program, or its folder. Without it pdfmd looks on PATH, "
+             "then in Windows App Paths.", "Tool locations"),
         text("options.pandoc-path", "Pandoc", "The pandoc program, or the folder that holds it. Without it pdfmd looks on PATH, "
              "then in the usual Windows install folders.", "Tool locations"),
         text("options.typst-path", "Typst", "The typst program, or the folder that holds it. Without it pdfmd looks on PATH, "

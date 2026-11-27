@@ -857,9 +857,8 @@ and `pdfmd --setup` can also set the default. The default is off, and
 `--no-crop` overrides an inherited setting. With no filename,
 `pdfmd --crop` uses the normal source lookup.
 
-The ink is what Ghostscript's `bbox` device finds painted on the page; only the page's media and crop box change, so the page
-stays vector and nothing is redrawn. It is what [eqpop](https://github.com/aliperdehan/eqpop) does to a rendered formula, on any
-machine that has Ghostscript and pypdf. A rotated page is handled; a page that draws nothing is left as it is, with a NOTE.
+Ghostscript, MuPDF or a bitmap scan measures the page ink. pypdf sets the page boxes and the PDF stays vector.
+A rotated page is handled. A page that draws nothing keeps its page boxes and prints a note.
 
 - `--crop-pad PT` sets the room around the ink (default 2); `--crop-ignore-bottom PT` leaves the foot of each page out of the
   measurement (for example, a page number already in a PDF). `--crop-page N` keeps page N alone.
@@ -867,9 +866,10 @@ machine that has Ghostscript and pypdf. A rotated page is handled; a page that d
 - **Several at once.** With `--to pdf,png,docx`, pdfmd draws the pictures from the same PDF that it saves
   and builds the Word document separately. Each result sits beside the others. Use a directory for `-o`.
   Set `pdfmd-options: {default-output: [pdf, png]}` to choose a list when the command line names no format.
-- **Targets.** `--to pdf` (the default), `png`, `jpg` (`jpeg`), `tiff` (`tif`), `eps`, `ps` or `svg`; `-o x.png` picks the format by its suffix. PNG is drawn by
-  Ghostscript on a transparent background at `--image-dpi` (default 300); JPEG the same on white, at `--image-quality` (default 90); `tiff` (LZW, white, all pages in one file), `eps` (vector; one file per page, its box is the ink) and `ps` (vector, all pages in one file); SVG by `pdftocairo` (poppler) or else `mutool` (MuPDF). `--to png|svg`
-  draws the whole page when cropping is off.
+- **Targets.** `--to pdf` (the default), `png`, `jpg` (`jpeg`), `tiff` (`tif`), `eps`, `ps` or `svg`. `-o x.png` picks the format by its suffix.
+  PNG is transparent at `--image-dpi` (default 300). JPEG is white, at `--image-quality` (default 90).
+  TIFF and PostScript hold all pages in one file. EPS uses one file per page with an ink bounding box.
+  PNG and SVG use the first working converter listed in `--doctor` and draw the whole page when cropping is off.
 - **Pages.** A PDF keeps all its pages, each cut to its own ink. A picture format is one picture per page (`tiff` and `ps` keep all pages in one file): `NAME.png` beside the
   document for a one-page result, a folder `NAME/` with `001.png`, `002.png` ... for several (with a NOTE); `--crop-page 1` gives
   the plain name. `-o a.png` with several pages gives the folder `a/`. `--no-page-folder` (or `pdfmd-options: {page-folder: false}`,
@@ -885,6 +885,7 @@ machine that has Ghostscript and pypdf. A rotated page is handled; a page that d
 `crop-pad`, `crop-ignore-bottom`, `crop-page`, `image-dpi`, `image-quality` and `page-folder` are also
 `pdfmd-options` keys in front matter or metadata. Folder settings, global configuration and `--setup`
 provide defaults. Command-line values take precedence.
+Use the `ghostscript-path`, `mutool-path` and `poppler-path` rows in `--setup` to choose installed converters.
 
 ### A small editor
 

@@ -52,6 +52,9 @@ class DoctorTests(unittest.TestCase):
         self.assertTrue(all(check["status"] in {"ok", "warn", "fail", "info"} for check in checks.values()))
         tools = {tool["name"]: tool for tool in data["tools"]}
         self.assertEqual(tools["pandoc"], {"name": "pandoc", "found": False, "path": None, "version": None, "source": None})
+        for name in ("ghostscript", "mutool", "pdftocairo", "pdftoppm", "sips", "pypdfium2", "Pillow"):
+            self.assertIn(name, tools)
+        self.assertIn("pdf-ink-chain", checks)
 
     def test_with_nothing_on_path_it_names_what_to_install(self):
         with tempfile.TemporaryDirectory() as directory:

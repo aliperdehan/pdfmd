@@ -213,6 +213,7 @@ Use `default-output: [pdf, png]` in `pdfmd-options` to save both from
 one build. Set `crop-pad`, `crop-ignore-bottom`, `crop-page`, `image-dpi`,
 `image-quality` and `page-folder` in `pdfmd-options` or through `--setup`.
 The matching command-line flags override these defaults.
+Use `--doctor` to see which optional PDF crop and picture converters are available.
 
 A trailing numbered list of web sources and matching markers such as
 `[1]` or `[1, 3]` become Pandoc citations in the pdfmd and Obsidian flavours.

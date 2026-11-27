@@ -149,6 +149,30 @@ class ToolLocations(unittest.TestCase):
         with redirect_stderr(io.StringIO()):
             self.assertEqual(pdfmd.locate_tool("poppler"), (None, ""))
 
+    def test_crop_uses_configured_tools_and_windows_ghostscript_names(self):
+        from pdfmd_crop import tools
+        gs = self.make("pf", "gs", "gs10.06.0", "bin", "gswin64c.exe")
+        self.assertEqual(tools.find("ghostscript"), str(gs))
+        gs = self.make("custom", "renamed-gs.exe")
+        mupdf = self.make("custom", "mutool.exe")
+        cairo = self.make("my-poppler", "pdftocairo.exe")
+        self.config = {"ghostscript-path": str(gs), "mutool-path": str(mupdf.parent), "poppler-path": str(cairo.parent)}
+        pdfmd.use_found_tools()
+        self.assertEqual(tools.find("ghostscript"), str(gs))
+        self.assertEqual(tools.find("mutool"), str(mupdf))
+        self.assertEqual(tools.find("pdftocairo"), str(cairo))
+
+        from pdfmd_engines.tools import tool_paths
+
+        local_cairo = self.make("folder", "pdftocairo.exe")
+        local_gs = self.make("folder", "custom-gs.exe")
+        document = self.make("doc.md")
+        options = [("document", {"ghostscript-path": str(local_gs), "poppler-path": str(local_cairo.parent)})]
+        with mock.patch.object(pdfmd, "option_sources", return_value=options), tool_paths(document, []):
+            self.assertEqual(tools.find("ghostscript"), str(local_gs))
+            self.assertEqual(tools.find("pdftocairo"), str(local_cairo))
+        self.assertEqual(tools.find("pdftocairo"), str(cairo))
+
     def test_a_stale_path_is_said_once_and_passed_over(self):
         self.config = {"tesseract-path": str(self.root / "gone")}
         self.on_path["tesseract"] = "elsewhere/tesseract"

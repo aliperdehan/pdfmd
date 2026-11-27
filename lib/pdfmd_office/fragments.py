@@ -85,13 +85,12 @@ def tools_available() -> bool:
 
 
 def ink_box(pdf: Path, page: int) -> tuple[float, float, float, float] | None:
-    """The bounding box of what a page draws, from Ghostscript's `bbox` device."""
-    gs = shutil.which("gs")
-    if gs is None:
+    """The bounding box of what a page draws, when a measuring tool is available."""
+    from pdfmd_crop import CropError, ink_boxes
+    try:
+        return ink_boxes(pdf, 1, page=page)[0]
+    except CropError:
         return None
-    done = _run([gs, "-q", "-dBATCH", "-dNOPAUSE", f"-dFirstPage={page}", f"-dLastPage={page}", "-sDEVICE=bbox", str(pdf)])
-    found = re.search(r"%%HiResBoundingBox:\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)", done.stderr)
-    return tuple(float(value) for value in found.groups()) if found else None
 
 
 def crop_page(pdf: Path, page: int, kind: str, folder: Path) -> Path | None:

@@ -1,19 +1,12 @@
-"""A PDF as pictures: one PNG, JPEG, EPS or SVG per page, or one TIFF or PostScript file of all the pages
-(`pdfmd --to png|jpg|tiff|eps|ps|svg`, v3.31.21).
-
-PNG is drawn by Ghostscript's `pngalpha` device (a transparent background, the page's crop box as the picture's edge),
-JPEG by its `jpeg` device (white: a JPEG has no transparency), TIFF by `tiff24nc` (LZW, white, all pages in one file), EPS
-by `eps2write` (its box is the ink of the page) and PostScript by `ps2write`; SVG by poppler's `pdftocairo`, else MuPDF's `mutool`. Text stays text in the SVG only as far as those tools keep it.
-"""
+"""Draw PDF pages as picture files or a multipage TIFF or PostScript file."""
 
 from __future__ import annotations
 
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 
-from . import CropError, ghostscript
+from . import CropError, ghostscript, rendering, tools
 
 KINDS = ("png", "jpg", "tiff", "eps", "ps", "svg")
 ONE_FILE = ("tiff", "ps")   # formats that hold all the pages in one file
@@ -21,13 +14,18 @@ DEFAULT_DPI = 300   # pixels per inch of a PNG or JPEG; `--image-dpi`
 DEFAULT_QUALITY = 90   # JPEG quality, 1-100; `--image-quality`
 
 
-def _run(command: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
-
-
 def _pages(pdf: Path) -> int:
-    from pypdf import PdfReader
-    return len(PdfReader(str(pdf)).pages)
+    try:
+        from pypdf import PdfReader
+    except ImportError as error:
+        raise CropError("Picture exports need pypdf (pip install pypdf)") from error
+    try:
+        count = len(PdfReader(str(pdf)).pages)
+    except Exception as error:  # pypdf raises several errors for unreadable PDFs
+        raise CropError(f"{pdf.name} is not a readable PDF ({error})") from error
+    if not count:
+        raise CropError(f"{pdf.name} has no pages")
+    return count
 
 
 def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quality: int = DEFAULT_QUALITY,
@@ -59,34 +57,24 @@ def pictures(pdf: Path, target: Path, kind: str, dpi: float = DEFAULT_DPI, quali
             device = {"tiff": ["-sDEVICE=tiff24nc", "-sCompression=lzw", f"-r{dpi:g}"], "eps": ["-sDEVICE=eps2write"],
                       "ps": ["-sDEVICE=ps2write"]}[kind]
             pattern = "pages." + kind if kind in ONE_FILE else "page-%d." + kind
-            done = _run([gs, "-q", "-dBATCH", "-dNOPAUSE", "-dUseCropBox", *device, f"-sOutputFile={work / pattern}", str(pdf)])
+            done = tools.run([gs, "-q", "-dBATCH", "-dNOPAUSE", "-dUseCropBox", *device, f"-sOutputFile={work / pattern}", str(pdf)])
             made = [work / pattern] if kind in ONE_FILE else [work / f"page-{number}.{kind}" for number in range(1, count + 1)]
-        elif kind in ("png", "jpg"):
-            gs = ghostscript()
-            if gs is None:
-                raise CropError(f"--to {kind} needs Ghostscript (brew install ghostscript, apt install ghostscript)")
-            device = ["-sDEVICE=pngalpha"] if kind == "png" else ["-sDEVICE=jpeg", f"-dJPEGQ={quality}"]
-            done = _run([gs, "-q", "-dBATCH", "-dNOPAUSE", "-dUseCropBox", "-dTextAlphaBits=4", "-dGraphicsAlphaBits=4",
-                         *device, f"-r{dpi:g}", f"-sOutputFile={work / ('page-%d.' + kind)}", str(pdf)])
-            made = [work / f"page-{number}.{kind}" for number in range(1, count + 1)]
+            if done.returncode != 0 or not all(path.is_file() for path in made):
+                detail = (done.stderr.strip().splitlines() or ["no picture was made"])[-1]
+                raise CropError(f"could not draw {pdf.name} as {kind}: {detail}")
         else:
-            cairo, mupdf = shutil.which("pdftocairo"), shutil.which("mutool")
-            if cairo is None and mupdf is None:
-                raise CropError("--to svg needs poppler's pdftocairo or MuPDF's mutool (brew install poppler, or mupdf-tools)")
-            made = []
-            done = subprocess.CompletedProcess([], 0, "", "")
-            for number in range(1, count + 1):
-                one = work / f"page-{number}.svg"
-                if cairo is not None:
-                    done = _run([cairo, "-svg", "-f", str(number), "-l", str(number), str(pdf), str(one)])
+            gs = ghostscript()
+            made = [work / f"page-{number}.{kind}" for number in range(1, count + 1)]
+            for number, path in enumerate(made, 1):
+                if kind == "png":
+                    rendering.png(pdf, path, number, dpi, gs)
+                elif kind == "svg":
+                    rendering.svg(pdf, path, number, gs)
                 else:
-                    done = _run([mupdf, "convert", "-o", str(one), str(pdf), str(number)])
-                if done.returncode != 0:
-                    break
-                made.append(one)
-        if done.returncode != 0 or not all(path.is_file() for path in made):
-            detail = (done.stderr.strip().splitlines() or ["no picture was made"])[-1]
-            raise CropError(f"could not draw {pdf.name} as {kind}: {detail}")
+                    if gs is None:
+                        raise CropError("--to jpg needs Ghostscript (brew install ghostscript, apt install ghostscript)")
+                    rendering.gs_page(gs, pdf, path, number, "jpeg", f"-dJPEGQ={quality}",
+                                      "-dTextAlphaBits=4", "-dGraphicsAlphaBits=4", f"-r{dpi:g}")
         for source, name in zip(made, names):
             try:
                 name.parent.mkdir(parents=True, exist_ok=True)

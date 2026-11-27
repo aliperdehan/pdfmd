@@ -258,6 +258,14 @@ def doctor_report(deep: bool = False, *, as_json: bool = False) -> bool:
              "nothing installed (" + pdfmd_images.install_hint() + ")"))
     except ImportError:
         pass
+    from pdfmd_crop import tools as crop_tools
+    line("pdf-ink-chain", None, "PDF ink measurement: " + " -> ".join(crop_tools.INK_CHAIN))
+    line("pdf-png-chain", None, "PDF to PNG: " + " -> ".join(crop_tools.PNG_CHAIN))
+    line("pdf-svg-chain", None, "PDF to SVG: " + " -> ".join(crop_tools.SVG_CHAIN))
+    for name, path, source in crop_tools.reports():
+        found = path or source
+        line(f"pdf-finishing:{name}", None, f"PDF finishing {name}: {found or 'not found'}"
+             + (f"  -- {tool_note(name)}" if path and tool_note(name) else ""))
     drawn_by = [f"{name} ({tool}{', ' + tool_note(tool) if tool_note(tool) else ''})" for tool, name, _ in core.DIAGRAM_TOOLS if core.which(tool)]
     line("diagrams", None, "diagrams written as code (```dot, ```d2, ```mermaid) are drawn with: "
          + (", ".join(drawn_by) if drawn_by else "nothing installed ("

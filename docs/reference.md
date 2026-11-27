@@ -75,7 +75,9 @@ line breaks.
 {crop: true}` in the source or metadata, or use a folder or global setting
 or the `--setup` row. The default is off. `--no-crop` overrides the setting.
 With an existing PDF input, `--crop` writes `NAME-crop.pdf` by default.
-Ghostscript measures the ink and pypdf sets the page boxes. Use
+Ghostscript or MuPDF measures the ink. If both fail, pdfmd scans a bitmap
+from pdftoppm, pdftocairo or MuPDF at four pixels per point. pypdf sets the
+page boxes. Use
 `--crop-pad PT` (default 2), `--crop-ignore-bottom PT` (default 0) and
 `--crop-page N` (default all pages) to adjust one run. These settings and
 `image-dpi` (300 for exported pages), `image-quality` (90 for JPEG) and
@@ -83,6 +85,14 @@ Ghostscript measures the ink and pypdf sets the page boxes. Use
 followed by front matter, metadata, folder settings and global configuration.
 Each has a `--setup` row. Picture formats are drawn from the normal PDF
 build, after any crop. The PDF is saved as an output when the request includes `pdf`.
+
+PNG export tries Ghostscript, pdftocairo, MuPDF, pdftoppm, sips on macOS,
+then pypdfium2 with Pillow. SVG tries pdftocairo, MuPDF and versions of
+Ghostscript with the SVG device. A failed converter passes the page on to
+the next one. See `--doctor` or `--check-dependencies` for the optional tools.
+Set `ghostscript-path` and `mutool-path` to executables or their folders.
+`poppler-path` selects a folder with the Poppler executables. These keys follow
+the tool-path layers and have matching flags and `--setup` rows.
 
 An office document (.docx, .doc, .odt, .ott, .rtf, .pptx, .ppt, .odp,
 .xlsx, .xls, .ods) targeting PDF is a third special case, as of
@@ -2376,10 +2386,11 @@ Plain `--doctor` checks discovery and reports the engine order. Run `pdfmd --doc
 a page with each engine and check whether the installed engines can actually build.
 
 The Tool locations section of `--setup` also works for a folder. The keys `pandoc-path`, `typst-path`, `chrome-path`,
-`tesseract-path`, `soffice-path`, `dot-path`, `mmdc-path` and `poppler-path` are also `pdfmd-options` keys
-and flags (for example `--pandoc-path PATH`). They follow the `soffice-timeout` layers, with flags first, then
-document, metadata, folder, per-install and user defaults. Supply a program file or its directory, or the directory
-holding `pdftotext` and `pdftoppm` for Poppler. Paths relative to the current working folder, `~`, and environment
+`tesseract-path`, `soffice-path`, `dot-path`, `mmdc-path`, `poppler-path`, `ghostscript-path` and `mutool-path`
+are also `pdfmd-options` keys and flags (for example `--pandoc-path PATH`). They follow the `soffice-timeout` layers,
+with flags first, then document, metadata, folder, per-install and user defaults. Supply a program file or its
+directory, or the directory holding the Poppler programs (`pdftotext`, `pdftoppm`, `pdftocairo`). Paths relative
+to the current working folder, `~`, and environment
 variables work as in the config. `pdfmd --doctor FILE` shows the source of an effective pin.
 
 ## Licence

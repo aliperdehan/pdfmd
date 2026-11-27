@@ -48,18 +48,20 @@ def picture_command(args) -> int:
         try:
             metadata = core.find_metadata(source.parent, args.metadata_file, document_stem=source.stem, document=source)
             metadata = metadata if isinstance(metadata, list) else [metadata] if isinstance(metadata, Path) else []
-            options = crop_settings(source, metadata, "pdf")
-            with TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
+            crop = crop_settings(source, metadata, "pdf")
+            from pdfmd_engines.tools import tool_paths
+
+            with tool_paths(source, metadata), TemporaryDirectory(prefix="pdfmd-pictures-") as scratch:
                 pdf = source
-                if options is not None:
+                if crop is not None:
                     pdf = Path(scratch) / "cropped.pdf"
-                    cropped = crop_pdf(source, pdf, **options)
-                    empty = [str(n) for n, box in enumerate(cropped.boxes, options["page"] or 1) if box is None]
+                    cropped = crop_pdf(source, pdf, **crop)
+                    empty = [str(n) for n, box in enumerate(cropped.boxes, crop["page"] or 1) if box is None]
                     if empty:
                         print(f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is", file=sys.stderr)
                 written = []
                 if "pdf" in targets:
-                    if options is None:
+                    if crop is None:
                         print(f"NOTE  {core.display_path(source)} is a PDF already: nothing to write for pdf", file=sys.stderr)
                     else:
                         destination = picture_destination(out, home, source.stem + "-crop.pdf")

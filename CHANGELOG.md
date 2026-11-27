@@ -19,6 +19,21 @@ same commit as the change.
 
 ---
 
+## v3.34.87 — 2026-11-27
+
+Pre-edit state: commit `f6bf7c0`. A missing or broken converter stopped PDF
+cropping and picture export even when alternatives were installed. Fall back
+from Ghostscript ink boxes to MuPDF, then to a raster scan at eqpop's four
+pixels per point. PNG and SVG try the next converter on a failed launch or
+conversion. List the optional tools in doctor and dependency reports. Reuse
+`poppler-path` and add `ghostscript-path` and `mutool-path` in the absence of
+the 3dt tool-path changes. Regressions cover rotated and clipped ink boxes,
+PNG fallback, Windows names and doctor output.
+
+Resolve converter paths through the existing document and command-line tool scopes. The tool-location regression also checks that a document's pins take precedence over machine defaults.
+
+---
+
 ## v3.34.86 — 2026-11-27
 
 Pre-edit state: commit `0142bbf`. Picture exports rebuilt sources in a separate

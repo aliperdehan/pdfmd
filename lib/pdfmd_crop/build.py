@@ -129,10 +129,10 @@ def prepare(document: Path, output: Path, metadata: list[Path], target: str, ver
             variables: Sequence[str] = (), report: bool = False):
     """Yield the crop to run after the engine succeeds. Restore the previous PDF if cropping fails."""
     try:
-        options = crop_settings(document, metadata, target)
+        crop = crop_settings(document, metadata, target)
     except CropError as error:
         raise SystemExit(str(error)) from error
-    if options is None:
+    if crop is None:
         yield None
         return
 
@@ -146,14 +146,14 @@ def prepare(document: Path, output: Path, metadata: list[Path], target: str, ver
 
         def finish() -> str:
             try:
-                cropped = crop_pdf(output, output, **options)
+                cropped = crop_pdf(output, output, **crop)
             except (CropError, OSError) as error:
                 if previous is None:
                     output.unlink(missing_ok=True)
                 else:
                     previous.replace(output)
                 return str(error)
-            empty = [str(number) for number, box in enumerate(cropped.boxes, options["page"] or 1) if box is None]
+            empty = [str(number) for number, box in enumerate(cropped.boxes, crop["page"] or 1) if box is None]
             if empty:
                 emit("note", None, f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is", file=sys.stderr)
             core.vprint(verbose, f"CROP  {core.display_path(output)}: cut to the ink")

@@ -322,6 +322,11 @@ def dependency_report() -> bool:
     print("Smaller PDFs (lossless, the first one installed shrinks every PDF; see --shrink):")
     for row in core.load_package("pdfmd_shrink").check_rows():
         print(row)
+    from pdfmd_crop.tools import reports as crop_reports
+    print("Cropping and exporting PDFs (optional converters):")
+    for name, path, source in crop_reports():
+        found = path or source
+        emit("result", None, f"{'OK  ' if found else 'MISS'}  {name}" + (f"  ({found})" if found else ""))
     print("Reading PDFs (PDF to Markdown, through batchocr):")
     BATCHOCR_MIN = core.BATCHOCR_MIN
     reader = core.find_batchocr()

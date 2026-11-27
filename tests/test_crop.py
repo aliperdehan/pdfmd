@@ -96,6 +96,25 @@ class Crop(unittest.TestCase):
         for number in range(3):
             self.assertEqual(media(target, number), [50.0, 30.0, 110.0, 50.0], f"page {number + 1}")
 
+    @unittest.skipUnless(shutil.which("mutool"), "needs MuPDF")
+    def test_mupdf_bbox_keeps_the_crop_origin_and_rotation(self):
+        writer = pypdf.PdfWriter()
+        page = writer.add_page(pypdf.PdfReader(str(self.source)).pages[0])
+        page.rotate(90)
+        source, target = self.dir / "rotated.pdf", self.dir / "out.pdf"
+        writer.write(source)
+        with mock.patch.object(pdfmd_crop, "ghostscript", return_value=None):
+            pdfmd_crop.crop_pdf(source, target, pad=0, ignore_bottom=15)
+        self.assertEqual(media(target), [50.0, 30.0, 110.0, 50.0])
+
+    @unittest.skipUnless(shutil.which("pdftoppm"), "needs Poppler pdftoppm")
+    def test_poppler_scan_measures_the_nonwhite_pixels_without_bbox_tools(self):
+        target = self.dir / "out.pdf"
+        pdftoppm = shutil.which("pdftoppm")
+        with mock.patch.object(shutil, "which", side_effect=lambda name: pdftoppm if name == "pdftoppm" else None):
+            pdfmd_crop.crop_pdf(self.source, target, pad=0, ignore_bottom=15, page=1)
+        self.assertEqual(media(target), [50.0, 30.0, 110.0, 50.0])
+
     def test_a_page_that_draws_nothing_is_left_alone(self):
         blank = self.dir / "blank.pdf"
         draw(blank, "showpage")
@@ -125,7 +144,7 @@ class Crop(unittest.TestCase):
 
 class NoGhostscript(unittest.TestCase):
     def test_it_says_what_to_install(self):
-        with mock.patch.object(pdfmd_crop.shutil, "which", return_value=None):
+        with mock.patch.object(shutil, "which", return_value=None):
             with self.assertRaises(pdfmd_crop.CropError) as raised:
                 pdfmd_crop.ink_boxes(Path("x.pdf"))
         self.assertIn("Ghostscript", str(raised.exception))
@@ -372,6 +391,16 @@ class Pictures(unittest.TestCase):
         done = self.run_pdfmd("formula.pdf", "--crop", "--crop-page", "1", "--to", "svg")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("<svg", (self.dir / "formula.svg").read_text())
+
+    @unittest.skipUnless(shutil.which("pdftocairo"), "needs Poppler pdftocairo")
+    def test_png_falls_back_when_ghostscript_fails(self):
+        from pdfmd_crop import images
+        pdftocairo = shutil.which("pdftocairo")
+        target = self.dir / "page.png"
+        with (mock.patch.object(images, "ghostscript", return_value=str(self.dir / "missing-gs")),
+              mock.patch.object(shutil, "which", side_effect=lambda name: pdftocairo if name == "pdftocairo" else None)):
+            made = images.pictures(self.source, target, "png", 72, folder=False)
+        self.assertEqual([png_size(path) for path in made], [(200, 100), (200, 100)])
 
     def test_a_target_without_pages_is_refused_before_anything_is_built(self):
         done = self.run_pdfmd("formula.pdf", "--crop", "--to", "docx")

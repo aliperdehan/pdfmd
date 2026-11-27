@@ -38,6 +38,8 @@ def source_for(name: str, path: str) -> str:
 
 
 def tool_reports(pandoc, version, quarto, soffice, calibre, reader, reader_version, shrinkers):
+    from pdfmd_crop.tools import reports as crop_reports
+    from pdfmd_engines.tools import pinned_program, tool_setting
     from pdfmd_images import CONVERTERS
 
     tools = {}
@@ -65,4 +67,15 @@ def tool_reports(pandoc, version, quarto, soffice, calibre, reader, reader_versi
         add("batchocr", None)
     for name, where in shrinkers:
         add(name, None if where == "Python module" else where, source="Python module" if where == "Python module" else None)
+    for name, path, source in crop_reports():
+        if path and name in ("pdftocairo", "pdftoppm"):
+            if pinned_program(name) == path:
+                source = tool_setting("poppler")
+            else:
+                poppler = core.TOOLS_FOUND.get("poppler")
+                if poppler and Path(path).parent == Path(poppler[0]).parent:
+                    source = source_for("poppler", poppler[0])
+        elif path and name in ("ghostscript", "mutool"):
+            source = tool_setting(name)
+        add(name, path, source=source)
     return list(tools.values())

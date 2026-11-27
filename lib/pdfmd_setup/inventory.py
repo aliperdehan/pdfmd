@@ -115,6 +115,7 @@ FLAGS: dict[str, str | Omitted] = {
     "pandoc_path": "options.pandoc-path", "typst_path": "options.typst-path", "chrome_path": "options.chrome-path",
     "tesseract_path": "options.tesseract-path", "soffice_path": "options.soffice-path", "dot_path": "options.dot-path",
     "mmdc_path": "options.mmdc-path", "poppler_path": "options.poppler-path",
+    "ghostscript_path": "options.ghostscript-path", "mutool_path": "options.mutool-path",
     "jobs": RUN, "variable": RUN, "metadata_file": RUN, "ignore": RUN, "exclude_unnumbered": RUN, "section": RUN,
     "cache": "options.cache.aux", "cache_location": "options.cache.location", "cache_plots": "options.cache.plots",
     "seed_labels": "options.seed-labels", "seed_calc": "options.seed-calc", "clear_cache": CMD, "cache_info": CMD,
@@ -294,6 +295,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "unicode": "options.unicode",
     "tesseract-path": "options.tesseract-path", "soffice-path": "options.soffice-path", "dot-path": "options.dot-path",
     "mmdc-path": "options.mmdc-path", "poppler-path": "options.poppler-path",
+    "ghostscript-path": "options.ghostscript-path", "mutool-path": "options.mutool-path",
     "pandoc-path": "options.pandoc-path", "typst-path": "options.typst-path", "chrome-path": "options.chrome-path",
 }
 

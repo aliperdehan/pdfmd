@@ -662,7 +662,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="cut each PDF page to what it draws. With a source, crop the result of the normal PDF build. "
                              "With an existing PDF, write NAME-crop.pdf. For pictures, crop before drawing them. "
                              "Also pdfmd-options: {crop: true} and --setup (default off). --no-crop overrides the setting. "
-                             "Needs Ghostscript and pypdf. Options: --crop-pad, --crop-ignore-bottom, --crop-page")
+                             "Needs pypdf and Ghostscript, MuPDF or Poppler (see --doctor). "
+                             "Options: --crop-pad, --crop-ignore-bottom, --crop-page")
     parser.add_argument("--crop-pad", type=float, default=None, metavar="PT",
                         help="with --crop: points of room left around the ink (default 2); also pdfmd-options.crop-pad and --setup")
     parser.add_argument("--crop-ignore-bottom", type=float, default=None, metavar="PT",
@@ -925,7 +926,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="show Pandoc and supported PDF-engine availability, then exit")
     from pdfmd_engines.tools import TOOL_KEYS
     for key in TOOL_KEYS:
-        kind = "folder holding pdftotext and pdftoppm" if key == "poppler-path" else "program or its folder"
+        kind = "folder holding pdftotext, pdftoppm or pdftocairo" if key == "poppler-path" else "program or its folder"
         parser.add_argument("--" + key, metavar="PATH",
                             help=f"pin the {key.removesuffix('-path')} {kind} for this run; also pdfmd-options.{key}")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="parallel workers in batch mode")

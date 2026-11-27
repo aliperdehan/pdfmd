@@ -59,7 +59,7 @@ wait for an answer before any code.
 ## Pictures and crop, carried inside 3.31 [3dv]
 
 - [ ] Layouts `long` (pages stacked into one tall page, any engine; a seamless tall page via Typst `height: auto`, LaTeX to 16383 pt) and `grid` (fewest columns*width + rows*height), with gap and background, with and without `--crop`
-- [ ] Tools: a fallback chain for the ink box, PNG, SVG (gs, mutool, pdftocairo, pdftoppm, sips, pypdfium2), a tool-path setting, `--doctor` lines; `--install` and `--doctor` bring them from pip, brew, winget (Ghostscript on Windows: `gswin64c`, the installer)
+- [ ] `--install` and `--doctor` bring PDF tools from pip, brew, winget (Ghostscript on Windows: `gswin64c`, the installer)
 - [ ] `--image-background`; webp (Pillow, pypdfium2 or ImageMagick); `--to pdf,docx` for formats that are not pictures (a loop of runs)
 - [ ] docx and odt with `--crop`: a lean page of the cropped size, or a document holding the cropped vector or PNG (`lib/pdfmd_office/fragments.py` has the pieces)
 - [ ] The equation popup (Colophon `Pop/`, once eqpop) calls `pdfmd --crop` when it can; its own AppKit crop stays as the fallback

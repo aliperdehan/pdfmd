@@ -1,26 +1,18 @@
 """Crop a PDF to what it draws (`pdfmd --crop`, v3.31.20).
 
-The ink of a page is found by Ghostscript's `bbox` device (the box of everything the page paints, to a hundredth of
-a point), and only the page's boxes change: the page stays vector, nothing is redrawn or rasterised. eqpop (the
-macOS popup that renders a formula to a cropped PDF) does the same on a bitmap with AppKit; this is the same crop
-for any machine that has `gs` and pypdf (`pdfmd_office/fragments.py` measures a fragment the same way).
-
-`crop_pdf` is the whole job; `ink_boxes` is the measuring part. A page that draws nothing is left as it is.
+Only the page's boxes change; the PDF's contents stay vector. `crop_pdf`
+does the whole job and `ink_boxes` measures the displayed page. A blank page
+keeps its original boxes.
 """
 
 from __future__ import annotations
 
 import logging
-import re
-import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_PAD = 2.0   # points of room around the ink; `--crop-pad`
-
-_BBOX = re.compile(r"%%HiResBoundingBox:\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)")
 
 Box = tuple[float, float, float, float]   # left, bottom, right, top, in points
 
@@ -38,31 +30,16 @@ class Cropped:
 
 
 def ghostscript() -> str | None:
-    for name in ("gs", "gswin64c", "gswin32c"):
-        found = shutil.which(name)
-        if found:
-            return found
-    return None
+    from pdfmd_crop.tools import find
+
+    return find("ghostscript")
 
 
-def ink_boxes(pdf: Path, pages: int | None = None) -> list[Box | None]:
-    """The box of what each page draws, in the page's own coordinates and orientation (the rotation is not applied
-    back; `crop_pdf` does that). `pdf` is read as it is, honouring its crop box. None for a page that draws nothing.
-    Raises CropError when Ghostscript is missing or fails."""
-    gs = ghostscript()
-    if gs is None:
-        raise CropError("--crop needs Ghostscript, which finds the ink of a page (brew install ghostscript, "
-                        "apt install ghostscript, or the Windows installer from ghostscript.com)")
-    done = subprocess.run([gs, "-q", "-dBATCH", "-dNOPAUSE", "-dUseCropBox", "-sDEVICE=bbox", str(pdf)],
-                          capture_output=True, encoding="utf-8", errors="replace")
-    found: list[Box | None] = []
-    for match in _BBOX.finditer(done.stderr):
-        left, bottom, right, top = (float(value) for value in match.groups())
-        found.append((left, bottom, right, top) if right > left and top > bottom else None)
-    if done.returncode != 0 or (pages is not None and len(found) != pages):
-        detail = done.stderr.strip().splitlines()[-1:] or ["no bounding boxes"]
-        raise CropError(f"Ghostscript could not measure {pdf.name}: {detail[0]}")
-    return found
+def ink_boxes(pdf: Path, pages: int | None = None, *, page: int | None = None) -> list[Box | None]:
+    """Ink boxes relative to the displayed crop box, or None for blank pages."""
+    from pdfmd_crop.measure import measure
+
+    return measure(pdf, pages, ghostscript(), page=page)
 
 
 def _unrotate(box: Box, rotation: int, width: float, height: float) -> Box:
