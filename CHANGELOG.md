@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.84 — 2026-11-27
+
+Pre-edit state: commit `b2b04a9`. [tables] The fallback budget and row spacing notes pushed `--help tables` to 82 lines, past the help topic's length limit. Fold them into the existing table settings summary so the topic fits in 79 lines at the default width. The help tests cover the length limit and the settings listed in the summary.
+
+---
+
 ## v3.34.83 — 2026-11-27
 
 Pre-edit state: commit `8b2c84d`. [tables] Rows with wrapped cells could be hard to distinguish in a LaTeX table. Opt in with `table-style: spaced` to stretch the row strut only in those tables, using the adjustable `table-row-spacing` factor. The regression checks cover opt-in, per-table and document settings, fixed CSV widths, labels, and LaTeX, Typst and HTML exports.

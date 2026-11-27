@@ -30,7 +30,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--keep-comments", "--strip-comments-in", "--keep-comments-in", "--attach-bibliography", "--attach-csl", "--attach-source",
         "--no-attach-source", "--no-attach-csl", "--bundle", "--bundle-packages", "--no-bundle", "--restore", "--list", "--unpack",
         "--slim", "--trust-embedded", "--hybrid", "--check-source")),
-    "tables": ("tables as CSV files, and back", (
+    "tables": ("CSV, widths and spacing", (
         "--extract-tables", "--extract-inline-csv", "--expand-tables", "--csv", "--no-csv", "--csv-rows", "--csv-cols", "--csv-note", "--table-keep", "--table-numbers", "--table-names",
         "--tables-dir", "--tables-inline", "--table-repair", "--fix-tables", "--dry-run")),
     "history": ("build notes, backups, versions of a document", (
@@ -201,17 +201,14 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
     previous = parser.description
     parser.description = f"{topic}: {summary}"
     if topic == "tables":
-        parser.description += (". column-estimate: count (default) | measure "
-                               "(LaTeX/Typst PDF, --verbose reports measured/cached widths). "
-                               "column-word-ceil: on | off; column-ceil-margin: 25%, fraction or percentage, 0 disables. "
-                               "table-colons: ignore | count. Set these in pdfmd-options or --setup. "
-                               "--check reports table-unparsed.")
+        parser.description += (". column-estimate: count (default) | measure (LaTeX/Typst PDF). "
+                               "--verbose reports measured/cached widths. table-chars: 95 (LaTeX fallback). "
+                               "table-style: spaced for wrapping LaTeX tables (default off). "
+                               "table-row-spacing: 1.4 (stretch). column-word-ceil: on | off. "
+                               "table-colons: ignore | count. column-ceil-margin: 25% (fraction or %, 0 disables). "
+                               "Use pdfmd-options or --setup. --check reports table-unparsed.")
     try:
         text = parser.format_help()
-        if topic == "tables":
-            text += ("\nIn pdfmd-options or --setup, table-chars sets the fallback LaTeX line budget\n"
-                     "(95 characters). Use table-style: spaced for wrapping LaTeX tables (off by\n"
-                     "default). Adjust the row stretch with table-row-spacing (1.4 by default).\n")
         if topic == "output":
             text += ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
                      "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"
