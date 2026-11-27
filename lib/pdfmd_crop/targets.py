@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 from pdfmd_base import core
 from pdfmd_crop import CropError, crop_pdf
 from pdfmd_crop.build import CROPPED_OFFICE, crop_settings, draw_targets, pdf_formats
+from pdfmd_log import emit
 
 
 def picture_target(args) -> str | None:
@@ -41,7 +42,7 @@ def picture_command(args) -> int:
     for source in sources:
         source = source.resolve()
         if not source.is_file():
-            print(f"ERROR  {core.display_path(source)}: no such file", file=sys.stderr)
+            emit("error", "crop-input-missing", f"ERROR  {core.display_path(source)}: no such file", file=sys.stderr)
             status = 1
             continue
         home = Path.cwd() if args.destination_cwd else source.parent
@@ -60,11 +61,13 @@ def picture_command(args) -> int:
                     cropped = crop_pdf(source, pdf, **crop)
                     empty = [str(n) for n, box in enumerate(cropped.boxes, crop["page"] or 1) if box is None]
                     if empty:
-                        print(f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is", file=sys.stderr)
+                        emit("note", "crop-empty-page", f"NOTE  nothing is drawn on page {', '.join(empty)}: left as it is",
+                             file=sys.stderr)
                 written = []
                 if "pdf" in targets:
                     if crop is None:
-                        print(f"NOTE  {core.display_path(source)} is a PDF already: nothing to write for pdf", file=sys.stderr)
+                        emit("note", "crop-already-pdf", f"NOTE  {core.display_path(source)} is a PDF already: nothing to write for pdf",
+                             file=sys.stderr)
                     else:
                         destination = picture_destination(out, home, source.stem + "-crop.pdf")
                         part = destination.with_name(destination.name + ".part")
@@ -76,11 +79,11 @@ def picture_command(args) -> int:
                     destination = picture_destination(out, home, source.stem + core.output_extension_for(pictures[0]))
                     written += draw_targets(pdf, destination, pictures, source, metadata, exact=len(pictures) == 1)
             for path in written:
-                print(f"OK    {core.display_path(source)} > {core.display_path(path)}")
+                emit("result", "crop-written", f"OK    {core.display_path(source)} > {core.display_path(path)}")
             if not written:
                 status = 1
         except (CropError, FileNotFoundError, ValueError, OSError) as error:
-            print(f"ERROR  {core.display_path(source)}: {error}", file=sys.stderr)
+            emit("error", "crop-failed", f"ERROR  {core.display_path(source)}: {error}", file=sys.stderr)
             status = 1
     return status
 

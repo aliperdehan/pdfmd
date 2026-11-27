@@ -195,6 +195,33 @@ class CommandLine(unittest.TestCase):
         self.assertIn("formula-crop.pdf", done.stdout)
         self.assertEqual(media(self.dir / "formula-crop.pdf"), [49.0, 29.0, 111.0, 51.0])
 
+    def test_crop_notes_and_results_follow_chatter_and_mute(self):
+        draw(self.dir / "blank.pdf", "showpage")
+        note = "NOTE  nothing is drawn on page 1: left as it is"
+        result = "OK    blank.pdf > blank-crop.pdf"
+        for flags, show_note, show_result in (
+            ((), True, True),
+            (("-q", "--summary"), False, True),
+            (("-qqq",), False, False),
+            (("--mute", "crop-empty-page", "--summary"), False, True),
+        ):
+            with self.subTest(flags=flags):
+                done = self.run_pdfmd("--crop", "blank.pdf", *flags)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(note in done.stderr.splitlines(), show_note, done.stderr)
+                self.assertEqual(result in done.stdout.splitlines(), show_result, done.stdout)
+                if "--summary" in flags:
+                    self.assertEqual("1 note" in done.stdout.splitlines(), "-q" in flags, done.stdout)
+
+    def test_quiet_crop_keeps_errors_on_stderr(self):
+        done = self.run_pdfmd("--crop", "-qqq", "nope.pdf")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("ERROR  nope.pdf: no such file", done.stderr.splitlines())
+        done = self.run_pdfmd("--crop", "-qqq", "formula.pdf", "--crop-ignore-bottom", "100")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("ERROR  formula.pdf: --crop-ignore-bottom 100 is the whole of page 1 of formula.pdf",
+                      done.stderr.splitlines())
+
     def test_o_names_a_file_or_a_folder(self):
         self.assertEqual(self.run_pdfmd("--crop", "formula.pdf", "-o", "tight.pdf").returncode, 0)
         self.assertTrue((self.dir / "tight.pdf").is_file())
@@ -336,8 +363,11 @@ class Pictures(unittest.TestCase):
         self.assertIn("names a folder", done.stderr)
         done = self.run_pdfmd("formula.pdf", "--to", "pdf,png", "--image-dpi", "72")   # a PDF to pdf without a crop: nothing to write
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertIn("PDF already", done.stderr)
+        self.assertIn("NOTE  formula.pdf is a PDF already: nothing to write for pdf", done.stderr.splitlines())
         self.assertFalse((self.dir / "formula-crop.pdf").exists())
+        done = self.run_pdfmd("formula.pdf", "--to", "pdf,png", "--image-dpi", "72", "--mute", "crop-already-pdf")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("nothing to write for pdf", done.stderr)
 
     def test_the_pages_can_sit_beside_the_document_instead_of_in_a_folder(self):
         done = self.run_pdfmd("formula.pdf", "--to", "png", "--image-dpi", "30", "--no-page-folder")

@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.92 — 2026-11-27
+
+Pre-edit state: commit `e9e544f`. Standalone PDF crop and picture export
+printed diagnostics directly, bypassing chatter, mute and summary counting.
+Send the five messages through the diagnostic emitter with IDs, preserving
+their default text and streams. Regressions cover default output, quiet
+levels, muted notes, summary counts and errors on stderr.
+
+---
+
 ## v3.34.91 — 2026-11-27
 
 Pre-edit state: commit `d7391fb`. The command-line parser consumed the

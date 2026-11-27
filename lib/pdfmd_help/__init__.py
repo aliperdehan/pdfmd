@@ -53,7 +53,10 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
         "--emoji-fallback", "--paper")),
     "office": ("Word / OpenDocument output and direct .typ / .html builds", (
         "--check-docx", "--init-reference", "--apply-defaults", "--no-apply-defaults", "--hybrid")),
-    "crop": ("cutting and exporting PDF pages", ("--crop", "--no-crop", "--crop-pad", "--crop-ignore-bottom", "--crop-page", "--image-dpi", "--image-quality", "--image-background", "--page-numbers", "--no-page-numbers", "--page-folder", "--no-page-folder")),
+    "crop": ("cutting and exporting PDF pages. For an existing PDF, use --chatter to set output detail or "
+             "--mute crop-empty-page,crop-already-pdf to hide notes about blank pages and PDFs left as they are",
+             ("--crop", "--no-crop", "--crop-pad", "--crop-ignore-bottom", "--crop-page", "--image-dpi", "--image-quality",
+              "--image-background", "--page-numbers", "--no-page-numbers", "--page-folder", "--no-page-folder")),
     "excerpts": ("local source records, citation resolution and detachment", ("--excerpts",)),
     "serve": ("the local server and JSON API behind the web UI (for the Mac app, a browser, or your own tools)", ("--serve", "--api")),
     "cache": ("faster rebuilds", ("--cache", "--cache-location", "--cache-plots", "--clear-cache", "--cache-info", "--no-cache", "--seed-labels", "--seed-calc")),

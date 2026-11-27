@@ -215,6 +215,7 @@ one build. Set `crop-pad`, `crop-ignore-bottom`, `crop-page`, `image-dpi`,
 `image-quality` and `page-folder` in `pdfmd-options` or through `--setup`.
 The matching command-line flags override these defaults.
 Use `--doctor` to see which optional PDF crop and picture converters are available.
+For an existing PDF, use `--mute crop-empty-page,crop-already-pdf` to hide notes about blank pages and PDFs left as they are.
 Use `--to webp` for compressed pictures with alpha, or
 `--image-background '#ffffff'` for an opaque background.
 Use `--crop --to docx` or `--crop --to odt` to place cropped PDF pages in an

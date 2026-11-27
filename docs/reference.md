@@ -75,6 +75,9 @@ line breaks.
 {crop: true}` in the source or metadata, or use a folder or global setting
 or the `--setup` row. The default is off. `--no-crop` overrides the setting.
 With an existing PDF input, `--crop` writes `NAME-crop.pdf` by default.
+Cropping and picture export from an existing PDF respect `--chatter`.
+Use `--mute crop-empty-page` to hide the note about a blank page, or
+`--mute crop-already-pdf` to hide the note about requesting an unchanged PDF.
 Ghostscript or MuPDF measures the ink. If both fail, pdfmd scans a bitmap
 from pdftoppm, pdftocairo or MuPDF at four pixels per point. pypdf sets the
 page boxes. Use
