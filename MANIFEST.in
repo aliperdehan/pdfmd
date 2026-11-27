@@ -1,2 +1,2 @@
 include README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE
-include docs/recipes.md docs/agents.md docs/reference.md
+include docs/recipes.md docs/agents.md docs/reference.md docs/windows.md

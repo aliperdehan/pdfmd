@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.80 — 2026-11-27
+
+Pre-edit state: commit `900cf76`. The existing Windows troubleshooting guide was missing from the offline document registry and distributions. Register it for listing, printing, path lookup, sections and search, and include it in the source distribution, wheel and zipapp. Documentation and packaging regressions check the guide and its bundle entries.
+
+---
+
 ## v3.34.79 — 2026-11-27
 
 Pre-edit state: commit `a2864f3`. Tool locations were read only from the machine configuration. Let flags and document, metadata and folder layers pin the executable through the same precedence as soffice-timeout. Each worker resolves its own paths, and doctor reports the winning layer. Tests exercise flag precedence, folder setup, invalid paths, scoped restoration and separate Pandoc launches in a parallel batch.

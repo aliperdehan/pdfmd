@@ -603,7 +603,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "`--setup FOLDER` (or `.`) does it for that folder and every folder under it, in FOLDER/.pdfmd/. "
                              "--config is the same")
     parser.add_argument("--doc", nargs="*", default=None, metavar="NAME",
-                        help="the documents of this version, offline: --doc lists them (readme, recipes, agents, changelog, reference); --doc NAME "
+                        help="the documents of this version, offline: --doc lists them (readme, recipes, agents, changelog, reference, windows); --doc NAME "
                              "shows one (the Markdown when the output is not a terminal or with --print, else a web page it opens); "
                              "--doc NAME SECTION shows a part (a number counts the ## headings, else a word of the title); "
                              "--doc search WORD finds the lines that have it; --path says where the file is")

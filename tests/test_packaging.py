@@ -179,6 +179,15 @@ class PyprojectTests(unittest.TestCase):
         for source, _ in module.DOCUMENTS:
             self.assertTrue((ROOT / source).is_file(), source)
 
+    def test_windows_guide_is_in_both_bundles_and_the_source_distribution(self):
+        import ast
+        for path in ("setup.py", "scripts/build_zipapp.py"):
+            tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
+            bundled = next(ast.literal_eval(node.value) for node in tree.body
+                           if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "DOCUMENTS")
+            self.assertIn(("docs/windows.md", "windows.md"), bundled, path)
+        self.assertIn("docs/windows.md", (ROOT / "MANIFEST.in").read_text(encoding="utf-8").split())
+
     def test_the_build_requires_the_setuptools_that_reads_the_license_fields(self):
         text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         required = re.search(r'(?m)^requires = \["setuptools>=(\d+)', text)

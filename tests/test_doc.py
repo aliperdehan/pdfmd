@@ -29,7 +29,7 @@ class Command(unittest.TestCase):
     def test_the_list_names_each_document_with_its_size(self):
         done = run("--doc")
         self.assertEqual(done.returncode, 0, done.stderr)
-        for name in ("readme", "recipes", "agents", "changelog", "reference"):
+        for name in ("readme", "recipes", "agents", "changelog", "reference", "windows"):
             self.assertRegex(done.stdout, rf"(?m)^\s+{name}\s+\d+ KB")
         self.assertIn(pdfmd.PDFMD_VERSION, done.stdout)
 
@@ -53,6 +53,17 @@ class Command(unittest.TestCase):
         done = run("--doc", "recipes", "--path")
         self.assertEqual(Path(done.stdout.strip()).name, "recipes.md")
         self.assertTrue(Path(done.stdout.strip()).is_file())
+
+    def test_windows_guide_can_be_printed_located_and_searched(self):
+        source = ROOT / "docs" / "windows.md"
+        printed = run("--doc", "windows", "--print")
+        self.assertEqual(printed.returncode, 0, printed.stderr)
+        self.assertEqual(printed.stdout, source.read_text(encoding="utf-8"))
+        self.assertEqual(Path(run("--doc", "windows", "--path").stdout.strip()), source)
+        section = run("--doc", "windows", "16", "--print")
+        self.assertEqual(section.returncode, 0, section.stderr)
+        self.assertTrue(section.stdout.startswith("## 16. Tests that need a symbolic link"))
+        self.assertRegex(run("--doc", "search", "WinError 1314").stdout, r"(?m)^windows: ")
 
     def test_a_section_by_number_and_by_word(self):
         by_number = run("--doc", "agents", "1").stdout
@@ -170,7 +181,7 @@ class Bundling(unittest.TestCase):
             done = subprocess.run([sys.executable, "setup.py", "-q", "egg_info", "--egg-base", folder, "build_py", "--build-lib", folder], cwd=ROOT,
                                   capture_output=True, text=True)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            for name in ("README.md", "CHANGELOG.md", "recipes.md", "agents.md", "reference.md"):
+            for name in ("README.md", "CHANGELOG.md", "recipes.md", "agents.md", "reference.md", "windows.md"):
                 self.assertTrue((Path(folder) / "pdfmd_docs" / name).is_file(), name)
             self.assertEqual((Path(folder) / "pdfmd_docs" / "agents.md").read_text(encoding="utf-8"),
                              (ROOT / "docs" / "agents.md").read_text(encoding="utf-8"))
@@ -180,6 +191,10 @@ class Bundling(unittest.TestCase):
                                      cwd=folder, capture_output=True, text=True, encoding="utf-8", env=env)
             self.assertEqual(printed.returncode, 0, printed.stderr)
             self.assertEqual(printed.stdout, (ROOT / "docs" / "reference.md").read_text(encoding="utf-8"))
+            printed = subprocess.run([sys.executable, str(Path(folder) / "pdfmd.py"), "--doc", "windows", "--print"],
+                                     cwd=folder, capture_output=True, text=True, encoding="utf-8", env=env)
+            self.assertEqual(printed.returncode, 0, printed.stderr)
+            self.assertEqual(printed.stdout, (ROOT / "docs" / "windows.md").read_text(encoding="utf-8"))
         # (the git checkout has no copies: they are made by the build)
         self.assertFalse((ROOT / "lib" / "pdfmd_docs" / "README.md").exists())
 

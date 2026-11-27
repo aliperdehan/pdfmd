@@ -29,7 +29,7 @@ PACKAGES = ("pdfmd_ansi", "pdfmd_args", "pdfmd_assemble", "pdfmd_attach", "pdfmd
 # the documents `pdfmd --doc` reads, as setup.py copies them into pdfmd_docs for a wheel; a checkout's lib/pdfmd_docs/ holds no .md
 # file, so the zipapp gets them from here (= setup.py's DOCUMENTS, test_packaging)
 DOCUMENTS = (("README.md", "README.md"), ("CHANGELOG.md", "CHANGELOG.md"), ("docs/recipes.md", "recipes.md"),
-             ("docs/agents.md", "agents.md"), ("docs/reference.md", "reference.md"))
+             ("docs/agents.md", "agents.md"), ("docs/reference.md", "reference.md"), ("docs/windows.md", "windows.md"))
 DEPENDENCIES = ("pypdf",)
 SKIP_DIRS = {"__pycache__", "tests", "test", ".git"}
 SKIP_SUFFIXES = (".so", ".pyd", ".dylib", ".pyc", ".pyo")

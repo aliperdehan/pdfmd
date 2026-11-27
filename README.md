@@ -528,6 +528,7 @@ shows the third `##` section of it, `--doc readme completion` the
 first section whose title has that word, and `--path` says where the file is. `--doc search WORDS` lists the headings and
 lines that have every word, one per line as `document: Heading > Subheading (line N): the line` (the first 40 of them);
 `pdfmd --doc search PDFMD_NO_PROMPT` lists every line that names that variable, the agent guide's line about it among them.
+Use `pdfmd --doc windows` for the Windows troubleshooting guide.
 The documents are those of this version, copied into the package when it is built; a checkout reads the originals, and a
 zipapp (`scripts/build_zipapp.py`) carries them too.
 

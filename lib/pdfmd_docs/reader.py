@@ -26,6 +26,7 @@ DOCUMENTS = {
     "agents": ("agents.md", "docs/agents.md", "a short guide for a program or an AI assistant that runs pdfmd"),
     "changelog": ("CHANGELOG.md", "CHANGELOG.md", "what changed in every version"),
     "reference": ("reference.md", "docs/reference.md", "the full reference for formats, settings and rendering"),
+    "windows": ("windows.md", "docs/windows.md", "troubleshooting pdfmd on Windows"),
 }
 
 
@@ -33,7 +34,7 @@ DOC_URL = "https://github.com/aliperdehan/pdfmd/blob/v{version}/{path}"
 
 
 def document_file(name: str) -> Path | None:
-    """The file of the document `name` (readme, recipes, agents, changelog, reference): the bundled copy, else the checkout's own."""
+    """The file of the named document, from the bundle or the checkout."""
     packaged, checkout, _ = DOCUMENTS[name]
     try:
         import pdfmd_docs

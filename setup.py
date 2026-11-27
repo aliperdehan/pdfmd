@@ -8,7 +8,7 @@ from setuptools import setup
 from setuptools.command.build_py import build_py
 
 DOCUMENTS = (("README.md", "README.md"), ("CHANGELOG.md", "CHANGELOG.md"), ("docs/recipes.md", "recipes.md"),
-             ("docs/agents.md", "agents.md"), ("docs/reference.md", "reference.md"))
+             ("docs/agents.md", "agents.md"), ("docs/reference.md", "reference.md"), ("docs/windows.md", "windows.md"))
 
 
 class BuildPy(build_py):
