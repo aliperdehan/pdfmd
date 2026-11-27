@@ -149,7 +149,9 @@ def finish_docx(path: Path) -> int:
 # and an openxml section break as it was written. Both are finished here, for the reference document of the user's too. The highlight
 # is a character shading, not `w:highlight`: Word takes both in a style, LibreOffice only the shading.
 MARKUP_STYLES = {"PdfmdCenter": ("pPr", "jc", '<w:jc w:val="center"/>'),
-                 "PdfmdHighlight": ("rPr", "shd", '<w:shd w:val="clear" w:color="auto" w:fill="FFFF00"/>')}
+                 "PdfmdHighlight": ("rPr", "shd", '<w:shd w:val="clear" w:color="auto" w:fill="FFFF00"/>'),
+                 "PdfmdWavy": ("rPr", "u", '<w:u w:val="wave"/>'),
+                 "PdfmdDotted": ("rPr", "u", '<w:u w:val="dotted"/>')}
 PORTRAIT_MARK, LANDSCAPE_MARK = "00D0F001", "00D0F002"
 BREAK = r'<w:p><w:pPr><w:sectPr w:rsidR="%s"\s*(?:/>|></w:sectPr>)</w:pPr></w:p>'
 SECTION = re.compile(r"<w:sectPr\b[^>]*?(?:/>|>(.*?)</w:sectPr>)", re.S)
@@ -162,7 +164,7 @@ def style_markup(styles: str) -> tuple[str, int]:
     changed = 0
     for style_id, (container, tag, element) in MARKUP_STYLES.items():
         found = re.search(r'<w:style\b[^>]*w:styleId="%s"[^>]*>.*?</w:style>' % style_id, styles, re.S)
-        if found is None or f"<w:{tag}" in found.group(0):
+        if found is None or re.search(rf"<w:{tag}\b", found.group(0)):
             continue
         block = found.group(0)
         have = re.search(rf"<w:{container}>(.*?)</w:{container}>", block, re.S)

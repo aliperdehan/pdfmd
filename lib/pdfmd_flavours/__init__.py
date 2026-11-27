@@ -43,7 +43,7 @@ class Preset(NamedTuple):
     numbered_references: bool = False
 
 
-OWN_SYNTAX = "callouts toc centre highlight underline keep landscape appendix fullcite pagecite excerpts"      # `space` stays off: a lone <br> is often just a blank line
+OWN_SYNTAX = "callouts toc centre highlight underline spans keep landscape appendix fullcite pagecite excerpts"      # `space` stays off: a lone <br> is often just a blank line
 
 PRESETS: dict[str, Preset] = {
     "pandoc": Preset("default", False, "keep"),

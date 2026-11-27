@@ -12,6 +12,7 @@ Use `--summary` to count unmuted warnings, notes and errors after the last build
 `--fix-tables` preserves code fences inside lists and raw HTML div blocks under GFM.
 `--mute ID[,ID]` accepts named warnings under `--strict`.
 Use `pdfmd-options.flavour-overrides` to adjust a named flavour. For example, `{comments: false}` keeps `%%` comments in the text.
+Use `[text]{.caps}`, `[text]{.wavy}` and `[text]{.dotted}` for uppercase prose and styled underlines. The `spans` markup kind enables them.
 
 ## The commands that matter
 

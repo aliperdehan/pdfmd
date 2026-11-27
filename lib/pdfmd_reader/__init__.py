@@ -395,7 +395,7 @@ def pdfmd_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str | 
 READER_NEEDS = (
     ("subscripts (H~2~O)", re.compile(r"(?<![~\\])~(?!~)[^\s~]+~(?!~)"), "subscript", "prose"),
     ("superscripts (x^2^)", re.compile(r"(?<![\^\\])\^[^\s^\[]+\^"), "superscript", "prose"),
-    ("{#id .class} attributes", re.compile(r"(?m)^#{1,6} .*\{[#.][^}]*\}[ \t]*$|\]\{[#.][^}]*\}|!\[[^\]]*\]\([^)]*\)\{[^}]*\}"),
+    ("{#id .class} attributes", re.compile(r"(?m)^#{1,6} .*\{[#.][^}]*\}[ \t]*$|\]\{[ \t]*(?:[#.]|class=)[^}]*\}|!\[[^\]]*\]\([^)]*\)\{[^}]*\}"),
      "attributes+bracketed_spans", "prose"),
     ("attributes on inline code", re.compile(r"`[^`\n]+`\{[#.][^}\n]*\}"), "attributes", "fences"),
     ("fenced code attributes ({.class key=value})", re.compile(r"(?m)^[ \t]*(?:`{3,}|~{3,})[ \t]*\{"), "attributes", "text"),

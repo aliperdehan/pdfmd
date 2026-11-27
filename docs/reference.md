@@ -182,6 +182,26 @@ highlighted spans. It starts landscape ranges on a landscape copy of the
 document's page layout and switches back on the next block. These kinds
 use the existing `markup:` setting, `--markup` and `--no-markup`.
 
+## Named spans
+
+Write `[text]{.caps}` for uppercase prose, `[text]{.wavy}` for a wavy underline or `[text]{.dotted}` for a dotted underline.
+Emphasis and links within the span are kept. `.caps` capitalises ordinary text, including Unicode letters, and leaves code and
+maths intact. It can be combined with either underline class, for example `[example]{.caps .dotted}`.
+
+The `spans` kind of universal markup is enabled in the `pdfmd` and `obsidian` flavours. An explicit `markup` list must include
+`spans`. `--markup spans` enables that kind for a run, and `--no-markup` disables it. A fixed reader must support Pandoc's
+bracketed spans, for example `markdown` or `gfm+attributes+bracketed_spans`.
+
+| Writer | `.caps` | `.wavy` | `.dotted` |
+|---|---|---|---|
+| HTML, HTML slides, EPUB | Uppercase text | Wavy CSS underline | Dotted CSS underline |
+| LaTeX and Beamer | Uppercase text | Wavy with `ulem`, otherwise plain underline | Dotted with `ulem`, otherwise plain underline |
+| Word (DOCX), OpenDocument (ODT) | Uppercase text | Wavy character style | Dotted character style |
+| Typst | Uppercase text | Plain underline | Dotted underline |
+| Pandoc Markdown, CommonMark X | Uppercase text and class kept | Span class kept | Span class kept |
+| Other Pandoc writers | Uppercase text | Plain underline where supported, otherwise readable text | Plain underline where supported, otherwise readable text |
+| Built-in renderer without Pandoc | Source span spelling | Source span spelling | Source span spelling |
+
 ## Lists of figures and tables
 
 Pandoc metadata `lof: true` and `lot: true` requests lists of captioned figures and tables.

@@ -3188,11 +3188,14 @@ What the flavours read so far (the rest of Obsidian's syntax, and pdfmd's own, a
   a file without front matter had read as gfm with none of these; `flavour: gfm` or `pandoc` gives the strict readers back.
 
 - **pdfmd's own syntax on** (v3.32.24, in `obsidian` and `pdfmd`, for a Markdown file). `markup` is on for callouts, `toc`, `centre`,
-  `highlight`, `underline`, `keep`, `landscape`, `appendix` and `fullcite` (`> [!note]`, `[TOC]`, `<center>`, `==text==`, `<u>text</u>`, `::: keep`, `::: landscape`,
+  `highlight`, `underline`, `spans`, `keep`, `landscape`, `appendix` and `fullcite` (`> [!note]`, `[TOC]`, `<center>`, `==text==`, `<u>text</u>`, `[text]{.wavy}`, `::: keep`, `::: landscape`,
   `\appendix`, `[@key]{.fullcite}`), and `pagebreak` for every family, with no setting. The `pagecite` kind is available too,
   but its shorthand stays off until `pagecite: auto` or another mode is set. `space` stays off (a lone `<br>` is often just a blank line), and
   so do `linebreak` and `raw`: name them (`markup: [space]`, `linebreak: true`, `raw: true`) to turn them on. A `markup:` or
   `pagebreak:` setting of any kind, `false` included, replaces the flavour's list; `--markup` and `--no-markup` decide for one run.
+
+  Use `[text]{.caps}` for uppercase prose and `[text]{.wavy}` or `[text]{.dotted}` for styled underlines. See
+  [Named spans](docs/reference.md#named-spans) for writer support and fallbacks.
 
 - **A single newline: `single-newline`** (v3.32.27). Markdown's rule is that one newline inside a paragraph is a space; Obsidian shows it as
   a line break unless its "Strict line breaks" option is on. In the `obsidian` flavour inside a vault pdfmd does what that vault does: it

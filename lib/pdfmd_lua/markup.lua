@@ -33,6 +33,7 @@
 --            OpenDocument uses the same character style.
 -- underline  <u>text</u> and <ins>text</ins> (raw HTML in every Markdown reader but Pandoc's own): Pandoc's Underline, so each writer draws
 --            its own: LaTeX \ul (soul), Typst #underline, Word and OpenDocument underlined runs, HTML <u>. The Markdown family keeps the tags.
+-- spans      Pandoc spans .caps, .wavy and .dotted: uppercase prose, wavy or dotted underline.
 local enabled = nil
 local function on(kind)
   return enabled == nil or enabled[kind] == true
@@ -170,6 +171,43 @@ local function task_status(span)
     return pandoc.RawInline("typst", '#box(stroke: black)[#raw(' .. string.format("%q", symbol) .. ')]')
   end
   return {pandoc.Str("☐"), pandoc.Space(), pandoc.Str(symbol)}
+end
+
+
+local HTML_SLIDES = {revealjs = true, s5 = true, slidy = true, slideous = true, dzslides = true, chunkedhtml = true}
+local SPAN_STYLES = {wavy = "PdfmdWavy", dotted = "PdfmdDotted"}
+
+local function decorated_span(span, tex_styles)
+  local caps, decoration
+  for _, class in ipairs(span.classes) do
+    if class == "caps" then caps = true end
+    if SPAN_STYLES[class] and not decoration then decoration = class end
+  end
+  if not caps and not decoration then return nil end
+  if caps then
+    span = span:walk({Str = function(word) return pandoc.Str(pandoc.text.upper(word.text)) end})
+  end
+  if not decoration then return span end
+  local format = FORMAT or ""
+  if format:match("^html") or format:match("^epub") or HTML_SLIDES[format] then
+    local existing = (span.attributes.style or ""):gsub("[;%s]+$", "")
+    span.attributes.style = (existing == "" and "" or existing .. "; ")
+      .. "text-decoration: underline; text-decoration-style: " .. decoration
+  elseif format == "docx" or format == "odt" then
+    span.content = {pandoc.Span(span.content, pandoc.Attr("", {}, {["custom-style"] = SPAN_STYLES[decoration]}))}
+  elseif (tex_styles and (format == "latex" or format == "beamer")) or (format == "typst" and decoration == "dotted") then
+    local tex = format ~= "typst"
+    local open = tex and ("\\pdfmd" .. decoration .. "{") or '#underline(stroke: (dash: "dotted"))['
+    local close = tex and "}" or "]"
+    local raw = tex and "latex" or "typst"
+    local content = pandoc.Inlines({pandoc.RawInline(raw, open)})
+    content:extend(span.content)
+    content:insert(pandoc.RawInline(raw, close))
+    span.content = content
+  elseif format ~= "markdown" and format ~= "commonmark_x" then
+    span.content = {pandoc.Underline(span.content)}
+  end
+  return span
 end
 
 
@@ -793,6 +831,8 @@ function Pandoc(doc)
     end
   end
   local used = {callouts = false}
+  local tex_styles = doc.meta["pdfmd-span-tex"] == true
+  doc.meta["pdfmd-span-tex"] = nil
   local walked = doc:walk({
     BlockQuote = function(quote)
       if not on("callouts") then return nil end
@@ -818,6 +858,7 @@ function Pandoc(doc)
       if on("highlight") and #span.classes == 1 and span.classes[1] == "mark" and #span.attributes == 0 and span.identifier == "" then
         return marked(span.content)
       end
+      if on("spans") then return decorated_span(span, tex_styles) end
     end,
     Blocks = function(blocks)
       local after = tex_environments(blocks)

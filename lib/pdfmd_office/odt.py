@@ -181,6 +181,8 @@ def with_paragraph_and_text_styles(content: str, styles: str) -> str:
     for name, family, properties, parent in (
         ("PdfmdCenter", "paragraph", '<style:paragraph-properties fo:text-align="center"/>', "Text_20_body"),
         ("PdfmdHighlight", "text", '<style:text-properties fo:background-color="#ffff00"/>', ""),
+        ("PdfmdWavy", "text", '<style:text-properties style:text-underline-style="wave" style:text-underline-type="single"/>', ""),
+        ("PdfmdDotted", "text", '<style:text-properties style:text-underline-style="dotted" style:text-underline-type="single"/>', ""),
     ):
         if (f'text:style-name="{name}"' in content
                 and not re.search(rf'<style:style\b[^>]*\bstyle:name="{name}"', styles)):

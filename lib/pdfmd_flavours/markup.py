@@ -18,7 +18,8 @@ try:
 except ImportError:      # a copy of pdfmd.py without its packages: strict Pandoc and nothing else
     FLAVOUR_PRESETS, FLAVOUR_WORDS = {}, ("auto",)
 
-MARKUP_KINDS = ("callouts", "toc", "centre", "highlight", "underline", "keep", "landscape", "appendix", "fullcite", "pagecite", "excerpts", "space")
+MARKUP_KINDS = ("callouts", "toc", "centre", "highlight", "underline", "spans", "keep", "landscape", "appendix",
+                "fullcite", "pagecite", "excerpts", "space")
 
 
 def markup_value(value) -> list[str]:
@@ -288,9 +289,21 @@ MARKUP_LANDSCAPE_HEADER = r"""% pdfmd: landscape pages (pdfmd-options: markup: l
 """
 
 
+MARKUP_SPANS_HEADER = r"""% pdfmd: styled underline spans
+\makeatletter
+\@ifpackageloaded{ulem}{}{\IfFileExists{ulem.sty}{\usepackage[normalem]{ulem}}{}}
+\makeatother
+\DeclareRobustCommand{\pdfmdwavy}[1]{\ifdefined\uwave\uwave{#1}\else\underline{#1}\fi}
+\DeclareRobustCommand{\pdfmddotted}[1]{\ifdefined\dotuline\dotuline{#1}\else\underline{#1}\fi}
+\AtBeginDocument{\ifdefined\pdfstringdefDisableCommands
+  \pdfstringdefDisableCommands{\def\pdfmdwavy#1{#1}\def\pdfmddotted#1{#1}}%
+\fi}
+"""
+
+
 # the LaTeX definitions each kind of markup needs (the kinds not here need none)
 MARKUP_HEADERS = {"callouts": MARKUP_CALLOUT_HEADER, "comments": MARKUP_CALLOUT_HEADER, "highlight": MARKUP_HIGHLIGHT_HEADER,
-                  "landscape": MARKUP_LANDSCAPE_HEADER}
+                  "landscape": MARKUP_LANDSCAPE_HEADER, "spans": MARKUP_SPANS_HEADER}
 
 
 def markup_header_args(sources: Path | list[Path], metadata_files: list[Path], before: list[str] | None = None) -> list[str]:
@@ -300,6 +313,8 @@ def markup_header_args(sources: Path | list[Path], metadata_files: list[Path], b
     pdfmd_tex.markup)."""
     files = sources if isinstance(sources, list) else [sources]
     kinds = [kind for kind in markup_kinds(files[0], metadata_files) if kind != "excerpts"] if files else []
+    if "spans" in kinds and not any(re.search(r"\]\{[^}]*\b(?:wavy|dotted)\b", core.read_text_best_effort(path)) for path in files):
+        kinds.remove("spans")
     pieces = core.markup_header_pieces(files[0], metadata_files, kinds, before) if kinds else []     # the box is one piece
     if not pieces:
         return []
@@ -311,4 +326,5 @@ def markup_header_args(sources: Path | list[Path], metadata_files: list[Path], b
             header.write_text(text, encoding="utf-8")
     except OSError:
         return []
-    return ["--include-in-header", str(header)]
+    args = ["--include-in-header", str(header)]
+    return args + (["-M", "pdfmd-span-tex=true"] if "spans" in kinds else [])

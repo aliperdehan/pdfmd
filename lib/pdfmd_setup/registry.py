@@ -187,6 +187,7 @@ MARKUP_CHOICES = (
     ("centre", "<center>, <div align=center>, ::: centre, \\begin{center}: centred text in LaTeX, Typst, HTML, Word and OpenDocument"),
     ("highlight", "==marked text==: highlighted in LaTeX (soul), Typst, HTML, Word and OpenDocument"),
     ("underline", "<u>text</u>, <ins>text</ins>: underlined in LaTeX (soul), Typst, HTML, Word and OpenDocument"),
+    ("spans", "[text]{.caps}, [text]{.wavy}, [text]{.dotted}: uppercase text and styled underlines"),
     ("keep", "::: keep, break-inside: avoid, \\begin{samepage}: blocks held on one page in LaTeX, Typst, HTML and Word"),
     ("landscape", "::: landscape, \\begin{landscape}: the blocks on landscape pages in LaTeX, Typst, HTML, Word and OpenDocument"),
     ("appendix", "\\appendix, <!-- appendix -->, {.appendix}: the sections after it lettered A, B (LaTeX, Typst; with --number-sections)"),
