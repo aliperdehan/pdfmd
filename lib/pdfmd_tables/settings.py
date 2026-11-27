@@ -43,19 +43,9 @@ from pdfmd_log import emit
 # unchanged) was always "rescue a table that would otherwise overflow," not
 # "give every unwidthed table an opinion" -- this was never meant to fire on
 # a table that already fits comfortably. Fixed with a real, if approximate,
-# overflow check: estimate the table's total natural width by summing each
-# column's longest-cell character count (same measurement already used for
-# the proportions below) and comparing against CHAR_BUDGET, a rough
-# characters-per-line figure for this project's own default document shape
-# (12pt serif body text, ~1in margins on A4/Letter -- see DEFAULT_MARGIN).
-# This is deliberately an ESTIMATE, not a real width computation (Pandoc's
-# Lua filters run before any font is ever measured, so an exact figure isn't
-# available here at all) -- it only needs to be good enough to distinguish
-# "a handful of short numeric columns" from "a table with real prose cells,"
-# which a raw character count comfortably does. A table with an unusual
-# fontsize/geometry front-matter override is not specially accounted for;
-# revisit CHAR_BUDGET (or make it geometry-aware) if that turns out to
-# matter in practice, rather than assuming this estimate transfers exactly.
+# overflow check: estimate the table's natural width by summing each column's
+# longest-cell character count and comparing against the number of characters
+# its document's line can hold. The optional measured mode uses engine metrics.
 TABLE_WIDTH_LUA_FILTER = "table_width"   # pdfmd_lua/table_width.lua
 
 
@@ -99,7 +89,8 @@ TABLE_WIDTH_LUA_FILTER = "table_width"   # pdfmd_lua/table_width.lua
 CSV_TABLE_LUA_FILTER = "csv_table"   # pdfmd_lua/csv_table.lua
 
 
-def width_filter_args(width_filter: Path, *, command: list[str] | None = None, cwd: Path | None = None) -> list[str]:
+def width_filter_args(width_filter: Path, *, command: list[str] | None = None, cwd: Path | None = None,
+                      latex_sources: tuple[Path, ...] = ()) -> list[str]:
     """``--lua-filter`` for the table-width filter, with the global column settings of the config or `--setup` handed
     to it (`column-widths`, `column-estimate`, `column-word-floor`, `column-word-ceil`, `column-ceil-margin`,
     `column-count-raw-tex`, and the numbers `column-outlier`,
@@ -133,9 +124,122 @@ def width_filter_args(width_filter: Path, *, command: list[str] | None = None, c
             number = float(number) if "." in number else int(number)
         if isinstance(number, (int, float)) and not isinstance(number, bool) and number >= 0:
             args += ["-M", f"pdfmd-{key}={number}"]
+    fallback = str(options.get("table-chars", "")).strip()
+    if re.fullmatch(r"[0-9]+", fallback) and fallback.lstrip("0"):
+        args += ["-M", f"pdfmd-table-chars-fallback={fallback}"]
     if command is not None:
-        args += width_cache_args(width_filter, command, cwd or Path.cwd())
+        directory = cwd or Path.cwd()
+        if latex_sources:
+            try:
+                chars = character_budget(latex_sources, command, directory)
+            except (OverflowError, ValueError):
+                chars = None                       # an invalid dimension is for the writer to diagnose
+            if chars is not None:
+                args += ["-M", f"pdfmd-table-chars={chars}"]
+        args += width_cache_args(width_filter, command, directory)
     return args
+
+
+def character_budget(sources: tuple[Path, ...], command: list[str], cwd: Path) -> int | None:
+    """Estimate a LaTeX line from the paper variables and geometry the writer will receive."""
+    try:
+        from pdfmd_lua.typst import option_values
+    except ImportError:
+        return None                     # the filter is a no-op when the Lua package is absent
+    from pdfmd_office.units import PAPER_TWIPS, length_to_twips, parse_geometry, parse_paper
+
+    writers = [re.split(r"[+-]", writer, maxsplit=1)[0] for writer in option_values(command, "--to", "-t")]
+    if option_values(command, "--template") or "context" in writers or "context" in option_values(command, "--pdf-engine"):
+        return None
+    meta = {}
+    for name in option_values(command, "--metadata-file"):
+        meta.update(core.metadata_file_yaml(cwd / name))
+    for source in sources:
+        meta.update(core.effective_metadata(source, [], []))
+    for long, short in (("--metadata", "-M"), ("--variable", "-V")):
+        values: dict[str, list[str]] = {}
+        for word in option_values(command, long, short):
+            match = re.fullmatch(r"(papersize|geometry|fontsize|documentclass|classoption|aspectratio)(?:[:=](.*))?", word)
+            if match:
+                key, value = match.groups()
+                values.setdefault(key, []).append(value if value is not None else "true")
+        for key, entries in values.items():
+            meta[key] = entries if short == "-V" and len(entries) > 1 else entries[-1]
+
+    beamer = "beamer" in writers
+    documentclass = meta.get("documentclass") or ("beamer" if beamer else "article")
+    classoptions = meta.get("classoption") or []
+    if not isinstance(classoptions, list):
+        classoptions = [classoptions]
+    classwords = [word.strip() for option in classoptions for word in str(option).split(",")]
+    if "twocolumn" in classwords:
+        return None
+    size = meta.get("fontsize")
+    for word in classwords:
+        if re.fullmatch(r"\d+(?:\.\d+)?pt", word):
+            size = word
+    if size is None:
+        size = {"article": "10pt", "report": "10pt", "book": "10pt", "beamer": "11pt",
+                "scrartcl": "11pt", "scrreprt": "11pt", "scrbook": "11pt"}.get(str(documentclass))
+    font = length_to_twips(size) if re.fullmatch(r"\s*\d+(?:\.\d+)?pt\s*", str(size)) else None
+    if not font:
+        return None
+
+    geometry = meta.get("geometry")
+    options = geometry if isinstance(geometry, list) else [geometry] if geometry else []
+    if not all(isinstance(item, str) for item in options):
+        return None
+    # Keep a braced pair such as hmargin={1in,2in} or papersize={8in,10in} together.
+    bits = [bit.strip() for item in options for bit in re.split(r",(?![^{}]*\})", item)]
+    geometry_options = []
+    for bit in bits:
+        key, _, value = bit.partition("=")
+        key, value = key.strip(), value.strip()
+        pair = {"papersize": ("paperwidth", "paperheight"), "hmargin": ("left", "right")}.get(key)
+        if pair and value.startswith("{") and "," in value:
+            geometry_options.extend(zip(pair, value.strip("{}").split(",", maxsplit=1)))
+        else:
+            geometry_options.append((key, value))
+    geometry_words = dict(geometry_options)
+    page = parse_geometry([f"{key}={value}" if value else key for key, value in geometry_options])
+    paper_name, orientation = core.paper_words(meta.get("papersize"))
+    paper, landscape = parse_paper([paper_name, *classwords])
+    landscape = landscape or orientation == "landscape" or page["landscape"]
+    if "portrait" in geometry_words:
+        landscape = False
+
+    margins = page["margins"]
+    if beamer:
+        # Dimensions and margins from beamer.cls and beamerbaseframecomponents.sty.
+        aspect = str(meta.get("aspectratio") or "43")
+        aspect = next((word.partition("=")[2] for word in reversed(classwords) if word.startswith("aspectratio=")), aspect)
+        width_cm = {"43": 12.8, "141": 14, "1610": 16, "169": 16, "149": 14, "54": 12.5, "32": 13.5, "2013": 14.85}.get(aspect)
+        if width_cm is None:
+            return None
+        paper_width = length_to_twips(f"{width_cm}cm")
+        margin = length_to_twips("1cm")
+    else:
+        if paper_name and parse_paper(paper_name)[0] is None and not page["paper"]:
+            return None
+        paper_width = (page["paper"] or paper or PAPER_TWIPS["letter"])[int(landscape)]
+        margin = None
+
+    # These options can decide the horizontal size independently of the paper and side margins.
+    width = geometry_words.get("textwidth", geometry_words.get("width", geometry_words.get("totalwidth")))
+    paper_side = "paperheight" if landscape else "paperwidth"
+    if paper_side in geometry_words:
+        paper_width = length_to_twips(geometry_words[paper_side].strip("{}"))
+    left, right = (margins.get(side, margin) for side in ("left", "right"))
+    binding = length_to_twips(geometry_words.get("bindingoffset", "0pt"))
+    if geometry_words.keys() & {"total", "scale", "hscale", "layout", "layoutsize", "layoutwidth", "layoutheight", "body"}:
+        return None
+    if left is not None and right is not None and paper_width is not None and binding is not None:
+        text_width = paper_width - left - right - binding
+    else:
+        text_width = length_to_twips(width)
+    # 3dj's estimate of roughly 100 characters in a 451pt line at 10pt.
+    chars = int(text_width / (font * 0.45)) if text_width and text_width > 0 else 0
+    return chars or None
 
 
 _WIDTH_LAYOUT_ARGS = ("-V", "--variable", "--pdf-engine", "--pdf-engine-opt", "-H", "--include-in-header", "--template")

@@ -203,6 +203,7 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
     if topic == "tables":
         parser.description += (". column-estimate: count (default) | measure "
                                "(LaTeX/Typst PDF, --verbose reports measured/cached widths). "
+                               "table-chars: fallback characters per LaTeX line (95) if the layout is unknown. "
                                "column-word-ceil: on | off; column-ceil-margin: 25%, fraction or percentage, 0 disables. "
                                "table-colons: ignore | count. Set these in pdfmd-options or --setup. "
                                "--check reports table-unparsed.")

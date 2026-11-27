@@ -2004,7 +2004,15 @@ column of four rows or more, does not size its column: it wraps and the others k
 caption wins. `--no-auto tablewidth` switches the filter off. In count mode this applies to LaTeX engines only:
 the other writers take Pandoc's widths as given. Typst PDF builds can opt in to measure below.
 
-`pdfmd-options: {column-estimate: count}` is the default and keeps the character-count result unchanged.
+`pdfmd-options: {column-estimate: count}` is the default. For LaTeX, pdfmd estimates the characters per
+line from the resolved paper and orientation, horizontal margins and font size. It divides the available
+width by 0.45 times the font size, rounding down. This assumes an average character width of 0.45 em.
+If pdfmd cannot resolve a width or a font size, it uses 95 characters. Set a different positive whole-number
+fallback with `table-chars` in `pdfmd-options`, the config or `--setup`. For one table, put
+`{table-chars=120}` after the caption (Pandoc 3.8.2 or newer) or use `table-chars=120` on its `.csv` div.
+Custom templates or horizontal geometry that pdfmd cannot resolve use the fallback. Local widths inside
+lists or columns, font metrics and adjustments made by TeX can differ from the estimate.
+
 Opt in to `measure` for PDF builds with pdflatex, xelatex, lualatex, tectonic or Typst, globally in the config or
 `--setup`, in the document, or per table with `{column-estimate=measure}` after its caption (Pandoc 3.8.2+).
 An extra Pandoc pass uses the build's template, fonts, headers, preambles and filters. For LaTeX, the selected engine

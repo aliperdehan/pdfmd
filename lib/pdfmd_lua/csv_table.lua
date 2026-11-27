@@ -592,13 +592,14 @@ end
 -- `::: {.csv keep=4}` / `.keep` / `.nokeep` on the div reach the table's own attributes, where a filter that keeps a short
 -- table on one page (nulabreport.lua: `{.keep}`, `{.nokeep}`, `{keep=N}` after a caption) looks for them; a caption's own
 -- attributes win
-local function inherit_keep(made, div)
+local function inherit_table_options(made, div)
   local wanted = {}
   for _, class in ipairs(div.classes) do
     if class == "keep" or class == "nokeep" then wanted[#wanted + 1] = class end
   end
   local count = div.attributes["keep"]
-  if #wanted == 0 and not count then return end
+  local chars = div.attributes["table-chars"]
+  if #wanted == 0 and not count and not chars then return end
   for _, item in ipairs(made) do
     if item.t == "Table" then
       local attr = item.attr
@@ -608,6 +609,7 @@ local function inherit_keep(made, div)
         end
       end
       if count and attr.attributes["keep"] == nil and not attr.classes:includes("nokeep") then attr.attributes["keep"] = count end
+      if chars and attr.attributes["table-chars"] == nil then attr.attributes["table-chars"] = chars end
       item.attr = attr
       return
     end
@@ -639,7 +641,7 @@ function Blocks(blocks)
           end
         end
       end
-      inherit_keep(made, block)
+      inherit_table_options(made, block)
       for _, item in ipairs(made) do out[#out + 1] = item end
     else
       out[#out + 1] = block

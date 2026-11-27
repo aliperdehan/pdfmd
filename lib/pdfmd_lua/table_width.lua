@@ -1,8 +1,6 @@
--- ~95 characters is a commonly-cited rule of thumb for how much 12pt serif
--- text fits on one line within a standard 1in-margin A4/Letter page -- see
--- the long comment above this filter's Python source for what this is and
--- is not measuring, and why an estimate is all that's available here.
-local CHAR_BUDGET = 95
+-- pdfmd supplies the estimated line budget. Standalone filter use and unknown
+-- layouts use the table-chars fallback.
+local FALLBACK_BUDGET = 95
 -- Rough per-column overhead (rule padding + inter-column gap) so a table
 -- with many columns, each individually short, doesn't dodge the budget
 -- check on a technicality -- \tabcolsep-scale, not a real measurement.
@@ -13,7 +11,7 @@ local PER_COLUMN_OVERHEAD = 3
 -- via a real chemistry-report table (Ksp/uncertainty-propagation cells)
 -- getting stretched by cell_length() treating that raw command text as
 -- 34 characters of visual width. No exact fix is possible here either
--- (same reasoning as CHAR_BUDGET above -- no font has been measured yet
+-- (no font has been measured yet
 -- when this filter runs), so this is a flat divisor, not a real LaTeX-
 -- width estimator: a short subscript/superscript like "K_{sp}" (6 raw
 -- characters, renders about as wide as "Ksp") and a stacked fraction
@@ -118,7 +116,7 @@ local function dimensions(tbl, o)
   local char_rows, char_longest, char_word = collect(tbl, o.count_raw)
   local data = o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]
   if not data then
-    return char_rows, char_longest, char_word, CHAR_BUDGET - #tbl.colspecs * PER_COLUMN_OVERHEAD
+    return char_rows, char_longest, char_word, o.chars - #tbl.colspecs * PER_COLUMN_OVERHEAD
   end
   local rows, longest, word, char_totals, point_totals = {}, {}, {}, {}, {}
   for c = 1, #tbl.colspecs do longest[c], word[c], char_totals[c], point_totals[c] = 1, 1, 0, 0 end
@@ -429,7 +427,7 @@ local function adjust_chosen(tbl, o)
   end
   local widened = o.floor and keep_words(chars, longest, word, room, scale, o)
   local widths = widened or chars
-  local narrowed = margin > 0 and take_air(widths, longest, margin * (data and data.line or CHAR_BUDGET))
+  local narrowed = margin > 0 and take_air(widths, longest, margin * (data and data.line or o.chars))
   if not widened and not narrowed then return nil end
   for c, spec in ipairs(tbl.colspecs) do
     local width = widths[c] / room
@@ -462,6 +460,11 @@ local function number_of(text)
   return nil
 end
 
+local function char_budget(text)
+  local value = number_of(text)
+  if value and value > 0 and value < math.huge and value == math.floor(value) then return value end
+end
+
 local function margin_of(text)
   if text == nil then return nil end
   text = text:match("^%s*(.-)%s*$"):lower()
@@ -478,6 +481,8 @@ end
 local function table_options(attributes)
   local o = {}
   for key, value in pairs(GLOBAL) do o[key] = value end
+  o.chars = GLOBAL.chars or char_budget(attributes["table-chars"]) or GLOBAL.fallback_chars
+  attributes["table-chars"] = nil
   local given = attributes["widths"]
   if given ~= nil then
     if MODES[given:lower()] then o.mode = given:lower() end
@@ -594,11 +599,11 @@ end
 
 -- A setting comes from the document's own `pdfmd-options` first, then from the global one pdfmd hands over
 -- (`-M pdfmd-column-widths=...`, from the config or --setup). `table-widths` and `table-word-floor` are older names.
-local function setting(meta, name)
+local function setting(meta, name, global_name)
   local options = meta["pdfmd-options"]
   local value = nil
   if options ~= nil then value = options[name] end                    -- YAML `off` is the boolean false
-  if value == nil then value = meta["pdfmd-" .. name] end
+  if value == nil then value = meta["pdfmd-" .. (global_name or name)] end
   if value == nil then return nil end
   return pandoc.utils.stringify(value):lower()
 end
@@ -617,6 +622,10 @@ function Pandoc(doc)
     cache_layout = pandoc.utils.stringify(layout) .. pandoc.write(pandoc.Pandoc({}, metadata), "json")
   end
   doc.meta["pdfmd-width-cache-dir"], doc.meta["pdfmd-width-cache-layout"] = nil, nil
+  GLOBAL.chars = char_budget(pandoc.utils.stringify(doc.meta["pdfmd-table-chars"] or ""))
+  GLOBAL.fallback_chars = char_budget(setting(doc.meta, "table-chars", "table-chars-fallback"))
+    or char_budget(pandoc.utils.stringify(doc.meta["pdfmd-table-chars-fallback"] or "")) or FALLBACK_BUDGET
+  doc.meta["pdfmd-table-chars"], doc.meta["pdfmd-table-chars-fallback"] = nil, nil
   local estimate = setting(doc.meta, "column-estimate")
   if estimate then estimate = estimate:match("^%s*(.-)%s*$") end
   if estimate == "count" or estimate == "measure" then GLOBAL.estimate = estimate end

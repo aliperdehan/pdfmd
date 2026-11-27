@@ -153,6 +153,7 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("measured/cached", text)
         self.assertIn("measure", text)
         self.assertIn("count (default)", " ".join(text.split()))
+        self.assertIn("table-chars", text)
 
     def test_every_topic_prints(self):
         for topic in [*pdfmd_help.TOPICS, "other"]:

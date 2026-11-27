@@ -68,6 +68,7 @@ UNSET = {
     "options.html.self-contained": "off", "options.html.math": "MathML", "options.css-scope": "html", "options.css": "none",
     "options.odt.engine": "auto",
     "options.line-numbers": "off", "options.line-number-step": "1", "options.column-outlier": "2", "options.column-outlier-rows": "4", "options.column-outlier-length": "30", "options.column-word-floor-limit": "16", "options.column-ceil-margin": "25%",
+    "options.table-chars": "95 (fallback when the layout cannot be estimated)",
     "options.header": "none", "options.footer": "none", "options.bookmarks": "off", "options.attach-links": "off",
     "options.stamp.enabled": "off", "options.backup.enabled": "off",
     "options.backup.dir": ".backups (or an existing backup/)",
@@ -514,6 +515,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("measure", "measure with the selected PDF engine; cache unchanged measurements")), "count",
                "LaTeX and Typst PDF builds. Exports and other writers keep count with a NOTE; a failed measurement "
                "keeps count with a WARN. One table: {column-estimate=measure} after its caption.", "Tables"),
+        text("options.table-chars", "Fallback characters per line for LaTeX tables",
+             "Default 95. A positive whole number used in count mode when paper, margins or font size cannot be estimated. "
+             "One table: {table-chars=120} after its caption (Pandoc 3.8.2 or newer) or on a .csv div.",
+             "Tables", check="positive"),
         choice("options.column-widths", "Pipe-table column widths",
                (("auto", "a `---|---` separator means no opinion: widths that give the fewest lines"),
                 ("keep", "exactly the widths the separator's dashes say"),

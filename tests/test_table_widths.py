@@ -174,6 +174,69 @@ class Config(unittest.TestCase):
         with mock.patch.object(pdfmd, "config_options", lambda *a: {"column-widths": "sideways"}):
             self.assertEqual(len(pdfmd.width_filter_args(Path("f.lua"))), 2)
 
+    def test_the_config_supplies_the_fallback_budget(self):
+        import pdfmd
+        from unittest import mock
+        with mock.patch.object(pdfmd, "config_options", return_value={"table-chars": "120"}):
+            self.assertIn("pdfmd-table-chars-fallback=120", pdfmd.width_filter_args(FILTER))
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class CharacterBudget(unittest.TestCase):
+    TEXT = "| A | B |\n|---|---|\n| " + " ".join(["abcd"] * 16) + " | short |\n"
+
+    def build(self, front="", *options, writer="latex", linked="", body=None):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source, output = root / "doc.md", root / "out.tex"
+            source.write_text((f"---\n{front}\n---\n\n" if front else "") + (body or self.TEXT), encoding="utf-8")
+            if linked:
+                (root / "layout.yaml").write_text(linked, encoding="utf-8")
+                options = ("--metadata-file", "layout.yaml", *options)
+            done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "-v", "--to", writer,
+                                   "-o", str(output), str(source), *options], cwd=root, capture_output=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            return output.read_text(encoding="utf-8"), done.stdout + done.stderr
+
+    def test_paper_margins_and_font_size_determine_when_a_table_wraps(self):
+        layout = "papersize: a4\nfontsize: 12pt\ngeometry: margin=1in"
+        for front, options, wrap in (
+            (layout, (), True),
+            (layout, ("-V", "fontsize=10pt"), False),
+            (layout, ("-V", "geometry:left=15mm,right=20mm"), False),
+            ("fontsize: 12pt", ("--paper", "a4,landscape"), False),
+            ("fontsize: 12pt\nmargin: {x: 1in}", ("--paper", "a5"), True),
+        ):
+            with self.subTest(front=front, options=options):
+                tex, _ = self.build(front, *options)
+                self.assertEqual(r"\real{" in tex, wrap)
+
+    def test_linked_layout_and_beamer_use_their_own_widths(self):
+        tex, log = self.build(linked="papersize: a4\nfontsize: 12pt\ngeometry: margin=1in\n")
+        self.assertIn("pdfmd-table-chars=83", log)
+        self.assertIn(r"\real{", tex)
+        _, log = self.build(writer="beamer")
+        self.assertIn("pdfmd-table-chars=61", log)
+
+    def test_fallback_is_used_only_when_the_layout_is_unknown(self):
+        fallback = "pdfmd-options: {table-chars: 60}"
+        self.assertNotIn(r"\real{", self.build(fallback)[0])
+        self.assertIn(r"\real{", self.build(fallback, "--no-auto", "margin")[0])
+        tex, log = self.build(fallback, "--no-auto", "tablewidth")
+        self.assertNotIn("pdfmd-table-chars", log)
+        self.assertIn(r"\real{0.5000}", tex)
+
+    def test_a_csv_div_can_override_the_fallback(self):
+        csv = f'::: {{.csv table-chars=60}}\nA,B\n{" ".join(["abcd"] * 16)},short\n:::\n'
+        self.assertIn(r"\real{", self.build("", "--no-auto", "margin", body=csv)[0])
+        self.assertNotIn(r"\real{", self.build(body=csv)[0])
+
+    @unittest.skipUnless(pandoc_version() >= (3, 8, 2), "caption attributes need Pandoc 3.8.2")
+    def test_one_table_can_override_the_fallback(self):
+        text = self.TEXT + "\n: Caption {table-chars=60}\n"
+        self.assertIsNotNone(widths(text)[0][0])
+        self.assertEqual(widths(text, "-M", "pdfmd-table-chars=100"), [[None, None]])
+
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Ceiling(unittest.TestCase):
@@ -207,7 +270,7 @@ class Ceiling(unittest.TestCase):
             result = output.read_text(encoding="utf-8")
         shares = [float(value) for value in re.findall(r"\\real\{([0-9.]+)\}", result)]
         self.assertEqual(len(shares), 3)
-        for drawn, expected in zip(shares, widths(self.TEXT)[0]):
+        for drawn, expected in zip(shares, widths(self.TEXT, "-M", "pdfmd-table-chars=104")[0]):
             self.assertAlmostEqual(drawn, expected, delta=0.0001)
         self.assertLess(shares[1], 0.31)
 

@@ -419,7 +419,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if fonts_filter is not None:
                 cmd += ["--lua-filter", str(fonts_filter)]
             if tablewidth_auto:
-                cmd += core.width_filter_args(width_filter)
+                cmd += core.width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd, latex_sources=(source,))
             cmd += core.cellalign_args(md_path, metadata_files)
             cmd += core.tblr_header_args(md_path, metadata_files)
             cmd += core.code_filter_args(no_auto, [md_path, title_source], metadata_files) + core.image_filter_args(no_auto, [md_path, title_source], metadata_files)

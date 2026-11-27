@@ -370,7 +370,7 @@ def _run(core, *, records,
                 if report_fonts_filter is not None:
                     cmd += ["--lua-filter", str(report_fonts_filter)]
                 if is_tex_target and not auto_disabled(report_no_auto, "tablewidth"):
-                    cmd += width_filter_args(width_filter)
+                    cmd += width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd, latex_sources=tuple(prepared_files))
                 cmd += cellalign_args(files, metadata_files)
                 if target_format in core.OFFICE_REFERENCE_EXTENSIONS:
                     cmd += image_filter_args(report_no_auto, list(files), metadata_files, format="png")
@@ -534,7 +534,7 @@ def _run(core, *, records,
                     if report_fonts_filter is not None:
                         cmd += ["--lua-filter", str(report_fonts_filter)]
                     if report_tablewidth_auto and engine in LATEX_ENGINES:
-                        cmd += width_filter_args(width_filter)
+                        cmd += width_filter_args(width_filter, command=cmd, cwd=pandoc_cwd, latex_sources=tuple(prepared_files))
                     if report_tablewidth_auto and engine == "typst":
                         from pdfmd_tables.measure import requested
                         if requested(list(files), metadata_files):
