@@ -134,7 +134,7 @@ def _convert_direct(kind: str, source: Path, built: Path, output: Path, engine_r
 
 
 def convert_qmd(source: Path, output: Path, target_format: str,
-                variables: list[str], pandoc_options: list[str]) -> tuple[Path, bool, str]:
+                variables: list[str], pandoc_options: list[str], verbose: bool = False) -> tuple[Path, bool, str]:
     """Render a Quarto document (.qmd) via the Quarto CLI, not Pandoc directly.
 
     Pandoc has no idea what a .qmd file is -- it silently falls back to
@@ -169,10 +169,46 @@ def convert_qmd(source: Path, output: Path, target_format: str,
     cmd += core.deferred("pdfmd_filters.hidden", "mark_args")(source, [])
     cmd += core.calc_filter_args(source, [])
     cmd += core.deferred("pdfmd_filters.hidden", "finish_args")()
+    from pdfmd_buildinfo.build import record_tex, record_tex_log, tex_log_state
+    log = source.with_suffix(".log")
+    previous = tex_log_state(log) if core.BUILD["record"] is not None and target_format in ("pdf", "beamer") else None
+    core.log_cmd(cmd, source.parent, verbose)
     result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=source.parent)
+    if core.BUILD["record"] is not None and target_format in ("pdf", "beamer"):
+        record_tex_log(log, previous)
+        record_tex(result.stdout + "\n" + result.stderr)
     rendered = source.parent / output.name
     if result.returncode == 0 and rendered.exists() and rendered.resolve() != output.resolve():
         rendered.replace(output)
     if result.returncode == 0:
         core.record_engine("quarto")
     return source, result.returncode == 0, (result.stdout + result.stderr)[-3000:]
+
+
+def build_standalone(kind, source, output, metadata_files, target_format, args, variables, pandoc_options):
+    """Build directly, with the same record and timing as the Pandoc route."""
+    from pdfmd_buildinfo.build import build_record
+    from pdfmd_crop.build import prepare as prepare_crop
+
+    core.BUILD.update(engine=None, failed=[], tried=[], chain=None, repaired=[], output=None)
+    core.begin_timer()
+    with build_record(source, metadata_files) as recorder:
+        with core.warning_capture() as seen, prepare_crop(
+                source, output, metadata_files, target_format, args.verbose) as crop:
+            if kind == "quarto":
+                result = core.convert_qmd(source, output, target_format, variables, pandoc_options, args.verbose)
+            else:
+                settings = core.config_options().get("apply-defaults", False) if args.apply_defaults is None else args.apply_defaults
+                result = core.convert_direct(kind, source, output, args.engine, args.verbose, args.debug,
+                                             apply_defaults=settings not in (False, "false", "False", 0, ""),
+                                             metadata_request=args.metadata_file)
+            if result[1]:
+                core.BUILD["output"] = output
+                if crop is not None and (problem := crop()):
+                    result = source, False, problem
+        built = core.finish_build(result, seen, source, [])
+        if built[1]:
+            core.backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
+        if recorder:
+            built.record_path = recorder.finish(built)
+        return built

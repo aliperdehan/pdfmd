@@ -21,7 +21,12 @@ from pdfmd_engines.memory import scoped
 
 
 @scoped
-def run(core, *,
+def run(core, **options) -> None:
+    with contextlib.ExitStack() as records:
+        _run(core, records=records, **options)
+
+
+def _run(core, *, records,
         args, default_target, embed_request, engines,
         need_engines, pandoc_options, paths, stamp_overrides,
         target_format, variables) -> None:
@@ -140,10 +145,12 @@ def run(core, *,
                     chapters=report_chapters, notes=title_notes, output=output, log_path=log_path)
         return
     transcript.CURRENT.get().start(log_path, files[0], output)
-    BUILD["engine"], BUILD["failed"], BUILD["chain"] = None, [], None
+    BUILD.update(engine=None, failed=[], tried=[], chain=None, repaired=[], output=None)
     history_record = core.load_package("pdfmd_history.record")
     history_record.begin_history()
     begin_timer()
+    from pdfmd_buildinfo.build import build_record
+    recorder = records.enter_context(build_record(files[0], metadata_files))
     report_capture = warning_capture()
     report_seen = report_capture.__enter__()       # --strict: the warnings of this build (closed before the OK lines)
     report_from, report_reader_reason = (
@@ -173,6 +180,8 @@ def run(core, *,
                                               named_reader=args.from_format)
         if not ok:
             raise SystemExit(reason)
+        if recorder:
+            recorder.finish(attach_time(Built((files[0], True, ""), output=output), files[0], metadata_files))
         for file in files:
             if not has_chapter_field(file):
                 emit("warning", None, f"[WARNING] unnumbered Markdown included: {display_path(file)}")
@@ -640,7 +649,10 @@ def run(core, *,
             else:
                 emit("normal", None, f"YAML  {display_path(metadata_file)}")
     AUTO_LOG.flush(shown=not args.verbose)
-    report_built = attach_time(Built((output, result.returncode == 0), BUILD["engine"], BUILD["failed"]), files[0], metadata_files)
+    report_ok = result.returncode == 0 and not report_strict_failed
+    report_answer = strict_message(report_problems) if report_strict_failed else result.stderr[-3000:]
+    report_built = attach_time(Built((files[0], report_ok, report_answer), BUILD["engine"], BUILD["failed"],
+                                    output if result.returncode == 0 else None), files[0], metadata_files)
     report_built.stopped = core.chain_stopped()
     emit("result" if result.returncode == 0 and (not report_strict_failed) else "error", None, f"{'OK  ' if result.returncode == 0 and not report_strict_failed else 'FAIL'}  REPORT  {display_path(output)}"
           + time_label(report_built) + engine_label(report_built))
@@ -649,7 +661,10 @@ def run(core, *,
             emit("verbose", None, line)
     emit_outcome(result.stderr[-3000:], result.returncode == 0)
     if report_strict_failed:
-        emit("error", None, strict_message(report_problems), counted=False)
+        emit("error", None, report_answer, counted=False)
+    if recorder and (where := recorder.finish(report_built)) and (args.verbose or not report_ok):
+        emit("verbose" if report_ok else "error", None,
+             f"{'RECORD  ' if report_ok else '      full record: '}{core.under_home(where)}", counted=False)
     if result.returncode or report_strict_failed:
         raise SystemExit(1)
     if args.open:

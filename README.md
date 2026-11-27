@@ -3354,8 +3354,9 @@ and their times. A build that failed ends with `full record: ~/.cache/pdfmd/buil
 `document`: `.cache/pdfmd/builds` beside the file, which then travels with the folder). `build-log: on|failed|off`
 (`--build-log MODE`), `build-log-keep` (the newest N stay, 5, and the newest failed one) and `build-log-max-size` (KB; a longer record keeps its start
 and its end; 512) are `pdfmd-options` keys and `--setup` rows. The home folder is written as `~` in the file, so a record can be pasted into a bug report.
-`pdfmd --clear-cache` removes them with the rest of the cache. A record that cannot be written never fails a build. Not yet in a record: the
-a build of a `.qmd`, a direct `.typ`/`.html` build and a report or book build, and the versions of the LaTeX packages.
+`pdfmd --clear-cache` removes them with the rest of the cache. A record that cannot be written never fails a build.
+Quarto, direct Typst and HTML builds, and reports and books also leave records. When the TeX engine supplies the
+information, the record lists the TeX Live year and loaded LaTeX packages with their dates and versions.
 
 When LaTeX itself stops, the warning also says where: Pandoc reports a line of the LaTeX it wrote, so pdfmd finds those
 words in your Markdown and prints `near line 9 of paper.md: ...has \badmacro`.

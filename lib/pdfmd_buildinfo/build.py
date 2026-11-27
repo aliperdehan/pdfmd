@@ -19,10 +19,13 @@ from __future__ import annotations
 import hashlib
 import os
 import platform
+import re
 import shlex
 import sys
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from pdfmd_base import core
 from pdfmd_log import emit
@@ -43,9 +46,7 @@ def resolve_build_time(md_path: Path, metadata_files: list[Path]) -> tuple[bool,
     style = core.TIME_FORMAT_CLI or os.environ.get("PDFMD_TIME_FORMAT") or ""
 
     def option(key: str):
-        if md_path.suffix.lower() in (".md", ".markdown"):
-            return core.first_pdfmd_option(md_path, metadata_files, key)
-        return core.config_options().get(key)
+        return core.first_pdfmd_option(md_path, metadata_files, key)
 
     if show is None:
         show = core.option_flag(option("build-time"))
@@ -103,6 +104,62 @@ def record_module():
         return None
 
 
+def record_tex(text: str) -> None:
+    """Record the engine banner and the dates and versions LaTeX reported loading."""
+    lines = core.BUILD["record"]
+    if lines is None:
+        return
+    year = re.search(r"(?m)^\s*This is [^\n]*\bTeX Live (\d{4})\b", text)
+    details = [f"TeX Live year: {year[1]}"] if year else []
+    for match in re.finditer(r"(?m)^(?:Package: ([^\s]+)|File: ([^\s]+)\.sty)\s+"
+                             r"(\d{4}[/-]\d{2}[/-]\d{2})(?:[ \t]+(v\d[^\s]*))?", text):
+        name, file, date, version = match.groups()
+        details.append(" ".join(filter(None, ("LaTeX package:", name or file, date, version))))
+    known = set(lines)
+    core.record_note("\n".join(row for row in dict.fromkeys(details) if row not in known))
+
+
+def tex_log_state(path: Path) -> tuple[int, int, int] | None:
+    try:
+        stat = path.stat()
+        return stat.st_ino, stat.st_size, stat.st_mtime_ns
+    except OSError:
+        return None
+
+
+def record_tex_log(path: Path, previous=None) -> None:
+    state = tex_log_state(path)
+    if state is not None and state != previous:
+        data = core.read_text_or_none(path)
+        if data:
+            record_tex(data)
+
+
+def recorded_pandoc_tex(run, command: list[str], target: Path, engine: str):
+    """Keep Pandoc's engine log in scratch until the build record has read it."""
+    if core.BUILD["record"] is None or engine not in {"lualatex", "xelatex", "pdflatex", "latexmk", "tectonic"}:
+        return run(command, target)
+    if any("output-directory" in arg or "outdir" in arg or arg in ("--defaults", "-d")
+           or arg.startswith("--defaults=") for arg in command):
+        result = run(command, target)
+        record_tex((result.stdout or "") + "\n" + (result.stderr or ""))
+        return result
+    try:
+        scratch = TemporaryDirectory(prefix="pdfmd-tex-record-")
+    except OSError:
+        return run(command, target)
+    with scratch as folder:
+        option = "--outdir=" if engine == "tectonic" else "-output-directory="
+        options = [f"--pdf-engine-opt={option}{Path(folder).as_posix()}"]
+        if engine == "tectonic":
+            options.append("--pdf-engine-opt=--keep-logs")
+        result = run([*command, *options], target)
+        for log in sorted(Path(folder).glob("*.log")):
+            record_tex_log(log)
+        record_tex((result.stdout or "") + "\n" + (result.stderr or ""))
+        return result
+
+
 class _RecordTee:
     """A text stream that passes everything on and keeps each line, in order, in the record."""
 
@@ -154,7 +211,7 @@ def build_record_folders(md_path: Path, metadata_files: list[Path] | None = None
     if metadata_files is None:
         return [machine, document]
     try:
-        where = core.cache_location(md_path, metadata_files) if md_path.suffix.lower() in (".md", ".markdown") else "global"
+        where = core.cache_location(md_path, metadata_files)
     except (SystemExit, OSError):
         where = "global"
     return [document if where == "document" else machine]
@@ -166,6 +223,7 @@ class BuildRecorder:
     def __init__(self, md_path: Path, metadata_files: list[Path], mode: str, keep: int, kilobytes: int):
         self.md_path, self.metadata_files, self.mode, self.keep, self.kilobytes = md_path, metadata_files, mode, keep, kilobytes
         self.lines: list[str] = []
+        self.active = True
         self.started = datetime.now()
         self.out, self.err = sys.stdout, sys.stderr
         self.tees = (_RecordTee(self.out, self.lines), _RecordTee(self.err, self.lines))
@@ -186,6 +244,7 @@ class BuildRecorder:
             return None
 
     def stop(self) -> None:
+        self.active = False
         for tee in self.tees:
             tee.finish()
         if sys.stdout is self.tees[0]:
@@ -220,6 +279,8 @@ class BuildRecorder:
 
     def finish(self, built=None, failure: str = "") -> Path | None:
         """Stop listening and write the record (a failed build always; a good one unless build-log is `failed`). The path."""
+        if not self.active:
+            return None
         self.stop()
         ok = built is not None and bool(built[1])
         if ok and self.mode == "failed":
@@ -239,6 +300,22 @@ class BuildRecorder:
 
     def build_folder(self) -> Path:
         return build_record_folders(self.md_path, self.metadata_files)[0]
+
+
+@contextmanager
+def build_record(document: Path, metadata_files: list[Path]):
+    """Keep a record through the route's success, returned failure or exception."""
+    recorder = BuildRecorder.start(document, metadata_files)
+    try:
+        yield recorder
+    except BaseException as error:
+        where = recorder.finish(None, core.failure_text(error)) if recorder else None
+        if where:
+            emit("error", None, f"      full record: {core.under_home(where)}", file=sys.stderr, counted=False)
+        raise
+    finally:
+        if recorder and recorder.active:
+            recorder.stop()
 
 
 def last_build_command(args) -> int:

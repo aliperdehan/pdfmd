@@ -19,7 +19,6 @@ wait for an answer before any code.
 
 - [ ] **decide** the list: text shorthands such as `+/-` -> ±, beside the `--`/`---` dashes; opt-in, never inside code or maths [D44 N144]
 - [ ] **later** PlantUML as a diagram language next to mermaid, d2 and dot: not now (author, 2026-11-02: no second Java for it); pick up if asked [3en]
-- [ ] Build record: LaTeX package versions and the TeX Live year, .qmd, direct and report builds [3dn]
 
 ## Features, agreed
 

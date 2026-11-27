@@ -855,34 +855,10 @@ def run_main() -> None:
         log_metadata = log_metadata if isinstance(log_metadata, list) else [log_metadata] if log_metadata else []
         transcript.CURRENT.get().start(transcript.destination(args.log, source, log_metadata),
                                        source, convert_job["final"] if convert_job else output)
-        if source.suffix.lower() == ".qmd":
-            core.BUILD["engine"], core.BUILD["failed"] = None, []
-            core.begin_timer()
-            from pdfmd_crop.build import prepare as prepare_crop
-            with core.warning_capture() as seen, prepare_crop(source, output, [], target_format, args.verbose) as crop:
-                built = core.convert_qmd(source, output, target_format, variables, pandoc_options)
-                if built[1] and crop is not None and (problem := crop()):
-                    built = source, False, problem
-            results = [core.finish_build(built, seen, source, [])]
-            if results[0][1]:
-                # Front matter only: Quarto has its own metadata system, so no
-                # metadata.yaml is looked up for a .qmd (see convert_qmd).
-                core.backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
-        elif direct_kind is not None:
-            core.BUILD["engine"], core.BUILD["failed"] = None, []
-            core.begin_timer()
-            from pdfmd_crop.build import prepare as prepare_crop
-            with core.warning_capture() as seen, prepare_crop(
-                    source, output, source_metadata, target_format, args.verbose) as crop:
-                built = core.convert_direct(direct_kind, source, output, args.engine, args.verbose, args.debug,
-                                       apply_defaults=(core.config_options().get("apply-defaults", False) if args.apply_defaults is None
-                                                       else args.apply_defaults) not in (False, "false", "False", 0, ""),
-                                       metadata_request=args.metadata_file)
-                if built[1] and crop is not None and (problem := crop()):
-                    built = source, False, problem
-            results = [core.finish_build(built, seen, source, [])]
-            if results[0][1]:
-                core.backup_after_success(source, [], args.backup, args.verbose, args.backup_format)
+        if source.suffix.lower() == ".qmd" or direct_kind is not None:
+            from pdfmd_direct.route import build_standalone
+            kind, crop_metadata = (("quarto", []) if source.suffix.lower() == ".qmd" else (direct_kind, source_metadata))
+            results = [build_standalone(kind, source, output, crop_metadata, target_format, args, variables, pandoc_options)]
         elif source.suffix.lower() in core.OFFICE_INPUT_EXTENSIONS:
             # A binary office document (.docx/.pptx/.xlsx/.odt/etc.) has no
             # YAML front matter, documentclass, or LaTeX preamble to go

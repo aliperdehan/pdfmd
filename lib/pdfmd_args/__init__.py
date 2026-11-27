@@ -250,7 +250,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "--verbose adds the time of every step). Also `pdfmd-options: {build-time: off}`")
     parser.add_argument("--build-log", choices=BUILD_LOG_MODES, metavar="MODE",
                         help="the record of each build, kept in the cache for debugging afterwards (on, failed: only a build "
-                             "that failed, off). Also `pdfmd-options: {build-log: failed}`; `build-log-keep` and "
+                             "that failed, off). Includes TeX Live and loaded LaTeX package versions where available. "
+                             "Also `pdfmd-options: {build-log: failed}`; `build-log-keep` and "
                              "`build-log-max-size` (KB) are settings too")
     parser.add_argument("--last-build", action="store_true",
                         help="print the newest record of FILE's build (see --build-log)")

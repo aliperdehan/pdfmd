@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.78 — 2026-11-27
+
+Pre-edit state: commit `afa0fc1`. Build records now cover Quarto, direct Typst and HTML, and both report routes. Pandoc previously discarded its LaTeX log and direct TeX discarded the scratch log without recording it. Read the actual engine log where available and record the TeX Live year and loaded package dates and versions. Quarto provides package details when it retains a fresh TeX log. Regression checks exercise Pandoc and direct TeX, direct Typst, a stand-in for Quarto, and the default and patch report routes.
+
+---
+
 ## v3.34.77 — 2026-11-27
 
 Pre-edit state: commit `646f1d3`. Pandoc left `.caps`, `.wavy` and `.dotted` spans unstyled. The `spans` markup kind now capitalises prose and uses writer-specific underlines in HTML, EPUB, LaTeX, Word, OpenDocument and Typst where available. Other writers can use a plain underline or keep readable text. The regression builds lists and parts, inspects HTML and Office markup, checks LaTeX and Typst commands, and exercises EPUB, flat text and the markup switches.

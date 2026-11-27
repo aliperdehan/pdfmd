@@ -370,7 +370,16 @@ def run_tex_engine(engine: str, tex_path: Path, output_dir: Path,
 
     def run(cmd: list[str], cwd: Path, env: dict | None = None) -> subprocess.CompletedProcess:
         core.log_cmd(cmd, cwd, verbose)
-        return subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
+        if core.BUILD["record"] is None or cmd[0] != engine:
+            return subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
+        from pdfmd_buildinfo.build import record_tex, record_tex_log, tex_log_state
+        previous = tex_log_state(log_path)
+        if engine == "tectonic":
+            cmd = [*cmd[:-1], "--keep-logs", cmd[-1]]
+        result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
+        record_tex_log(log_path, previous)
+        record_tex(result.stdout + "\n" + result.stderr)
+        return result
 
     engine_env = core.load_package("pdfmd_tex.repair").engine_env(engine, env)          # TeX self-repair (v3.33.219)
     cmd = latex_engine_command(engine, tex_path, output_dir,

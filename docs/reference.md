@@ -1807,6 +1807,9 @@ printed whatever --verbose said, what the engines answered, the steps and their 
 `full record: PATH`; `pdfmd --last-build FILE [--failed]` shows the newest. `build-log: on|failed|off` (--build-log MODE),
 `build-log-keep` (5; the newest failed record stays besides) and `build-log-max-size` (KB, 512) are `pdfmd-options` keys
 and `--setup` rows. The home folder is written as `~` in the file.
+Direct Typst and HTML builds, Quarto, and both report routes also leave records. A report's record is filed under its
+first source. For LaTeX, the record includes the TeX Live year and the dates and versions of the packages reported by
+the engine, where available. Quarto supplies package versions when it retains a TeX log beside the source.
 
 A Lua filter pdfmd finds by itself is noted (v3.26.11): a NOTE the first time this machine runs it and the first
 time after it changed; it runs either way, and nothing prompts. `--trust-lua FOLDER|FILE` marks what is yours;

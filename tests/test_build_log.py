@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
 import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
@@ -96,6 +97,20 @@ class VerbosePrint(unittest.TestCase):
             pdfmd.BUILD["record"] = saved
 
 
+class TexDetails(unittest.TestCase):
+    def test_reads_package_declarations_and_the_year_of_the_engine_that_ran(self):
+        from pdfmd_buildinfo.build import record_tex
+        lines = []
+        with mock.patch.dict(pdfmd.BUILD, record=lines):
+            record_tex("  This is pdfTeX, Version 1 (TeX Live 2026)\n"
+                       "Package: amsmath 2025/07/09 v2.17z AMS math features\n"
+                       "File: example.sty 2002/01/01 v1.0 Example\n"
+                       "File: logo.png Graphic file\n"
+                       "Package: amsmath 2025/07/09 v2.17z AMS math features\n")
+        self.assertEqual(lines, ["TeX Live year: 2026", "LaTeX package: amsmath 2025/07/09 v2.17z",
+                                 "LaTeX package: example 2002/01/01 v1.0"])
+
+
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
 class Builds(unittest.TestCase):
     def setUp(self):
@@ -126,6 +141,53 @@ class Builds(unittest.TestCase):
                          "what pdfmd printed, and what it ran", "TIME  d.md"):
             self.assertIn(expected, text)
         self.assertNotIn("full record", done.stdout)               # nothing to point at when the build went well
+
+    def test_report_routes_record_the_final_output(self):
+        (self.path / "b.md").write_text("---\nchapter: 2\n---\n\nSecond.\n", encoding="utf-8")
+        for mode in ("route", "patch"):
+            with self.subTest(mode=mode):
+                (self.path / "a.md").write_text(
+                    f"---\nchapter: 1\npdfmd-options: {{report-build: {mode}}}\n---\n\nFirst.\n", encoding="utf-8")
+                done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "-r", "a.md", "b.md",
+                                       "--to", "html", "-o", mode + ".html", "--no-backup", "--no-stamp"],
+                                      cwd=self.path, env=self.env, capture_output=True, encoding="utf-8")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                found = [p.read_text(encoding="utf-8") for p in self.records()]
+                self.assertTrue(any("result:    ok" in entry and f"output:    {self.path.resolve() / (mode + '.html')}" in entry
+                                    and "CMD  pandoc" in entry for entry in found), found)
+
+    @unittest.skipUnless(shutil.which("pdflatex"), "needs pdfLaTeX")
+    def test_pandoc_and_direct_tex_record_the_loaded_package(self):
+        (self.path / "sample-record.sty").write_text(
+            "\\ProvidesPackage{sample-record}[2024/04/05 v1.2 Synthetic package]\n", encoding="utf-8")
+        (self.path / "a.md").write_text(
+            "---\nheader-includes: '\\usepackage{sample-record}'\n---\n\nExample.\n", encoding="utf-8")
+        (self.path / "b.tex").write_text(
+            "\\documentclass{article}\n\\usepackage{sample-record}\n"
+            "\\begin{document}Example.\\end{document}\n", encoding="utf-8")
+        for name in ("a.md", "b.tex"):
+            with self.subTest(name=name):
+                done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), name, "-e", "pdflatex",
+                                       "--no-backup", "--no-stamp"], cwd=self.path, env=self.env,
+                                      capture_output=True, encoding="utf-8")
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                found = [p.read_text(encoding="utf-8") for p in self.records()]
+                self.assertTrue(any(f"document:  {self.path.resolve() / name}" in entry
+                                    and "LaTeX package: sample-record 2024/04/05 v1.2" in entry
+                                    for entry in found), found)
+        self.assertFalse(list(self.path.glob("*.log")))
+
+    @unittest.skipUnless(shutil.which("typst"), "needs Typst")
+    def test_direct_typst_has_a_record(self):
+        (self.path / "a.typ").write_text("Example.\n", encoding="utf-8")
+        done = subprocess.run([sys.executable, str(ROOT / "scripts/pdfmd"), "a.typ", "--no-backup", "--no-stamp"],
+                              cwd=self.path, env=self.env, capture_output=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(len(self.records()), 1)
+        text = self.records()[0].read_text(encoding="utf-8")
+        self.assertIn("result:    ok", text)
+        self.assertRegex(text, r"(?m)^CMD  .*\btypst(?:\.exe)?['\"]? compile")
+        self.assertIn(f"output:    {self.path.resolve() / 'a.pdf'}", text)
 
     def test_the_record_holds_every_line_that_only_verbose_prints(self):
         (self.path / "metadata.yaml").write_text("author: A\n", encoding="utf-8")      # a file pdfmd finds by itself: an AUTO line of our own

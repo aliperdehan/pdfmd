@@ -26,6 +26,7 @@ class QuartoWithoutPandoc(unittest.TestCase):
         self.env = {**os.environ, **hidden_tools(self.bin), "PATH": str(self.bin),
                     "XDG_CONFIG_HOME": str(self.folder / "config"), "XDG_CACHE_HOME": str(self.folder / "cache"),
                     "XDG_DATA_HOME": str(self.folder / "data"), "PDFMD_CONFIG": "", "PDFMD_NO_PROMPT": "1"}
+        self.env["LOCALAPPDATA"] = self.env["XDG_CACHE_HOME"]
         (self.folder / "analysis.qmd").write_text("---\ntitle: Analysis\n---\n\nHello.\n", encoding="utf-8")
 
     def run_pdfmd(self, *arguments):
@@ -70,3 +71,20 @@ class QuartoWithoutPandoc(unittest.TestCase):
         done = self.run_pdfmd("document.md", "--to", "html")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("Pandoc was not found", done.stdout + done.stderr)
+
+    def test_pdf_records_the_actual_tex_banner_and_a_retained_log(self):
+        tool = self.bin / "quarto"
+        tool.write_text(f"#!{sys.executable}\n" +
+                        "import sys\nfrom pathlib import Path\n"
+                        "if '--version' in sys.argv:\n    print('1.0')\n    sys.exit(0)\n"
+                        "print('  This is pdfTeX, Version 1 (TeX Live 2026)')\n"
+                        "Path('analysis.log').write_text('Package: sample 2026/01/01 v1.2 Sample\\n')\n"
+                        "Path('analysis.pdf').write_bytes(b'%PDF-sample')\n", encoding="utf-8")
+        tool.chmod(0o755)
+        done = self.run_pdfmd("analysis.qmd", "--build-log", "on")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        record, = (self.folder / "cache" / "pdfmd" / "builds").rglob("*.log")
+        text = record.read_text(encoding="utf-8")
+        self.assertRegex(text, r"(?m)^CMD  .*\bquarto['\"]? render")
+        self.assertIn("TeX Live year: 2026", text)
+        self.assertIn("LaTeX package: sample 2026/01/01 v1.2", text)
