@@ -154,6 +154,8 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("measure", text)
         self.assertIn("count (default)", " ".join(text.split()))
         self.assertIn("table-chars", text)
+        self.assertIn("table-style", text)
+        self.assertIn("table-row-spacing", text)
 
     def test_every_topic_prints(self):
         for topic in [*pdfmd_help.TOPICS, "other"]:

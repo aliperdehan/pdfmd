@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.83 — 2026-11-27
+
+Pre-edit state: commit `8b2c84d`. [tables] Rows with wrapped cells could be hard to distinguish in a LaTeX table. Opt in with `table-style: spaced` to stretch the row strut only in those tables, using the adjustable `table-row-spacing` factor. The regression checks cover opt-in, per-table and document settings, fixed CSV widths, labels, and LaTeX, Typst and HTML exports.
+
+---
+
 ## v3.34.82 — 2026-11-27
 
 Pre-edit state: commit `0d6c93c`. [tables] Count mode used the same 95-character line for every LaTeX table, so narrow pages could leave long cells unwrapped. Estimate the available characters from the resolved paper, orientation, margins and font size, using 0.45 em per character. Keep 95 as the configurable `table-chars` fallback, including per-table settings. Regression tests cover paper and font overrides, linked metadata, Beamer, CSV and caption settings, and disabling the filter.

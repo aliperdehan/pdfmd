@@ -100,6 +100,7 @@ def width_filter_args(width_filter: Path, *, command: list[str] | None = None, c
     options = core.config_options()
     words = (("column-widths", "table-widths", ("auto", "keep", "force")),
              ("column-estimate", None, ("count", "measure")),
+             ("table-style", None, ("off", "spaced")),
              ("column-word-floor", "table-word-floor", ("on", "off", "true", "false")),
              ("column-word-ceil", None, ("on", "off", "true", "false")),
              ("column-count-raw-tex", None, ("on", "off", "true", "false")))
@@ -127,6 +128,9 @@ def width_filter_args(width_filter: Path, *, command: list[str] | None = None, c
     fallback = str(options.get("table-chars", "")).strip()
     if re.fullmatch(r"[0-9]+", fallback) and fallback.lstrip("0"):
         args += ["-M", f"pdfmd-table-chars-fallback={fallback}"]
+    spacing = str(options.get("table-row-spacing", "")).strip()
+    if re.fullmatch(r"[0-9]+(?:\.[0-9]*)?", spacing):
+        args += ["-M", f"pdfmd-table-row-spacing={spacing}"]
     if command is not None:
         directory = cwd or Path.cwd()
         if latex_sources:

@@ -2036,6 +2036,14 @@ Unchanged tables cost one extra Pandoc pass but no extra engine run. Exports (`-
 ODT, HTML, EPUB and other formats) run no measuring engine and keep count with one NOTE when measure was requested.
 A failed measurement keeps count for that build with one WARN naming the cause; the normal build continues.
 
+`pdfmd-options: {table-style: spaced}` adds space between rows of a LaTeX longtable when the width
+filter estimates that at least one cell will wrap. The default is `off`. The style changes the row
+strut with `\arraystretch` and keeps the line spacing inside a cell. Set `table-row-spacing` to a decimal
+of at least 1 to adjust the stretch factor (default 1.4). Both settings are available in the config and
+`--setup`. Override them after a table caption with `{table-style=spaced table-row-spacing=1.5}`
+(Pandoc 3.8.2 or newer), or put the attributes on a `.csv` div. `--no-auto tablewidth` disables the
+style. Tables rebuilt as `longtblr` by the cell-tag filter use tabularray's own spacing.
+
 ## Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block
 
 --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/

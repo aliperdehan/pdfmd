@@ -449,6 +449,7 @@ local GLOBAL = {
   mode = "auto", floor = true, ceil = true, count_raw = true, estimate = "count", ["column-ceil-margin"] = 0.25,
   ["column-outlier"] = 2, ["column-outlier-rows"] = 4, ["column-outlier-length"] = 30, ["column-word-floor-limit"] = 16,
 }
+local table_style, row_spacing = "off", "1.4"
 local NUMBERS = {"column-outlier", "column-outlier-rows", "column-outlier-length", "column-word-floor-limit"}
 
 local function number_of(text)
@@ -463,6 +464,19 @@ end
 local function char_budget(text)
   local value = number_of(text)
   if value and value > 0 and value < math.huge and value == math.floor(value) then return value end
+end
+
+local function style_of(text)
+  local word = (text or ""):lower():match("^%s*(.-)%s*$")
+  if word == "spaced" or word == "off" then return word end
+  if word == "false" then return "off" end
+end
+
+local function spacing_of(text)
+  local word = (text or ""):match("^%s*(.-)%s*$")
+  local value = tonumber(word)
+  -- TeX needs a decimal multiplier in front of a length.
+  if value and value >= 1 and value < math.huge and word:match("^%d+%.?%d*$") then return word end
 end
 
 local function margin_of(text)
@@ -532,15 +546,11 @@ local function without_dash_widths(tbl)
   for index, spec in ipairs(tbl.colspecs) do tbl.colspecs[index] = {spec[1]} end
 end
 
-local function rebalance(tbl)
-  tables_seen = tables_seen + 1
+local function rebalance(tbl, o)
   local ncols = #tbl.colspecs
   if ncols == 0 then return nil end
   local typst = FORMAT:match("typst") ~= nil
   if not typst then without_dash_widths(tbl) end
-  local attributes = tbl.attr.attributes
-  if attributes["data-pdfmd-widths"] == "fixed" then return nil end     -- widths= on a .csv div
-  local o = table_options(attributes)
   if typst then
     if not (o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]) then return nil end
     without_dash_widths(tbl)
@@ -597,6 +607,40 @@ local function rebalance(tbl)
   return tbl
 end
 
+local function wraps(tbl, o)
+  local _, longest, _, room = dimensions(tbl, o)
+  local data = o.estimate == "measure" and measurements and measurements.tables[tostring(tables_seen)]
+  for c, spec in ipairs(tbl.colspecs) do
+    local share = spec[2]
+    if share and share > 0 then
+      local width = data and data.inset and share * data.line - data.inset or share * room
+      if longest[c] > width then return true end
+    end
+  end
+  return false
+end
+
+local function format_table(tbl)
+  tables_seen = tables_seen + 1
+  local attributes = tbl.attr.attributes
+  local style = style_of(attributes["table-style"]) or table_style
+  local spacing = spacing_of(attributes["table-row-spacing"]) or row_spacing
+  attributes["table-style"], attributes["table-row-spacing"] = nil, nil
+  local fixed = attributes["data-pdfmd-widths"] == "fixed"
+  local spaced = style == "spaced" and (FORMAT == "latex" or FORMAT == "beamer")
+  if fixed and not spaced then return nil end
+  local o = table_options(attributes)
+  local balanced
+  if not fixed then balanced = rebalance(tbl, o) end        -- widths= on a .csv div
+  local result = balanced or tbl
+  if spaced and wraps(result, o) then
+    -- Keep a Table in the AST so the filters after this one still see it.
+    return {pandoc.RawBlock("latex", "\\begingroup\n\\renewcommand{\\arraystretch}{" .. spacing .. "}"),
+            result, pandoc.RawBlock("latex", "\\endgroup")}
+  end
+  return balanced
+end
+
 -- A setting comes from the document's own `pdfmd-options` first, then from the global one pdfmd hands over
 -- (`-M pdfmd-column-widths=...`, from the config or --setup). `table-widths` and `table-word-floor` are older names.
 local function setting(meta, name, global_name)
@@ -626,6 +670,8 @@ function Pandoc(doc)
   GLOBAL.fallback_chars = char_budget(setting(doc.meta, "table-chars", "table-chars-fallback"))
     or char_budget(pandoc.utils.stringify(doc.meta["pdfmd-table-chars-fallback"] or "")) or FALLBACK_BUDGET
   doc.meta["pdfmd-table-chars"], doc.meta["pdfmd-table-chars-fallback"] = nil, nil
+  table_style = style_of(setting(doc.meta, "table-style")) or table_style
+  row_spacing = spacing_of(setting(doc.meta, "table-row-spacing")) or row_spacing
   local estimate = setting(doc.meta, "column-estimate")
   if estimate then estimate = estimate:match("^%s*(.-)%s*$") end
   if estimate == "count" or estimate == "measure" then GLOBAL.estimate = estimate end
@@ -651,5 +697,5 @@ function Pandoc(doc)
     measurements = pandoc.json.decode(handle:read("*a"))
     handle:close()
   end
-  return pandoc.Pandoc(doc.blocks:walk({Table = rebalance}), doc.meta)
+  return pandoc.Pandoc(doc.blocks:walk({Table = format_table}), doc.meta)
 end

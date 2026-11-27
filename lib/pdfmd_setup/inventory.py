@@ -280,6 +280,7 @@ OPTIONS: dict[str, str | Omitted] = {
     "strip-comments": "options.strip-comments",
     "column-estimate": "options.column-estimate", "column-widths": "options.column-widths", "table-widths": "options.column-widths",
     "table-chars": "options.table-chars",
+    "table-style": "options.table-style", "table-row-spacing": "options.table-row-spacing",
     "column-word-floor": "options.column-word-floor", "table-word-floor": "options.column-word-floor",
     "column-word-floor-limit": "options.column-word-floor-limit",
     "column-word-ceil": "options.column-word-ceil", "column-ceil-margin": "options.column-ceil-margin",

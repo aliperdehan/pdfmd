@@ -590,16 +590,14 @@ local function attach_caption(blocks, inlines, div)
 end
 
 -- `::: {.csv keep=4}` / `.keep` / `.nokeep` on the div reach the table's own attributes, where a filter that keeps a short
--- table on one page (nulabreport.lua: `{.keep}`, `{.nokeep}`, `{keep=N}` after a caption) looks for them; a caption's own
--- attributes win
+-- table on one page (nulabreport.lua: `{.keep}`, `{.nokeep}`, `{keep=N}` after a caption) looks for them. The width
+-- filter also reads the table's budget and row spacing. A caption's own attributes win.
 local function inherit_table_options(made, div)
   local wanted = {}
   for _, class in ipairs(div.classes) do
     if class == "keep" or class == "nokeep" then wanted[#wanted + 1] = class end
   end
   local count = div.attributes["keep"]
-  local chars = div.attributes["table-chars"]
-  if #wanted == 0 and not count and not chars then return end
   for _, item in ipairs(made) do
     if item.t == "Table" then
       local attr = item.attr
@@ -609,7 +607,9 @@ local function inherit_table_options(made, div)
         end
       end
       if count and attr.attributes["keep"] == nil and not attr.classes:includes("nokeep") then attr.attributes["keep"] = count end
-      if chars and attr.attributes["table-chars"] == nil then attr.attributes["table-chars"] = chars end
+      for _, key in ipairs({"table-chars", "table-style", "table-row-spacing"}) do
+        if attr.attributes[key] == nil then attr.attributes[key] = div.attributes[key] end
+      end
       item.attr = attr
       return
     end

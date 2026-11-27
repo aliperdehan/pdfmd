@@ -48,7 +48,7 @@ wait for an answer before any code.
 - [ ] Cell tags: vertical alignment and heights in Typst, Word and ODT; an exact row height (tabularray's `ht` is a minimum); `j` (justify) [3fa]
 - [ ] Cell tags: a table rebuilt as `longtblr` is raw LaTeX to later filters (`table-keep`, `labtabular`, Beamer untested); the native tier and grid tables read no tags [3fa]
 - [ ] Revise the thin features of this line (line breaks, table captions, `<c>` cells, Org extras) against unusual input users will try, while the documentation programme writes them up [3el, 3dg]
-- [ ] Row legibility for long-cell tables: `table-style` (rules, zebra, spacing)
+- [ ] Row legibility for long-cell tables: decide the `table-style` spellings for rules and zebra
 - [ ] Width modes beyond auto/keep/force: combinations, more per-table spellings (per-column widths are in the attribute line, 3.32.33) [3dl]
 - [ ] Measured column widths beyond LaTeX and Typst (`column-estimate: measure`, 3.33.332-333): Word/ODT through LibreOffice, then measure as the default (4.0 at the earliest) and the raw-TeX kludge (`column-count-raw-tex`) retired [3dl 3ge]
 

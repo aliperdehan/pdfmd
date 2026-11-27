@@ -271,6 +271,8 @@ then root `csl:`. For spacing, `bibliography-line-spacing` wins over `csl.spacin
 The default LaTeX table-width count estimates the line capacity from the paper, margins and type size.
 `pdfmd-options: {table-chars: 95}` sets the fallback when those inputs cannot be resolved. A table caption
 can carry `{table-chars=120}` (recent Pandoc), and a CSV div can carry `table-chars=120`.
+For LaTeX tables with wrapping cells, opt in to more space between rows with
+`pdfmd-options: {table-style: spaced, table-row-spacing: 1.4}`.
 Table width estimation: `pdfmd-options: {column-estimate: measure}` opts in to measured cell and unbreakable word widths
 for LaTeX and Typst PDF builds with their selected engine, including the word breaks in inline code. `--setup` offers the key,
 and a table caption can carry `{column-estimate=measure}` (recent Pandoc). Exports use count with a NOTE.

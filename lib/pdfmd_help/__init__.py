@@ -203,12 +203,15 @@ def _topic(parser: argparse.ArgumentParser, topic: str) -> str:
     if topic == "tables":
         parser.description += (". column-estimate: count (default) | measure "
                                "(LaTeX/Typst PDF, --verbose reports measured/cached widths). "
-                               "table-chars: fallback characters per LaTeX line (95) if the layout is unknown. "
                                "column-word-ceil: on | off; column-ceil-margin: 25%, fraction or percentage, 0 disables. "
                                "table-colons: ignore | count. Set these in pdfmd-options or --setup. "
                                "--check reports table-unparsed.")
     try:
         text = parser.format_help()
+        if topic == "tables":
+            text += ("\nIn pdfmd-options or --setup, table-chars sets the fallback LaTeX line budget\n"
+                     "(95 characters). Use table-style: spaced for wrapping LaTeX tables (off by\n"
+                     "default). Adjust the row stretch with table-row-spacing (1.4 by default).\n")
         if topic == "output":
             text += ("\npdfmd-options.pandoc-memory: heap size (512m, 2g); unset = off.\n"
                      "pdfmd-options.indent (or indent:): false/unset = writer default; true = the writer's standard indent; lengths: 0.5in, 3em, 1cm.\n"

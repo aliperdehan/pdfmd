@@ -186,17 +186,7 @@ class CharacterBudget(unittest.TestCase):
     TEXT = "| A | B |\n|---|---|\n| " + " ".join(["abcd"] * 16) + " | short |\n"
 
     def build(self, front="", *options, writer="latex", linked="", body=None):
-        with tempfile.TemporaryDirectory() as name:
-            root = Path(name)
-            source, output = root / "doc.md", root / "out.tex"
-            source.write_text((f"---\n{front}\n---\n\n" if front else "") + (body or self.TEXT), encoding="utf-8")
-            if linked:
-                (root / "layout.yaml").write_text(linked, encoding="utf-8")
-                options = ("--metadata-file", "layout.yaml", *options)
-            done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "-v", "--to", writer,
-                                   "-o", str(output), str(source), *options], cwd=root, capture_output=True, encoding="utf-8")
-            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-            return output.read_text(encoding="utf-8"), done.stdout + done.stderr
+        return export_table(self, body or self.TEXT, front, *options, writer=writer, linked=linked)
 
     def test_paper_margins_and_font_size_determine_when_a_table_wraps(self):
         layout = "papersize: a4\nfontsize: 12pt\ngeometry: margin=1in"
@@ -236,6 +226,66 @@ class CharacterBudget(unittest.TestCase):
         text = self.TEXT + "\n: Caption {table-chars=60}\n"
         self.assertIsNotNone(widths(text)[0][0])
         self.assertEqual(widths(text, "-M", "pdfmd-table-chars=100"), [[None, None]])
+
+
+def export_table(test, text, front="", *options, writer="latex", linked=""):
+    with tempfile.TemporaryDirectory() as name:
+        root = Path(name)
+        source, output = root / "doc.md", root / "out.tex"
+        source.write_text((f"---\n{front}\n---\n\n" if front else "") + text, encoding="utf-8")
+        if linked:
+            (root / "layout.yaml").write_text(linked, encoding="utf-8")
+            options = ("--metadata-file", "layout.yaml", *options)
+        done = subprocess.run([sys.executable, str(ROOT / "scripts" / "pdfmd"), "-v", "--to", writer,
+                               "-o", str(output), str(source), *options], cwd=root, capture_output=True, encoding="utf-8")
+        test.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        return output.read_text(encoding="utf-8"), done.stdout + done.stderr
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class RowSpacing(unittest.TestCase):
+    LONG_TABLE = f"| A | B |\n|---|---|\n| row | {LONG} {LONG} |\n"
+    SHORT_TABLE = "| Narrow | B |\n|---|---|\n| 1 | 2 |\n"
+    SPACED = "pdfmd-options: {table-style: spaced}"
+    ADJUST = r"\renewcommand{\arraystretch}"
+
+    def test_spacing_is_opt_in_local_to_a_wrapping_latex_table_and_adjustable(self):
+        body = self.LONG_TABLE + "\n" + self.SHORT_TABLE
+        self.assertNotIn(self.ADJUST, export_table(self, body)[0])
+        spaced, _ = export_table(self, body, self.SPACED)
+        group = spaced.split("\\begingroup\n" + self.ADJUST + "{1.4}", 1)
+        self.assertEqual(len(group), 2)
+        wrapped, end, rest = group[1].partition(r"\endgroup")
+        self.assertTrue(end)
+        self.assertEqual(wrapped.count(r"\begin{longtable}"), 1)
+        self.assertIn(r"\end{longtable}", wrapped)
+        self.assertNotIn("Narrow", wrapped)
+        self.assertIn("Narrow", rest)
+        self.assertEqual(spaced.count(self.ADJUST), 1)
+        tuned, _ = export_table(self, body, "pdfmd-options: {table-style: ' Spaced ', table-row-spacing: 1.6}")
+        self.assertIn(self.ADJUST + "{1.6}", tuned)
+        off, _ = export_table(self, body, self.SPACED, "--no-auto", "tablewidth")
+        self.assertNotIn(self.ADJUST, off)
+
+    def test_csv_divs_can_override_the_style_and_spacing_with_fixed_widths(self):
+        csv = f'::: {{.csv widths="1,1" table-style=spaced table-row-spacing=1.7}}\nA,B\nrow,{LONG}\n:::\n'
+        self.assertIn(self.ADJUST + "{1.7}", export_table(self, csv)[0])
+        self.assertNotIn(self.ADJUST, export_table(self, csv.replace("spaced", "off"), self.SPACED)[0])
+
+    @unittest.skipUnless(pandoc_version() >= (3, 8, 2), "caption attributes need Pandoc 3.8.2")
+    def test_a_caption_can_opt_out_and_preserves_the_table_label(self):
+        body = self.LONG_TABLE + "\n: Result {#tbl:result table-style=off}\n"
+        self.assertNotIn(self.ADJUST, export_table(self, body, self.SPACED, "--from", "markdown")[0])
+        tex, _ = export_table(self, body.replace("table-style=off", "table-style=spaced table-row-spacing=1.5"),
+                              "", "--from", "markdown")
+        self.assertIn(self.ADJUST + "{1.5}", tex)
+        self.assertIn(r"\label{tbl:result}", tex)
+
+    def test_other_writers_keep_their_own_spacing(self):
+        for writer in ("typst", "html"):
+            with self.subTest(writer=writer):
+                tex, _ = export_table(self, self.LONG_TABLE, self.SPACED, writer=writer)
+                self.assertNotIn("arraystretch", tex)
 
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
