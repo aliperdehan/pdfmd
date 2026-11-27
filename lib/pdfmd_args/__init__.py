@@ -227,7 +227,8 @@ def build_parser() -> argparse.ArgumentParser:
     from pdfmd_log import CHATTER_LEVELS
     parser.add_argument("-q", dest="quiet", action="count", default=0,
                         help="-q shows warnings and results, -qq shows results, -qqq keeps only errors. "
-                             "--chatter takes precedence. Incompatible with -v/--verbose and --debug")
+                             "--chatter takes precedence. All three pass one -q to batchocr when reading a PDF. "
+                             "Incompatible with -v/--verbose and --debug")
     parser.add_argument("--chatter", type=lambda word: word.strip().casefold(), choices=CHATTER_LEVELS, metavar="LEVEL",
                         help="build output: off, result, warnings, normal (default), verbose or debug. Also "
                              "`pdfmd-options: {chatter: LEVEL}` and `--setup`")

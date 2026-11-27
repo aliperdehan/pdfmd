@@ -1096,10 +1096,12 @@ All of the reading is batchocr's (text layer or OCR, reading order, headings,
 tables): pdfmd finds it (`$PDFMD_BATCHOCR`, `batchocr` on PATH, or the module in
 this Python), checks it is 1.2.4 or newer, and passes it the PDF with every flag
 pdfmd does not know itself, unchanged -- `--ocr`, `--lang`, `--export-images`,
-`--page-breaks`, `--preview-only`, `--keep-headers`, `--stats`, `-q`, `-c`, ...
+`--page-breaks`, `--preview-only`, `--keep-headers`, `--stats`, `-c`, ...
 (the names of M1ck4's pdfmd, whose PDF-to-Markdown batchocr vendors, MIT). Flags
 pdfmd owns are mapped: `-o/--output`, `-t/--to`, `-j`, `-v` (a switch here, counted
 for batchocr: `-vv` is two), `--engine` (only a `FORMAT=ENGINE` value goes on).
+Each of `-q`, `-qq` and `-qqq` passes one `-q` to batchocr, which then shows only
+errors and warnings on the terminal.
 Abbreviations are off on this route, so no flag is swallowed by a longer pdfmd
 one. Mixed PDF and Markdown inputs, `-o x.pdf` and a target pdfmd cannot read a
 PDF as (html, docx, ...) are refused. The exit status is batchocr's.

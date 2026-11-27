@@ -82,6 +82,13 @@ class PdfInput(unittest.TestCase):
         self.run_pdfmd("a.pdf", "-vv", batchocr=self.fake())
         self.assertEqual(self.call().count("-v"), 2)
 
+    def test_quiet_flags_forward_one_quiet_option_to_batchocr(self):
+        for flag in ("-q", "-qq", "-qqq"):
+            with self.subTest(flag=flag):
+                done = self.run_pdfmd("a.pdf", flag, batchocr=self.fake())
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(self.call(), ["a.pdf", "--to", "md", "-q"])
+
     def test_direction_from_the_output_and_to(self):
         self.run_pdfmd("a.pdf", "-o", "t.txt", batchocr=self.fake())
         self.assertEqual(self.call()[1:3], ["--to", "txt"])

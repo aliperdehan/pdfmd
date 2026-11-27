@@ -1835,8 +1835,10 @@ order, OCR for scanned pages, headings, lists, tables, running headers removed,
 `<!-- Page N -->` markers (`--no-page-markers`, `--page-breaks`, `--keep-headers`).
 pdfmd only routes: any flag it does not know goes to batchocr unchanged, so the
 options of [M1ck4's pdfmd](https://github.com/M1ck4/pdfmd) (`--ocr`, `--lang`,
-`--export-images`, `--page-breaks`, `--preview-only`, `--stats`, `-q`, `--output`)
-work as they did (`-o -` writes the Markdown to standard output). Install the reader once:
+`--export-images`, `--page-breaks`, `--preview-only`, `--stats`, `--output`)
+work as they did (`-o -` writes the Markdown to standard output). Each of `-q`, `-qq`
+and `-qqq` passes one `-q` to batchocr, leaving its errors and warnings on the terminal.
+Install the reader once:
 
 ```sh
 pdfmd --install batchocr         # pip install batchocr[md] from its GitHub release,

@@ -7,6 +7,7 @@ A short guide for a program or an AI assistant that runs `pdfmd`. The same text 
 
 For a build, `-qq` (`--chatter=result`) shows its final OK line. `-qqq` (`--chatter=off`) keeps errors on stderr
 and preserves the exit status. Use `-q` to show warnings as well.
+When reading a PDF, all three flags pass one `-q` to batchocr, which shows only errors and warnings.
 Use `--log FILE` to append the full diagnostics to a file while keeping the console quiet.
 Use `--summary` to count unmuted warnings, notes and errors after the last build result, including in a batch.
 `--fix-tables` preserves code fences inside lists and raw HTML div blocks under GFM.

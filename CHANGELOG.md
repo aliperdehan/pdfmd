@@ -19,6 +19,16 @@ same commit as the change.
 
 ---
 
+## v3.34.91 — 2026-11-27
+
+Pre-edit state: commit `d7391fb`. The command-line parser consumed the
+counted quiet flag, so batchocr printed its normal diagnostics when reading
+a PDF. Forward one `-q` for each invocation with `-q`, `-qq` or `-qqq`.
+The PDF-input regressions check each spelling and forwarding alongside
+other batchocr options.
+
+---
+
 ## v3.34.90 — 2026-11-27
 
 Pre-edit state: commit `d15a155`. The setup row for format lists had

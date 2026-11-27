@@ -282,6 +282,8 @@ def route_pdf_input(args, extra: list[str]) -> int | None:
     levels = (sum(len(token) - 1 for token in sys.argv[1:] if re.fullmatch(r"-v+", token))
               + sys.argv[1:].count("--verbose"))
     call += ["-v"] * (levels or (1 if args.verbose else 0))     # pdfmd's -v is a switch, batchocr's a counter
+    if args.quiet:
+        call.append("-q")
     if args.jobs and args.jobs > 1:
         call += ["-j", str(args.jobs)]
     if args.engine and "=" in args.engine:
