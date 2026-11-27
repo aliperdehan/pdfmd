@@ -31,7 +31,7 @@ def markdown_features(md_path: Path, metadata_files=()) -> tuple[bool, bool] | N
     there to say (the callers then fall back to a pattern)."""
     try:
         stat = md_path.stat()
-        key = (str(md_path), stat.st_mtime_ns, stat.st_size, core.flavour_of(md_path, metadata_files),
+        key = (str(md_path), stat.st_mtime_ns, stat.st_size, core.effective_preset(md_path, metadata_files),
                core.unclosed_comment_mode(md_path, metadata_files))
     except OSError:
         return None
@@ -314,18 +314,18 @@ def flavour_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str 
     name, spec = core.flavour_setting(md_path, metadata_files)
     if spec:
         return spec, None                 # `pdfmd-options: {flavour: gfm+smart}` (or `reader:`; document, metadata file, config): --from, per document
-    preset = core.FLAVOUR_PRESETS.get(name)
+    preset = core.effective_preset(md_path, metadata_files, name)
     if preset is not None and preset.reader != "auto":
         return (None if preset.reader == "default" else preset.reader), None      # `flavour: pandoc|gfm|commonmark`: that reader, as it is
     reader, note = pdfmd_reader(md_path, metadata_files)
     if preset is None:
         return reader, note
-    if reader is None:                                   # Pandoc's Markdown, with what the flavour adds to it (v3.32.23)
-        return ("markdown" + preset.markdown_plus if preset.markdown_plus else None), note
-    if reader.startswith("markdown+"):
-        return reader + preset.markdown_plus, note
-    return (reader + "".join(f"+{extension}" for extension in preset.gfm_plus.split("+") if extension and extension not in reader)
-            if reader.startswith("gfm") else reader), note
+    base = re.split(r"[+-]", reader, maxsplit=1)[0] if reader else "markdown"
+    additions = {"markdown": preset.markdown_plus, "gfm": preset.gfm_plus}.get(base, "")
+    if not additions:
+        return reader, note
+    extensions = {word[1:]: word for word in re.findall(r"[+-][^+-]+", (reader or "") + additions)}
+    return base + "".join(extensions.values()), note
 
 
 def pdfmd_reader(md_path: Path, metadata_files: list[Path] = ()) -> tuple[str | None, str | None]:

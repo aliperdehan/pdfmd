@@ -3147,9 +3147,20 @@ folder's settings or the config file, `--flavour obsidian` (`--flavor`) for one 
 | `gfm`, `commonmark` | that reader, as it stands | none |
 
 Any other value is a Pandoc reader, with `+`/`-` extensions (`markdown`, `gfm+smart`, `commonmark_x`): that reader is used for the
-file (it is `--from` for one document) and the flavour stays `auto`. `--from` on the command line wins over the setting. The
-presets are a table in the `pdfmd_flavours` package; later releases make every part of a preset adjustable, so that a flavour of
-your own is a few lines.
+file (it is `--from` for one document) and the flavour stays `auto`. `--from` on the command line wins over the setting.
+
+Use `flavour-overrides` beside `flavour` under `pdfmd-options`, or choose **Flavour preset overrides** in `--setup`.
+For example, keep the `pdfmd` preset, leave percent comments visible as source text, and add only `smart` to the GFM reader:
+
+```yaml
+pdfmd-options:
+  flavour: pdfmd
+  flavour-overrides:
+    comments: false
+    gfm-extensions: [smart]
+```
+
+See [Flavour preset overrides](docs/reference.md#flavour-preset-overrides) for the fields and how they combine across settings.
 
 For a document with front matter, `pdfmd-options: {dialect-detect: deep}` (also in `--setup`) reads GFM-style
 blocks that follow prose without a blank line. It also reads a leading `+++` TOML block as metadata on Python 3.11

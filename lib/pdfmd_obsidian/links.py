@@ -230,6 +230,8 @@ def linked_inputs(inputs, sources, reader, metadata_files, target, output, title
     if not any(active):
         yield inputs, reader
         return
+    wikilinks = [enabled and core.effective_preset(path, metadata_files).wikilinks
+                 for enabled, path in zip(active, sources)]
     texts = [path.read_text(encoding="utf-8-sig") for path in inputs]
     kinds = core.markup_kinds(sources[0], metadata_files)
     from pdfmd_obsidian.markup import callouts_and_tasks
@@ -242,7 +244,7 @@ def linked_inputs(inputs, sources, reader, metadata_files, target, output, title
         if kinds and lua_path and lua_path("markup") else texts
     matches = [list(syntax_matches(text)) if enabled and ("#" in text or "^" in text) else []
                for enabled, text in zip(active, styled)]
-    if styled == texts and not any(matches) and not any(enabled and "[[" in text for enabled, text in zip(active, texts)):
+    if styled == texts and not any(matches) and not any(enabled and "[[" in text for enabled, text in zip(wikilinks, texts)):
         yield inputs, reader
         return
     links = Links(sources, texts, reader, target, output, title_auto)
@@ -250,7 +252,7 @@ def linked_inputs(inputs, sources, reader, metadata_files, target, output, title
         links.headings = _read_headings(texts, reader)
     marked, links.blocks = _block_syntax(styled, matches, links.headings or [])
     converted = []
-    for enabled, path, text in zip(active, links.sources, marked):
+    for enabled, path, text in zip(wikilinks, links.sources, marked):
         def destination(name, heading):
             return links.destination(path, name, heading)
 

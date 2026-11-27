@@ -10,6 +10,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
 import isolation_support  # noqa: E402,F401  (the run's own cache, config and data folders: never the real ones)
@@ -149,6 +150,12 @@ class Flavour(unittest.TestCase):
                 self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], reader)
         path = self.note("plain", "Text\n")           # no front matter: pdfmd's own pick, gfm, with what the flavour adds
         self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "gfm+smart+implicit_figures")
+
+    def test_negative_extensions_override_detection_and_earlier_duplicates(self):
+        path = self.note("plain", "A subscript: H~2~O.\n")
+        overrides = {"gfm-extensions": ["smart", "-subscript", "-smart"]}
+        with patch.object(pdfmd, "config_options", return_value={"flavour-overrides": overrides}):
+            self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "gfm-subscript-smart")
         path = self.note("plain", "---\ntitle: T\n---\n\nText\n")      # front matter: Pandoc's Markdown, with what the flavour adds
         self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "markdown+autolink_bare_uris+emoji")
         path = self.note("plain", "---\ntitle: T\npdfmd-options:\n  flavour: pandoc\n---\n\nText\n")
@@ -160,6 +167,28 @@ class Flavour(unittest.TestCase):
         pdfmd.UNCLOSED_CLI["mode"] = "hide"
         self.addCleanup(pdfmd.UNCLOSED_CLI.update, {"mode": None})
         self.assertEqual(pdfmd.unclosed_comment_mode(self.note("plain")), "hide")
+
+    def test_overrides_merge_by_field_but_replace_extension_lists(self):
+        path = self.note("plain", "---\npdfmd-options:\n  flavour-overrides: {markdown-extensions: [-smart, emoji], wikilinks: off}\n---\n\nText\n")
+        metadata = path.with_name("input.yaml")
+        metadata.write_text("pdfmd-options:\n  flavour-overrides:\n    reader: auto\n"
+                            "    markdown-extensions: [autolink_bare_uris]\n    comments: false\n", encoding="utf-8")
+        self.assertEqual(pdfmd.resolve_from_format(path, None, [metadata])[0], "markdown-smart+emoji")
+        source = "Body %%a comment%% and [[Note|Alias]]\n"
+        self.assertEqual(pdfmd.obsidian_source(source, path, [metadata]), source)
+        path.write_text("Text\n", encoding="utf-8")
+        with patch.object(pdfmd, "config_options", return_value={"flavour-overrides": {"gfm-extensions": []}}):
+            self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "gfm")
+        self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "gfm+smart+implicit_figures")
+
+    def test_a_named_preset_can_override_its_reader_and_syntax_independently(self):
+        path = self.note("plain", "---\npdfmd-options:\n  flavour: pandoc\n"
+                         "  flavour-overrides: {reader: commonmark, comments: true, wikilinks: true}\n---\n\nText\n")
+        self.assertEqual(pdfmd.flavour_of(path), "pandoc")
+        self.assertEqual(pdfmd.resolve_from_format(path, None, [])[0], "commonmark")
+        self.assertEqual(pdfmd.resolve_from_format(path, "gfm", [])[0], "gfm")
+        self.assertEqual(pdfmd.obsidian_source("A %%hide%% [[Note|Alias]]\n", path), "A  Alias\n")
+        self.assertEqual(pdfmd.markup_kinds(path, []), [])
 
 
 @needs_pandoc(3, 1, 3)
@@ -192,6 +221,15 @@ class CommandLine(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         return path
+
+    def test_folder_overrides_leave_links_and_embeds_literal_in_a_vault(self):
+        self.write_note("other.md", "# Other\n")
+        self.write_note(".pdfmd/config.yaml", "options:\n  flavour-overrides: {wikilinks: false, embeds: false}\n")
+        html, output = self.build("vault", "See [[other|Alias]] and ![[missing.png]].\n\n# Tagged\n\nA #tag.\n")
+        self.assertIn("[[other|Alias]]", html)
+        self.assertIn("[[missing.png]]", html)
+        self.assertIn('class="tag"', html)
+        self.assertNotIn("no picture of that name was found", output)
 
     def test_report_chapters_follow_the_comment_policy(self):
         first = "---\ntitle: First\nchapter: 1\n{}---\n\nVisible first.\n"

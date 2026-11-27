@@ -72,7 +72,7 @@ def citation_mask(text, document, metadata, include_metadata=False, *, metadata_
     scanned = blank_matches(re.compile(r"(?s)\\\[.*?\\\]|\\\(.*?\\\)"), scanned)
     scanned = blank_matches(re.compile(r"(?s)\\begin\{([^}]+)\}.*?\\end\{\1\}"), scanned)
     if "%%" in text:
-        preset = core.FLAVOUR_PRESETS.get(core.flavour_of(document, metadata))
+        preset = core.effective_preset(document, metadata)
         if preset and preset.comments:
             from pdfmd_obsidian.comments import _pairs
             for start, end, closed in _pairs(text, core.unclosed_comment_mode(document, metadata))[0]:

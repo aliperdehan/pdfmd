@@ -72,6 +72,15 @@ class Plain(unittest.TestCase):
                          {"show": ["stage", "tags"], "hide": ["private", "scratch"], "labels": {"stage": "Phase"},
                           "place": "end", "style": "inline"})
 
+    def test_flavour_overrides_save_a_mapping_with_an_explicit_empty_list(self):
+        row = str(number("options.flavour-overrides"))
+        done, path = self.run_setup([row, "{gfm-extensions: smart}", row,
+                                     "{comments: false, gfm-extensions: []}", "s"])
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("Flavour overrides: gfm-extensions", done.stdout)
+        self.assertEqual(yaml.safe_load(path.read_text(encoding="utf-8"))["options"]["flavour-overrides"],
+                         {"comments": False, "gfm-extensions": []})
+
     @unittest.skipUnless(__import__("shutil").which("pandoc"), "needs Pandoc")
     def test_no_families_are_disabled_and_a_separate_reset_restores_defaults(self):
         from pdfmd_setup import plain

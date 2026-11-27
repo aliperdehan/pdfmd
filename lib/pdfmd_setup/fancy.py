@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import builtins
 
-from .registry import Setting, from_stored, parse_citation_aliases, parse_properties_value, read, shown, to_stored, write
+from .registry import Setting, from_stored, parse_citation_aliases, parse_flavour_overrides, parse_properties_value, read, shown, to_stored, write
 
 
 def available() -> bool:
@@ -248,6 +248,12 @@ def run(stores: dict, settings: list[Setting], path: str, input=None, output=Non
                 elif setting.check == "citation-aliases":
                     try:
                         value = parse_citation_aliases(value)
+                    except ValueError as error:
+                        state["message"] = str(error)
+                        continue
+                elif setting.check == "flavour-overrides":
+                    try:
+                        value = parse_flavour_overrides(value)
                     except ValueError as error:
                         state["message"] = str(error)
                         continue

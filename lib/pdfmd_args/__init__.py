@@ -744,7 +744,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "(%%%%comments%%%% hidden; the rest of pdfmd's own syntax follows), pandoc (strict "
                              "Pandoc: nothing added), gfm, commonmark, or auto (the default: obsidian inside a vault, a folder with "
                              ".obsidian/ above the document, pdfmd elsewhere). A Pandoc reader such as gfm+smart is taken as the reader "
-                             "with the flavour on auto, like --from. Also pdfmd-options.flavour (or reader) and pdfmd --setup. With an automatic reader, pdfmd-options.dialect-detect: deep checks for GFM-style blocks after front matter and reads TOML metadata")
+                             "with the flavour on auto, like --from. Also pdfmd-options.flavour (or reader) and pdfmd --setup. "
+                             "Use pdfmd-options.flavour-overrides for individual preset settings, e.g. {comments: false}. "
+                             "With an automatic reader, pdfmd-options.dialect-detect: deep checks for GFM-style blocks after front matter and reads TOML metadata")
     parser.add_argument("--unclosed-comment", dest="unclosed_comment", metavar="WORD", type=str.casefold, choices=core.UNCLOSED_WORDS,
                         help="what a %%%% with no closing %%%% does: hide (the default in an Obsidian vault, as Obsidian does: the rest "
                              "of the note is the comment) or keep (the default elsewhere: it stays text); both warn; also pdfmd-options.unclosed-comment "

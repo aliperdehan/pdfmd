@@ -271,7 +271,9 @@ def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reade
         return None, None
     document = sources[0]
     flavour, configured_reader = core.flavour_setting(document, metadata)
-    named = (reader or configured_reader or "").casefold()
+    preset = core.effective_preset(document, metadata, flavour)
+    preset_reader = preset.reader if preset and preset.reader not in ("auto", "default", core.FLAVOUR_PRESETS[flavour].reader) else ""
+    named = (reader or configured_reader or preset_reader).casefold()
     if named and not named.startswith(("markdown", "md", "gfm", "commonmark")):
         return None, None
     if not native:
@@ -284,7 +286,7 @@ def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reade
         if not ROW_PREFIX.match(terminal_line) or not URL.search(terminal_line):
             return None, None
     setting = core.option_flag(core.first_pdfmd_option(document, metadata, KEY))
-    if not core.FLAVOUR_PRESETS[flavour].numbered_references and setting is not True:
+    if not (preset and preset.numbered_references) and setting is not True:
         return None, None
     enabled = setting is not False
     scanned = [prose(text, path, metadata) for text, path in zip(texts[:last + 1], sources)]

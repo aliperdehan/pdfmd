@@ -11,6 +11,7 @@ Use `--log FILE` to append the full diagnostics to a file while keeping the cons
 Use `--summary` to count unmuted warnings, notes and errors after the last build result, including in a batch.
 `--fix-tables` preserves code fences inside lists and raw HTML div blocks under GFM.
 `--mute ID[,ID]` accepts named warnings under `--strict`.
+Use `pdfmd-options.flavour-overrides` to adjust a named flavour. For example, `{comments: false}` keeps `%%` comments in the text.
 
 ## The commands that matter
 

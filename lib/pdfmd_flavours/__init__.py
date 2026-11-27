@@ -1,7 +1,7 @@
 """Flavour presets (pdfmd 3.32.22, entry 3ee/3eo/3ex).
 
-A flavour is a name for a set of reading choices. One table, ``PRESETS``, holds them; ``pdfmd_flavours.markup`` looks a document's flavour
-up here and does what the row says, so a new flavour (or, later, a user's own) is a new row, not new code.
+A flavour is a name for a set of reading choices. ``PRESETS`` holds the defaults. ``pdfmd_flavours.markup`` looks up a
+document's flavour here and applies any individual ``flavour-overrides``.
 
 The columns of a row:
 

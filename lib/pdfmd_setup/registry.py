@@ -51,6 +51,7 @@ UNSET = {
     "options.pagecite-terms": "p., pp.",
     "options.numbered-references": "on when the markers match a trailing source list (pdfmd and obsidian flavours)",
     "options.citation-aliases": "none",
+    "options.flavour-overrides": "use the selected flavour's defaults",
     "options.excerpt-prefix": "x",
     "options.excerpt-page-terms": "p., pp.",
     "options.excerpt-quote-min-words": "3 words",
@@ -130,7 +131,7 @@ FOLDER_OPTIONS = frozenset({
     "options.attach-source", "options.attach-csl", "options.bundle", "options.bundle-packages", "options.bundle-max-mb",
     "options.strip-comments", "options.cache.aux", "options.cache.plots", "options.cache.location", "options.seed-labels", "options.seed-calc",
     "options.smiles.engine", "options.smiles.format", "options.smiles.office-format", "options.smiles.palette", "options.smiles.cell-width", "options.smiles.cell-height", "options.smiles.per-row", "options.smiles.bond-length", "options.smiles.dpi",
-    "options.flavour", "options.dialect-detect", "options.single-newline", "options.unclosed-comment", "options.embed-px-to-pt", "options.embed-fit", "options.embed-search", "options.raw", "options.pagebreak", "options.show-hidden", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.typeset", "options.calc.typeset-upright", "options.calc.typeset-italic", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.page-folder", "options.report-build", "options.report-titles", "options.strict",
+    "options.flavour", "options.flavour-overrides", "options.dialect-detect", "options.single-newline", "options.unclosed-comment", "options.embed-px-to-pt", "options.embed-fit", "options.embed-search", "options.raw", "options.pagebreak", "options.show-hidden", "options.show-comments", "options.markup", "options.calc.enabled", "options.calc.digits", "options.calc.round", "options.calc.subs", "options.calc.typeset", "options.calc.typeset-upright", "options.calc.typeset-italic", "options.calc.noindent", "options.calc.space", "options.calc.align", "options.calc.constants", "options.calc.export", "options.page-folder", "options.report-build", "options.report-titles", "options.strict",
     "options.chatter", "options.mute", "options.log", "options.summary", "options.max-asset-mb", "options.max-output-mb",
     "options.check-ignore", "options.build-time", "options.time-format",
     "options.image-dpi", "options.build-log", "options.build-log-keep", "options.build-log-max-size", "options.soffice-timeout", "options.diagram-timeout",
@@ -703,6 +704,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
              "commonmark; or a Pandoc reader with +/- extensions (markdown, gfm+smart, commonmark_x), which is the reader with the "
              "flavour on auto. `reader` is another name for the setting. Per run: --flavour, or --from for a reader.",
              "Input"),
+        text("options.flavour-overrides", "Flavour preset overrides",
+             "A YAML mapping, e.g. {comments: false, gfm-extensions: [smart]}. Fields: reader, comments, embeds, "
+             "wikilinks, gfm-extensions and markdown-extensions. Each extension list replaces the preset list.",
+             "Input", check="flavour-overrides"),
         choice("options.dialect-detect", "Markdown dialect detection",
                (("basic", "use the usual reader selection; warn about TOML front matter"),
                 ("deep", "look for GFM-style blocks after front matter and read TOML metadata")), "",
@@ -1014,6 +1019,20 @@ def parse_citation_aliases(text: str) -> dict:
     if not valid_mapping(aliases):
         raise ValueError(message)
     return aliases
+
+
+def parse_flavour_overrides(text: str) -> dict:
+    from pdfmd_base import core
+    from pdfmd_flavours.markup import preset_overrides
+
+    try:
+        value = core.yaml.safe_load(text)
+    except core.yaml.YAMLError as error:
+        raise ValueError("A YAML mapping such as {comments: false}, please.") from error
+    _, invalid = preset_overrides(value)
+    if invalid:
+        raise ValueError("Flavour overrides: " + ", ".join(invalid))
+    return value
 
 
 def parse_properties_value(kind: str, text: str):

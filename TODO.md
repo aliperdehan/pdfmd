@@ -83,7 +83,7 @@ wait for an answer before any code.
 ## Obsidian flavour, 3.32.x patches (no minor bump yet) [3ee]
 
 - [ ] The rest of Obsidian's syntax: note embeds (`![[note#Heading]]`, `#^block`), links between notes, tags, block ids, properties, foldable and custom callouts, extra task statuses [3ee]
-- [ ] Every part of a flavour adjustable: presets are tables a user overrides piece by piece or defines their own ("frankenstein") ; per-feature overrides first, own presets second [3ex N144]
+- [ ] Let users define their own named flavour presets [3ex N144]
 - [ ] Other flavours as `flavour` values, one at a time after Obsidian: MyST, MkDocs/pymdown, CriticMarkup, Logseq/Roam, Quarto extras, MultiMarkdown, Djot [3eo]
 - [ ] Spans `.caps`, `.wavy`, `.dotted`... in every writer, then the shorthand (`++x++`, `!!x!!`, `??x??`) as opt-in `markup` kinds; CriticMarkup and abbreviations later [3eq]
 - [ ] Typst route: inline-maths WARNs on a source that the LaTeX engines build (seen with the control-character note) [3es D85]

@@ -47,7 +47,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.34.75"
+PDFMD_VERSION = "3.34.76"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
@@ -303,7 +303,7 @@ names("pdfmd_filters", "has_code_block code_filter_args SVG_WARNED image_filter_
                        "DIAGRAM_TIMEOUT diagram_timeout_from diagram_timeout_for DIAGRAM_TOOLS RELATIVE_IMAGE_RE "
                        "select_filter_args chem_filter_args typst_filter_args resolve_raw")
 names("pdfmd_flavours.markup", "FLAVOUR_PRESETS FLAVOUR_WORDS MARKUP_KINDS markup_value show_comments_on _FLAVOUR_TOLD "
-                               "UNCLOSED_WORDS unclosed_comment_mode flavour_setting flavour_of flavour_default "
+                               "UNCLOSED_WORDS unclosed_comment_mode flavour_setting flavour_of flavour_default effective_preset "
                                "obsidian_source markup_kinds markup_filter_args MARKUP_HIGHLIGHT_HEADER "
                                "MARKUP_LANDSCAPE_HEADER MARKUP_HEADERS markup_header_args")
 names("pdfmd_tex.plots", "CACHE_HANDSHAKE picture_cache_styles cache_aliases user_tex_trees plot_key_text "

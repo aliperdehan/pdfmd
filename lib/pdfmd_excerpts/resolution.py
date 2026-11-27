@@ -49,8 +49,10 @@ def term_list(value):
 
 
 def enabled(document, metadata, no_auto, named_reader=None):
-    _, reader = core.deferred("pdfmd_flavours.markup", "flavour_setting")(document, metadata)
-    return (not named_reader and not reader and not core.auto_disabled(no_auto, "excerpts")
+    flavour, reader = core.flavour_setting(document, metadata)
+    preset = core.effective_preset(document, metadata, flavour)
+    fixed = preset is not None and preset.reader != core.FLAVOUR_PRESETS[flavour].reader and preset.reader != "auto"
+    return (not named_reader and not reader and not fixed and not core.auto_disabled(no_auto, "excerpts")
             and "excerpts" in core.markup_kinds(document, metadata))
 
 

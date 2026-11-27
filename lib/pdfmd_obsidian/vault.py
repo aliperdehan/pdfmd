@@ -193,7 +193,7 @@ def embed_filter_args(sources: Path | list[Path], metadata_files: list[Path]) ->
     files = sources if isinstance(sources, list) else [sources]
     if not files or files[0].suffix.lower() not in (".md", ".markdown"):
         return []
-    preset = core.FLAVOUR_PRESETS.get(core.flavour_of(files[0], metadata_files))
+    preset = core.effective_preset(files[0], metadata_files)
     if preset is None or not preset.embeds:
         return []
     try:
@@ -214,8 +214,8 @@ def figure_filter_args(sources: Path | list[Path], metadata_files: list[Path]) -
     files = sources if isinstance(sources, list) else [sources]
     if not files or files[0].suffix.lower() not in (".md", ".markdown"):
         return []
-    preset = core.FLAVOUR_PRESETS.get(core.flavour_of(files[0], metadata_files))
-    if preset is None or "implicit_figures" not in preset.gfm_plus:
+    preset = core.effective_preset(files[0], metadata_files)
+    if preset is None or "+implicit_figures" not in preset.gfm_plus:
         return []
     try:
         if "![" not in files[0].read_text(encoding="utf-8-sig"):

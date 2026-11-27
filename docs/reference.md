@@ -1444,6 +1444,23 @@ line endings, turns vertical tabs and form feeds into newlines, removes ANSI col
 other controls. One warning per affected source lists its original line numbers, code points and repairs.
 `--strict` reports the build as failed. The repair leaves the source file untouched.
 
+### Flavour preset overrides
+
+Set `pdfmd-options.flavour-overrides` in a document, metadata file, folder settings or config, or set **Flavour preset overrides**
+in `--setup`. The selected `flavour` supplies the defaults. Each field uses its highest-priority value across the usual option layers.
+
+| Field | Override |
+|---|---|
+| `reader` | `auto` for pdfmd's adaptive reader, `default` for Pandoc's file default, or a reader specification such as `gfm+smart`. `--from` and an explicit reader specification in `flavour` or `reader` take precedence. |
+| `comments` | Recognise Obsidian `%%comments%%` with `true`, or leave them in the source text with `false`. |
+| `embeds` | Recognise Obsidian picture embeds with `true` or leave them as text with `false`. |
+| `wikilinks` | Recognise `[[Note]]` with `true` or leave it as text with `false`. The Obsidian preset resolves links. The other presets display the link text when enabled. |
+| `gfm-extensions`, `markdown-extensions` | Replace the additions for the respective adaptive reader. For example, `[smart, -implicit_figures]` enables `smart` and disables `implicit_figures`. `[]` clears the preset additions. Pandoc's reader defaults and pdfmd's syntax detection still apply. |
+
+The other preset fields already have individual settings. `markup` and `pagebreak` replace the preset lists, including with `[]` or `false`.
+`single-newline`, `unclosed-comment` and `numbered-references` override their corresponding defaults. The `--setup` override row
+accepts a YAML mapping such as `{comments: false, gfm-extensions: [smart]}`.
+
 ## CSV/TSV table inclusion
 
 A fenced Div with class `csv` --

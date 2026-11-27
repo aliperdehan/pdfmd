@@ -4,6 +4,7 @@ state are read as `core.X` when the code runs (`core` is pdfmd: lib/pdfmd_base),
 from __future__ import annotations
 
 import hashlib
+import re
 import sys
 from pathlib import Path
 
@@ -91,6 +92,50 @@ def flavour_of(md_path: Path, metadata_files=()) -> str:
     return flavour_setting(md_path, metadata_files)[0]
 
 
+OVERRIDE_FIELDS = {"reader": "reader", "comments": "comments", "embeds": "embeds", "wikilinks": "wikilinks",
+                   "gfm-extensions": "gfm_plus", "markdown-extensions": "markdown_plus"}
+
+
+def preset_overrides(value):
+    """Return the valid preset fields and the names of fields with errors."""
+    if not isinstance(value, dict):
+        return {}, ["expected a mapping"]
+    fields, invalid = {}, []
+    for key, item in value.items():
+        parsed = None
+        if key == "reader" and isinstance(item, str) and item.strip():
+            parsed = item.strip().casefold()
+        elif key in ("comments", "embeds", "wikilinks"):
+            parsed = core.option_flag(item)
+        elif key in ("gfm-extensions", "markdown-extensions") and isinstance(item, list):
+            if all(isinstance(word, str) and re.fullmatch(r"[+-]?[a-z0-9_]+", word.strip(), re.I) for word in item):
+                parsed = "".join(word if word.startswith(("+", "-")) else "+" + word
+                                 for word in (word.strip().casefold() for word in item))
+        if parsed is None:
+            invalid.append(str(key))
+        else:
+            fields[OVERRIDE_FIELDS[key]] = parsed
+    return fields, invalid
+
+
+def effective_preset(md_path: Path, metadata_files=(), name: str | None = None):
+    """Apply the option cascade to the selected preset without mutating it."""
+    preset = core.FLAVOUR_PRESETS.get(name or flavour_of(md_path, metadata_files))
+    if preset is None:
+        return None
+    value = core.first_pdfmd_option(md_path, list(metadata_files), "flavour-overrides")
+    if value is None:
+        return preset
+    fields, invalid = preset_overrides(value)
+    if invalid:
+        message = "flavour-overrides: invalid " + ", ".join(invalid)
+        told = f"{md_path}:{message}"
+        if told not in _FLAVOUR_TOLD:
+            _FLAVOUR_TOLD.add(told)
+            emit("warning", None, f"WARN  {message}", file=sys.stderr)
+    return preset._replace(**fields)
+
+
 def flavour_default(md_path: Path, metadata_files, column: str) -> str:
     """What the flavour switches on without a setting (v3.32.24): its `markup` or `pagebreak` column (see pdfmd_flavours), for a
     Markdown file only; empty for any other input and for `pandoc`, `gfm` and `commonmark`."""
@@ -106,7 +151,7 @@ def obsidian_source(text: str, md_path: Path, metadata_files=(), show: bool | No
     `show-comments`) turned into HTML comments the writers draw as Comment boxes; then each `![[picture|300]]` written as a Markdown
     image (see embed_source). Unchanged when the flavour has neither or the text has none of them. A `%%` that never closes is told
     once (see unclosed_comment_mode for what becomes of it)."""
-    preset = core.FLAVOUR_PRESETS.get(flavour_of(md_path, metadata_files)) if ("%%" in text or "[[" in text) else None
+    preset = effective_preset(md_path, metadata_files) if ("%%" in text or "[[" in text) else None
     if preset is None:
         return text
     if preset.comments and "%%" in text:
@@ -146,7 +191,7 @@ def hidden_comments(text: str, md_path: Path, metadata_files=(), show: bool | No
 def comment_source(text: str, path: Path, metadata_files=(), *, show: bool | None = None,
                    preserve_lines: bool = False) -> str:
     """Apply just the flavour's percent-comment rules, without rewriting links or embeds."""
-    if "%%" not in text or not core.FLAVOUR_PRESETS[flavour_of(path, metadata_files)].comments:
+    if "%%" not in text or not (preset := effective_preset(path, metadata_files)) or not preset.comments:
         return text
     if preserve_lines:
         from pdfmd_obsidian.comments import mask_comments

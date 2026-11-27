@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.76 — 2026-11-27
+
+Pre-edit state: commit `2b6a393`. A named Markdown flavour could not independently change its reader, percent comments, picture embeds, wikilinks or adaptive reader extensions. `flavour-overrides` now accepts those fields in the usual settings layers and in `--setup`. Extension lists replace lower-priority lists, including with an empty list. Reader and Obsidian syntax discovery share the resulting preset. Regression coverage checks list replacement, positive and negative extensions, option precedence, a vault build with links and embeds disabled, and setup input validation.
+
 ## v3.34.75 — 2026-11-26
 
 Pre-edit state: commit `88ca922`. Calculator style markers rejected spaces, and Pandoc split a spaced marker across several inlines in a calc div. Rejoin the marker before evaluating the line and allow spaces around its comma-separated pieces. The regression compares compact and spaced markers in calc divs, fences and spans with LaTeX and Typst output and with typesetting off.

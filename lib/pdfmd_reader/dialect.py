@@ -48,7 +48,7 @@ def _gfm_body(text: str, path: Path, metadata_files):
 
     visible = _PROSE.sub(lambda match: spaces(match[0]) if match.lastgroup != "code" else spaces(match[0]).replace(" ", "x", 1), text)
     if "%%" in visible:
-        preset = core.FLAVOUR_PRESETS.get(core.flavour_of(path, metadata_files))
+        preset = core.effective_preset(path, metadata_files)
         if preset and preset.comments:
             pairs, _ = _pairs(visible, core.unclosed_comment_mode(path, metadata_files))
             for opening, closing, closed in reversed(pairs):

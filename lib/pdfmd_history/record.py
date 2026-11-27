@@ -118,12 +118,9 @@ def set_reader(md_path: Path, reader: str | None, cli_from: str | None,
     """Keep the reader actually passed to Pandoc, including an implicit Markdown default."""
     if reader is None and md_path.suffix.lower() not in (".md", ".markdown"):
         return
-    chosen = core.FLAVOUR_CLI["name"]
-    if chosen is None:
-        chosen = core.first_pdfmd_option(md_path, metadata_files, "flavour", "reader")
-    word = str(chosen or "").strip().lower()
-    preset = core.FLAVOUR_PRESETS.get(word)
-    fixed = word not in ("", "auto") and (preset is None or preset.reader != "auto")
+    name, named_reader = core.flavour_setting(md_path, metadata_files)
+    preset = core.effective_preset(md_path, metadata_files, name)
+    fixed = named_reader or (preset is not None and preset.reader != "auto")
     explicit = bool(cli_from or fixed
                     or core.auto_disabled(no_auto, "reader"))
     if reason:
