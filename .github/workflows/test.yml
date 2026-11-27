@@ -274,3 +274,29 @@ jobs:
           export PATH="/c/ProgramData/chocolatey/bin:$PATH"
           pdftotext -v 2>&1 | head -1 || true
           python -m unittest discover -s tests -v
+
+  # Non-gating macOS coverage for regular documents, Beamer decks and LaTeX diagnostics.
+  macos-latex:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: pandoc/actions/setup@v1
+      - name: Install BasicTeX and Poppler
+        run: |
+          brew install --cask basictex
+          brew install poppler
+          texbin=/Library/TeX/texbin
+          sudo "$texbin/tlmgr" install collection-latexrecommended luaotfload bookmark fvextra
+          printf '%s\n' "$texbin" >> "$GITHUB_PATH"
+      - run: python -m pip install .
+      - name: Run the Pandoc and LaTeX subset
+        run: |
+          pandoc --version
+          lualatex --version
+          pdfinfo -v
+          pdftotext -v
+          python scripts/test_parallel.py -j 2 test_sections test_slide_notes test_tex_cause

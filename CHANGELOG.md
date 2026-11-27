@@ -19,6 +19,12 @@ same commit as the change.
 
 ---
 
+## v3.34.84a — 2026-11-27
+
+Pre-edit state: commit `de0e8ea`. macOS CI lacked coverage for Pandoc builds with a TeX Live engine. Add a non-gating job using BasicTeX and Poppler for section builds, Beamer slide notes and LaTeX diagnostics. The workflow regression checks that the job runs on macOS and keeps the subset non-gating.
+
+---
+
 ## v3.34.84 — 2026-11-27
 
 Pre-edit state: commit `b2b04a9`. [tables] The fallback budget and row spacing notes pushed `--help tables` to 82 lines, past the help topic's length limit. Fold them into the existing table settings summary so the topic fits in 79 lines at the default width. The help tests cover the length limit and the settings listed in the summary.

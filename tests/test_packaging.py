@@ -90,6 +90,17 @@ class PyprojectTests(unittest.TestCase):
         math = next(step for step in native["steps"] if step.get("name", "").startswith("With md2pdf and math"))
         self.assertEqual(math["if"], "matrix.python == '3.13'")
 
+    def test_ci_runs_a_non_gating_pandoc_and_latex_subset_on_macos(self):
+        from pdfmd_yaml_support import yaml
+        workflow = yaml.safe_load((ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8"))
+        job = workflow["jobs"]["macos-latex"]
+        self.assertTrue(job["runs-on"].startswith("macos-"))
+        self.assertIs(job["continue-on-error"], True)
+        self.assertTrue(any(step.get("uses", "").startswith("pandoc/actions/setup@") for step in job["steps"]))
+        run = next(step["run"] for step in job["steps"] if "scripts/test_parallel.py" in step.get("run", ""))
+        self.assertIn("test_sections", run.split())
+        self.assertIn("test_slide_notes", run.split())
+
     def test_yaml_acceleration_is_an_optional_extra(self):
         self.assertEqual(self.project["optional-dependencies"].get("yaml"), ["pyyaml"])
 
