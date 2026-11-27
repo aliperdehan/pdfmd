@@ -724,10 +724,12 @@ class InstallToolsTests(unittest.TestCase):
         calls = []
         with mock.patch.object(pdfmd, "install_extra", wraps=pdfmd.install_extra) as wrapped, \
                 mock.patch.object(pdfmd, "install_typst", lambda: calls.append("typst") or True), \
-                mock.patch.object(pdfmd.subprocess, "run", lambda *a, **k: done):
+                mock.patch.object(pdfmd.subprocess, "run", lambda *a, **k: done), \
+                mock.patch("pdfmd_install.install_fonts", return_value=True) as fonts:
             self.assertTrue(pdfmd.install_extra("full"))
         self.assertEqual(calls, ["typst"])
-        self.assertEqual([call.args[0] for call in wrapped.call_args_list], ["full", "pandoc", "typst"])
+        fonts.assert_called_once_with("core")
+        self.assertEqual([call.args[0] for call in wrapped.call_args_list], ["full", "pandoc", "typst", "fonts:core"])
 
     def test_every_install_kind_is_known(self):
         for kind in pdfmd.INSTALL_KINDS:
