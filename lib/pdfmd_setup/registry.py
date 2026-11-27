@@ -379,13 +379,14 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
                 ("calibre", "Calibre's ebook-convert (only when named, no fallback)"), ("tex", "only TeX engines"), ("html", "only HTML engines"), ("office", "only the LibreOffice route")), "",
                "The engine to try first (a family limits the fallback chain). `-e` on the command line wins.", "Output"),
         choice("options.engine-fallback", "When a PDF engine fails",
-               (("auto", "a new PDF: any failure tries the next engine; an existing one: start with the engine that made it, "
+               (("auto", "a new PDF: try the next engine after an engine failure; an existing one: start with the engine that made it, "
                          "as missing"),
-                ("on", "any failure tries the next engine"),
+                ("on", "try the next engine after an engine failure"),
                 ("missing", "only an engine that cannot run here falls through; an error in the document stops the build and "
                             "keeps the PDF already there"),
                 ("off", "the first failure stops the build")), "",
-               "A stopped build exits 1 and leaves the existing PDF as it was. A pinned engine (-e, pdf-engine) is never "
+               "Confirmed Pandoc input errors stop in every mode. A stopped build exits 1 and leaves the existing PDF "
+               "as it was. A pinned engine (-e, pdf-engine) is never "
                "reordered. Per run: --engine-fallback MODE.", "Output"),
         choice("options.tex-repair", "Mend a broken TeX installation for the run",
                (("auto", "what is broken in the TeX installation (a missing package or font loader, a cache that cannot be "

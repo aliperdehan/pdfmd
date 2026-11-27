@@ -60,6 +60,16 @@ class Location(unittest.TestCase):
             self.assertIsNone(pdfmd.latex_error_location("REPORT", stderr))
             self.assertIsNone(pdfmd.latex_error_location(str(document), "no context here"))
 
+    def test_the_complete_context_wins_over_a_command_shared_by_parts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first, second = (Path(directory) / name for name in ("01.md", "02.md"))
+            first.write_text("First \\badmacro\n", encoding="utf-8")
+            second.write_text("Second \\badmacro\n", encoding="utf-8")
+            sources = [first, second]
+            self.assertIn("02.md: Second", pdfmd.latex_error_location(
+                "REPORT", "l.91 Second \\badmacro\n", sources=sources))
+            self.assertIsNone(pdfmd.latex_error_location("REPORT", "l.91 \\badmacro\n", sources=sources))
+
 
 HAS_LATEX = any(shutil.which(name) for name in ("xelatex", "lualatex", "pdflatex"))
 
@@ -76,6 +86,34 @@ class CommandLine(unittest.TestCase):
                                   capture_output=True, text=True, encoding="utf-8", env=env)
             self.assertEqual(done.returncode, 1)
             self.assertRegex(done.stderr, r"near line (9|10) of doc\.md")      # the paragraph that holds the macro
+
+    def test_scaffold_and_reports_name_the_original_part(self):
+        engine = next(name for name in ("pdflatex", "xelatex", "lualatex") if shutil.which(name))
+        for route in ("scaffold", "cached scaffold", "report", "patch report"):
+            with self.subTest(route=route), tempfile.TemporaryDirectory() as directory:
+                folder = Path(directory)
+                parts = folder / "parts"
+                parts.mkdir()
+                options = "parts: auto, stamp: {pdf-metadata: false}"
+                if route == "patch report":
+                    options += ", report-build: patch"
+                (folder / "01-paper.md").write_text(
+                    f"---\ntitle: Paper\npdfmd-options: {{{options}}}\n---\n\nIntroduction.\n",
+                    encoding="utf-8")
+                (parts / "02-section.md").write_text(
+                    "---\ntitle: Part\n---\n\n# Findings\n\n```{=latex}\n\\pdfmdUndefinedFixture\n```\n",
+                    encoding="utf-8")
+                args = ["01-paper.md"] if route.endswith("scaffold") else [
+                    "-r", "01-paper.md", str(Path("parts") / "02-section.md")]
+                if route == "cached scaffold":
+                    args += ["--cache"]
+                done = subprocess.run(
+                    [sys.executable, str(ROOT / "scripts" / "pdfmd"), *args, "-e", engine,
+                     "--no-auto", "mainfont", "unicode", "texpackages"],
+                    cwd=folder, env={**os.environ, "PYTHONUTF8": "1"}, stdin=subprocess.DEVNULL,
+                    capture_output=True, encoding="utf-8", timeout=90)
+                self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+                self.assertIn(f"near line 8 of {Path('parts') / '02-section.md'}", done.stderr)
 
 
 if __name__ == "__main__":

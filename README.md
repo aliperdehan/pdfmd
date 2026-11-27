@@ -359,7 +359,7 @@ the document stopped LuaLaTeX), and it used to replace the good PDF already ther
   family when that one is not in it (LuaTeX: lualatex, context; XeTeX: xelatex, tectonic; pdfTeX: pdflatex, latexmk; the
   browsers are one family), and the other engines follow in their usual order; and the build behaves as `missing`. No engine
   found (no record, a PDF of another program): as `on`.
-- `on`: any failure tries the next engine, as before 3.33.71.
+- `on`: try the next engine after an engine failure.
 - `missing`: only an engine that cannot run here falls through, with a NOTE that says so (not installed, a Typst too old, an
   engine that stopped without an error about the document, a broken TeX installation or one that may not write). An engine that
   ran and reported an error in the document (TeX: a `!` error line such as `! Undefined control sequence`, a missing `.sty` or
@@ -367,6 +367,10 @@ the document stopped LuaLaTeX), and it used to replace the good PDF already ther
   always, and the PDF already there is left byte for byte as it was (an engine writes the output only when it succeeded).
   A failure pdfmd does not recognise as the document's counts as the engine's.
 - `off`: the first engine that fails stops the build, whatever the cause.
+
+Confirmed Pandoc input errors such as invalid YAML and missing bibliography or CSL files stop the build in every mode.
+When LaTeX's error context identifies one source location, pdfmd gives the original file and line, including the part
+in a scaffold or report.
 
 An engine you pin is never reordered: `-e ENGINE`, `-e A,B`, `pdf-engine:` in the document, a metadata file, a folder or the
 config. `engine-fallback` still decides what a failure does, so `auto` with a pinned engine is `missing` when the PDF exists and

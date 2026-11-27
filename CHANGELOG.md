@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.93 — 2026-11-27
+
+Pre-edit state: commit `5b5c800`. LaTeX errors only searched the main source for their context, and the PDF engine chain retried when Pandoc itself rejected the input. Match the TeX context against the original scaffold, part and report files, and stop the chain on confirmed Pandoc YAML or citation-input errors. Regressions with Pandoc 3.13 cover ordinary and cached scaffolds, both report routes, ambiguous contexts, missing bibliography and CSL files, invalid CSL and YAML, preservation of an existing PDF, and continued fallback for engine failures.
+
 ## v3.34.92 — 2026-11-27
 
 Pre-edit state: commit `e9e544f`. Standalone PDF crop and picture export

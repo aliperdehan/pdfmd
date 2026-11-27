@@ -77,7 +77,8 @@ Use `--page-numbers` when a cropped result should keep them.
 - When an engine fails, the next one is tried only where `engine-fallback` lets it. The default, `auto`, stops a
   build whose PDF already exists at an error in the document (exit `1`, the existing PDF left as it was; the closing line says
   `engine-fallback auto stopped the build`) and goes on only past an engine that cannot run here; a new PDF gets the whole
-  chain. `--engine-fallback on` is the old behaviour, `missing` and `off` are stricter.
+  chain. `--engine-fallback on` tries the next engine after an engine failure. Confirmed Pandoc input errors stop
+  the build in every mode.
 - `FOUND` lists the files pdfmd picked up beside the document (a metadata file, a preamble, a Lua filter, the folder
   settings); `DEFAULTS` what it applied because nothing said otherwise. If the output is not what the source alone
   predicts, read these first, or run `--verbose`.

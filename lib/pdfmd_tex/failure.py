@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from bisect import bisect_right
 from pathlib import Path
 
 from pdfmd_base import core
@@ -48,52 +49,68 @@ def probe_tex_cause(engine: str, timeout: int = 120) -> tuple[str, str] | None:
 SHOWN_LOCATIONS: set[tuple[str, str]] = set()
 
 
-LATEX_CONTEXT_RE = re.compile(r"(?m)^l\.(\d+) (.+)$")
+LATEX_CONTEXT_RE = re.compile(r"(?m)^[ \t]*l\.\d+[ \t]+(.+)$")
 
 
-def source_line_for(text: str, context: str) -> int | None:
-    """The line of ``text`` (a Markdown source) that ``context`` (the words LaTeX printed up to its error) came from.
-    The generated LaTeX is wrapped and escaped differently, so the match is on the words with whitespace collapsed,
-    first the whole context, then its last 30 characters, then the last command in it."""
+def source_words(text: str) -> tuple[str, list[int], list[int]]:
+    """Put Markdown on one line and retain each original line's starting offset."""
     collapsed: list[str] = []
-    starts: list[tuple[int, int]] = []
+    starts: list[int] = []
+    lines: list[int] = []
     size = 0
     for number, line in enumerate(text.splitlines(), 1):
         piece = re.sub(r"\s+", " ", line.strip())
         if piece:
-            starts.append((size, number))
+            starts.append(size)
+            lines.append(number)
             collapsed.append(piece)
             size += len(piece) + 1
-    haystack = " ".join(collapsed)
+    return " ".join(collapsed), starts, lines
+
+
+def source_position(sources, context: str):
+    """Locate the most specific TeX context across the original Markdown inputs."""
     context = re.sub(r"\s+", " ", context.strip())
     command = re.search(r"(\\[A-Za-z@]+)\s*$", context)
-    for needle in (context, context[-30:], command.group(1) if command else ""):
+    candidates = (context, context[-30:], command.group(1) if command else "")
+    indexed = [(path, *source_words(text)) for path, text in sources]
+    for needle in dict.fromkeys(candidates):
         if len(needle) < 4:
             continue
-        found = haystack.find(needle)
-        if found >= 0:
-            return [number for start, number in starts if start <= found][-1]
+        hits = {(path, lines[bisect_right(starts, match.start()) - 1])
+                for path, haystack, starts, lines in indexed for match in re.finditer(re.escape(needle), haystack)}
+        if hits:
+            return hits.pop() if len(hits) == 1 else None
     return None
 
 
-def latex_error_location(label: str, stderr: str) -> str | None:
-    """`near line 9 of doc.md: Second has \\badmacro` for a LaTeX error whose context is in the Markdown ``label``
-    names (Pandoc prints `l.67 Second has \\badmacro`, a line of the LaTeX it wrote, which nobody sees)."""
-    path = Path(label)
-    found = LATEX_CONTEXT_RE.search(stderr or "")
-    if not found or path.suffix.lower() not in (".md", ".markdown") or not path.is_file():
+def source_line_for(text: str, context: str) -> int | None:
+    """The original Markdown line corresponding to a unique LaTeX context."""
+    found = source_position([(None, text)], context)
+    return found[1] if found else None
+
+
+def latex_error_location(label: str, stderr: str, *, sources=()) -> str | None:
+    """Report the source part and line when LaTeX's generated context identifies them."""
+    found = LATEX_CONTEXT_RE.search(stderr)
+    if not found:
         return None
-    try:
-        number = source_line_for(path.read_text(encoding="utf-8-sig"), found.group(2))
-    except (OSError, UnicodeDecodeError):
+    originals = []
+    for path in dict.fromkeys(sources or (Path(label),)):
+        if path.suffix.lower() in core.MARKDOWN_LIKE_SUFFIXES:
+            text = core.read_text_best_effort(path)
+            if text:
+                originals.append((path, text))
+    context = found.group(1).strip()
+    location = source_position(originals, context)
+    if location is None:
         return None
-    if number is None:
-        return None
-    return f"near line {number} of {core.display_path(path)}: {found.group(2).strip()[:100]}"
+    path, number = location
+    return f"near line {number} of {core.display_path(path)}: {context[:100]}"
 
 
 def report_engine_failure(label: str, engine: str, result: subprocess.CompletedProcess,
-                          remaining: list[str], debug: bool, stopped: str | None = None) -> None:
+                          remaining: list[str], debug: bool, stopped: str | None = None, *, sources=()) -> None:
     """Print why one PDF-engine attempt failed -- always, not just under --verbose.
 
     Added 2026-09-17 alongside engine_failure_reason() (see its docstring):
@@ -110,24 +127,16 @@ def report_engine_failure(label: str, engine: str, result: subprocess.CompletedP
     hint = f" ({reason})" if reason else ""
     if stopped:                     # engine-fallback stops the chain here (lib/pdfmd_chain)
         emit("warning", None, f"WARN  {label}: {engine} failed{hint}; {stopped}", file=sys.stderr)
-        where = latex_error_location(label, result.stderr)
-        if where and (label, where) not in SHOWN_LOCATIONS:
-            SHOWN_LOCATIONS.add((label, where))
-            emit("warning", None, f"      {where}", file=sys.stderr)
     elif remaining:
         emit("warning", None, f"WARN  {label}: {engine} failed{hint}; trying {remaining[0]}...", file=sys.stderr)
-        where = latex_error_location(label, result.stderr)
-        if where and (label, where) not in SHOWN_LOCATIONS:       # the next LaTeX engine fails in the same place: once
-            SHOWN_LOCATIONS.add((label, where))
-            emit("warning", None, f"      {where}", file=sys.stderr)
     else:
         emit("warning", None, f"WARN  {label}: {engine} failed{hint}; no more engines to try. "
               f"Rerun with --engine {engine} --verbose (or --debug) for the full log.",
               file=sys.stderr)
-        where = latex_error_location(label, result.stderr)
-        if where and (label, where) not in SHOWN_LOCATIONS:
-            SHOWN_LOCATIONS.add((label, where))
-            emit("warning", None, f"      {where}", file=sys.stderr)
+    where = latex_error_location(label, (result.stderr or "") + "\n" + (result.stdout or ""), sources=sources)
+    if where and (label, where) not in SHOWN_LOCATIONS:       # the next LaTeX engine can fail in the same place
+        SHOWN_LOCATIONS.add((label, where))
+        emit("warning", None, f"      {where}", file=sys.stderr)
     known = core.tex_failure_cause(result.stderr)
     if known is None and engine == "lualatex" and "Fatal error occurred" in result.stderr:
         known = probe_tex_cause(engine)                                  # the cause is in the console, not in Pandoc's text

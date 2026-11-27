@@ -558,6 +558,10 @@ value) always means the full, unrestricted fallback chain, overriding
 even a family restriction from either source -- the escape hatch when a
 family-restricted document needs output produced at all costs.
 
+Confirmed Pandoc input errors, including invalid YAML and missing bibliographies or CSL files, stop the build in
+every `engine-fallback` mode. The build returns the Pandoc error and keeps an existing PDF. When LaTeX's error
+context identifies a unique source location, pdfmd gives the original file and line, including in a parts build or report.
+
 **Page numbers.** `pdfmd-options: {page-numbers: off}` suppresses running page numbers in LaTeX, Pandoc's Typst template and Calibre.
 Word and OpenDocument output omit page-number fields, keeping the rest of their headers and footers. The built-in
 inkmd renderer already has no page numbers. The default keeps the writer's numbering. Set this in front matter,

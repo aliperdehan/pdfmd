@@ -774,6 +774,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         result = None
         failed_families: set[str] = set()
         failed_engines: list[str] = []
+        error_sources = [md_path, *(chosen if partial else parts_inputs)]
         for engine_index, engine in enumerate(engines):
             family = core.ENGINE_FAMILY.get(engine, engine)
             if family in failed_families:
@@ -1047,7 +1048,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 break
             remaining = [e for e in engines[engine_index + 1:] if core.ENGINE_FAMILY.get(e, e) not in failed_families
                          and not (e == "typst" and pdfmd_install.typst_too_old())]
-            if core.chain_engine_failed(str(md_path), engine, result, remaining, debug):     # engine-fallback stops here
+            if core.chain_engine_failed(str(md_path), engine, result, remaining, debug,
+                                        sources=error_sources, metadata=metadata_files):
                 break
         if result is None:
             # Every engine was skipped: each shares an engine with one that failed already.
@@ -1490,7 +1492,8 @@ def convert_via_cache(md_path: Path, out_dir: Path | None, font: str, engines: l
                                               for name in aliases.get("dir", [])) + tex_text,
                                     encoding="utf-8")
         ok, reason = core.compile_tex_direct(tex_path, output, engines, keep_aux, verbose, debug,
-                                        aux_dir=base, cwd=pandoc_cwd, env=tex_env, document_directory=md_path.parent)
+                                        aux_dir=base, cwd=pandoc_cwd, env=tex_env, document_directory=md_path.parent,
+                                        sources=[md_path, *parts_inputs])
         if ok and plot_dir is not None:
             requests = {}
             for suffix in (*aliases.get("requests", []), ".pdfmdreq"):

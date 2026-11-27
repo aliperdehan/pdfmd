@@ -4,7 +4,7 @@ pdfmd tries the engines of its chain in turn, and before this setting every fail
 one; the degraded file (a Typst PDF after a LaTeX error in the document) replaced the good PDF already there, with exit 0. The
 modes (`--engine-fallback MODE`, `pdfmd-options: {engine-fallback: MODE}`, a `--setup` row):
 
-- `on`: any failure tries the next engine, as before.
+- `on`: an engine failure tries the next engine. Confirmed Pandoc input errors stop in every mode.
 - `missing`: only an engine that cannot run here (not installed, too old, crashed without a word about the document, a
   broken installation, a folder it may not write) falls through, with a NOTE; an engine that ran and reported an error in the
   document (TeX: a `!` error line, a missing `.sty` or `.cls`; Typst: an `error:` with its place in the source) stops the build.
@@ -37,6 +37,14 @@ MODE_WORDS = {"auto": "auto", "on": "on", "true": "on", "yes": "on", "missing": 
 
 # Pandoc's exit code when it cannot run the PDF program it was told to use (PandocPDFProgramNotFoundError): a fact of Pandoc's.
 PANDOC_PROGRAM_NOT_FOUND = 47
+# Pandoc's application, citeproc, parse and missing-resource exit codes.
+PANDOC_APPLICATION_ERROR = 4
+PANDOC_CITEPROC_ERROR = 25
+PANDOC_PARSE_ERRORS = (64, 65)
+PANDOC_RESOURCE_NOT_FOUND = 99
+PANDOC_YAML_ERROR = re.compile(r"(?m)^(?:Error parsing YAML metadata|YAML parse exception)\b")
+CITEPROC_ERROR = re.compile(r"(?m)^(?:Citeproc\w*Error:|Error (?:reading|parsing) (?:bibliography|CSL)\b)")
+MISSING_RESOURCE = re.compile(r"(?m)^File '(.+)' not found in resource path\r?$")
 # What a TeX run prints when the installation, not the document, is broken or may not write (log signatures, facts of TeX's;
 # the ones pdfmd_tex.TEX_CAUSES knows count too, a missing package aside, which is the document's).
 TEX_UNUSABLE = ("I can't find the format file", "Fatal format file error", "I can't write on file", "Not writing to",
@@ -281,16 +289,49 @@ def failure_kind(engine: str, result) -> tuple[str, str]:
     return "engine", "it reported no error in the document that pdfmd recognises"
 
 
-def engine_failed(label: str, engine: str, result, remaining: list[str], debug: bool) -> bool:
+def pandoc_input_error(result, sources, metadata) -> bool:
+    """Recognise input failures before an engine can run. Other Pandoc and engine errors can still fall through."""
+    args = result.args
+    if not args or not isinstance(args, (list, tuple)) or Path(args[0]).name.lower() not in ("pandoc", "pandoc.exe"):
+        return False
+    text = result.stderr or ""
+    if result.returncode in PANDOC_PARSE_ERRORS:
+        return bool(PANDOC_YAML_ERROR.search(text))
+    if result.returncode in (PANDOC_APPLICATION_ERROR, PANDOC_CITEPROC_ERROR):
+        return bool(CITEPROC_ERROR.search(text))
+    if result.returncode != PANDOC_RESOURCE_NOT_FOUND:
+        return False
+    missing = MISSING_RESOURCE.search(text)
+    if missing is None or "--citeproc" not in args:
+        return False
+    from pdfmd_args import metadata_command_layers
+    from pdfmd_bibliography.sources import layers, values
+
+    name = missing.group(1)
+    words = iter(args[1:])
+    for word in words:
+        if (word == "--csl" and next(words, None) == name) or word == f"--csl={name}":
+            return True
+    cli, _ = metadata_command_layers(args)[0]
+    return any(name == value for _, layer in [(None, cli), *layers(sources, metadata, args)]
+               for key in ("bibliography", "bibliography+", "csl") for value in values(layer.get(key)))
+
+
+def engine_failed(label: str, engine: str, result, remaining: list[str], debug: bool, *,
+                  sources=(), metadata=()) -> bool:
     """Report one engine's failure (core.report_engine_failure) and say whether the chain stops here (True) under the build's
     engine-fallback; a fall-through for an engine that cannot run here gets a NOTE in `missing` mode."""
     plan = core.BUILD.get("chain")
+    if pandoc_input_error(result, sources, metadata):
+        if plan is not None and remaining:
+            plan.stopped = "Pandoc rejected the input; switching engines would not help"
+        return True
     if plan is None or plan.mode == "on":
-        core.report_engine_failure(label, engine, result, remaining, debug)
+        core.report_engine_failure(label, engine, result, remaining, debug, sources=sources)
         return False
     kind, why = failure_kind(engine, result)
     if plan.mode == "missing" and kind == "engine":
-        core.report_engine_failure(label, engine, result, remaining, debug)
+        core.report_engine_failure(label, engine, result, remaining, debug, sources=sources)
         if remaining:
             emit("note", None, f"NOTE  {label}: engine-fallback {plan.asked}: {engine} counts as unusable here ({why}), not as an error in "
                   f"the document, so {remaining[0]} is tried", file=sys.stderr)
@@ -298,7 +339,8 @@ def engine_failed(label: str, engine: str, result, remaining: list[str], debug: 
     kept = (f"the existing {plan.output.name} is left as it was" if plan.output.is_file() else "nothing is written")
     cause = "an error in the document" if kind == "document" else "no other engine is tried"
     core.report_engine_failure(label, engine, result, [], debug,
-                               stopped=f"engine-fallback {plan.asked}: {cause}, so the build stops here and {kept}")
+                               stopped=f"engine-fallback {plan.asked}: {cause}, so the build stops here and {kept}",
+                               sources=sources)
     plan.stopped = (f"{engine} failed; engine-fallback {plan.asked} stopped the build, "
                     + (f"{plan.output.name} kept" if plan.output.is_file() else "nothing written")
                     + "; --engine-fallback on tries the next engine")

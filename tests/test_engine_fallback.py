@@ -30,6 +30,9 @@ chain = pdfmd.load_package("pdfmd_chain")
 PANDOC = shutil.which("pandoc")
 LUALATEX = shutil.which("lualatex")
 TYPST = shutil.which("typst")
+TWO_ENGINES = next((pair for pair in ("pdflatex,xelatex", "pdflatex,typst", "xelatex,typst",
+                                     "lualatex,typst", "pdflatex,lualatex", "xelatex,lualatex")
+                    if all(shutil.which(engine) for engine in pair.split(","))), None)
 GOOD = "---\ntitle: E\n---\n\nGood text.\n"
 BAD = "---\ntitle: E\n---\n\nBad \\undefinedcommandxyz text.\n"
 FAKE_LUALATEX = """#!/bin/sh
@@ -48,6 +51,15 @@ def sha(path: Path) -> str:
 
 
 class Kinds(unittest.TestCase):
+    def test_only_confirmed_pandoc_input_errors_stop_every_engine(self):
+        citation = "File 'references.json' not found in resource path\n"
+        for result in (failed(citation, 43),
+                       failed("File 'figure.png' not found in resource path\n", 99),
+                       failed("pdf-engine typst is not compatible with output format beamer\n", 4),
+                       subprocess.CompletedProcess(["xelatex"], 64, "", "Error parsing YAML metadata")):
+            with self.subTest(result=result), mock.patch.object(pdfmd, "BUILD", {"chain": None}), redirect_stderr(io.StringIO()):
+                self.assertFalse(chain.engine_failed("d.md", "xelatex", result, ["typst"], False))
+
     def test_an_error_in_the_document_is_the_documents(self):
         self.assertEqual(chain.failure_kind("lualatex", failed("Error producing PDF.\n! Undefined control sequence.\nl.5 \\x"))[0],
                          "document")
@@ -180,6 +192,41 @@ class Records(unittest.TestCase):
         self.assertIn("fell back (typst after lualatex, xelatex failed)", why)
         self.record("20261110-090300-ok.log", "ok  in 3.1 s  (lualatex)")        # an older good build is
         self.assertEqual(self.look()[0], "lualatex")
+
+
+@unittest.skipUnless(PANDOC and TWO_ENGINES, "needs Pandoc and two PDF engines from distinct families")
+class InputErrors(unittest.TestCase):
+    def test_missing_citation_files_and_bad_yaml_skip_the_second_engine(self):
+        cases = (
+            ("bibliography: absent-references.json\n", "absent-references.json"),
+            ("csl: absent-style.csl\nreferences: [{id: sample, title: A reference, type: book}]\n", "absent-style.csl"),
+            ("csl: broken.csl\nreferences: [{id: sample, title: A reference, type: book}]\n", "Citeproc"),
+            ("title: [unclosed\n", "YAML"),
+        )
+        for patch_report in (False, True):
+            for metadata, reason in cases:
+                with self.subTest(metadata=metadata, patch_report=patch_report), tempfile.TemporaryDirectory() as directory:
+                    folder = Path(directory)
+                    (folder / "01-doc.md").write_text(
+                        f"---\npdfmd-options: {{report-build: patch}}\n{metadata}---\n\nSee [@sample].\n",
+                        encoding="utf-8")
+                    (folder / "02-part.md").write_text("More text.\n", encoding="utf-8")
+                    (folder / "broken.csl").write_text("<style><broken>\n", encoding="utf-8")
+                    output = folder / "previous.pdf"
+                    output.write_bytes(b"previous output")
+                    args = ["01-doc.md"] if not patch_report else ["-r", "01-doc.md", "02-part.md"]
+                    done = subprocess.run(
+                        [sys.executable, str(ROOT / "scripts" / "pdfmd"), *args, "-o", str(output),
+                         "-e", TWO_ENGINES, "--engine-fallback", "on", "--verbose",
+                         "--no-auto", "mainfont", "unicode", "texpackages"],
+                        cwd=folder, env={**os.environ, "PYTHONUTF8": "1"}, stdin=subprocess.DEVNULL,
+                        capture_output=True, encoding="utf-8", timeout=90)
+                    shown = done.stdout + done.stderr
+                    self.assertEqual(done.returncode, 1, shown)
+                    self.assertIn(reason, shown)
+                    self.assertEqual(output.read_bytes(), b"previous output")
+                    self.assertIn(f"--pdf-engine={TWO_ENGINES.split(',')[0]}", shown)
+                    self.assertNotIn(f"--pdf-engine={TWO_ENGINES.split(',')[1]}", shown)
 
 
 @unittest.skipUnless(PANDOC and LUALATEX, "needs Pandoc and LuaLaTeX")

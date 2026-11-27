@@ -600,7 +600,8 @@ AUX_CLEAN_SUFFIXES = (".aux", ".toc", ".out", ".lof", ".lot", ".bbl", ".blg", ".
 def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
                        keep_aux: bool, verbose: bool, debug: bool,
                        aux_dir: Path | None = None, cwd: Path | None = None,
-                       env: dict | None = None, document_directory: Path | None = None) -> tuple[bool, str]:
+                       env: dict | None = None, document_directory: Path | None = None, *,
+                       sources=()) -> tuple[bool, str]:
     """Compile a standalone .tex document directly, without Pandoc.
 
     See the module-level comment above for why, and this file's docstring
@@ -688,6 +689,6 @@ def compile_tex_direct(tex_path: Path, output: Path, engines: list[str],
         failed_engines.append(engine)
         remaining = [e for e in tex_engines[engine_index + 1:] if core.ENGINE_FAMILY.get(e, e) not in failed_families]
         fake_result = subprocess.CompletedProcess(args=[engine], returncode=1, stdout=log_tail, stderr=last_reason)
-        if core.chain_engine_failed(str(tex_path), engine, fake_result, remaining, debug):   # engine-fallback (v3.33.71)
+        if core.chain_engine_failed(str(tex_path), engine, fake_result, remaining, debug, sources=sources):
             break
     return False, last_reason

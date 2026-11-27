@@ -626,7 +626,8 @@ def _run(core, *, records,
                 failed_families.add(family)
                 failed_engines.append(engine)
                 remaining = [e for e in engines[engine_index + 1:] if ENGINE_FAMILY.get(e, e) not in failed_families]
-                if core.chain_engine_failed("REPORT", engine, result, remaining, args.debug):   # engine-fallback stops here
+                if core.chain_engine_failed("REPORT", engine, result, remaining, args.debug,
+                                            sources=files, metadata=metadata_files):
                     break
         if result is not None and result.returncode == 0 and crop is not None:
             polish_pdf(output, list(files), args.verbose)

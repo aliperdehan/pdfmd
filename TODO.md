@@ -40,7 +40,7 @@ wait for an answer before any code.
 - [ ] `table-keep` by height: keep a short table whole when it is under `table-keep-height` of a page (default 25%), plus orphan control; mechanics unspiked [3dl]
 - [ ] Fetch templates (pandoc-templates.org index, `owner/repo`, URL) and CSL styles by name or link, cached; generalises the Eisvogel line [3dl]
 - [ ] Install source: pdfmd records how it was installed; `pdfmd --upgrade`; `--version` says when a newer release exists [3dk]
-- [ ] Term-paper gaps: --check codes attr-stray, emphasis-empty, repeated heading text, heading-only section/part, uncited keys (info), opt-in en-GB spelling; the "parts also sits beside" WARN for files without front matter ("not merged"); LaTeX errors name the part and line; engine-independent errors stop the fallback chain; a --restore help line [N123]
+- [ ] Term-paper gaps: decide the backend and dictionary for opt-in en-GB/en-US spelling [N123]
 
 ## Tables line, one feature line (3.31.0, full suite) [3dj]
 
