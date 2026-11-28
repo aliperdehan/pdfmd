@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.34.96 — 2026-11-28
+
+Pre-edit state: commit `5d83e24`. pdfmd gave no indication of which package manager owned the running
+copy, and pip's metadata also appears inside manager-owned environments. `--upgrade` checks installation receipts,
+records the source for this copy in the cache and prints the owning manager's command or general guidance. The opt-in
+`--version` check caches a successful PyPI lookup for 24 hours by default, with both settings in `--setup`. The notice
+goes to standard error. Tests exercise checkout guidance, pip, pipx, Homebrew and Scoop receipts, missing or damaged
+provenance, cache reuse and expiry, and simulated PyPI replies and offline operation.
+
 ## v3.34.95 — 2026-11-27
 
 Pre-edit state: commit `5b7a12f`. A build that needed both Pandoc's version and its

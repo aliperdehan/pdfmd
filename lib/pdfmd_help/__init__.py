@@ -62,7 +62,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "cache": ("faster rebuilds", ("--cache", "--cache-location", "--cache-plots", "--clear-cache", "--cache-info", "--no-cache", "--seed-labels", "--seed-calc")),
     "setup": ("installing, configuring and checking pdfmd itself", (
         "--setup", "--disabled", "--init-config", "--show-config", "--install", "--uninstall", "--completion", "--doctor", "--json",
-        "--check-dependencies", "--version", "--trust-lua", "--deep", "--init", "--doc", "--print", "--path",
+        "--check-dependencies", "--version", "--upgrade", "--trust-lua", "--deep", "--init", "--doc", "--print", "--path",
         "--user-path", "--add-to-path", "--remove-from-path", "--show-user-path", "--yes",
         "--pandoc-path", "--typst-path", "--chrome-path", "--tesseract-path", "--soffice-path", "--dot-path",
         "--mmdc-path", "--poppler-path", "--ghostscript-path", "--mutool-path")),

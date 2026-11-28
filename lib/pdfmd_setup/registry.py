@@ -34,6 +34,7 @@ ON_OFF = (("on", "yes"), ("off", "no"))
 # What a build does when a setting is not set: the words the screens print beside "default", for every setting whose
 # `default` is not itself one of its choices. Checked by tests/test_setup.py: a setting with neither is a bug.
 UNSET = {
+    "options.version-check": "off", "options.version-check-cache-hours": "24 hours",
     "author": "none", "lang": "none",
     "papersize": "US Letter (A4 in WeasyPrint)", "fontsize": "10 pt LaTeX, 11 pt Typst",
     "geometry": "margin=1in for LaTeX documents, Beamer's own for slides",
@@ -112,7 +113,8 @@ UNSET = {
 }
 
 # Settings that belong to this computer, not to a folder: a folder's setup (pdfmd --setup DIR) cannot set them.
-MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "options.cache.max-mb"})
+MACHINE = frozenset({"setup-ui", "translit", "disabled", "user-path", "kits", "options.cache.max-mb",
+                     "options.version-check", "options.version-check-cache-hours"})
 
 # What `pdfmd --setup DIR` offers (v3.29.29), by the key of the row: the `options:` a document's build reads through its folder
 # layers (first_pdfmd_option / option_sources, or config_options(document)), and the metadata rows below. A row that is not here
@@ -1035,6 +1037,10 @@ def _settings(choice, text, no_auto_kinds, setup_ui_choices, on_off) -> list[Set
         Setting("disabled", "Features switched off", "multi", feature_choices(), "",
                 "Hidden from --help, completion and this screen, refused on the command line; "
                 "`pdfmd --disabled ...` uses one for a run. Also the d key.", "Setup"),
+        choice("options.version-check", "Check PyPI for a newer pdfmd release", on_off, "off",
+               "Only when running pdfmd --version. Off by default.", "Setup"),
+        text("options.version-check-cache-hours", "Keep the latest pdfmd release result (hours)",
+             "A positive whole number, default 24. Applies when the PyPI check is on.", "Setup", check="positive"),
         choice("setup-ui", "This setup screen",
                tuple((value, {"plain": "a numbered list", "fancy": "full screen (pdfmd --install tui)"}[value])
                      for value in setup_ui_choices), "plain", "", "Setup"),

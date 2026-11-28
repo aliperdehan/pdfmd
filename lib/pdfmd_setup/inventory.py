@@ -43,7 +43,7 @@ WORD_ONLY = Omitted("document", "a Word/ODT-only override of the metadata rows; 
 FLAGS: dict[str, str | Omitted] = {
     "excerpts": CMD,
     "pagecite": "options.pagecite",
-    "help": CMD, "version": CMD, "path": RUN,
+    "help": CMD, "version": CMD, "upgrade": CMD, "path": RUN,
     "presentation": "options.presentation",
     "slide_level": Omitted("document", "the document's own slide-level:"),
     "newest": RUN, "include_never": RUN, "which": CMD,
@@ -144,6 +144,7 @@ FLAGS: dict[str, str | Omitted] = {
 # of the current one. A key that takes a value or a mapping (`metadata: x.yaml` / `metadata: {yaml: ...}`) is listed
 # both ways.
 OPTIONS: dict[str, str | Omitted] = {
+    "version-check": "options.version-check", "version-check-cache-hours": "options.version-check-cache-hours",
     "alias": Omitted("document", "other names one document answers to (pdfmd NAME)"),
     "priority": Omitted("document", "one document's rank when bare pdfmd must choose: a number or a word (draft, final, never)"),
     "presentation": "options.presentation",

@@ -225,8 +225,12 @@ for one release (sizes unpacked, measured on arm64):
 TeX Live is optional everywhere: without it pdfmd uses Tectonic (XeTeX) or Typst, which cover most documents.
 `docker/Dockerfile` is one file for all four (`--build-arg TEX=1 OFFICE=1`).
 
-To update later, run `pipx upgrade pdfmd-cli`. (The package is named
-`pdfmd-cli` because `pdfmd` on PyPI is an unrelated PDF-to-Markdown tool.
+Run `pdfmd --upgrade` to see the update command for this copy, such as `pipx upgrade pdfmd-cli`.
+It prints guidance only. In `pdfmd --setup`, turn on **Check PyPI for a newer pdfmd release** if you want
+`pdfmd --version` to tell you when a newer release is available. The check is off by default and its result
+is cached for 24 hours by default.
+
+(The package is named `pdfmd-cli` because `pdfmd` on PyPI is an unrelated PDF-to-Markdown tool.
 The command is still `pdfmd`. For the latest unreleased code, use `pipx
 install git+https://github.com/aliperdehan/pdfmd`.)
 

@@ -110,6 +110,17 @@ class PersonaStylesheet(argparse.Action):
         namespace._persona_stylesheet = True
 
 
+class ReportVersion(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(f"pdfmd {core.PDFMD_VERSION}", flush=True)
+        options = core.config_options()
+        if core.option_flag(options.get("version-check")):
+            from pdfmd_install.provenance import report_newer_version
+
+            report_newer_version(options.get("version-check-cache-hours"))
+        parser.exit()
+
+
 class PersonaBorder(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         from pdfmd_compat import MDPDF_BORDER_SIDES, mdpdf_npm_length
@@ -205,7 +216,12 @@ def build_parser() -> argparse.ArgumentParser:
                     add_help=TieredHelp is None, formatter_class=HelpFormatter)
     if TieredHelp is not None:
         parser.add_argument("-h", "--help", action=TieredHelp)
-    parser.add_argument("--version", action="version", version=f"pdfmd {core.PDFMD_VERSION}")
+    parser.add_argument("--version", action=ReportVersion, nargs=0, default=argparse.SUPPRESS,
+                        help="print the installed version. Enable 'Check PyPI for a newer pdfmd release' in --setup "
+                             "to see update notices. The check is off by default. It caches results for 24 hours unless "
+                             "you change the lifetime in --setup")
+    parser.add_argument("--upgrade", action="store_true",
+                        help="print upgrade guidance for this install")
     parser.add_argument("path", type=Path, nargs="*", action="extend",
                         help="Markdown name, input files or folders; several paths build separately (default: current directory)")
     parser.add_argument("-p", "--presentation", action="store_true", default=None,

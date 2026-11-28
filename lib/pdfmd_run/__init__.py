@@ -98,6 +98,11 @@ def _run_main(tools, document_tools) -> None:
         argv, excerpts = argv[:at + 1], argv[at + 1:]
     args, pandoc_options = parser.parse_known_args(core.load_package("pdfmd_args").normalise_metadata_options(argv))
     refuse_disabled(args, hidden, parser)
+    if args.upgrade:
+        from pdfmd_install.provenance import upgrade_command
+
+        upgrade_command()
+        raise SystemExit(0)
     if args.excerpts is not None:
         raise SystemExit(core.load_package("pdfmd_excerpts.cli").command(list(args.excerpts if excerpts is None else excerpts)))
     if args.bopen is not None:

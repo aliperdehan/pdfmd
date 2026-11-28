@@ -27,6 +27,7 @@ pdfmd *                            # deduplicate inputs and skip non-inputs and 
 pdfmd report.md -e typst            # a PDF engine by name (or a list: -e typst,lualatex)
 pdfmd report.md --kit apa7         # build with a kit (a house style); `pdfmd --kits apa7` describes it, builds nothing
 pdfmd --install diagram:resvg        # SVG to PNG tool, GitHub SHA-256 checked, in pdfmd’s tools folder
+pdfmd --upgrade                     # print upgrade guidance for the running copy
 pdfmd --doctor                      # tools, shared SVG image/diagram converter chain, found converters and fixes
 pdfmd --doctor --deep               # also builds a small page with every engine: "installed" is not "works"
 pdfmd --doctor --json               # versioned checks and tool discovery
@@ -40,6 +41,8 @@ pdfmd --install core:tex            # also cortex: Pandoc, Tectonic and fonts:co
 pdfmd --restore report.pdf          # a PDF that carries its own source: write the folder back (never over a file)
 pdfmd --check-source report.pdf     # does this PDF carry its source? (reads the attachment list only)
 ```
+
+`pdfmd --version` prints the installed version on stdout and any opt-in, cached PyPI notice on stderr.
 
 Batch selection uses resolved paths and fails if nothing buildable remains. Explicit files can use Pandoc input
 formats; special single-file routes such as PDF-to-Markdown, Quarto and non-Pandoc ebooks are excluded. Name those alone.

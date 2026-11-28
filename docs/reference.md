@@ -1753,6 +1753,20 @@ refused on the command line unless --disabled is given.
 What pdfmd itself remembers (trusted-filters.txt, the dismissed native-renderer
 offer) lives beside it, not in the cache that --clear-cache empties.
 
+### Installation source and updates
+
+`pdfmd --upgrade` reads the installation receipts for the running copy and prints guidance. It shows the owning
+manager's command for pip, pipx, Homebrew or Scoop, or lists the commands when the owner is unknown. For a source
+checkout or editable install it tells you to update the source. The result and this copy's version are recorded
+under `install-sources/` in the global cache when writable.
+
+`pdfmd --version` prints the installed version on standard output. To also check PyPI for a newer release, set
+`version-check: on` under `options:` in the global or per-install config, or use `pdfmd --setup`.
+This setting is off by default. A newer release notice goes to standard error. A successful response is cached
+globally for 24 hours by default. Set `version-check-cache-hours` to a positive whole number under `options:`
+or in `--setup` to change the lifetime. Both `pdfmd-options` keys are read only from the config for this machine.
+If the check fails, `--version` still prints the installed version.
+
 ### JSON reports
 
 `pdfmd --show-config --json [DOCUMENT]` and `pdfmd --doctor --json` each write

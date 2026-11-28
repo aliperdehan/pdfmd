@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -61,6 +62,19 @@ class Plain(unittest.TestCase):
         done, path = self.run_setup([str(number("options.presentation")), "1", "s"])
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIs(yaml.safe_load(path.read_text(encoding="utf-8"))["options"]["presentation"], True)
+
+    def test_version_check_and_cache_hours_are_global_settings(self):
+        screen, _ = self.run_setup(["q"])
+        numbers = re.findall(r"(?m)^ +([0-9]+)\. (?:Check PyPI for a newer pdfmd release|"
+                             r"Keep the latest pdfmd release result) ", screen.stdout)
+        self.assertEqual(len(numbers), 2)
+        flag, hours = numbers
+        done, path = self.run_setup([flag, "1", hours, "8", "s"])
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("Saved", done.stdout)
+        self.assertEqual(yaml.safe_load(path.read_text(encoding="utf-8"))["options"],
+                         {"version-check": True, "version-check-cache-hours": 8})
+        self.assertTrue({"options.version-check", "options.version-check-cache-hours"} <= registry.MACHINE)
 
     def test_properties_fields_save_their_yaml_shapes(self):
         fields = (("show", "[stage, tags]"), ("hide", "private, scratch"), ("labels", "{stage: Phase}"),

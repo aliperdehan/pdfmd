@@ -178,6 +178,13 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("diagram:all", text)
         self.assertIn("source, target and removal", " ".join(text.split()))
 
+    def test_setup_help_describes_upgrade_guidance_and_version_check_settings(self):
+        text = " ".join(run("--help", "setup").stdout.split())
+        self.assertIn("--upgrade", text)
+        self.assertIn("print upgrade guidance for this install", text)
+        self.assertIn("Check PyPI for a newer pdfmd release", text)
+        self.assertIn("caches results for 24 hours", text)
+
     def test_an_unknown_topic_is_an_error_that_lists_them(self):
         done = run("--help", "nonsense")
         self.assertNotEqual(done.returncode, 0)
