@@ -559,7 +559,8 @@ even a family restriction from either source -- the escape hatch when a
 family-restricted document needs output produced at all costs.
 
 Confirmed Pandoc input errors, including invalid YAML and missing bibliographies or CSL files, stop the build in
-every `engine-fallback` mode. The build returns the Pandoc error and keeps an existing PDF. When LaTeX's error
+every `engine-fallback` mode. Missing citation files are recognised whether or not Pandoc quotes their filenames.
+The build returns the Pandoc error and keeps an existing PDF. When LaTeX's error
 context identifies a unique source location, pdfmd gives the original file and line, including in a parts build or report.
 
 **Page numbers.** `pdfmd-options: {page-numbers: off}` suppresses running page numbers in LaTeX, Pandoc's Typst template and Calibre.

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.102 — 2026-11-28
+
+Pre-edit state: commit `a3afb6d`. Pandoc’s older missing-resource message leaves the filename unquoted, so missing bibliography and CSL files could trigger another PDF engine. Recognise both spellings while still requiring the missing resource to be a declared citation file. Regressions exercise both spellings and distinguish missing figures from missing citation files.
+
 ## v3.34.101 — 2026-11-28
 
 Pre-edit state: commit `806406b`. Output fingerprinting compared metadata from a path lookup with metadata from an open handle. Use handle metadata for both snapshots so Windows can verify the files it wrote. Read record paths as paths in the tests, including home-relative paths, and keep records enabled across the batch fixture’s rewrites so writer replacement is covered. Regressions cover differing metadata, edited output, scrubbed paths, both report routes and batch selection.

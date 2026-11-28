@@ -51,6 +51,16 @@ def sha(path: Path) -> str:
 
 
 class Kinds(unittest.TestCase):
+    def test_missing_citation_resources_stop_fallback_with_or_without_quotes(self):
+        bibliography = "work's references.json"
+        csl = "sample style.csl"
+        args = ["pandoc", "--citeproc", "-M", f"bibliography={bibliography}", "--csl", csl]
+        for quote in ("", "'"):
+            for name, expect_stop in ((bibliography, True), (csl, True), ("figure.png", False)):
+                result = subprocess.CompletedProcess(args, 99, "", f"File {quote}{name}{quote} not found in resource path\n")
+                with self.subTest(quote=quote, name=name), mock.patch.object(pdfmd, "BUILD", {"chain": None}), redirect_stderr(io.StringIO()):
+                    self.assertEqual(chain.engine_failed("d.md", "xelatex", result, ["typst"], False), expect_stop)
+
     def test_only_confirmed_pandoc_input_errors_stop_every_engine(self):
         citation = "File 'references.json' not found in resource path\n"
         for result in (failed(citation, 43),

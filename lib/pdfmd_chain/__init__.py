@@ -44,7 +44,8 @@ PANDOC_PARSE_ERRORS = (64, 65)
 PANDOC_RESOURCE_NOT_FOUND = 99
 PANDOC_YAML_ERROR = re.compile(r"(?m)^(?:Error parsing YAML metadata|YAML parse exception)\b")
 CITEPROC_ERROR = re.compile(r"(?m)^(?:Citeproc\w*Error:|Error (?:reading|parsing) (?:bibliography|CSL)\b)")
-MISSING_RESOURCE = re.compile(r"(?m)^File '(.+)' not found in resource path\r?$")
+# Older Pandoc releases omit the single quotes around the filename.
+MISSING_RESOURCE = re.compile(r"(?m)^File (?P<quote>'?)(?P<name>[^\r\n]+)(?P=quote) not found in resource path\r?$")
 # What a TeX run prints when the installation, not the document, is broken or may not write (log signatures, facts of TeX's;
 # the ones pdfmd_tex.TEX_CAUSES knows count too, a missing package aside, which is the document's).
 TEX_UNUSABLE = ("I can't find the format file", "Fatal format file error", "I can't write on file", "Not writing to",
@@ -307,7 +308,7 @@ def pandoc_input_error(result, sources, metadata) -> bool:
     from pdfmd_args import metadata_command_layers
     from pdfmd_bibliography.sources import layers, values
 
-    name = missing.group(1)
+    name = missing["name"]
     words = iter(args[1:])
     for word in words:
         if (word == "--csl" and next(words, None) == name) or word == f"--csl={name}":
