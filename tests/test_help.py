@@ -50,10 +50,11 @@ class TieredHelp(unittest.TestCase):
                 continue                       # internal: the ASCII filter's helper
             for option in action.option_strings:
                 self.assertIn(option, everything, option)
-        tables = run("--help", "tables").stdout
+        with mock.patch.dict(os.environ, {"COLUMNS": "80"}):
+            tables = run("--help", "tables").stdout
         self.assertIn("--extract-tables", tables)
         self.assertNotIn("--stamp-mode", tables)
-        self.assertLess(len(tables.splitlines()), 80)
+        self.assertLessEqual(len(tables.splitlines()), 78)
 
     def test_pandoc_memory_key_has_a_help_topic(self):
         for topic in ("output", "all"):

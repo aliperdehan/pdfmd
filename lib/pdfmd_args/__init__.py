@@ -805,13 +805,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--init-vscode", action="store_true",
                         help="write .vscode/tasks.json with pdfmd build, watch, check and table tasks; never overwrites it")
     parser.add_argument("--extract-tables", action="store_true",
-                        help="save pipe, simple, multiline and grid tables as `.csv` blocks with captions and alignment. "
-                             "Backs up FILE and verifies the result with Pandoc. Use --tables-inline for inline data and "
-                             "--table-names to override names derived from captions or numbered table names")
+                        help="convert pipe, simple, multiline and grid tables to `.csv` blocks, preserving captions "
+                             "and alignment. Backs up the source and verifies with Pandoc. See --table-names and --tables-inline")
     parser.add_argument("--extract-inline-csv", action="store_true",
-                        help="with --extract-tables (implied): also move the data of `.csv` blocks that hold it inside "
-                             "the document into tables/<name>.csv files. Off by default. A table, or a block, with "
-                             "`<!-- pdfmd: ignore -->` on the line above it (or under its caption) is left as it is")
+                        help="also move inline CSV data to tables/<name>.csv (implies --extract-tables). "
+                             "`<!-- pdfmd: ignore -->` above a table or block, or under a caption, skips it")
     parser.add_argument("--expand-tables", action="store_true",
                         help="turn each `.csv` block into a pipe table with all its rows and caption. Keep its CSV file")
     parser.add_argument("--table-repair", choices=("pandoc", "header", "widest"), metavar="MODE",
@@ -825,10 +823,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "or --setup. With Pandoc, widths= on the div takes numbers, percentages and * for free columns. "
                              "A wrong width count is repaired with one warning")
     parser.add_argument("--csv-note", type=csv_note_argument, default=None, metavar="MODE",
-                        help="the note under a `::: {.csv}` table that was cut: short (default; the fact only: \"showing the first 7 "
-                             "and the last 3 of 11 rows\"), off (none; the \u2026 row still marks the cut) or full (adds how to show "
-                             "more). The advice is in the warning on stderr whatever this says. A div's note= wins. "
-                             "Also `pdfmd-options: {csv: {note: off}}`, or --setup")
+                        help="note under a cut CSV table: short (default, counts only), full (adds advice), "
+                             "or off (keep the \u2026 row). The warning still gives advice. Set with "
+                             "`pdfmd-options: {csv: {note: off}}` or --setup. A div's note= wins")
     parser.add_argument("--csv-rows", type=csv_count_argument, default=None, metavar="N|all",
                         help="how many data rows a `::: {.csv}` table shows when its div does not say (default 10). "
                              "Also `pdfmd-options: {csv: {rows: N}}`, or --setup")
@@ -914,9 +911,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--width", type=core.ansi_width_argument, default=None, metavar="N",
                         help="--to ansi / --view: draw for N columns (default: the terminal's, else 120)")
     parser.add_argument("--table-numbers", metavar="1,3-4",
-                        help="with --extract-tables: only these tables, by their position in the document "
-                             "(1 is the first; ranges allowed); the others stay as they are, and --table-names "
-                             "names just the chosen ones. In a document in parts it applies to each part")
+                        help="with --extract-tables: select tables by position, from 1, with ranges. "
+                             "--table-names names only the selected tables. Applied to each part separately")
     parser.add_argument("--table-names", metavar="A,B,C",
                         help="with --extract-tables: the file names for the tables, in the order they appear")
     parser.add_argument("--tables-dir", default="tables", metavar="DIR",

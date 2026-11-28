@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.100 — 2026-11-28
+
+Pre-edit state: commit `0402161`. The tables help topic reached 80 lines on Python 3.9 and 3.10 because argparse wraps the descriptions differently. Shorten the table extraction, CSV note and selection descriptions. The 80-column regression reserves at least two lines under the limit; Python 3.13 and 3.14 both print 72 lines.
+
 ## v3.34.99 — 2026-11-28
 
 Pre-edit state: commit `9f380f5`. Templates needed a manual download and a CSL URL used the rolling cache.
