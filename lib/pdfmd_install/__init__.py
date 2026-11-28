@@ -1034,7 +1034,7 @@ def install_kind(value: str) -> str:
     if value == "":
         return value
     kind = value.partition(":")[0]
-    if (kind not in core.INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math", "diagram", "core", "kit"))
+    if (kind not in core.INSTALL_KINDS or (":" in value and kind not in ("fonts", "ocr", "math", "diagram", "core", "kit", "template", "csl"))
             or (kind == "core" and ":" in value and value not in ("core:tex", "core:typst"))
             or (kind == "math" and ":" in value and value not in ("math:katex", "math:mathjax"))
             or (kind == "diagram" and ":" in value and value.partition(":")[2] not in (*DIAGRAM_INSTALLS, "all"))):
@@ -1196,6 +1196,11 @@ def install_extra(kind: str, assume_yes: bool = False) -> bool:
         from .catalogue import table
         print(table())
         return True
+    group, _, source = kind.partition(":")
+    if group in ("template", "csl"):
+        from .styles import install_style
+
+        return install_style(group, source, assume_yes)
     if kind == "kit" or kind.startswith("kit:"):
         return install_kits(kind.partition(":")[2], assume_yes)
     if kind in ("full", "core", "core:typst"):

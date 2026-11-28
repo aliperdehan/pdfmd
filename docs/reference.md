@@ -2149,6 +2149,31 @@ build used. The default is off, including when bundling the source.
 `--no-attach-template` overrides the setting for one build. An attached
 template from outside the project is restored below `templates/`.
 
+### Installing a pinned template or citation style
+
+Use `--install template:SOURCE` for a pandoc-templates.org index ID, a GitHub
+`owner/repo` or a direct HTTP(S) asset link. Use `--install csl:SOURCE` for a
+name from the Citation Style Language styles repository, a GitHub repository
+or a style link (including Zotero). A repository selector accepts `@REVISION`
+and needs `#ASSET-PATH` when several assets match. Quote selectors containing
+`#` in the shell.
+
+pdfmd shows the source, revision and licence before accepting the asset.
+A GitHub asset is fetched at its resolved commit. For other URLs the content
+SHA-256 identifies the downloaded version. The file or repository must
+declare a licence. Use `--yes` to approve from a non-interactive session.
+The installer fetches the selected file. Supply any additional template
+files the writer needs separately.
+
+Use the same SOURCE in `--template SOURCE`, `pdfmd-options.template`, `--csl SOURCE`
+or `csl: SOURCE`, or pass the local file reported by the installer. The
+normal build reads the pinned file without contacting the source. Repeat
+`--install` to request a refresh. Existing local paths take precedence.
+Templates are kept in the config's `templates/installed/` folder.
+CSL pins share the `csl/` cache directory and are removed by `--clear-cache`.
+A `csl:` URL used without an explicit install keeps the regular 30-day
+refresh and offline fallback.
+
 ## Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block
 
 --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/

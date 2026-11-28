@@ -567,7 +567,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "With .hst history on, changes of the automatic "
                              "reader warn; an explicit --from or pdfmd-options reader never warns")
     parser.add_argument("--install", nargs="?", const="", type=core.install_kind, metavar="KIND",
-                        help="alone: list every kind, size, source, target and removal; with KIND, install an optional piece for pdfmd to use: 'pandoc' (the real Pandoc from "
+                        help="alone: list every kind, size, source, target and removal; with KIND, install an optional piece for pdfmd to use. "
+                             "Use template:SOURCE (an index name, GitHub repository or URL) or csl:SOURCE (a CSL name or URL). "
+                             "Append #ASSET-PATH if several assets match. Repeat --install to refresh a pinned copy. "
+                             "Other kinds are 'pandoc' (the real Pandoc from "
                              "PyPI's pypandoc_binary, about 35 MB), 'typst' (Typst's release binary from "
                              "GitHub, into pdfmd's own tools folder), 'core' (also 'core:typst' and 'full': Pandoc, Typst and fonts:core, "
                              "about 58 MB, a complete Markdown-to-PDF setup with no admin rights), 'math' (md2pdf with offline math, about 150 MB, "
@@ -662,7 +665,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--remove-from-path", action="store_true", help="the same as --user-path remove")
     parser.add_argument("--show-user-path", action="store_true", help="the same as --user-path show")
     parser.add_argument("--yes", action="store_true",
-                        help="with --user-path (or --add-to-path, --remove-from-path): do not ask first")
+                        help="with --user-path, or --install for a kit, template or CSL style: approve without asking")
     parser.add_argument("--init", nargs="?", const="", metavar="TEMPLATE",
                         help="start a new document from a template: `pdfmd --init article paper` makes the folder paper/ "
                              "(a template that is one file makes paper.md) with the title, author and date filled in "

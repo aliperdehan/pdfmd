@@ -59,6 +59,7 @@ Word or OpenDocument file that follows its page setup, fonts and LaTeX (see
   - [A book or report from several files](#a-book-or-report-from-several-files)
   - [One long document in several files](#one-long-document-in-several-files)
   - [Tables straight from a CSV file](#tables-straight-from-a-csv-file)
+  - [Project Pandoc templates and citation styles](#project-pandoc-templates-and-citation-styles)
   - [One style sheet for the page: `--css`, `pdfmd.css`, `css-scope`](#one-style-sheet-for-the-page---css-pdfmdcss-css-scope)
   - [A cover: `cover`](#a-cover-cover)
   - [Code: wrapping and line numbers](#code-wrapping-and-line-numbers)
@@ -2628,6 +2629,12 @@ A PDF uses the writer of its engine, for example `template.latex`,
 `--verbose` shows the winner. Use `--no-auto template` or `--no-auto csl` to
 disable either search. With `--attach-source`, opt in to carrying the local
 template with `--attach-template` or `pdfmd-options: {attach-template: true}`.
+
+Use `--install template:SOURCE` for a pandoc-templates.org name, a GitHub
+repository or an asset URL, and `--install csl:SOURCE` for a CSL name or link.
+Give `#ASSET-PATH` for a repository with several matches. After reviewing the
+source, revision and licence, use that same SOURCE with `--template` or
+`--csl`. Repeat the install command to refresh the pinned copy.
 
 ### One style sheet for the page: `--css`, `pdfmd.css`, `css-scope`
 

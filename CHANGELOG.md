@@ -19,6 +19,14 @@ same commit as the change.
 
 ---
 
+## v3.34.99 — 2026-11-28
+
+Pre-edit state: commit `9f380f5`. Templates needed a manual download and a CSL URL used the rolling cache.
+Install named templates and CSL styles explicitly, with an asset path when several files match. Display the source,
+revision and licence before saving the pin. A build reuses the pinned copy, and a repeated install can refresh
+it. Uninstalled CSL URLs keep the existing 30-day refresh and offline fallback. Regression tests use mocked
+downloads and exercise named pins through the checkout, ambiguous assets, provenance and a failed refresh.
+
 ## v3.34.98 — 2026-11-28
 
 Pre-edit state: commit `1db2eb4`. Pandoc templates had to be named, CSL styles were not discovered and an

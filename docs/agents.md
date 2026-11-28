@@ -106,6 +106,9 @@ Use `--page-numbers` when a cropped result should keep them.
 - A Lua filter, a preamble or a metadata file beside the document is used without being named (a new or edited Lua
   filter is said in a `NOTE`; `--strict` does not run one that is new). `--no-auto` turns the discovery off, one kind
   of it with `--no-auto lua` (or `preamble`, `yaml`, `margin` ...).
+- Fetch a named style explicitly with `--install template:SOURCE` or `--install csl:SOURCE`.
+  Use the same SOURCE in the build. The installer displays the revision and licence and
+  asks before saving. `--yes` approves the install. Repeat it to refresh the pin.
 - Pandoc builds also discover templates for the output writer, CSL styles and CSS. The project root
   precedes `templates/` and user config. An explicit path takes precedence. The corresponding switches
   are `--no-auto template`, `--no-auto csl` and `--no-auto css`. Use `--attach-template` with `--attach-source`

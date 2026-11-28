@@ -327,8 +327,8 @@ def _run(core, *, records,
                     for metadata_file in prepared_metadata:
                         cmd += ["--metadata-file", str(metadata_file)]
                 cmd += [*reference_args, *report_resource_path]
-                cmd += template_args(files[0], metadata_files, writer, output, pandoc_options,
-                                     pandoc_cwd, report_no_auto, args.verbose)
+                template = template_args(files[0], metadata_files, writer, output, pandoc_options,
+                                         pandoc_cwd, report_no_auto, args.verbose)
                 if is_tex_target:
                     # See convert_one's matching comment: no
                     # mainfontfallback here -- it's the Pandoc mechanism
@@ -375,14 +375,15 @@ def _run(core, *, records,
                         and "--citeproc" not in pandoc_options
                         and not core.CITEPROC_DISABLED):
                     cmd.append("--citeproc")
-                cmd += csl_args(
-                    list(files), metadata_files, pandoc_options, report_no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
                 cmd += core.fullcite_post_args(list(files), metadata_files, cmd, pandoc_options)      # after citeproc
                 cmd += core.bibliography_indent_args(list(files), metadata_files, cmd, pandoc_options, target_format)
                 # pandoc_options after --citeproc: see convert_one's
                 # matching comment.
                 cmd += report_office_arguments
                 cmd += pandoc_options
+                cmd += csl_args(
+                    list(files), metadata_files, pandoc_options, report_no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
+                cmd += template
                 apply_citation_aliases(cmd, files[0], metadata_files)
                 cmd += core.bibliography_spacing_args(files[0], metadata_files, cmd)
                 if report_fonts_filter is not None:
@@ -504,8 +505,8 @@ def _run(core, *, records,
                         for metadata_file in prepared_metadata:
                             cmd += ["--metadata-file", str(metadata_file)]
                     cmd += [*reference_args, *report_resource_path]
-                    cmd += template_args(files[0], metadata_files, pdf_writer(engine, False), output, pandoc_options,
-                                         pandoc_cwd, report_no_auto, args.verbose)
+                    template = template_args(files[0], metadata_files, pdf_writer(engine, False), output,
+                                             pandoc_options, pandoc_cwd, report_no_auto, args.verbose)
                     if geometry_needed and engine in LATEX_ENGINES:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                     elif margin_options and engine in LATEX_ENGINES:
@@ -539,13 +540,14 @@ def _run(core, *, records,
                             and "--citeproc" not in pandoc_options
                             and not core.CITEPROC_DISABLED):
                         cmd.append("--citeproc")
-                    cmd += csl_args(
-                        list(files), metadata_files, pandoc_options, report_no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
                     cmd += core.fullcite_post_args(list(files), metadata_files, cmd, pandoc_options)      # after citeproc
                     cmd += core.bibliography_indent_args(list(files), metadata_files, cmd, pandoc_options, engine)
                     # pandoc_options after --citeproc: see convert_one's
                     # matching comment.
                     cmd += pandoc_options
+                    cmd += csl_args(
+                        list(files), metadata_files, pandoc_options, report_no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
+                    cmd += template
                     apply_citation_aliases(cmd, files[0], metadata_files)
                     cmd += core.bibliography_spacing_args(files[0], metadata_files, cmd)
                     if engine in LATEX_ENGINES:

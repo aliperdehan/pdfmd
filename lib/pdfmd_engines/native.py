@@ -20,14 +20,14 @@ NATIVE_ALIASES = {"ink": "inkmd", "reportlab": "md2pdf", "pymd2pdf": "md2pdf", "
 
 
 # Kinds that are not pip packages (see install_typst), and the one that is both.
-INSTALL_KINDS = ("pandoc", "typst", "full", "core", "cortex", "math", "diagram", "calibre", "emoji", "batchocr", "fonts", "translit", "ocr", "tui", "kit")
+INSTALL_KINDS = ("pandoc", "typst", "full", "core", "cortex", "math", "diagram", "calibre", "emoji", "batchocr", "fonts", "translit", "ocr", "tui", "kit", "template", "csl")
 
 
 CORE_TYPST_SIZE = "Pandoc 35 MB, Typst 15 MB and fonts 8 MB (about 58 MB download)"
 CORE_TEX_SIZE = "Pandoc 35 MB, Tectonic 10 to 22 MB and fonts 8 MB (about 53 to 65 MB download)"
 
 
-INSTALL_SIZES = {"kit": "the repository you name", "tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
+INSTALL_SIZES = {"template": "one asset", "csl": "one style", "kit": "the repository you name", "tui": "about 1 MB", "translit": "about 3 MB", "ocr": "see `pdfmd --install ocr`", "fonts": "see `pdfmd --install fonts`", "emoji": "about 11 MB", "math": "about 150 MB", "pandoc": "about 35 MB download",
                  "typst": "about 15 MB download", "full": CORE_TYPST_SIZE,
                  "diagram": "about 22 MB: D2 17 MB, Graphviz 2 MB, resvg about 3 MB",
                  "diagram:resvg": "about 3 MB download",

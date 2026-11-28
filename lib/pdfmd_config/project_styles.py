@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from pdfmd_base import core
+from .installed_styles import pinned_style
 from .pandoc_defaults import custom_template, defaults_value, template_source
 
 WRITER_EXTENSIONS = {
@@ -104,6 +105,10 @@ def template_args(document: Path, metadata_files: list[Path], writer: str, outpu
         try:
             _, path = template_source(explicit, cwd, options, "." + extensions[0], local_only=True)
         except (OSError, ValueError):
+            if path := pinned_style("template", explicit):
+                core.BUILD["project-template"] = path
+                discovered("TEMPLATE", path, verbose)
+                return ["--template", str(path)]
             discovered("TEMPLATE", explicit, verbose)
         else:
             core.BUILD["project-template"] = path
@@ -116,7 +121,9 @@ def template_args(document: Path, metadata_files: list[Path], writer: str, outpu
         name = Path(named.strip()).expanduser()
         path = document.parent / name
         if not path.is_file():
-            raise SystemExit(f"{core.display_path(document)}: template {named!r} does not exist")
+            path = pinned_style("template", named.strip())
+            if path is None:
+                raise SystemExit(f"{core.display_path(document)}: template {named!r} does not exist")
         path = path.resolve()
     elif not core.discovery_disabled(no_auto, "template"):
         names = [f"{stem}.{extension}" for stem in (document.stem, "template") for extension in extensions]

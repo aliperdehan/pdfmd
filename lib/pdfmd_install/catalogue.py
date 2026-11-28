@@ -36,6 +36,8 @@ def table() -> str:
         "fonts": ("list; fonts:NAME downloads font releases (GitHub)", fonts, "--uninstall fonts:NAME"),
         "emoji": ("download: Noto colour emoji font (GitHub)", fonts, "--uninstall fonts:emoji"),
         "ocr": ("list; ocr:LANG downloads tessdata_fast (GitHub)", data + "/tessdata", "--uninstall ocr:LANG"),
+        "template": ("pandoc-templates.org, GitHub or a URL", "the config's templates/installed folder", "delete the named install folder"),
+        "csl": ("the CSL styles repository or a URL", "the cache's csl/installed folder", "delete the named install folder"),
         "kit": ("list; kit:SOURCE copies a local folder or downloads a git repository", "kits beside pdfmd config", "--uninstall kit:NAME"),
         "translit": ("pip: pypinyin, anyascii (PyPI)", "Python environment running pdfmd", "pip uninstall pypinyin anyascii"),
         "tui": ("pip: prompt_toolkit (PyPI)", "Python environment running pdfmd", "pip uninstall prompt_toolkit"),

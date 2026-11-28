@@ -84,7 +84,7 @@ FLAGS: dict[str, str | Omitted] = {
     "check_fonts": CMD, "show_config": CMD, "json": CMD, "text_to_markdown": "options.text-to-markdown",
     "setup": CMD, "disabled": Omitted("run", "uses switched-off features for one run"), "init_config": CMD, "uninstall": CMD, "init_reference": CMD, "completion": CMD, "init": CMD,
     "user_path": "user-path", "add_to_path": "user-path", "remove_from_path": "user-path", "show_user_path": "user-path",
-    "yes": Omitted("run", "answers the question of --user-path"),
+    "yes": Omitted("run", "approves the current --user-path or --install request"),
     "check": CMD, "check_source": CMD, "check_ignore": "options.check-ignore", "check_docx": CMD, "edit": CMD,
     "crop": "options.crop", "crop_pad": "options.crop-pad", "crop_ignore_bottom": "options.crop-ignore-bottom", "crop_page": "options.crop-page",
     "image_dpi": "options.image-dpi",

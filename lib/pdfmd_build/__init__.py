@@ -545,7 +545,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += core.table_keep_metadata(md_path, metadata_files)
                 pandoc_cwd = core.pandoc_working_directory(core.metadata_cwd(metadata_files, md_path.parent))
                 cmd += core.resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
-                cmd += template_args(md_path, metadata_files, writer, output, pandoc_options, pandoc_cwd, no_auto, verbose)
+                template = template_args(md_path, metadata_files, writer, output, pandoc_options, pandoc_cwd, no_auto, verbose)
                 if is_tex_target:
                     # Only the PDF path's FIRST attempt (PREFERRED_FONT, or an
                     # explicit font/document mainfont) is reproduced here --
@@ -622,8 +622,6 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                         cmd.append(f"--{citation_engine}")
                     else:
                         cmd.append("--citeproc")
-                cmd += core.csl_args(
-                    [md_path], metadata_files, pandoc_options, no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
                 cmd += core.fullcite_post_args(all_inputs or md_path, metadata_files, cmd, pandoc_options)   # after citeproc
                 cmd += core.bibliography_indent_args(all_inputs or md_path, metadata_files, cmd, pandoc_options, target_format)
                 # pandoc_options after the citation-engine flag above: a
@@ -634,6 +632,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += core.html_pandoc_args(md_path, metadata_files, pandoc_options, self_contained, note)
                 cmd += office_arguments
                 cmd += pandoc_options
+                cmd += core.csl_args(
+                    [md_path], metadata_files, pandoc_options, no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
+                cmd += template
                 apply_citation_aliases(cmd, md_path, metadata_files)
                 cmd += core.bibliography_spacing_args(md_path, metadata_files, cmd)
                 if is_tex_target:
@@ -843,8 +844,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += core.table_keep_metadata(md_path, metadata_files)
                     pandoc_cwd = core.pandoc_working_directory(core.metadata_cwd(metadata_files, md_path.parent))
                     cmd += core.resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
-                    cmd += template_args(md_path, metadata_files, pdf_writer(engine, presentation), output, pandoc_options,
-                                         pandoc_cwd, no_auto, verbose)
+                    template = template_args(md_path, metadata_files, pdf_writer(engine, presentation), output,
+                                             pandoc_options, pandoc_cwd, no_auto, verbose)
                     if presentation:
                         cmd += ["-t", "beamer"]
                         if slide_level is not None:
@@ -909,8 +910,6 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if (any_citations or (engine == "typst" and core.document_csl([md_path], metadata_files))) \
                             and "--citeproc" not in pandoc_options and not core.CITEPROC_DISABLED:
                         cmd.append("--citeproc")
-                    cmd += core.csl_args(
-                        [md_path], metadata_files, pandoc_options, no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
                     cmd += core.fullcite_post_args(all_inputs or md_path, metadata_files, cmd, pandoc_options)   # after citeproc
                     cmd += core.bibliography_indent_args(all_inputs or md_path, metadata_files, cmd, pandoc_options, engine)
                     # pandoc_options after --citeproc, same reason as below: a
@@ -922,6 +921,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     # on the actual pandoc command line. Confirmed via
                     # --verbose CMD output before this fix.)
                     cmd += pandoc_options
+                    cmd += core.csl_args(
+                        [md_path], metadata_files, pandoc_options, no_auto, citeproc="--citeproc" in cmd or "--citeproc" in pandoc_options)
+                    cmd += template
                     apply_citation_aliases(cmd, md_path, metadata_files)
                     cmd += core.bibliography_spacing_args(md_path, metadata_files, cmd)
                     if engine in core.LATEX_ENGINES:

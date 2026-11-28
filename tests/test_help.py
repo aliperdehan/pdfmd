@@ -144,6 +144,11 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("pdfmd-options.template", run("--help", "debug").stdout)
         self.assertIn("pdfmd-options.attach-template", run("--help", "source").stdout)
 
+    def test_pinned_styles_have_install_help(self):
+        text = " ".join(run("--help", "setup").stdout.split())
+        for phrase in ("template:SOURCE", "csl:SOURCE", "#ASSET-PATH", "refresh a pinned copy"):
+            self.assertIn(phrase, text)
+
     def test_csl_line_spacing_is_in_output_help(self):
         text = " ".join(re.sub(r"-\n\s+", "-", run("--help", "output").stdout).split())
         self.assertIn("bibliography-line-spacing", text)

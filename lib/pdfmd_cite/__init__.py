@@ -145,6 +145,10 @@ def fetch_csl(url: str) -> tuple[str | None, str]:
 
 def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | None:
     """The local file for a `csl:` URL (see above); None leaves the URL to Pandoc."""
+    from pdfmd_config.installed_styles import pinned_style
+
+    if installed := pinned_style("csl", url):
+        return installed
     name = Path(urllib.parse.urlparse(url).path).name or "style.csl"
     name = name if name.lower().endswith(".csl") else name + ".csl"
     folder = core.cache_root() / "csl"
@@ -188,6 +192,27 @@ def remote_csl(url: str, md_path: Path, metadata_files: list[Path]) -> Path | No
     return default
 
 
+def installed_csl(name: str, sources: list[Path], metadata_files: list[Path], options) -> Path | None:
+    """An explicitly installed CSL selector, unless the build can already read a local file of that name."""
+    from pdfmd_bibliography.sources import locate, resource_folders
+    from pdfmd_config.installed_styles import pinned_style
+    from pdfmd_config.pandoc_defaults import option_values
+
+    installed = pinned_style("csl", name)
+    if installed is None or name.startswith(("http://", "https://")):
+        return installed
+    folders = resource_folders(sources, metadata_files)
+    cwd = core.metadata_cwd(metadata_files, sources[0].parent)
+    if paths := option_values(options, "--resource-path"):
+        folders = [cwd / path for path in paths[-1].split(os.pathsep)]
+    data_dirs = option_values(options, "--data-dir")
+    data_dir = cwd / data_dirs[-1] if data_dirs else core.pandoc_user_data_dir()
+    if data_dir is not None:
+        folders.extend((data_dir / "csl", data_dir))
+    names = (name,) if name.lower().endswith(".csl") else (name, name + ".csl")
+    return None if any(locate(value, folders).is_file() for value in names) else installed
+
+
 def csl_args(sources: list[Path], metadata_files: list[Path], pandoc_options: list[str],
              no_auto: list[str] | None, *, citeproc: bool = True) -> list[str]:
     """Select a plain path for the pdfmd-options alias or a remotely cached CSL style."""
@@ -212,6 +237,8 @@ def csl_args(sources: list[Path], metadata_files: list[Path], pandoc_options: li
     metadata, _ = metadata_command_layers(options)[0]
     cli_metadata = metadata.get("csl")
     root = root_csl(sources, metadata_files)
+    command_style = cli if cli is not None else cli_metadata
+    from_command = cli is not None or "csl" in metadata
     choices = [(key, value) for key, value in (("--csl", cli), ("command-line csl metadata", cli_metadata),
                                                ("pdfmd-options.csl", alias), ("root csl", root))
                if isinstance(value, str) and value]
@@ -234,11 +261,15 @@ def csl_args(sources: list[Path], metadata_files: list[Path], pandoc_options: li
                      if identity(other) != winner]
         if conflicts:
             emit("warning", None, f"WARN  {core.display_path(source)}: {key} {value!r} overrides {', '.join(conflicts)}", file=sys.stderr)
-    if cli is not None or "csl" in metadata:
-        if choices:
-            discovered("CSL", choices[0][1], core.VERBOSE_OUTPUT)
+    value = command_style if from_command else alias or root
+    if citeproc and isinstance(value, str) and value and (installed := installed_csl(value, sources, metadata_files, options)):
+        discovered("CSL", installed, core.VERBOSE_OUTPUT)
+        return ["--csl", str(installed)]
+    if from_command:
+        if isinstance(value, str) and value:
+            discovered("CSL", value, core.VERBOSE_OUTPUT)
         return []
-    if value := alias or root:
+    if value:
         if citeproc and re.match(r"^https?://", value, re.I) and not core.auto_disabled(no_auto, "remotecsl"):
             local = remote_csl(value, source, metadata_files)
             if local is not None:
@@ -246,13 +277,16 @@ def csl_args(sources: list[Path], metadata_files: list[Path], pandoc_options: li
                 return ["--csl", str(local)]
         discovered("CSL", value, core.VERBOSE_OUTPUT)
         return ["--csl", alias] if alias is not None else []
-    if citeproc and not core.discovery_disabled(no_auto, "csl"):
+    if citeproc:
         try:
             explicit = defaults_csl(source, metadata_files, options)
         except (OSError, ValueError, subprocess.SubprocessError):
             return []
         if explicit:
-            discovered("CSL", str(explicit), core.VERBOSE_OUTPUT)
+            if installed := installed_csl(explicit, sources, metadata_files, options):
+                discovered("CSL", installed, core.VERBOSE_OUTPUT)
+                return ["--csl", str(installed)]
+            discovered("CSL", explicit, core.VERBOSE_OUTPUT)
         elif local := local_csl(source, no_auto):
             discovered("CSL", local, core.VERBOSE_OUTPUT)
             return ["--csl", str(local)]
@@ -390,8 +424,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--metadata-file", str(metadata)]
             pandoc_cwd = core.pandoc_working_directory(core.metadata_cwd(metadata_files, md_path.parent))
             cmd += core.resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
-            cmd += template_args(md_path, metadata_files, "beamer" if presentation else "latex", output,
-                                 pandoc_options, pandoc_cwd, no_auto, verbose)
+            template = template_args(md_path, metadata_files, "beamer" if presentation else "latex", output,
+                                     pandoc_options, pandoc_cwd, no_auto, verbose)
             if presentation and slide_level is not None:
                 cmd += ["--slide-level=" + str(slide_level)]
             first_font = nativebib_font
@@ -411,6 +445,7 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
             if "--citeproc" in pandoc_options:
                 cmd += before_citeproc
             cmd += pandoc_options
+            cmd += template
             apply_citation_aliases(cmd, md_path, metadata_files)
             cmd += core.paragraph_spacing_latex_args(md_path, metadata_files)
             if preamble_files:

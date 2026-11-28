@@ -841,6 +841,8 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
     or after a Markdown output (--keep-source); ``output`` is the file they will belong to."""
     base = Path(os.path.abspath(base or md_path.parent))
     is_pdf = output.suffix.lower() == ".pdf"
+    if template is not None:
+        template = template.resolve()
     from .options import private_attach
     bundled = is_pdf and core.resolve_bundle(md_path, metadata_files) is not None
     shortcut = frozenset({"excerpts"}) if is_pdf and private_attach(md_path, metadata_files) else frozenset()

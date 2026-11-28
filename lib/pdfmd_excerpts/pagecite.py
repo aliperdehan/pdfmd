@@ -118,6 +118,9 @@ def style_settings(mode: str, sources: list[Path], metadata: list[Path], options
             pass  # Pandoc reports invalid defaults files.
     if not value:
         return ("page" if mode == "auto" else mode), "(", ")", False
+    from pdfmd_cite import installed_csl
+
+    value = installed_csl(str(value), sources, metadata, options) or value
     # These are the same local search folders passed to Pandoc. An unreadable style falls back to a real citation.
     cwd = core.pandoc_working_directory(core.metadata_cwd(metadata, sources[0].parent))
     folders = [sources[0].parent, cwd]
