@@ -83,6 +83,14 @@ class Layers(Tree):
         self.assertIn("citation-aliases: 'book' is a bibliography key", done.stderr)
         self.assertIn("citation-aliases: 'gone' targets missing key 'missing'", done.stderr)
 
+        quiet = self.run_pdfmd("--no-citeproc", "--citeproc", "--chatter", "result", "--log", "aliases.log")
+        self.assertEqual(quiet.returncode, 0, quiet.stdout + quiet.stderr)
+        transcript = (self.doc / "aliases.log").read_text(encoding="utf-8")
+        for message in ("citation-aliases: 'book' is a bibliography key",
+                        "citation-aliases: 'gone' targets missing key 'missing'"):
+            self.assertNotIn(message, quiet.stderr)
+            self.assertEqual(transcript.count(message), 1)
+
     def test_citation_alias_target_can_be_found_by_bibliography_discovery(self):
         self.bib("sources.bib", "long-key", "Discovered Book")
         self.write("d.md", "---\npdfmd-options: {citation-aliases: {short: long-key}}\n---\n[@short]\n")

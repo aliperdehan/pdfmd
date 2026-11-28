@@ -1055,12 +1055,12 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
             records = "no excerpt records travel inside the PDF"
         emit("note", None, f"NOTE  {'source bundle' if bundled else 'attached source'}: {note}. {records}")
     kept = manifest.get("extras") or []
-    print(f"ATTACHED  {core.display_path(pdf_path)}: source of {core.display_path(md_path)}"
-          + (f" and {len(parts)} more" if report and parts else "")
-          + f" ({len(merged.splitlines())} lines, {note}"
-          + (f", plus {len(kept)} file{'s' if len(kept) != 1 else ''}, "
-             f"{sum(item['size'] for item in kept) / 1048576:.1f} MB" if kept else "")
-          + "); `pdfmd --restore` writes it back")
+    emit("normal", None, f"ATTACHED  {core.display_path(pdf_path)}: source of {core.display_path(md_path)}"
+         + (f" and {len(parts)} more" if report and parts else "")
+         + f" ({len(merged.splitlines())} lines, {note}"
+         + (f", plus {len(kept)} file{'s' if len(kept) != 1 else ''}, "
+            f"{sum(item['size'] for item in kept) / 1048576:.1f} MB" if kept else "")
+         + "); `pdfmd --restore` writes it back")
     stored = {item["path"] for item in kept}
     unstored = [image["path"] for image in manifest["images"] if image["path"] not in stored]
     if unstored:
@@ -1116,11 +1116,11 @@ def keep_source_after_success(md_path: Path, output: Path, parts: list[Path], me
               "the Markdown itself was written", file=sys.stderr)
         return
     kept = manifest.get("extras") or []
-    print(f"KEPT      {core.display_path(output)}: source of {core.display_path(md_path)}"
-          + (f" and {len(parts)} more" if parts else "")
-          + f" ({len(merged.splitlines())} lines, {held_comments_note(manifest, merged)}"
-          + (f", plus {len(kept)} file{'s' if len(kept) != 1 else ''}" if kept else "")
-          + f"; {mode}, {len(trailer) / 1024:.0f} KB); `pdfmd --restore {output.name}` writes it back")
+    emit("normal", None, f"KEPT      {core.display_path(output)}: source of {core.display_path(md_path)}"
+         + (f" and {len(parts)} more" if parts else "")
+         + f" ({len(merged.splitlines())} lines, {held_comments_note(manifest, merged)}"
+         + (f", plus {len(kept)} file{'s' if len(kept) != 1 else ''}" if kept else "")
+         + f"; {mode}, {len(trailer) / 1024:.0f} KB); `pdfmd --restore {output.name}` writes it back")
     if len(trailer.encode("utf-8")) > keep.WARN_BYTES:
         emit("warning", None, f"WARN  keep-source: the kept source is {len(trailer) / 1048576:.1f} MB; GitHub and some editors stop "
               "showing a Markdown file this large (--no-keep-source, or --attach-source on a PDF, keeps it out)",

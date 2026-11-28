@@ -115,10 +115,11 @@ def hybrid_after_success(path: Path, pdf_path: Path, metadata_files: list[Path],
             return
         data, extension = found
         if attach_hybrid(pdf_path, data, extension):
-            print(f"HYBRID    {core.display_path(pdf_path)}: carries {core.display_path(path)} as Original.{extension} "
-                  f"({len(data) // 1024 or 1} KB); LibreOffice opens the PDF as an editable document")
+            emit("normal", None, f"HYBRID    {core.display_path(pdf_path)}: carries {core.display_path(path)} as Original.{extension} "
+                 f"({len(data) // 1024 or 1} KB); LibreOffice opens the PDF as an editable document")
         else:
-            core.vprint(verbose, f"HYBRID    {core.display_path(pdf_path)}: already carries its OpenDocument source")
+            emit("verbose", None, f"HYBRID    {core.display_path(pdf_path)}: already carries its OpenDocument source",
+                 shown=verbose)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
         emit("warning", None, f"WARN  hybrid: could not attach the OpenDocument copy to {core.display_path(pdf_path)} ({error}); "
               "the PDF itself was built", file=sys.stderr)

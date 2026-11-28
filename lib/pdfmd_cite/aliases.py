@@ -48,7 +48,8 @@ def show_warnings(result):
     rest = []
     for line in result.stderr.splitlines(keepends=True):
         if line.startswith(prefix):
-            print(line.decode("utf-8", errors="replace").rstrip() if isinstance(line, bytes) else line.rstrip(), file=sys.stderr)
+            text = line.decode("utf-8", errors="replace") if isinstance(line, bytes) else line
+            emit("warning", None, text.rstrip(), file=sys.stderr)
         else:
             rest.append(line)
     result.stderr = prefix[:0].join(rest)

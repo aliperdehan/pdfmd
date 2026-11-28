@@ -754,7 +754,7 @@ def backup_after_success(md_path: Path, metadata_files: list[Path], cli_enabled:
         target = core.backup_target(backup_dir, template, md_path)
         shutil.copy2(md_path, target)
         if collect is None:
-            print(f"BACKUP  {core.display_path(target)}")
+            emit("normal", None, f"BACKUP  {core.display_path(target)}")
         else:
             collect.append(target)
         prunable.append(target)
@@ -799,7 +799,7 @@ def backup_pdf_after_success(md_path: Path, pdf: Path, metadata_files: list[Path
             target = backup_dir / f"{pdf.stem}_{stamp}-{counter}.pdf"
             counter += 1
         shutil.copy2(pdf, target)
-        print(f"BACKUP  {core.display_path(target)}")
+        emit("normal", None, f"BACKUP  {core.display_path(target)}")
         kept.append(target)
         if keep > 0 and len(kept) > keep:
             for old in kept[:-keep]:

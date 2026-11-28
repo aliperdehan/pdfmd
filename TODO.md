@@ -96,7 +96,7 @@ is low priority. [3di]
 
 - [ ] Coloured links on by default in LaTeX and Typst, with the other default flips; the `colorlinks` setup row is the opt-in until then [3fl D84]
 - [ ] **Documentation programme**: a reference generated from the code's own registries, an example for every feature built and checked in CI, a new README, `docs/recipes.md` retired into it; hosted from the repo (GitHub Pages, indexable) and bundled for `pdfmd --doc`; a layered README tested by a beginner on a clean machine; agent surfaces (task table, `--help` as JSON, `llms.txt` hosted); an audit of ambiguous names (one meaning per word, a test for collisions and aliases); feature pages carry the version added, fixed and last tested [3dg]
-- [ ] Extend event-log transcripts and layered summary settings to the remaining routes [3fi] [3bh]
+- [ ] Extend event-log transcripts and layered summaries to early-return routes (including standalone PDF export, split and check) and settle diagnostic ownership for watch, Word checks and PDF reading [3fi] [3bh]
 - [ ] Lean install: extras that survive their absence with one message and a CI leg for the core only; a separate core distribution (`pdfmd-cli` staying the full default) only if that leg shows a real saving [3dx N144]
 - [ ] Docs: a table of every install kind (pip or download, size, `--uninstall`, `--check-dependencies`), decided together with the lean install [3ei, 3dg, 3dx]
 - [ ] The pre-4.0 pass (code review, edge cases, documentation) reads pdfmd as an agent would, not only as a human: exit codes, output size, non-TTY, name guessing, untrusted documents; then tested with the author's local models on real tasks [3ff, 3dg]

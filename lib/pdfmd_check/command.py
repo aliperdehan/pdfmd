@@ -170,7 +170,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
         try:
             files, document = check_documents(target, args)
         except (FileNotFoundError, SystemExit) as error:
-            print(str(error), file=sys.stderr)
+            emit("error", None, str(error), file=sys.stderr)
             status = 1
             continue
         metadata_files = core.scaffold_metadata_files(document, args.metadata_file)
@@ -179,7 +179,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
                 ignore = check.parse_ignore(args.check_ignore) | check.parse_ignore(
                     core.first_pdfmd_option(document, metadata_files, "check-ignore"))
             except ValueError as error:
-                print(f"{core.display_path(document)}: {error}", file=sys.stderr)
+                emit("error", None, f"{core.display_path(document)}: {error}", file=sys.stderr)
                 status = 1
                 continue
             bibliography, missing = check_bibliography(document, metadata_files, args.variable or [], pandoc_options)
@@ -188,7 +188,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
                 try:
                     inputs.append((path, check.Source(core.display_path(path), path.parent, path.read_text(encoding="utf-8-sig"))))
                 except (OSError, UnicodeDecodeError) as error:
-                    print(f"{core.display_path(path)}: cannot read it ({error})", file=sys.stderr)
+                    emit("error", None, f"{core.display_path(path)}: cannot read it ({error})", file=sys.stderr)
                     status = 1
             folders = core.accessory_directories(document.parent, document.stem)
             limit = core.resolve_budget(document, metadata_files)[0]
@@ -197,7 +197,7 @@ def check_command(args, pandoc_options: list[str]) -> int:
                     inputs, document, metadata_files, pandoc_options, core.effective_no_auto(document, args.no_auto),
                     args.from_format)
             except ValueError as error:
-                print(f"{core.display_path(document)}: {error}", file=sys.stderr)
+                emit("error", None, f"{core.display_path(document)}: {error}", file=sys.stderr)
                 status = 1
                 continue
             from pdfmd_cite import numbered

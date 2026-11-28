@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.34.97 — 2026-11-28
+
+Pre-edit state: commit `d254d2a`. Assembly, embedding, attachments, backups, PDF
+finishing, splitting and watch progress bypassed chatter. Citation alias warnings
+and check lookup errors bypassed diagnostic counting. Route these messages through
+`emit` with their existing default wording and streams. Regression tests cover
+quiet merge transcripts, citation alias warnings and check errors, and guard the
+moved progress messages against direct printing. `pdfmd.py` remains 787 lines.
+
 ## v3.34.96 — 2026-11-28
 
 Pre-edit state: commit `5d83e24`. pdfmd gave no indication of which package manager owned the running

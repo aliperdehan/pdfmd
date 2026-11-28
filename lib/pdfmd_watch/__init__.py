@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 
 from pdfmd_base import core
+from pdfmd_log import emit, transcript
 
 
 def watch_signature(source: Path, outputs: set[Path] | None = None) -> tuple:
@@ -80,6 +81,7 @@ def pinned_watch_argv(argv: list[str], given: list | None, chosen: Path) -> list
     return argv
 
 
+@transcript.scope()
 def run_watch(source: Path, argv: list[str], args, default_target, scaffold_plan, section_plan) -> None:
     """Recompile ``source`` immediately, then again on each later change.
 
@@ -93,11 +95,11 @@ def run_watch(source: Path, argv: list[str], args, default_target, scaffold_plan
     matching every other part of pdfmd. The signature is re-snapshotted
     AFTER each recompile, so a --stamp write back into the source itself
     never falsely re-triggers another immediate recompile. The output file
-    is excluded from the snapshot.
+    is excluded from the snapshot. Each child owns its build transcript.
     """
     rerun_argv = [arg for arg in argv if arg not in ("-w", "--watch")]
     script = str(Path(core.__file__).resolve())
-    print(f"WATCH  {source}: watching {source.parent} for changes (Ctrl+C to stop)")
+    emit("normal", None, f"WATCH  {source}: watching {source.parent} for changes (Ctrl+C to stop)")
     try:
         while True:
             subprocess.run([sys.executable, script, *rerun_argv])
@@ -105,9 +107,9 @@ def run_watch(source: Path, argv: list[str], args, default_target, scaffold_plan
             signature = watch_signature(source, outputs)
             while watch_signature(source, outputs) == signature:
                 time.sleep(core.WATCH_INTERVAL)
-            print(f"WATCH  change detected, recompiling {source}...")
+            emit("normal", None, f"WATCH  change detected, recompiling {source}...")
     except KeyboardInterrupt:
-        print("\nWATCH  stopped")
+        emit("normal", None, "\nWATCH  stopped")
 
 
 WATCH_INTERVAL = 1.0

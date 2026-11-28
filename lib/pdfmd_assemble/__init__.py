@@ -206,8 +206,8 @@ def write_assembled_markdown(sources: list[Path], output: Path,
     text = assemble_markdown_text(sources, drop_later_front_matter, plan, partial, strip_comments,
                                   excerpt_state, metadata_files, excerpt_diagnostics=True)
     core.write_text_lf(output, text)
-    print(f"ASSEMBLED  {core.display_path(output)}  ({len(sources)} file{'s' if len(sources) != 1 else ''}, "
-          f"{len(text.splitlines())} lines)")
+    emit("normal", None, f"ASSEMBLED  {core.display_path(output)}  ({len(sources)} file{'s' if len(sources) != 1 else ''}, "
+         f"{len(text.splitlines())} lines)")
     return True, ""
 
 
@@ -1145,7 +1145,7 @@ def embed_into_text(text: str, first: Path, plan: EmbedPlan, partial: bool = Fal
     for problem in bib_problems:
         emit("warning", None, f"WARN  not embedded: {problem}", file=sys.stderr)
     summary += left_out
-    print("EMBEDDED  " + ("; ".join(summary) if summary else "nothing was found to embed"))
+    emit("normal", None, "EMBEDDED  " + ("; ".join(summary) if summary else "nothing was found to embed"))
     # What the text points at is not embedded: say which of it the file still needs.
     outside: list[str] = []
     for key in ("bibliography", "csl"):

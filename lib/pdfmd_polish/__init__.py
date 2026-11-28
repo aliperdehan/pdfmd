@@ -319,7 +319,7 @@ def polish_pdf(pdf_path: Path, sources: list[Path], verbose: bool = False) -> No
                 done.append("properties")
             core.atomic_write_pdf(writer, pdf_path)
         if done:
-            print(f"PDF   {core.display_path(pdf_path)}: " + ", ".join(done))
+            emit("normal", None, f"PDF   {core.display_path(pdf_path)}: " + ", ".join(done))
     except ValueError as error:
         emit("error", None, f"ERROR {error}", file=sys.stderr)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is already fine

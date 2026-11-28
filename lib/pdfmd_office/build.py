@@ -364,7 +364,7 @@ def check_docx_command(args, pandoc_options: list[str]) -> int:
         try:
             document = core.find_markdown(target)
         except FileNotFoundError as error:
-            print(str(error), file=sys.stderr)
+            emit("error", None, str(error), file=sys.stderr)
             status = 1
             continue
         with tempfile.TemporaryDirectory(prefix="pdfmd-check-") as scratch:

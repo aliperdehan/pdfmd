@@ -886,8 +886,8 @@ def split_into_parts(source: Path, destination: Path, depth: int = 1) -> int:
     original = pandoc_run(["pandoc", str(source), "-t", "native"], capture_output=True, encoding="utf-8", errors="replace")
     split = pandoc_run(["pandoc", str(scaffold), *map(str, written), "-t", "native"],
                            capture_output=True, encoding="utf-8", errors="replace")
-    print(f"SPLIT  {core.display_path(source)} -> {core.display_path(scaffold)} + {len(written)} parts in "
-          f"{core.display_path(parts_dir)}")
+    emit("normal", None, f"SPLIT  {core.display_path(source)} -> {core.display_path(scaffold)} + {len(written)} parts in "
+         f"{core.display_path(parts_dir)}")
     if original.returncode == 0 and original.stdout == split.stdout:
         emit("result", None, "OK     the parts read back as the identical document (Pandoc AST compared)")
         if not core.parts_setting(scaffold, core.scaffold_metadata_files(scaffold, None)):

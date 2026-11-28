@@ -1840,6 +1840,8 @@ citation, a LaTeX undefined reference), into a failed file: the output is kept, 
 same discovery and commands as `-v`, and `debug` adds engine failure diagnostics. The level leaves the exit status
 unchanged, including `--strict` failures. Set `options.chatter` in `--setup` or `pdfmd-options: {chatter: LEVEL}` in
 the document. The command line wins, then the document, its metadata, folder settings and global settings.
+Assembly, embedding, source attachments, backups, PDF finishing, splitting and watching show progress at
+`normal` and above. Citation alias warnings and check lookup errors count towards `--summary`.
 Use `-q` for `warnings`, `-qq` for `result` or `-qqq` for `off`. Repeated `-q` flags add up
 to a maximum of three. An explicit `--chatter LEVEL` wins over `-q`. Combining `-q` with
 `-v`/`--verbose` or `--debug` is a usage error (exit 2).
@@ -1856,6 +1858,7 @@ ISO time, input and output. The file is created if needed, and its parent folder
 Use `pdfmd-options: {log: FILE}` or the `options.log` row in `--setup` to set the path for a document.
 The precedence is the same as for `chatter`. Relative paths from settings are based at the document's
 folder. With `--log`, they are based at the current folder. Batch workers can append to the same file.
+With logging enabled, each watch rebuild appends its own transcript.
 
 `--summary` prints one line after the last build result, such as `2 warnings, 1 note`. It counts unmuted
 diagnostics, including those hidden by chatter and those from all workers in a batch. Zero counts are
