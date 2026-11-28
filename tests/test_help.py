@@ -140,6 +140,10 @@ class TieredHelp(unittest.TestCase):
         self.assertIn("Keeping excerpts in attached PDF source", text)
         self.assertIn("A PDF bundle keeps comments and excerpt records by default", text)
 
+    def test_template_discovery_and_attachment_have_help(self):
+        self.assertIn("pdfmd-options.template", run("--help", "debug").stdout)
+        self.assertIn("pdfmd-options.attach-template", run("--help", "source").stdout)
+
     def test_csl_line_spacing_is_in_output_help(self):
         text = " ".join(re.sub(r"-\n\s+", "-", run("--help", "output").stdout).split())
         self.assertIn("bibliography-line-spacing", text)

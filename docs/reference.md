@@ -1071,8 +1071,8 @@ from Markdown images, `<img>`, `file="..."` CSV tables, \includegraphics,
 \input, pgfplots tables, listings, and any word that is a relative file name
 naming a file that exists (so data reached by a project's own macros is found
 too); `--bundle all` every file in the document's folder except the output,
-hidden files and folders, .aux/.log and the like, and backups. It implies
---attach-source. An explicit PDF bundle keeps comments, hidden content and
+hidden files and folders, .aux/.log and the like, and backups. The PDF's template
+requires `--attach-template`. The bundle implies `--attach-source`. An explicit PDF bundle keeps comments, hidden content and
 excerpt records by default. It prints a NOTE naming what travels. A
 `strip-comments` setting or flag can still strip any of those kinds.
 `--bundle all` includes earlier PDFs carrying excerpt records when excerpts are kept.
@@ -2118,6 +2118,37 @@ of at least 1 to adjust the stretch factor (default 1.4). Both settings are avai
 (Pandoc 3.8.2 or newer), or put the attributes on a `.csv` div. `--no-auto tablewidth` disables the
 style. Tables rebuilt as `longtblr` by the cell-tag filter use tabularray's own spacing.
 
+## Project templates, CSL and CSS
+
+For a Pandoc build, use `--template FILE`, a Pandoc defaults file with a template, or
+`pdfmd-options: {template: FILE}` to select a template explicitly. A path in
+`pdfmd-options.template` is relative to the document. Otherwise pdfmd looks for
+`<name>.<writer>` and `template.<writer>`, where `<name>` is the document stem
+and `<writer>` is the Pandoc output writer. HTML5 also accepts `.html`.
+Use `<name>.html5` when exporting to `<name>.html`, so the template and output have different paths.
+For a PDF, the engine determines the writer, for example `.latex`, `.beamer`,
+`.context`, `.typst` or `.html5`. Office formats use reference documents.
+
+The project root is searched first, followed by its `templates/` directory and
+the user config directory (including its `templates/`). In each directory
+the document-specific name takes precedence. CSS can also fall back to the
+`metadata/` and `<name>.unpacked/` accessory directories.
+A report uses the first chapter's location and name.
+
+When citeproc needs a style, `<name>.csl` or `csl.csl` fills in an otherwise unset
+`csl`. CSS discovery checks `<name>.css` and `pdfmd.css` when no explicit style
+sheet is set. The `FOUND` summary names the discovered file and `--verbose`
+shows it on an `AUTO TEMPLATE`, `AUTO CSL` or `AUTO CSS` line.
+Use `--no-auto template`, `--no-auto csl` or `--no-auto css` to disable the
+corresponding search. The same kinds are available in `--setup` and
+`pdfmd-options.auto`.
+
+When attaching source to a PDF, add `--attach-template` or
+`pdfmd-options: {attach-template: true}` to include the local template the
+build used. The default is off, including when bundling the source.
+`--no-attach-template` overrides the setting for one build. An attached
+template from outside the project is restored below `templates/`.
+
 ## Suppressing pdfmd's own defaults, and the `pdfmd-options:` front-matter block
 
 --no-auto turns off the reader/title/margin/mainfont/monofont/tablewidth/
@@ -2128,7 +2159,7 @@ those. KIND is one of: reader, title, margin, mainfont, monofont, font
 (mainfont+monofont), tablewidth, standalone (the --to latex/beamer/
 context --standalone default), metadata/yaml (the auto-discovered
 --metadata-file), preamble/tex (auto-included preamble.tex etc.), lua
-(auto-included <stem>.lua/nulabreport.lua), files (metadata+preamble+
+(auto-included <stem>.lua/nulabreport.lua), template, csl, css, files (metadata+preamble+
 lua), texdirect (the v3.1.0 direct-.tex-compile path under "Input
 formats" above -- disabling it routes a .tex input back through Pandoc
 the old way), officedirect (the direct office-document-to-PDF path,

@@ -328,7 +328,7 @@ def office_reference_document(md_path: Path, metadata_files: list[Path], variabl
         house = str(options.get("style", "house")).casefold() != "plain"
         if target == "docx":
             from pdfmd_css.headings import stylesheet_headings
-            spec.css_headings = stylesheet_headings(md_path, metadata_files, no_auto)
+            spec.css_headings = stylesheet_headings(md_path, metadata_files, no_auto, pandoc_options)
     else:
         yield []
         return

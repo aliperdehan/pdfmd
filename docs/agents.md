@@ -106,6 +106,10 @@ Use `--page-numbers` when a cropped result should keep them.
 - A Lua filter, a preamble or a metadata file beside the document is used without being named (a new or edited Lua
   filter is said in a `NOTE`; `--strict` does not run one that is new). `--no-auto` turns the discovery off, one kind
   of it with `--no-auto lua` (or `preamble`, `yaml`, `margin` ...).
+- Pandoc builds also discover templates for the output writer, CSL styles and CSS. The project root
+  precedes `templates/` and user config. An explicit path takes precedence. The corresponding switches
+  are `--no-auto template`, `--no-auto csl` and `--no-auto css`. Use `--attach-template` with `--attach-source`
+  to carry the local template used for the PDF.
 
 Inline code in LaTeX builds can break after path and URL punctuation only to avoid overflowing the margin,
 without a printed hyphen. Headings keep unsplit code for PDF bookmarks. `--no-code-wrap`, `pdfmd-options: {code-wrap: false}` or `--no-auto codewrap` turns off

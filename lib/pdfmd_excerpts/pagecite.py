@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -100,7 +101,7 @@ def csl_choice(sources: list[Path], metadata: list[Path], options: list[str]) ->
     return value
 
 
-def style_settings(mode: str, sources: list[Path], metadata: list[Path], options: list[str]) -> tuple[str, str, str, bool]:
+def style_settings(mode: str, sources: list[Path], metadata: list[Path], options: list[str], no_auto=None) -> tuple[str, str, str, bool]:
     """(mode, opening, closing, dropped-for-no-locator). Follow citation macros, not unused bibliography macros."""
     from xml.etree import ElementTree as ET
 
@@ -108,6 +109,13 @@ def style_settings(mode: str, sources: list[Path], metadata: list[Path], options
     if mode == "auto" and native:
         return "style", "(", ")", False
     value = csl_choice(sources, metadata, options)
+    if value is None:
+        from pdfmd_config.project_styles import defaults_csl, local_csl
+
+        try:
+            value = defaults_csl(sources[0], metadata, options) or local_csl(sources[0], no_auto)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass  # Pandoc reports invalid defaults files.
     if not value:
         return ("page" if mode == "auto" else mode), "(", ")", False
     # These are the same local search folders passed to Pandoc. An unreadable style falls back to a real citation.
@@ -201,7 +209,7 @@ def filter_args(sources: Path | list[Path], metadata: list[Path], options: list[
     if shipped is None:
         core.pdfmd_lua_missing()
         return []
-    mode, opening, closing, dropped = style_settings(mode, files, metadata, options)
+    mode, opening, closing, dropped = style_settings(mode, files, metadata, options, no_auto)
     if dropped:
         emit("note", None, "NOTE  pagecite: citation style never prints a locator; dropping page markers", file=sys.stderr)
     # JSON metadata keeps literal punctuation and non-ASCII terms without Markdown smartening.

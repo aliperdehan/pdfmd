@@ -9,10 +9,10 @@ from . import first_family, length_points, translate
 from .latex import CSS_COLOURS, css_scope, css_sources
 
 
-def stylesheet_headings(document, metadata_files, no_auto):
+def stylesheet_headings(document, metadata_files, no_auto, pandoc_options=()):
     if css_scope(document, metadata_files) != "all":
         return {}
-    sheets = dict.fromkeys(path for group in css_sources(document, metadata_files, no_auto) for path in group)
+    sheets = dict.fromkeys(path for group in css_sources(document, metadata_files, no_auto, pandoc_options) for path in group)
     return translate("\n".join(path.read_text(encoding="utf-8", errors="replace") for path in sheets)).headings
 
 

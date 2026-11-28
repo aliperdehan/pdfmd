@@ -47,7 +47,7 @@ from __future__ import annotations
 # (2026-09-16, the author's call) as an honest baseline: this is where real
 # changelog tracking begins, not a claim about how many changes preceded it.
 
-PDFMD_VERSION = "3.34.97"
+PDFMD_VERSION = "3.34.98"
 import importlib.util
 import json  # noqa: F401 -- retained for the unchanged start-up module set (phase 2 move 17)
 import platform  # noqa: F401 -- preserve startup and the public module attribute
@@ -628,6 +628,7 @@ VERBOSE_OUTPUT = False
 
 # Command-line bibliography attachment mode override.
 BIB_ATTACH_CLI: str | None = None
+TEMPLATE_ATTACH_CLI: bool | None = None
 
 # --attach-csl / --no-attach-csl
 CSL_ATTACH_CLI: bool | None = None

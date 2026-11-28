@@ -19,6 +19,15 @@ same commit as the change.
 
 ---
 
+## v3.34.98 — 2026-11-28
+
+Pre-edit state: commit `1db2eb4`. Pandoc templates had to be named, CSL styles were not discovered and an
+automatically found CSS sheet could still apply when an explicit sheet was supplied. Select the output writer's
+template and fill in unset CSL and CSS from the project and user config, with document-specific names first
+within each directory. Show the winning paths and allow PDF source attachments to carry the template on request.
+One line in pdfmd.py carries the attachment override to batch workers. Regression tests exercise writer and
+directory precedence, explicit settings, reports, previous HTML exports and opt-in attachment.
+
 ## v3.34.97 — 2026-11-28
 
 Pre-edit state: commit `d254d2a`. Assembly, embedding, attachments, backups, PDF

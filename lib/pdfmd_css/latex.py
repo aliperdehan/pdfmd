@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -31,7 +32,7 @@ def css_names(value) -> list[str]:
             if str(item).strip()]
 
 
-def css_sources(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None
+def css_sources(md_path: Path, metadata_files: list[Path], no_auto: list[str] | None, pandoc_options=()
                 ) -> tuple[list[Path], list[Path], list[Path]]:
     """(found beside the document, named by `css:` of the front matter or a metadata file, named by pdfmd-options or the
     command line): each in the order the page reads them, files that exist only (a missing one is a WARN)."""
@@ -45,12 +46,6 @@ def css_sources(md_path: Path, metadata_files: list[Path], no_auto: list[str] | 
                 emit("warning", None, f"WARN  {origin}: the style sheet {name} was not found beside {core.display_path(md_path)}", file=sys.stderr)
         return found
 
-    beside: list[Path] = []
-    if not core.auto_disabled(no_auto, "css"):
-        for folder in core.accessory_directories(md_path.parent, md_path.stem):
-            for name in (f"{md_path.stem}.css", "pdfmd.css"):
-                if (folder / name).is_file() and (folder / name).resolve() not in beside:
-                    beside.append((folder / name).resolve())
     keys: list[str] = []
     for item in metadata_files:
         keys += css_names(core.metadata_file_yaml(item).get("css"))
@@ -59,15 +54,40 @@ def css_sources(md_path: Path, metadata_files: list[Path], no_auto: list[str] | 
     except (OSError, UnicodeDecodeError):                    # not a text file (a .docx is converted too)
         pass
     named = css_names(core.first_pdfmd_option(md_path, metadata_files, "css")) + [str(Path(item)) for item in core.CSS_CLI]
-    return beside, existing(keys, "css:"), existing(named, "pdfmd-options.css / --css")
+    from pdfmd_config.pandoc_defaults import defaults_value, option_values
+    from pdfmd_config.project_styles import find_style
+
+    paths = option_values(pandoc_options, "--css", "-c")
+    if not paths and option_values(pandoc_options, "--defaults", "-d"):
+        cwd = core.pandoc_working_directory(core.metadata_cwd(metadata_files, md_path.parent))
+        try:
+            paths = css_names(defaults_value("css", list(pandoc_options), cwd))
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return [], existing(keys, "css:"), existing(named, "pdfmd-options.css / --css")
+
+    beside: list[Path] = []
+    if not (keys or named or paths or css_names(core.html_settings(md_path, metadata_files).get("css"))
+            or core.discovery_disabled(no_auto, "css")):
+        path = find_style(md_path, (f"{md_path.stem}.css", "pdfmd.css"), accessories=True)
+        if path is not None:
+            beside.append(path)
+    # Pandoc gets the paths supplied in its own options directly. Include local
+    # ones among the sheets read for css-scope: all.
+    pandoc_sheets = [path for name in paths if (path := md_path.parent / name).is_file()]
+    return beside, [*existing(keys, "css:"), *pandoc_sheets], existing(named, "pdfmd-options.css / --css")
 
 
 def css_additions(md_path: Path, metadata_files: list[Path], variables: list[str], no_auto: list[str] | None,
-                  for_html: bool, note) -> tuple[list[str], list[str]]:
+                  for_html: bool, note, pandoc_options=()) -> tuple[list[str], list[str]]:
     """(Pandoc options, -V variables) the style sheets of a document add. The options are `--css FILE` for an HTML-family
     build, for the sheets Pandoc would not read itself (not `css:` of the metadata, which its template links). The
     variables are what `css-scope: all` finds in them that nothing of the document sets."""
-    beside, keyed, named = css_sources(md_path, metadata_files, no_auto)
+    beside, keyed, named = css_sources(md_path, metadata_files, no_auto, pandoc_options)
+    if beside or keyed or named:
+        from pdfmd_config.project_styles import discovered
+
+        for sheet in dict.fromkeys([*beside, *keyed, *named]):
+            discovered("CSS", sheet, core.VERBOSE_OUTPUT)
     options: list[str] = []
     if for_html:
         for path in dict.fromkeys([*beside, *named]):
@@ -188,12 +208,12 @@ def css_heading_latex(headings: dict[int, dict[str, str]], base_pt: float, say) 
 
 
 def css_heading_args(sources: Path | list[Path], metadata_files: list[Path], variables: list[str], no_auto: list[str] | None,
-                     note) -> list[str]:
+                     note, pandoc_options=()) -> list[str]:
     """`--include-in-header` for the headings of the style sheets of a LaTeX build (`css-scope: all`), or []."""
     files = sources if isinstance(sources, list) else [sources]
     if not files or css_scope(files[0], metadata_files) != "all":
         return []
-    sheets = list(dict.fromkeys(item for group in css_sources(files[0], metadata_files, no_auto) for item in group))
+    sheets = list(dict.fromkeys(item for group in css_sources(files[0], metadata_files, no_auto, pandoc_options) for item in group))
     if not sheets:
         return []
     try:

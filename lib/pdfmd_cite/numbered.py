@@ -265,7 +265,7 @@ class Plan:
         return ["--metadata-file", str(target)]
 
 
-def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reader=None, *, native=False):
+def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reader=None, *, native=False, no_auto=None):
     """Return (plan, diagnostic). A partial or ambiguous match leaves all input alone."""
     if not sources or any(source.suffix.lower() not in core.MARKDOWN_LIKE_SUFFIXES for source in sources):
         return None, None
@@ -330,15 +330,24 @@ def inspect(sources: list[Path], texts: list[str], metadata, arguments=(), reade
         return None, "numbered references left unchanged because the chosen reader does not parse citations"
     custom = bool(core.document_csl(sources, list(metadata)) or "csl" in cli
                   or any(option == "--csl" or option.startswith("--csl=") for option in arguments))
+    if not custom and not native:
+        from subprocess import SubprocessError
+
+        from pdfmd_config.project_styles import defaults_csl, local_csl
+
+        try:
+            custom = bool(defaults_csl(document, metadata, arguments) or local_csl(document, no_auto))
+        except (OSError, ValueError, SubprocessError):
+            pass  # Pandoc reports the defaults file error.
     return Plan(list(metadata), sources[last], entries, custom, separate), None
 
 
-def prepare(sources, metadata, arguments=(), reader=None, *, native_text=None):
+def prepare(sources, metadata, arguments=(), reader=None, *, native_text=None, no_auto=None):
     if native_text is None:
         texts = [core.read_text_best_effort(path) for path in sources]
     else:
         texts = [native_text]
-    plan, issue = inspect(sources, texts, metadata, arguments, reader, native=native_text is not None)
+    plan, issue = inspect(sources, texts, metadata, arguments, reader, native=native_text is not None, no_auto=no_auto)
     if issue and issue != CHECK:
         emit("warning", None, f"WARN  {core.display_path(sources[0])}: {issue}", file=sys.stderr)
     return plan

@@ -556,7 +556,7 @@ def title_filter_args(sources: Path | list[Path], metadata_files: list[Path], pa
 
     warning = []
     # Only audited defaults: a project filter or kit may print its own title block.
-    own = any(word in ("--template", "--defaults", "-d", "--lua-filter", "--filter")
+    own = core.BUILD.get("project-template") or any(word in ("--template", "--defaults", "-d", "--lua-filter", "--filter")
               or word.startswith(("--template=", "--defaults=", "--lua-filter=", "--filter=", "-d", "-L", "-F"))
               for word in pandoc_options or [])
     if not own and not core.active_kits(files[0], metadata_files, None) and not core.is_assembled_document(files[0]):

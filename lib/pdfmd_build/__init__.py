@@ -149,6 +149,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     # extra_inputs: parts-mode parts, joined to md_path (the scaffold) in one
     # Pandoc run -- see plan_scaffold(). partial: only some of them, so this
     # isn't the report itself and writes no BUILD NOTES stamp.
+    from pdfmd_config.project_styles import pdf_writer, template_args
     from pdfmd_tables.settings import writer_width_filter_args
 
     stamp_overrides = stamp_overrides or {}
@@ -168,13 +169,18 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
         noted.add((kind, detail))
         core.AUTO_LOG.record(kind, detail, verbose)
 
+    cli_no_auto = no_auto
+    no_auto = core.effective_no_auto(md_path, no_auto)
+    metadata_files = [metadata_file] if isinstance(metadata_file, Path) else list(metadata_file or [])
+    kit_kinds = core.kit_no_auto_kinds(md_path, metadata_files, no_auto)
+    if kit_kinds:
+        no_auto = core.effective_no_auto(md_path, cli_no_auto, kit_kinds)
     # the style sheets of the document (v3.28.41): linked for an HTML-family build, read for settings with css-scope: all
-    css_meta = [metadata_file] if isinstance(metadata_file, Path) else list(metadata_file or [])
     for layer_path, _ in core.folder_layer_files(str(md_path.resolve().parent)):        # the folder settings in force (v3.29.10)
         core.AUTO_LOG.record_file("SETTINGS", Path(layer_path), verbose)
     html_family = (target_format in core.HTML_TARGETS or target_format.startswith("epub")
                    or (target_format == "pdf" and any(item in core.ENGINE_GROUPS["html"] or item == "calibre" or item in core.BROWSER_ENGINES for item in engines)))
-    css_options, css_variables = core.css_additions(md_path, css_meta, variables, no_auto, html_family, note)
+    css_options, css_variables = core.css_additions(md_path, metadata_files, variables, no_auto, html_family, note, pandoc_options)
     if css_options or css_variables:
         pandoc_options = [*pandoc_options, *css_options]
         variables = [*variables, *css_variables]
@@ -185,12 +191,6 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
 
     from pdfmd_filters.lua import figure_fit_module
     figure_fit = figure_fit_module()
-    metadata_files = metadata_file if isinstance(metadata_file, list) else ([metadata_file] if metadata_file else [])
-    cli_no_auto = no_auto
-    no_auto = core.effective_no_auto(md_path, no_auto)
-    kit_kinds = core.kit_no_auto_kinds(md_path, metadata_files, no_auto)
-    if kit_kinds:
-        no_auto = core.effective_no_auto(md_path, cli_no_auto, kit_kinds)
     output_extension = core.output_extension_for(target_format, md_path)
     output = output_file or (
         (out_dir / f"{md_path.stem}{output_extension}") if out_dir else md_path.with_suffix(output_extension)
@@ -390,7 +390,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
     from pdfmd_obsidian.links import linked_inputs
     from pdfmd_tables.prepass import table_colons, table_repair, table_source
 
-    references = numbered.prepare([md_path, *parts_inputs], metadata_files, pandoc_options, from_format)
+    references = numbered.prepare([md_path, *parts_inputs], metadata_files, pandoc_options, from_format, no_auto=no_auto)
     numbered_citations = references is not None and not references.separate
     numbered_source = numbered_citations and target_format == "markdown"
     if numbered_citations:
@@ -545,6 +545,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 cmd += core.table_keep_metadata(md_path, metadata_files)
                 pandoc_cwd = core.pandoc_working_directory(core.metadata_cwd(metadata_files, md_path.parent))
                 cmd += core.resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
+                cmd += template_args(md_path, metadata_files, writer, output, pandoc_options, pandoc_cwd, no_auto, verbose)
                 if is_tex_target:
                     # Only the PDF path's FIRST attempt (PREFERRED_FONT, or an
                     # explicit font/document mainfont) is reproduced here --
@@ -638,9 +639,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 if is_tex_target:
                     cmd += core.tex_package_args([md_path, *parts_inputs], no_auto, note)
                     cmd += core.paragraph_spacing_latex_args([md_path, *parts_inputs], metadata_files)
-                    cmd += core.css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
-                    cmd += core.cover_header_args([md_path, *parts_inputs], css_meta)
-                    cmd += core.markup_header_args([md_path, *parts_inputs], css_meta, cmd)
+                    cmd += core.css_heading_args([md_path, *parts_inputs], metadata_files, variables, no_auto, note, pandoc_options)
+                    cmd += core.cover_header_args([md_path, *parts_inputs], metadata_files)
+                    cmd += core.markup_header_args([md_path, *parts_inputs], metadata_files, cmd)
                     cmd += core.slide_notes_args([md_path, *parts_inputs], metadata_files, target_format == "beamer")
                 if fonts_filter is not None:
                     cmd += ["--lua-filter", str(fonts_filter)]  # before table-width: it renders cells to LaTeX
@@ -785,6 +786,7 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                 emit("normal", None, f"SKIP  {md_path}: {pdfmd_install.typst_too_old()}", file=sys.stderr)
                 continue
             if engine == "soffice":
+                core.BUILD.pop("project-template", None)
                 # Not a real Pandoc --pdf-engine -- see convert_via_soffice_bridge's
                 # own docstring for why this is special-cased here instead.
                 ok, reason = core.convert_via_soffice_bridge(md_path, output, effective_from, metadata_files,
@@ -841,6 +843,8 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     cmd += core.table_keep_metadata(md_path, metadata_files)
                     pandoc_cwd = core.pandoc_working_directory(core.metadata_cwd(metadata_files, md_path.parent))
                     cmd += core.resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
+                    cmd += template_args(md_path, metadata_files, pdf_writer(engine, presentation), output, pandoc_options,
+                                         pandoc_cwd, no_auto, verbose)
                     if presentation:
                         cmd += ["-t", "beamer"]
                         if slide_level is not None:
@@ -923,9 +927,9 @@ def _convert_one_core(md_path: Path, out_dir: Path | None, presentation: bool, f
                     if engine in core.LATEX_ENGINES:
                         cmd += core.tex_package_args([md_path, *parts_inputs], no_auto, note)
                         cmd += core.paragraph_spacing_latex_args([md_path, *parts_inputs], metadata_files)
-                        cmd += core.css_heading_args([md_path, *parts_inputs], css_meta, variables, no_auto, note)
-                        cmd += core.cover_header_args([md_path, *parts_inputs], css_meta)
-                        cmd += core.markup_header_args([md_path, *parts_inputs], css_meta, cmd)
+                        cmd += core.css_heading_args([md_path, *parts_inputs], metadata_files, variables, no_auto, note, pandoc_options)
+                        cmd += core.cover_header_args([md_path, *parts_inputs], metadata_files)
+                        cmd += core.markup_header_args([md_path, *parts_inputs], metadata_files, cmd)
                         cmd += core.slide_notes_args([md_path, *parts_inputs], metadata_files, bool(presentation))
                     # Lua filters go last: pandoc applies --citeproc and filters in
                     # command-line order, and a filter that renders cell contents to
@@ -1090,6 +1094,7 @@ def set_soffice_limit(md_path: Path, metadata_files: list[Path]) -> None:
 def convert_one(md_path: Path, *args, export=None, **kwargs) -> "Built":  # noqa: F821 -- quoted, never evaluated: pdfmd.py's Built
     """_convert_one_recorded, with the engine that built the file and --strict (see the section above)."""
     core.BUILD["engine"], core.BUILD["failed"], core.BUILD["output"], core.BUILD["sources"], core.BUILD["partial"], core.BUILD["root"] = None, [], None, [], None, None
+    core.BUILD.pop("project-template", None)
     core.BUILD.pop("bibliography-discovery", None)
     core.BUILD.pop("bibliography-warnings", None)
     history_record = core.load_package("pdfmd_history.record")
@@ -1358,7 +1363,8 @@ def _convert_one_recorded(md_path: Path, out_dir: Path | None, presentation: boo
             core.attach_source_after_success(md_path, produced, list(extra_inputs or []), metadata_files,
                                         preamble_files, core.effective_no_auto(md_path, no_auto), verbose,
                                         report=bool(core.REPORT_BUILD), base=core.REPORT_BUILD.get("base"),
-                                        named_reader=from_format, pandoc_options=pandoc_options)
+                                        named_reader=from_format, pandoc_options=pandoc_options,
+                                        template=core.BUILD.get("project-template"))
         if (target_format in core.MARKDOWN_TARGETS and source_override is None and not partial
                 and md_path.suffix.lower() in (".md", ".markdown")):
             keep_mode = core.resolve_keep_source(md_path, metadata_files)

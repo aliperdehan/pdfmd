@@ -153,18 +153,20 @@ class Build(unittest.TestCase):
         out = self.run_pdfmd("--css-scope", "all", "--no-auto", "css")
         self.assertNotIn("papersize=letter", out)
 
-    def test_the_command_line_sheet_comes_last_and_html_links_what_it_is_given(self):
+    def test_explicit_sheets_keep_their_cascade_and_replace_discovery(self):
+        (self.root / "early.css").write_text("body { font-size: 10pt }\n", encoding="utf-8")
         (self.root / "late.css").write_text("body { font-size: 12pt }\n", encoding="utf-8")
-        out = self.run_pdfmd("--css-scope", "all", "--css", "late.css")
-        self.assertIn("fontsize=12pt", out)                              # after pdfmd.css's 11pt
+        out = self.run_pdfmd("--css-scope", "all", "--css", "early.css", "--css", "late.css")
+        self.assertIn("fontsize=12pt", out)
         html = subprocess.run([sys.executable, str(ROOT / "pdfmd.py"), "d.md", "--to", "html", "-o", "d.html", "--standalone",
-                               "--no-stamp", "--css", "late.css"], cwd=self.root, env=self.env, capture_output=True,
+                               "--no-stamp", "--css", "early.css", "--css", "late.css"], cwd=self.root, env=self.env, capture_output=True,
                               text=True, timeout=300)
         self.assertEqual(html.returncode, 0, html.stdout + html.stderr)
         page = (self.root / "d.html").read_text(encoding="utf-8")
         self.assertIn('href="', page)
         self.assertIn("late.css", page)
-        self.assertIn("pdfmd.css", page)
+        self.assertLess(page.index("early.css"), page.index("late.css"))
+        self.assertNotIn("pdfmd.css", page)
 
     def test_a_missing_sheet_is_a_warning_not_a_failure(self):
         (self.root / "d.md").write_text("---\ntitle: T\npdfmd-options:\n  css: nope.css\n---\n\nText.\n", encoding="utf-8")

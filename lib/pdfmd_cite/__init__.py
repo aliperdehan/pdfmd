@@ -193,6 +193,7 @@ def csl_args(sources: list[Path], metadata_files: list[Path], pandoc_options: li
     """Select a plain path for the pdfmd-options alias or a remotely cached CSL style."""
     from pdfmd_args import metadata_command_layers
     from pdfmd_bibliography import csl_option
+    from pdfmd_config.project_styles import defaults_csl, discovered, local_csl
 
     if not sources:
         return []
@@ -234,13 +235,28 @@ def csl_args(sources: list[Path], metadata_files: list[Path], pandoc_options: li
         if conflicts:
             emit("warning", None, f"WARN  {core.display_path(source)}: {key} {value!r} overrides {', '.join(conflicts)}", file=sys.stderr)
     if cli is not None or "csl" in metadata:
+        if choices:
+            discovered("CSL", choices[0][1], core.VERBOSE_OUTPUT)
         return []
-    value = alias or root
-    if citeproc and value and re.match(r"^https?://", value, re.I) and not core.auto_disabled(no_auto, "remotecsl"):
-        local = remote_csl(value, source, metadata_files)
-        if local is not None:
+    if value := alias or root:
+        if citeproc and re.match(r"^https?://", value, re.I) and not core.auto_disabled(no_auto, "remotecsl"):
+            local = remote_csl(value, source, metadata_files)
+            if local is not None:
+                discovered("CSL", local, core.VERBOSE_OUTPUT)
+                return ["--csl", str(local)]
+        discovered("CSL", value, core.VERBOSE_OUTPUT)
+        return ["--csl", alias] if alias is not None else []
+    if citeproc and not core.discovery_disabled(no_auto, "csl"):
+        try:
+            explicit = defaults_csl(source, metadata_files, options)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return []
+        if explicit:
+            discovered("CSL", str(explicit), core.VERBOSE_OUTPUT)
+        elif local := local_csl(source, no_auto):
+            discovered("CSL", local, core.VERBOSE_OUTPUT)
             return ["--csl", str(local)]
-    return ["--csl", alias] if alias is not None else []
+    return []
 
 
 BIB_ENTRY_START_RE = re.compile(r"^[ \t]*@[ \t]*([A-Za-z]+)[ \t]*([{(])", re.MULTILINE)
@@ -346,6 +362,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
     # unrelated way. prepared_latex_inputs()'s temp files never hit this
     # because they're only ever Pandoc INPUT (--metadata-file/a title
     # source) -- Pandoc has no concept of "jobname" to derive.
+    from pdfmd_config.project_styles import template_args
+
     def note(kind: str, detail: str) -> None:
         emit("verbose", kind, f"AUTO {kind}  {detail}", shown=verbose)
 
@@ -372,6 +390,8 @@ def convert_via_native_bibliography(md_path: Path, output: Path, effective_from:
                 cmd += ["--metadata-file", str(metadata)]
             pandoc_cwd = core.pandoc_working_directory(core.metadata_cwd(metadata_files, md_path.parent))
             cmd += core.resource_path_option(md_path.parent, pandoc_cwd, metadata_files)
+            cmd += template_args(md_path, metadata_files, "beamer" if presentation else "latex", output,
+                                 pandoc_options, pandoc_cwd, no_auto, verbose)
             if presentation and slide_level is not None:
                 cmd += ["--slide-level=" + str(slide_level)]
             first_font = nativebib_font

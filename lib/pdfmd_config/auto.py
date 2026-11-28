@@ -37,7 +37,7 @@ NO_AUTO_KINDS = frozenset({
     "papersize", "parts", "lookup", "unicode", "officeref", "officestyle", "officelatex", "officeprofile",
     "codewrap", "typstdirect", "htmldirect", "svg", "remoteimages", "pdfimages", "diagrams", "texpackages",
     "smiles", "draftpictures", "remotecsl", "mathfont", "css", "mathjax", "kit", "kpsewhich",
-    "priority", "bib", "pagecite", "excerpts",
+    "priority", "bib", "pagecite", "excerpts", "template", "csl",
 })
 
 
@@ -89,7 +89,7 @@ def accessory_directories(directory: Path, stem: str | None = None) -> list[Path
 EXPLICIT_PREFIX = "explicit:"
 
 
-EXPLICIT_KINDS = frozenset({"lua", "preamble", "tex", "metadata", "yaml", "files", "bib"})
+EXPLICIT_KINDS = frozenset({"lua", "preamble", "tex", "metadata", "yaml", "files", "bib", "template", "csl", "css"})
 
 
 AUTO_STATES = {"on": "on", "true": "on", "yes": "on", "off": "off", "false": "off", "no": "off",
@@ -111,11 +111,11 @@ def discovery_disabled(no_auto: list[str] | None, kind: str) -> bool:
     return False
 
 
-CODE_KINDS = frozenset({"lua", "preamble"})
+CODE_KINDS = frozenset({"lua", "preamble", "template"})
 
 
 def folder_auto_safe(options: dict, where: str) -> dict:
-    """A folder's `auto:` without the `on` of a kind that finds code (lua, preamble, and the aliases files and tex that cover them):
+    """A folder's `auto:` without the `on` of a kind that finds code (Lua, preambles or templates):
     a folder you did not write must not run what you switched off in your config or your document. Off and explicit-only,
     which only tighten, stay."""
     mapping = options.get("auto")

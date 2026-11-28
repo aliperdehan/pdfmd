@@ -28,7 +28,7 @@ TOPICS: dict[str, tuple[str, tuple[str, ...]]] = {
     "source": ("a PDF that carries its source, an assembled single file, comments", (
         "--stop-at", "--assemble-only", "--merge", "--embed-metadata", "--no-embed-metadata", "--lua-mode", "--strip-comments",
         "--keep-comments", "--strip-comments-in", "--keep-comments-in", "--attach-bibliography", "--attach-csl", "--attach-source",
-        "--no-attach-source", "--no-attach-csl", "--bundle", "--bundle-packages", "--no-bundle", "--restore", "--list", "--unpack",
+        "--no-attach-source", "--no-attach-csl", "--attach-template", "--no-attach-template", "--bundle", "--bundle-packages", "--no-bundle", "--restore", "--list", "--unpack",
         "--slim", "--trust-embedded", "--hybrid", "--check-source")),
     "tables": ("CSV, widths and spacing", (
         "--extract-tables", "--extract-inline-csv", "--expand-tables", "--csv", "--no-csv", "--csv-rows", "--csv-cols", "--csv-note", "--table-keep", "--table-numbers", "--table-names",

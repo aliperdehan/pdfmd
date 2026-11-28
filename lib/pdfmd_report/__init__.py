@@ -160,7 +160,10 @@ def _run(core, *, records,
                     chapters=report_chapters, notes=title_notes, output=output, log_path=log_path, export=export)
         return
     transcript.CURRENT.get().start(log_path, files[0], output)
+    from pdfmd_config.project_styles import pdf_writer, template_args
+
     BUILD.update(engine=None, failed=[], tried=[], chain=None, repaired=[], output=None)
+    BUILD.pop("project-template", None)
     history_record = core.load_package("pdfmd_history.record")
     history_record.begin_history()
     begin_timer()
@@ -225,13 +228,21 @@ def _run(core, *, records,
         any_citations = any(contains_citations(file, metadata_files) for file in files)
     from pdfmd_filters.lua import pre_citeproc_args
     before_citeproc = pre_citeproc_args(files[0], metadata_files, report_no_auto)
-    references = numbered.prepare(files, metadata_files, pandoc_options, args.from_format)
+    references = numbered.prepare(files, metadata_files, pandoc_options, args.from_format, no_auto=report_no_auto)
     numbered_citations = references is not None and not references.separate
     numbered_source = numbered_citations and target_format == "markdown"
     transform = references.rewrite if references else None
     if numbered_citations:
         report_from = numbered.reader_for(report_from)
     any_citations = any_citations or bool(before_citeproc) or numbered_citations
+    html_family = (target_format in HTML_TARGETS or target_format.startswith("epub")
+                   or (target_format == "pdf" and any(item in ENGINE_GROUPS["html"] or item == "calibre"
+                                                      or item in BROWSER_ENGINES for item in engines)))
+    css_options, css_variables = css_additions(files[0], metadata_files, variables, report_no_auto,
+                                                html_family, report_note, pandoc_options)
+    if css_options or css_variables:
+        pandoc_options = [*pandoc_options, *css_options]
+        variables = [*variables, *css_variables]
     from pdfmd_crop.build import prepare as prepare_crop
     with (document_filter_scope(), table_width_filter() as width_filter, csv_table_filter() as csv_filter,
           titles.Hidden() as hidden,
@@ -258,15 +269,6 @@ def _run(core, *, records,
                 if (report_pdf_meta_options["pdf_metadata"] and is_tex_target
                     and stamp_scope_matches(report_pdf_meta_options, output)) else None
             )
-            # the style sheets of the first file (v3.28.41), as _convert_one_core does for a document
-            css_options, css_variables = css_additions(
-                files[0], metadata_files, variables, report_no_auto,
-                target_format in HTML_TARGETS or target_format.startswith("epub")
-                or (target_format == "pdf" and any(item in ENGINE_GROUPS["html"] or item == "calibre" or item in BROWSER_ENGINES for item in engines)),
-                report_note)
-            if css_options or css_variables:
-                pandoc_options = [*pandoc_options, *css_options]
-                variables = [*variables, *css_variables]
             report_document_font = is_tex_target and has_mainfont(files[0], variables, metadata_files)
             report_mainfont_auto = is_tex_target and not auto_disabled(report_no_auto, "mainfont")
             report_standalone_auto = (is_tex_target and not auto_disabled(report_no_auto, "standalone")
@@ -325,6 +327,8 @@ def _run(core, *, records,
                     for metadata_file in prepared_metadata:
                         cmd += ["--metadata-file", str(metadata_file)]
                 cmd += [*reference_args, *report_resource_path]
+                cmd += template_args(files[0], metadata_files, writer, output, pandoc_options,
+                                     pandoc_cwd, report_no_auto, args.verbose)
                 if is_tex_target:
                     # See convert_one's matching comment: no
                     # mainfontfallback here -- it's the Pandoc mechanism
@@ -500,6 +504,8 @@ def _run(core, *, records,
                         for metadata_file in prepared_metadata:
                             cmd += ["--metadata-file", str(metadata_file)]
                     cmd += [*reference_args, *report_resource_path]
+                    cmd += template_args(files[0], metadata_files, pdf_writer(engine, False), output, pandoc_options,
+                                         pandoc_cwd, report_no_auto, args.verbose)
                     if geometry_needed and engine in LATEX_ENGINES:
                         cmd += ["-V", f"geometry:margin={DEFAULT_MARGIN}"]
                     elif margin_options and engine in LATEX_ENGINES:
@@ -545,7 +551,7 @@ def _run(core, *, records,
                     if engine in LATEX_ENGINES:
                         cmd += tex_package_args(files, report_no_auto, report_note)
                         cmd += core.paragraph_spacing_latex_args(list(files), metadata_files)
-                        cmd += css_heading_args(list(files), metadata_files, variables, report_no_auto, report_note)
+                        cmd += css_heading_args(list(files), metadata_files, variables, report_no_auto, report_note, pandoc_options)
                         cmd += cover_header_args(list(files), metadata_files)
                         cmd += markup_header_args(list(files), metadata_files, cmd)
                     if report_fonts_filter is not None:
@@ -658,7 +664,8 @@ def _run(core, *, records,
             attach_source_after_success(
                 files[0], output, list(files[1:]), metadata_files, list(stamp_preambles), report_no_auto,
                 args.verbose, report=True,
-                base=report_common_folder(files), named_reader=args.from_format, pandoc_options=pandoc_options)
+                base=report_common_folder(files), named_reader=args.from_format, pandoc_options=pandoc_options,
+                template=BUILD.get("project-template"))
         if export:
             try:
                 output = export.finish(output, destination, files[0], metadata_files)

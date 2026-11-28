@@ -835,7 +835,7 @@ def strip_bundled_file(name: str, data: bytes, strip: frozenset[str], detach_mar
 def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_files: list[Path],
                        preamble_files: list[Path] | None, no_auto: list[str] | None,
                        report: bool = False, base: Path | None = None, named_reader=None,
-                       pandoc_options=()) -> tuple[dict[str, bytes], str, dict]:
+                       pandoc_options=(), *, template: Path | None = None) -> tuple[dict[str, bytes], str, dict]:
     """The files a build's source is kept as -- the assembled Markdown, a manifest of the layout, the data and
     bundled files -- as {name: bytes}, with the merged text and the manifest. They go into a PDF (--attach-source)
     or after a Markdown output (--keep-source); ``output`` is the file they will belong to."""
@@ -891,6 +891,8 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
                                       manifest["data_files"], base, pictures, bundle_reach(base), metadata_files)
         core.add_calc_constants(md_path, metadata_files, base, represented, found, outside)
         core.drop_calc_export(md_path, [md_path, *parts], metadata_files, found, outside)
+        if template is not None:
+            found = [path for path in found if path.resolve() != template]
         if strip_bundle_excerpts:
             found = [path for path in found if not exclude(path)]
         up = next((count for count in (1, 2) if all(item.is_relative_to(base.parents[count - 1])
@@ -952,6 +954,20 @@ def source_attachments(md_path: Path, output: Path, parts: list[Path], metadata_
             for place in block_places(block):
                 if place not in extras and place in inline_candidates({place: block["bytes"]}):
                     extras[place] = block["bytes"]
+    if template is not None:
+        resolved_base = base.resolve()
+        if template.is_relative_to(resolved_base):
+            name = template.relative_to(resolved_base).as_posix()
+            extras.pop(name, None)
+            origins.pop(name, None)
+        else:
+            name = f"templates/{template.name}"
+        attach = core.TEMPLATE_ATTACH_CLI
+        if attach is None:
+            attach = core.option_flag(core.first_pdfmd_option(md_path, metadata_files, "attach-template"))
+        if is_pdf and attach and not exclude(template):
+            extras[name] = template.read_bytes()
+            origins[name] = "template"
     if bundled and strip:
         def detach_markers(text):
             from pdfmd_excerpts.detach import rewrite
@@ -1023,7 +1039,7 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
                                 metadata_files: list[Path], preamble_files: list[Path] | None,
                                 no_auto: list[str] | None, verbose: bool,
                                 report: bool = False, base: Path | None = None,
-                                named_reader=None, pandoc_options=()) -> None:
+                                named_reader=None, pandoc_options=(), *, template: Path | None = None) -> None:
     """--attach-source: put the document's source into the PDF just built. ``report``: the
     files are the chapters of a -r/--report build; ``base`` the folder their layout is relative to."""
     if pdf_path.suffix.lower() != ".pdf" or not pdf_path.is_file():
@@ -1035,7 +1051,7 @@ def attach_source_after_success(md_path: Path, pdf_path: Path, parts: list[Path]
     base = Path(os.path.abspath(base or md_path.parent))
     try:
         attachments, merged, manifest = source_attachments(md_path, pdf_path, parts, metadata_files, preamble_files, no_auto,
-                                                           report, base, named_reader, pandoc_options)
+                                                           report, base, named_reader, pandoc_options, template=template)
         write_pdf_attachments(pdf_path, attachments)
     except Exception as error:  # noqa: BLE001 -- the PDF itself is fine; say so and carry on
         emit("warning", None, f"WARN  attach-source: could not attach the source to {core.display_path(pdf_path)} ({error}); "

@@ -35,7 +35,6 @@ wait for an answer before any code.
 - [ ] Agent-friendly pdfmd, low priority (when there is spare time): stale PDF after a failed build, `--explain CODE`, `--help agent`, a `--json` result shared with `--api` and `--doctor --json`, `--profile agent` (no guessing, no fallback, per-code `--strict`, tiny output), `--fix`, raw TeX and front matter under `--security`, a tool schema or MCP front-end last; exit code 3 for "degraded" is the author's call [3ff, 3fk]
 - [ ] Pandoc-gap audit: the user guide's "does not" sentences and closed won't-fix requests, each marked done / worth doing / refused; before the Eisvogel line [3dk]
 - [ ] Eisvogel LaTeX template: a bundled pinned copy with its licence, `--install eisvogel` for the latest, a `template` key; LaTeX only [3dk]
-- [ ] Discover more project files without a flag: `template.<ext>` or `<name>.<ext>` per output format, `templates/`, CSL, CSS; templates are an auto kind and an attach-source kind (off by default) [3dl]
 - [ ] `table-keep` by height: keep a short table whole when it is under `table-keep-height` of a page (default 25%), plus orphan control; mechanics unspiked [3dl]
 - [ ] Fetch templates (pandoc-templates.org index, `owner/repo`, URL) and CSL styles by name or link, cached; generalises the Eisvogel line [3dl]
 - [ ] Term-paper gaps: decide the backend and dictionary for opt-in en-GB/en-US spelling [N123]

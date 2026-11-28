@@ -208,6 +208,7 @@ def _run_main(tools, document_tools) -> None:
     core.KEEP_KINDS_CLI = core.comment_kind_set(args.keep_comments_in)
     core.BIB_ATTACH_CLI = args.attach_bibliography
     core.CSL_ATTACH_CLI = args.attach_csl
+    core.TEMPLATE_ATTACH_CLI = args.attach_template
     core.CSS_CLI[:] = args.css
     core.CSS_SCOPE_CLI = args.css_scope
     core.ATTACH_CLI = args.attach_source

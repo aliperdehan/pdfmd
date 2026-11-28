@@ -372,9 +372,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "`nocite: '@*'`), 'all' the file as it is. A document sets it with "
                              "pdfmd-options.attach-bibliography")
     parser.add_argument("--css", action="append", default=[], metavar="FILE",
-                        help="a style sheet for the HTML writers (HTML, EPUB, the HTML engines' PDF, Calibre), after the "
-                             "ones found beside the document (NAME.css, pdfmd.css) and named in its metadata (css:, "
-                             "pdfmd-options.css); repeat it for more. With --css-scope all it is read for the paper, "
+                        help="an explicit style sheet for HTML, EPUB and the HTML engines' PDF, after any sheets named in "
+                             "metadata (css:, pdfmd-options.css). Repeat it for more. Discovery of NAME.css or pdfmd.css "
+                             "fills in an otherwise unset style sheet. With --css-scope all it is read for the paper, "
                              "margins, body font and size, line spacing, link colour and code font of the other writers too")
     parser.add_argument("--css-scope", dest="css_scope", choices=core.CSS_SCOPES, default=None,
                         help="what a style sheet is for: html (default) the writers that read CSS, all those and the "
@@ -390,6 +390,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "an assembled file")
     parser.add_argument("--no-attach-csl", dest="attach_csl", action="store_false",
                         help="attach no style, even where a document's pdfmd-options.attach-csl asks for it")
+    parser.add_argument("--attach-template", dest="attach_template", action="store_true", default=None,
+                        help="include the local Pandoc template used by the PDF when attaching its source. "
+                             "Off by default. A document sets it with pdfmd-options.attach-template")
+    parser.add_argument("--no-attach-template", dest="attach_template", action="store_false",
+                        help="omit the Pandoc template from the attached source")
     parser.add_argument("--attach-source", "--embed-source", dest="attach_source", nargs="?", const=True,
                         type=attach_source_argument, default=None, metavar="private",
                         help="attach the document's whole source (the assembled Markdown, comments "
@@ -414,7 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "read, never images (the PDF holds those and --restore takes them out), "
                              "'referenced' (default for --bundle alone) those and the image files, 'all' every file in the "
                              "document's folder except output and housekeeping (hidden files, .aux/.log, "
-                             "backups). A PDF bundle keeps comments and excerpt records by default. "
+                             "backups). The template used by the PDF needs --attach-template. A PDF bundle keeps comments and excerpt records by default. "
                              "Implies --attach-source. --restore puts the files back. A document sets it "
                              "with pdfmd-options.bundle (sources | true | all | false); pdfmd-options.bundle-max-mb (default "
                              f"{core.BUNDLE_MAX_MB}) caps the size")
@@ -552,7 +557,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "(single-file/report modes only, e.g. -o notes.html) implies this too; "
                              "an explicit --to always wins. png, jpg, tiff, eps, ps, svg and webp are made from a PDF build. "
                              "For a comma-separated list (e.g. --to pdf,png,docx), the PDF and pictures share a build, "
-                             "and -o names a folder. Also pdfmd-options.default-output and --setup")
+                             "and -o names a folder. Also pdfmd-options.default-output and --setup. "
+                             "For Pandoc writers use --template FILE or pdfmd-options.template to override template discovery")
     parser.add_argument("--from", dest="from_format", default=None, metavar="FORMAT",
                         type=lambda reader: core.load_package("pdfmd_reader").markdown_reader_alias(reader),
                         help="Pandoc source format override (no short flag: -f is --font). Only needed "
@@ -1064,6 +1070,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "monofont together), tablewidth (proportional pipe-table column widths), "
                              "standalone (the --to latex/beamer/context --standalone default), "
                              "bib (local bibliography discovery for missing citation keys), "
+                             "template (Pandoc template discovery for the output writer, overridden by --template "
+                             "or pdfmd-options.template), csl (local citation style discovery), css (style sheet discovery), "
                              "metadata/yaml (auto-discovered --metadata-file), preamble/tex "
                              "(auto-included LaTeX preambles), lua (auto-included Lua filters), "
                              "unicode (fonts for text in other scripts, and the main font chosen for the "

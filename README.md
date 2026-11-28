@@ -1761,7 +1761,8 @@ style, a compound library, a shared bibliography and parts.
   also those only your own TeX tree resolves (`\input{library}` from `texmf-home`). A restored report builds
   again; only images are left out (the PDF has them). Over 100 MB (`bundle-max-mb`) only the source is
   attached. `bundle: false` (or `--no-bundle`) keeps the source alone; `--bundle` (`bundle: true`) stores the
-  image files too, `--bundle all` the whole folder except output and housekeeping. An explicit PDF bundle
+  image files too, `--bundle all` the whole folder except output and housekeeping. The PDF's template needs
+  `--attach-template`. An explicit PDF bundle
   keeps comments and excerpt records by default. Data whose file name a
   macro builds cannot be found: use `all`. A Markdown output (`--keep-source`) keeps the same files, but has no PDF to
   take pictures from: they come with `--bundle`.
@@ -2616,13 +2617,25 @@ line above it (or under its caption); the comment survives comment stripping, be
 A comment between a table and its caption would stop Pandoc from reading the caption as one, so there is no such
 position.
 
+### Project Pandoc templates and citation styles
+
+Use `--template FILE` or `pdfmd-options: {template: FILE}` to set a Pandoc template.
+With no explicit template, pdfmd checks `<name>.<writer>` and `template.<writer>`
+in the project root, `templates/` and user config.
+A PDF uses the writer of its engine, for example `template.latex`,
+`template.typst` or `template.html5`. Citeproc looks for `<name>.csl` or
+`csl.csl` in the same places if the build does not name a style.
+`--verbose` shows the winner. Use `--no-auto template` or `--no-auto csl` to
+disable either search. With `--attach-source`, opt in to carrying the local
+template with `--attach-template` or `pdfmd-options: {attach-template: true}`.
+
 ### One style sheet for the page: `--css`, `pdfmd.css`, `css-scope`
 
-A `.css` file styles the writers that read CSS: HTML, EPUB, the PDF the HTML engines make (WeasyPrint and the rest) and
-Calibre. pdfmd finds `pdfmd.css` or `<name>.css` beside the document (and in its `metadata/` folder; `--no-auto css` turns the
-search off), takes `css:` from the front matter or a metadata file (Pandoc's own key), `pdfmd-options: {css: file.css}`
-(a name or a list; `pdfmd --setup` keeps one for every document) and `--css FILE`; they come in that order, the last after the
-others, as in CSS.
+A `.css` file styles HTML, EPUB and PDFs made by an HTML engine. Explicit `css:` metadata,
+`pdfmd-options: {css: file.css}` (a name or list) and repeatable `--css FILE` sheets keep
+their cascade. With no explicit sheet, pdfmd takes the first `<name>.css` or `pdfmd.css`
+from the project root, `templates/`, user config or the accessory folders, in that order.
+`--no-auto css` switches the search off.
 
 ```css
 @page { size: A4; margin: 2cm 2.5cm }                 /* paper and margins */
