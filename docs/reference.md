@@ -210,10 +210,12 @@ A part's own leading front matter remains discarded.
 Word carries `::: keep` (also `nobreak`, `keep-together`, a div with
 `break-inside: avoid`, or `\begin{samepage}`) using Word's keep-lines and
 keep-with-next properties within the block. Pandoc's OpenDocument writer
-applies `PdfmdCenter` to centred paragraphs and `PdfmdHighlight` to
-highlighted spans. It starts landscape ranges on a landscape copy of the
-document's page layout and switches back on the next block. These kinds
-use the existing `markup:` setting, `--markup` and `--no-markup`.
+applies `PdfmdCenter` to centred paragraphs. `PdfmdHighlight` and the named
+underline character styles need Pandoc 3.2 or later for OpenDocument. Earlier
+versions keep the span text and its emphasis. OpenDocument starts landscape
+ranges on a landscape copy of the document's page layout and switches back on
+the next block. These kinds use the existing `markup:` setting, `--markup`
+and `--no-markup`.
 
 ## Named spans
 

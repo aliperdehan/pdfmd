@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from pandoc_support import ODF, office_markup  # noqa: E402
+from pandoc_support import ODF, PANDOC_VERSION, office_markup  # noqa: E402
 
 import pdfmd  # noqa: E402
 
@@ -76,13 +76,25 @@ class Filter(unittest.TestCase):
             document, styles = office_markup(folder, SOURCE, "odt", "--markup", "highlight")
             disabled, _ = office_markup(folder, SOURCE, "odt", "--no-markup")
         highlight = styles.find(".//style:style[@style:name='PdfmdHighlight']/style:text-properties", ODF)
-        self.assertIsNotNone(highlight)
-        self.assertEqual(highlight.get(f"{{{ODF['fo']}}}background-color"), "#ffff00")
         query = ".//text:span[@text:style-name='PdfmdHighlight']"
         marked = document.findall(query, ODF)
+        self.assertEqual(disabled.findall(query, ODF), [])
+        if PANDOC_VERSION < (3, 2):  # OpenDocument gained custom-style for spans in this release.
+            self.assertIsNone(highlight)
+            self.assertEqual(marked, [])
+            paragraphs = document.findall(".//office:text/text:p", ODF)
+            self.assertEqual([" ".join("".join(para.itertext()).split()) for para in paragraphs], [
+                "Some marked text here, one and with emph inside, end. A lone == sign and a == b == c.",
+                "==code== stays. multi line",
+            ])
+            emphasis = document.findall(".//text:span[@text:style-name='Emphasis']", ODF)
+            self.assertEqual(["".join(span.itertext()) for span in emphasis], ["emph"])
+            self.assertIn("==marked text==", "".join(disabled.itertext()))
+            return
+        self.assertIsNotNone(highlight)
+        self.assertEqual(highlight.get(f"{{{ODF['fo']}}}background-color"), "#ffff00")
         self.assertEqual(["".join(span.itertext()) for span in marked], ["marked text", "one", "with emph inside", "end", "multi line"])
         self.assertIsNotNone(marked[2].find("text:span[@text:style-name='Emphasis']", ODF))
-        self.assertEqual(disabled.findall(query, ODF), [])
 
     def test_only_when_the_kind_is_on(self):
         out, _ = convert("html5", enabled="toc")

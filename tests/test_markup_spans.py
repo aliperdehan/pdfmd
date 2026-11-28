@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import isolation_support  # noqa: E402,F401
 
-from pandoc_support import ODF, WORD, needs_pandoc, office_markup  # noqa: E402
+from pandoc_support import ODF, PANDOC_VERSION, WORD, needs_pandoc, office_markup  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = "- [Café *mixed* `case`]{.caps}; [a *wave*]{#sample .wavy}\n- > [a dot]{.dotted}\n"
@@ -73,6 +73,12 @@ class NamedSpans(unittest.TestCase):
         for writer in ("docx", "odt"):
             with self.subTest(writer=writer):
                 document, styles = office_markup(str(self.root), SOURCE, writer)
+                legacy_odt = writer == "odt" and PANDOC_VERSION < (3, 2)
+                if legacy_odt:
+                    paragraphs = document.findall(".//office:text//text:p", ODF)
+                    self.assertEqual(["".join(para.itertext()) for para in paragraphs], ["CAFÉ MIXED case; a wave", "a dot"])
+                    emphasis = document.findall(".//text:span[@text:style-name='Emphasis']", ODF)
+                    self.assertEqual(["".join(span.itertext()) for span in emphasis], ["MIXED", "wave"])
                 for name, line in (("PdfmdWavy", "wave"), ("PdfmdDotted", "dotted")):
                     if writer == "docx":
                         style = styles.find(f".//w:style[@w:styleId='{name}']/w:rPr/w:u", WORD)
@@ -80,10 +86,17 @@ class NamedSpans(unittest.TestCase):
                         self.assertEqual(style.get(f"{{{WORD['w']}}}val"), line)
                         self.assertIsNotNone(document.find(f".//w:rStyle[@w:val='{name}']", WORD))
                     else:
-                        style = styles.find(f".//style:style[@style:name='{name}']/style:text-properties", ODF)
-                        self.assertIsNotNone(style)
-                        self.assertEqual(style.get(f"{{{ODF['style']}}}text-underline-style"), line)
-                        self.assertIsNotNone(document.find(f".//text:span[@text:style-name='{name}']", ODF))
+                        style = styles.find(f".//style:style[@style:name='{name}']", ODF)
+                        span = document.find(f".//text:span[@text:style-name='{name}']", ODF)
+                        if legacy_odt:
+                            self.assertIsNone(style)
+                            self.assertIsNone(span)
+                        else:
+                            self.assertIsNotNone(style)
+                            properties = style.find("style:text-properties", ODF)
+                            self.assertIsNotNone(properties)
+                            self.assertEqual(properties.get(f"{{{ODF['style']}}}text-underline-style"), line)
+                            self.assertIsNotNone(span)
 
     def test_epub_carries_the_style_and_flat_text_keeps_the_words(self):
         with zipfile.ZipFile(self.build("epub")) as epub:

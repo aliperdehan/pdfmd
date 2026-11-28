@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.102a — 2026-11-28
+
+Pre-edit state: commit `fa63dd6`. The OpenDocument highlight and underline tests expected named character styles that Pandoc's OpenDocument writer gained in 3.2. Check that older writers preserve the text and emphasis, and keep the colour and underline checks for writers that support those styles. Document the OpenDocument version requirement. Both tests reproduce the old failures with span styles disabled in Pandoc 3.13 and pass with and without that simulation.
+
 ## v3.34.102 — 2026-11-28
 
 Pre-edit state: commit `a3afb6d`. Pandoc’s older missing-resource message leaves the filename unquoted, so missing bibliography and CSL files could trigger another PDF engine. Recognise both spellings while still requiring the missing resource to be a declared citation file. Regressions exercise both spellings and distinguish missing figures from missing citation files.

@@ -2894,6 +2894,7 @@ and the text is kept. These interpretations respect `--no-markup`.
 break) is highlighted: LaTeX with `soul`'s `\hl` in a pale yellow (LuaLaTeX: `lua-ul`'s `\highLight`, with the `luacolor` it needs, when both are
 installed; plain text when `soul` is not installed either), Typst with
 `#highlight[...]`, HTML, EPUB and `--to gfm` with `<mark>`, Word and OpenDocument with the character style `PdfmdHighlight` (yellow shading).
+OpenDocument highlights need Pandoc 3.2 or later. Earlier versions keep the text and its emphasis.
 Pandoc's own Markdown output keeps `==...==`. A lone `==` or one inside code stays as written; a closing `==` followed by
 punctuation (`==end==.`) works. `markup: [callouts, toc, centre, highlight]` or `true` for all; `--markup highlight` for one run.
 
