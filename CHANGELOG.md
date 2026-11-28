@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.102b — 2026-11-28
+
+Pre-edit state: commit `a3bbb04`. Three batch tests supplied a same-stem HTML source that also matched automatic template discovery. Disable that search in the three fixtures so they exercise source protection, reserved destinations and build-record matching. All three assertions failed with discovery enabled and pass with it disabled.
+
 ## v3.34.102a — 2026-11-28
 
 Pre-edit state: commit `fa63dd6`. The OpenDocument highlight and underline tests expected named character styles that Pandoc's OpenDocument writer gained in 3.2. Check that older writers preserve the text and emphasis, and keep the colour and underline checks for writers that support those styles. Document the OpenDocument version requirement. Both tests reproduce the old failures with span styles disabled in Pandoc 3.13 and pass with and without that simulation.

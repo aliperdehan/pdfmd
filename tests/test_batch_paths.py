@@ -313,7 +313,8 @@ class Checkout(unittest.TestCase):
         (self.work / "a.md").write_text("# Markdown\n\nMarkdown source.\n", encoding="utf-8")
         html = self.work / "a.html"
         html.write_text("<p>Independent HTML</p>", encoding="utf-8")
-        done = self.run_pdfmd("a.html", "a.md", "--to", "html")
+        # The same-stem HTML source also matches the template search.
+        done = self.run_pdfmd("a.html", "a.md", "--to", "html", "--no-auto", "template")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(html.read_text(encoding="utf-8"), "<p>Independent HTML</p>")
         self.assertIn("NOTE  skipped (same output as a.md): a.html", done.stdout)
@@ -325,7 +326,7 @@ class Checkout(unittest.TestCase):
         html.write_text("<p>Independent HTML</p>", encoding="utf-8")
         (self.work / "a.md").write_text("# A\n\nFirst source.\n", encoding="utf-8")
         (self.work / "a (1).md").write_text("# B\n\nSecond source.\n", encoding="utf-8")
-        done = self.run_pdfmd("a.md", "a.html", "a (1).md", "--to", "html", "-j", "2")
+        done = self.run_pdfmd("a.md", "a.html", "a (1).md", "--to", "html", "--no-auto", "template", "-j", "2")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(html.read_text(encoding="utf-8"), "<p>Independent HTML</p>")
         self.assertIn("First source", (self.work / "a (2).html").read_text(encoding="utf-8"))
@@ -337,7 +338,8 @@ class Checkout(unittest.TestCase):
         html.write_text("<p>Independent HTML</p>", encoding="utf-8")
         (self.work / "a.md").write_text("# A\n\nFirst source.\n", encoding="utf-8")
         (self.work / "a (1).md").write_text("# B\n\nSecond source.\n", encoding="utf-8")
-        done = self.run_pdfmd("a.html", "a.md", "a (1).md", "--to", "latex,html", "-j", "2", "--build-log", "on")
+        done = self.run_pdfmd("a.html", "a.md", "a (1).md", "--to", "latex,html", "--no-auto", "template",
+                              "-j", "2", "--build-log", "on")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("NOTE  skipped (same output as a.md): a.html", done.stdout)
         self.assertEqual(html.read_text(encoding="utf-8"), "<p>Independent HTML</p>")
