@@ -43,17 +43,20 @@ def output_fingerprint(path: Path) -> str | None:
         return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
     try:
-        before = path.stat()
-        if not S_ISREG(before.st_mode):
+        if not S_ISREG(path.stat().st_mode):
             return None
         with path.open("rb") as handle:
-            if state(before) != state(os.fstat(handle.fileno())):
+            before = os.fstat(handle.fileno())
+            if not S_ISREG(before.st_mode):
                 return None
             digest = sha256(repr(file_identity(before)).encode("ascii"))
             for block in iter(lambda: handle.read(128 * 1024), b""):
                 digest.update(block)
-            if state(before) == state(path.stat()):
-                return digest.hexdigest()
+            # Use handle metadata for both snapshots. On Windows the path
+            # lookup can return different metadata for the same file.
+            with path.open("rb") as current:
+                if state(before) == state(os.fstat(current.fileno())):
+                    return digest.hexdigest()
     except OSError:
         pass
     return None

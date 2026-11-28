@@ -404,7 +404,9 @@ class Checkout(unittest.TestCase):
                 done = self.run_pdfmd(*prefix, *sorted(self.work.iterdir()), "--to", "html", "-o", "out")
                 self.assert_built(done, 3, self.work / "out", ".html")
                 self.assertIn("built outputs:", done.stdout)
-                done = self.run_pdfmd(*prefix, *sorted(p for p in self.work.iterdir() if p.is_file()), "--to", "html")
+                # Keep a fresh record of each rewrite. A writer may replace the file.
+                done = self.run_pdfmd(*prefix, *sorted(p for p in self.work.iterdir() if p.is_file()),
+                                      "--to", "html", "--build-log", "on")
                 self.assertIn("built outputs:", done.stdout)
                 for name in self.names:
                     self.assertIn(Path(name).with_suffix(".html").name, done.stdout)

@@ -19,6 +19,10 @@ same commit as the change.
 
 ---
 
+## v3.34.101 — 2026-11-28
+
+Pre-edit state: commit `806406b`. Output fingerprinting compared metadata from a path lookup with metadata from an open handle. Use handle metadata for both snapshots so Windows can verify the files it wrote. Read record paths as paths in the tests, including home-relative paths, and keep records enabled across the batch fixture’s rewrites so writer replacement is covered. Regressions cover differing metadata, edited output, scrubbed paths, both report routes and batch selection.
+
 ## v3.34.100 — 2026-11-28
 
 Pre-edit state: commit `0402161`. The tables help topic reached 80 lines on Python 3.9 and 3.10 because argparse wraps the descriptions differently. Shorten the table extraction, CSV note and selection descriptions. The 80-column regression reserves at least two lines under the limit; Python 3.13 and 3.14 both print 72 lines.

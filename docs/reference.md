@@ -1167,7 +1167,8 @@ by default; add --recursive to also include subdirectories.
 Batch mode also handles several named paths without `-b`. It skips readable files whose current contents and file
 identity match an output in a retained build record. It looks in the global build records and in document caches in
 the working folder and folders represented in the batch. Replacing a file or removing its record releases the path
-for use as an input. Records made before output verification lack the file fingerprint.
+for use as an input. Keep build records enabled for rebuilds so each new output has a current fingerprint.
+Records made before output verification lack the file fingerprint.
 
 When inputs share an output destination, the batch builds one. It prefers Markdown, other text markup, HTML,
 then office or ebook formats, with name order breaking ties. The batch names the skipped inputs and uses a

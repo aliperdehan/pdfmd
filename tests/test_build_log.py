@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from threading import Barrier
+from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # tests/, for isolation_support
@@ -23,6 +24,16 @@ sys.path.insert(0, str(ROOT))
 
 import pdfmd  # noqa: E402,F401
 from pdfmd_buildinfo import record  # noqa: E402
+from pdfmd_cache.manage import recorded_path  # noqa: E402
+
+
+def record_path(entry: str, field: str) -> Path | None:
+    for line in entry.splitlines():
+        name, _, value = line.partition(":")
+        if name == field:
+            path = recorded_path(value.strip(), home_scrubbed=True)
+            return path.resolve() if path is not None else None
+    return None
 
 
 class Pure(unittest.TestCase):
@@ -35,6 +46,38 @@ class Pure(unittest.TestCase):
         self.assertEqual(record.scrub_home("CMD pandoc /home/ann/a.md -o /home/ann/a.pdf", "/home/ann"), "CMD pandoc ~/a.md -o ~/a.pdf")
         self.assertEqual(record.scrub_home("C:/Users/ann/a.md", "C:\\Users\\ann"), "~/a.md")
         self.assertEqual(record.scrub_home("nothing", ""), "nothing")
+
+    def test_a_home_relative_record_path_identifies_the_file(self):
+        source = self.path / "source.md"
+        source.touch()
+        saved = record.write(self.path, f"document:  {source}\n", True, 5, 1000, home=str(self.path))
+        entry = saved.read_text(encoding="utf-8")
+        self.assertIn("document:  ~", entry)
+        with mock.patch.object(Path, "home", return_value=self.path):
+            self.assertEqual(record_path(entry, "document"), source.resolve())
+
+    def test_output_verification_uses_consistent_file_metadata(self):
+        output = self.path / "built.html"
+        output.write_text("Original.", encoding="utf-8")
+        path_stat = Path.stat
+
+        def stat(path, *args, **kwargs):
+            info = path_stat(path, *args, **kwargs)
+            if path != output:
+                return info
+            # The path lookup and open handle can expose different metadata on Windows.
+            return SimpleNamespace(st_mode=info.st_mode, st_dev=info.st_dev, st_ino=info.st_ino,
+                                   st_size=info.st_size, st_mtime_ns=info.st_mtime_ns,
+                                   st_ctime_ns=info.st_ctime_ns + 1)
+
+        with mock.patch.object(Path, "stat", stat):
+            fingerprint = record.output_fingerprint(output)
+            self.assertIsNotNone(fingerprint)
+            record.write(self.path / "source", f"pdfmd build record\nwritten:   {record.output_key(output)} {fingerprint}\n",
+                         True, 5, 1000)
+            self.assertEqual(record.matching_outputs([output], {self.path}), {output})
+            output.write_text("Modified.", encoding="utf-8")
+            self.assertEqual(record.matching_outputs([output], {self.path}), set())
 
     def test_a_long_record_keeps_its_start_and_more_of_its_end(self):
         text = "START\n" + "middle\n" * 5000 + "THE ERROR\n"
@@ -178,8 +221,10 @@ class Builds(unittest.TestCase):
                                       cwd=self.path, env=self.env, capture_output=True, encoding="utf-8")
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 found = [p.read_text(encoding="utf-8") for p in self.records()]
-                self.assertTrue(any("result:    ok" in entry and f"output:    {self.path.resolve() / (mode + '.html')}" in entry
+                self.assertTrue(any("result:    ok" in entry and record_path(entry, "output") == (self.path / (mode + ".html")).resolve()
                                     and "CMD  pandoc" in entry for entry in found), found)
+                output = self.path / (mode + ".html")
+                self.assertEqual(record.matching_outputs([output], {self.cache / "pdfmd" / "builds"}), {output})
 
     @unittest.skipUnless(shutil.which("pdflatex"), "needs pdfLaTeX")
     def test_pandoc_and_direct_tex_record_the_loaded_package(self):
@@ -197,7 +242,7 @@ class Builds(unittest.TestCase):
                                       capture_output=True, encoding="utf-8")
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 found = [p.read_text(encoding="utf-8") for p in self.records()]
-                self.assertTrue(any(f"document:  {self.path.resolve() / name}" in entry
+                self.assertTrue(any(record_path(entry, "document") == (self.path / name).resolve()
                                     and "LaTeX package: sample-record 2024/04/05 v1.2" in entry
                                     for entry in found), found)
         self.assertFalse(list(self.path.glob("*.log")))
@@ -212,7 +257,7 @@ class Builds(unittest.TestCase):
         text = self.records()[0].read_text(encoding="utf-8")
         self.assertIn("result:    ok", text)
         self.assertRegex(text, r"(?m)^CMD  .*\btypst(?:\.exe)?['\"]? compile")
-        self.assertIn(f"output:    {self.path.resolve() / 'a.pdf'}", text)
+        self.assertEqual(record_path(text, "output"), (self.path / "a.pdf").resolve())
 
     def test_the_record_holds_every_line_that_only_verbose_prints(self):
         (self.path / "metadata.yaml").write_text("author: A\n", encoding="utf-8")      # a file pdfmd finds by itself: an AUTO line of our own
